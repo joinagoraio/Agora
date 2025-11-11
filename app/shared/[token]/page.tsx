@@ -32,8 +32,8 @@ export default async function SharedConversationPage({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b bg-card">
-        <div className="container flex h-16 items-center justify-between px-4">
+      <header className="bg-card">
+        <div className="flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-3">
             <Building2 className="h-6 w-6" />
             <div>
@@ -45,10 +45,10 @@ export default async function SharedConversationPage({
         </div>
       </header>
 
-      <main className="flex-1 bg-muted/20">
-        <div className="container max-w-4xl py-8 px-4">
+      <main className="flex-1 bg-white">
+        <div className="container mx-auto max-w-4xl py-8 px-4">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold">{sharedLink.conversations.title || "Shared Conversation"}</h2>
+            <h2 className="text-2xl font-semibold">{sharedLink.conversations.title || "Shared Conversation"}</h2>
             <p className="text-sm text-muted-foreground">From workspace: {sharedLink.conversations.workspaces.name}</p>
           </div>
 

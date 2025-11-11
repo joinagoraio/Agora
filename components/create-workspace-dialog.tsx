@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { createWorkspace } from "@/lib/actions/workspace"
 import { Plus } from "lucide-react"
 
@@ -27,7 +26,6 @@ interface CreateWorkspaceDialogProps {
 export function CreateWorkspaceDialog({ spaceId }: CreateWorkspaceDialogProps) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
-  const [description, setDescription] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
@@ -37,7 +35,7 @@ export function CreateWorkspaceDialog({ spaceId }: CreateWorkspaceDialogProps) {
     setIsLoading(true)
     setError(null)
 
-    const result = await createWorkspace(spaceId, name, description)
+    const result = await createWorkspace(spaceId, name)
 
     if (result.error) {
       setError(result.error)
@@ -45,9 +43,8 @@ export function CreateWorkspaceDialog({ spaceId }: CreateWorkspaceDialogProps) {
     } else {
       setOpen(false)
       setName("")
-      setDescription("")
       setIsLoading(false)
-      router.push(`/workspaces/${result.data.id}`)
+      router.push(`/workspaces/${result.data.id}?new=true`)
     }
   }
 
@@ -76,16 +73,6 @@ export function CreateWorkspaceDialog({ spaceId }: CreateWorkspaceDialogProps) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="workspace-description">Description (optional)</Label>
-              <Textarea
-                id="workspace-description"
-                placeholder="Company policies, procedures, and guidelines..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
               />
             </div>
             {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}

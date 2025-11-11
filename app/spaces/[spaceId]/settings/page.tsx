@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { SpaceSettings } from "@/components/space-settings"
+import { UserMenu } from "@/components/user-menu"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
@@ -56,24 +57,25 @@ export default async function SpaceSettingsPage({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b bg-card">
-        <div className="container flex h-16 items-center justify-between px-4">
+      <header className="bg-card">
+        <div className="flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
+            <Button variant="ghost" asChild>
               <Link href={`/spaces/${spaceId}`}>
-                <ArrowLeft className="h-5 w-5" />
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                <span className="text-sm font-normal">Back to {space.name}</span>
               </Link>
             </Button>
-            <div>
-              <h1 className="text-xl font-bold">Settings</h1>
-              <p className="text-xs text-muted-foreground">{space.name}</p>
-            </div>
           </div>
+          <UserMenu />
         </div>
       </header>
 
-      <main className="flex-1 bg-muted/20">
-        <div className="container max-w-4xl py-8 px-4">
+      <main className="flex-1 bg-white">
+        <div className="container mx-auto max-w-4xl py-8 px-4">
+          <div className="mb-6">
+            <h1 className="text-2xl font-semibold">Settings</h1>
+          </div>
           <SpaceSettings space={space} members={members || []} invitations={invitations || []} />
         </div>
       </main>

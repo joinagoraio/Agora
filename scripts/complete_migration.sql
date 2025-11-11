@@ -1,5 +1,8 @@
 -- AGORA Complete Database Migration
 -- Run this script in your Supabase SQL Editor: https://supabase.com/dashboard/project/_/sql
+-- 
+-- NOTE: If you get errors about existing policies or triggers, you can safely ignore them
+-- or drop existing policies first. This script is idempotent for tables and indexes.
 
 -- Step 1: Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -61,7 +64,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
 CREATE TABLE IF NOT EXISTS connectors (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('google_drive', 'notion', 'confluence', 'sharepoint', 'dropbox')),
+  type TEXT NOT NULL CHECK (type IN ('google_drive', 'notion', 'confluence', 'sharepoint', 'dropbox', 'direct_upload')),
   name TEXT NOT NULL,
   config JSONB NOT NULL DEFAULT '{}',
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'error', 'syncing')),
@@ -99,19 +102,55 @@ CREATE TABLE IF NOT EXISTS conversations (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   title TEXT,
-  created_by UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migrate existing conversations table if it has created_by instead of user_id
+DO $$
+BEGIN
+  -- Check if created_by column exists and user_id doesn't
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'conversations' AND column_name = 'created_by'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'conversations' AND column_name = 'user_id'
+  ) THEN
+    -- Rename created_by to user_id
+    ALTER TABLE conversations RENAME COLUMN created_by TO user_id;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS messages (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
   content TEXT NOT NULL,
-  metadata JSONB DEFAULT '{}',
+  sources JSONB DEFAULT '[]',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migrate existing messages table if it has metadata instead of sources
+DO $$
+BEGIN
+  -- Check if metadata column exists and sources doesn't
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'messages' AND column_name = 'metadata'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'messages' AND column_name = 'sources'
+  ) THEN
+    -- Rename metadata to sources
+    ALTER TABLE messages RENAME COLUMN metadata TO sources;
+    -- Set default to empty array
+    ALTER TABLE messages ALTER COLUMN sources SET DEFAULT '[]';
+    -- Update any existing NULL values to empty array
+    UPDATE messages SET sources = '[]' WHERE sources IS NULL;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS shared_links (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -123,21 +162,22 @@ CREATE TABLE IF NOT EXISTS shared_links (
 );
 
 -- Step 3: Create indexes
-CREATE INDEX idx_space_members_space_id ON space_members(space_id);
-CREATE INDEX idx_space_members_user_id ON space_members(user_id);
-CREATE INDEX idx_workspaces_space_id ON workspaces(space_id);
-CREATE INDEX idx_connectors_workspace_id ON connectors(workspace_id);
-CREATE INDEX idx_documents_connector_id ON documents(connector_id);
-CREATE INDEX idx_documents_workspace_id ON documents(workspace_id);
-CREATE INDEX idx_document_embeddings_document_id ON document_embeddings(document_id);
-CREATE INDEX idx_conversations_workspace_id ON conversations(workspace_id);
-CREATE INDEX idx_messages_conversation_id ON messages(conversation_id);
-CREATE INDEX idx_invitations_token ON invitations(token);
-CREATE INDEX idx_invitations_email ON invitations(email);
-CREATE INDEX idx_shared_links_token ON shared_links(token);
+CREATE INDEX IF NOT EXISTS idx_space_members_space_id ON space_members(space_id);
+CREATE INDEX IF NOT EXISTS idx_space_members_user_id ON space_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_workspaces_space_id ON workspaces(space_id);
+CREATE INDEX IF NOT EXISTS idx_connectors_workspace_id ON connectors(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_documents_connector_id ON documents(connector_id);
+CREATE INDEX IF NOT EXISTS idx_documents_workspace_id ON documents(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_document_embeddings_document_id ON document_embeddings(document_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_workspace_id ON conversations(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token);
+CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(email);
+CREATE INDEX IF NOT EXISTS idx_shared_links_token ON shared_links(token);
 
--- Vector similarity search index
-CREATE INDEX ON document_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- Vector similarity search index (drop and recreate if exists)
+DROP INDEX IF EXISTS document_embeddings_embedding_idx;
+CREATE INDEX document_embeddings_embedding_idx ON document_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 -- Step 4: Enable Row Level Security
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
@@ -153,6 +193,150 @@ ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shared_links ENABLE ROW LEVEL SECURITY;
 
 -- Step 5: Create RLS Policies
+-- Note: If policies already exist, you may see errors. You can drop them first or ignore the errors.
+
+-- Drop existing functions if they exist (for idempotency)
+-- Query system catalog to find and drop all versions of these functions
+DO $$
+DECLARE
+  func_record RECORD;
+BEGIN
+  -- Drop all versions of is_space_member
+  FOR func_record IN 
+    SELECT oid::regprocedure as func_name
+    FROM pg_proc
+    WHERE proname = 'is_space_member'
+  LOOP
+    EXECUTE 'DROP FUNCTION IF EXISTS ' || func_record.func_name || ' CASCADE';
+  END LOOP;
+  
+  -- Drop all versions of is_space_admin
+  FOR func_record IN 
+    SELECT oid::regprocedure as func_name
+    FROM pg_proc
+    WHERE proname = 'is_space_admin'
+  LOOP
+    EXECUTE 'DROP FUNCTION IF EXISTS ' || func_record.func_name || ' CASCADE';
+  END LOOP;
+END $$;
+
+-- Create a security definer function to check space membership without recursion
+CREATE OR REPLACE FUNCTION is_space_member(space_uuid UUID, user_uuid UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  -- Check if user is owner
+  IF EXISTS (SELECT 1 FROM spaces WHERE id = space_uuid AND owner_id = user_uuid) THEN
+    RETURN TRUE;
+  END IF;
+  
+  -- Check if user is a member (bypass RLS using security definer)
+  IF EXISTS (
+    SELECT 1 FROM space_members 
+    WHERE space_id = space_uuid 
+    AND user_id = user_uuid
+  ) THEN
+    RETURN TRUE;
+  END IF;
+  
+  RETURN FALSE;
+END;
+$$;
+
+-- Create a security definer function to check if user is space admin/owner
+CREATE OR REPLACE FUNCTION is_space_admin(space_uuid UUID, user_uuid UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  -- Check if user is owner
+  IF EXISTS (SELECT 1 FROM spaces WHERE id = space_uuid AND owner_id = user_uuid) THEN
+    RETURN TRUE;
+  END IF;
+  
+  -- Check if user is admin/owner member (bypass RLS using security definer)
+  IF EXISTS (
+    SELECT 1 FROM space_members 
+    WHERE space_id = space_uuid 
+    AND user_id = user_uuid
+    AND role IN ('owner', 'admin')
+  ) THEN
+    RETURN TRUE;
+  END IF;
+  
+  RETURN FALSE;
+END;
+$$;
+
+-- Drop existing policies if they exist (for idempotency)
+DO $$ 
+BEGIN
+  -- Profiles policies
+  DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON profiles;
+  DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
+  DROP POLICY IF EXISTS "Users can insert own profile" ON profiles;
+  
+  -- Spaces policies
+  DROP POLICY IF EXISTS "Users can view their spaces" ON spaces;
+  DROP POLICY IF EXISTS "Users can create spaces" ON spaces;
+  DROP POLICY IF EXISTS "Owners and admins can update spaces" ON spaces;
+  DROP POLICY IF EXISTS "Owners can delete spaces" ON spaces;
+  
+  -- Space members policies
+  DROP POLICY IF EXISTS "Members can view space members" ON space_members;
+  DROP POLICY IF EXISTS "Admins can add members" ON space_members;
+  DROP POLICY IF EXISTS "Admins can update members" ON space_members;
+  DROP POLICY IF EXISTS "Admins can remove members" ON space_members;
+  
+  -- Invitations policies
+  DROP POLICY IF EXISTS "Admins can view invitations" ON invitations;
+  DROP POLICY IF EXISTS "Admins can create invitations" ON invitations;
+  DROP POLICY IF EXISTS "Anyone can view invitation by token" ON invitations;
+  DROP POLICY IF EXISTS "Invitees can update their invitation" ON invitations;
+  
+  -- Workspaces policies
+  DROP POLICY IF EXISTS "Space members can view workspaces" ON workspaces;
+  DROP POLICY IF EXISTS "Space members can create workspaces" ON workspaces;
+  DROP POLICY IF EXISTS "Admins can update workspaces" ON workspaces;
+  DROP POLICY IF EXISTS "Admins can delete workspaces" ON workspaces;
+  
+  -- Connectors policies
+  DROP POLICY IF EXISTS "Workspace members can view connectors" ON connectors;
+  DROP POLICY IF EXISTS "Workspace members can create connectors" ON connectors;
+  DROP POLICY IF EXISTS "Creators and admins can update connectors" ON connectors;
+  DROP POLICY IF EXISTS "Creators and admins can delete connectors" ON connectors;
+  
+  -- Documents policies
+  DROP POLICY IF EXISTS "Workspace members can view documents" ON documents;
+  DROP POLICY IF EXISTS "System can insert documents" ON documents;
+  DROP POLICY IF EXISTS "System can update documents" ON documents;
+  DROP POLICY IF EXISTS "Admins can delete documents" ON documents;
+  
+  -- Document embeddings policies
+  DROP POLICY IF EXISTS "Workspace members can view embeddings" ON document_embeddings;
+  DROP POLICY IF EXISTS "System can insert embeddings" ON document_embeddings;
+  DROP POLICY IF EXISTS "System can delete embeddings" ON document_embeddings;
+  
+  -- Conversations policies
+  DROP POLICY IF EXISTS "Workspace members can view conversations" ON conversations;
+  DROP POLICY IF EXISTS "Workspace members can create conversations" ON conversations;
+  DROP POLICY IF EXISTS "Creators can update conversations" ON conversations;
+  DROP POLICY IF EXISTS "Creators and admins can delete conversations" ON conversations;
+  
+  -- Messages policies
+  DROP POLICY IF EXISTS "Conversation members can view messages" ON messages;
+  DROP POLICY IF EXISTS "System can insert messages" ON messages;
+  
+  -- Shared links policies
+  DROP POLICY IF EXISTS "Anyone can view shared links by token" ON shared_links;
+  DROP POLICY IF EXISTS "Conversation creators can create shared links" ON shared_links;
+  DROP POLICY IF EXISTS "Creators can delete shared links" ON shared_links;
+END $$;
 
 -- Profiles: Users can read all profiles, update their own
 CREATE POLICY "Public profiles are viewable by everyone"
@@ -171,11 +355,8 @@ CREATE POLICY "Users can insert own profile"
 CREATE POLICY "Users can view their spaces"
   ON spaces FOR SELECT
   USING (
-    EXISTS (
-      SELECT 1 FROM space_members
-      WHERE space_members.space_id = spaces.id
-      AND space_members.user_id = auth.uid()
-    )
+    owner_id = auth.uid()
+    OR is_space_member(id, auth.uid())
   );
 
 CREATE POLICY "Users can create spaces"
@@ -198,48 +379,22 @@ CREATE POLICY "Owners can delete spaces"
   USING (owner_id = auth.uid());
 
 -- Space Members: Members can view members of their spaces
+-- Fixed: Use security definer function to avoid recursion
 CREATE POLICY "Members can view space members"
   ON space_members FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM space_members sm
-      WHERE sm.space_id = space_members.space_id
-      AND sm.user_id = auth.uid()
-    )
-  );
+  USING (is_space_member(space_id, auth.uid()));
 
 CREATE POLICY "Admins can add members"
   ON space_members FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM space_members sm
-      WHERE sm.space_id = space_members.space_id
-      AND sm.user_id = auth.uid()
-      AND sm.role IN ('owner', 'admin')
-    )
-  );
+  WITH CHECK (is_space_admin(space_id, auth.uid()));
 
 CREATE POLICY "Admins can update members"
   ON space_members FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM space_members sm
-      WHERE sm.space_id = space_members.space_id
-      AND sm.user_id = auth.uid()
-      AND sm.role IN ('owner', 'admin')
-    )
-  );
+  USING (is_space_admin(space_id, auth.uid()));
 
 CREATE POLICY "Admins can remove members"
   ON space_members FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM space_members sm
-      WHERE sm.space_id = space_members.space_id
-      AND sm.user_id = auth.uid()
-      AND sm.role IN ('owner', 'admin')
-    )
-  );
+  USING (is_space_admin(space_id, auth.uid()));
 
 -- Invitations: Admins can manage invitations
 CREATE POLICY "Admins can view invitations"
@@ -444,12 +599,12 @@ CREATE POLICY "Workspace members can create conversations"
 
 CREATE POLICY "Creators can update conversations"
   ON conversations FOR UPDATE
-  USING (created_by = auth.uid());
+  USING (user_id = auth.uid());
 
 CREATE POLICY "Creators and admins can delete conversations"
   ON conversations FOR DELETE
   USING (
-    created_by = auth.uid() OR
+    user_id = auth.uid() OR
     EXISTS (
       SELECT 1 FROM workspaces w
       JOIN space_members sm ON sm.space_id = w.space_id
@@ -487,7 +642,7 @@ CREATE POLICY "Conversation creators can create shared links"
     EXISTS (
       SELECT 1 FROM conversations c
       WHERE c.id = shared_links.conversation_id
-      AND c.created_by = auth.uid()
+      AND c.user_id = auth.uid()
     )
   );
 
@@ -503,6 +658,15 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Drop existing triggers if they exist (for idempotency)
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON profiles;
+DROP TRIGGER IF EXISTS update_spaces_updated_at ON spaces;
+DROP TRIGGER IF EXISTS update_space_members_updated_at ON space_members;
+DROP TRIGGER IF EXISTS update_workspaces_updated_at ON workspaces;
+DROP TRIGGER IF EXISTS update_connectors_updated_at ON connectors;
+DROP TRIGGER IF EXISTS update_documents_updated_at ON documents;
+DROP TRIGGER IF EXISTS update_conversations_updated_at ON conversations;
 
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -539,7 +703,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE OR REPLACE TRIGGER on_auth_user_created
+-- Drop existing trigger if it exists
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+
+CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 

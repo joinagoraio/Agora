@@ -1,15 +1,15 @@
-"use client"
-
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { createConversation, getUserConversations, getConversationMessages } from "@/lib/actions/conversation"
 import { ChatInterface } from "@/components/chat-interface"
 import { ShareConversationDialog } from "@/components/share-conversation-dialog"
+import { NewChatButton } from "@/components/new-chat-button"
+import { UserMenu } from "@/components/user-menu"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import Link from "next/link"
-import { ArrowLeft, MessageSquarePlus } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 
 export default async function ChatPage({
   params,
@@ -63,22 +63,26 @@ export default async function ChatPage({
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="border-b bg-card">
-        <div className="container flex h-16 items-center justify-between px-4">
+      <header className="bg-card">
+        <div className="flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
-              <Link href={`/workspaces/${workspaceId}`}>
-                <ArrowLeft className="h-5 w-5" />
+            <Button variant="ghost" asChild>
+              <Link href={`/spaces/${workspace.spaces.id}`}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                <span className="text-sm font-normal">Back to {workspace.spaces.name}</span>
               </Link>
             </Button>
             <div>
-              <h1 className="text-xl font-bold">{workspace.name}</h1>
-              <p className="text-xs text-muted-foreground">AI Assistant</p>
+              <h1 className="text-2xl font-semibold">{workspace.name}</h1>
+              <p className="text-sm text-muted-foreground">AI Assistant</p>
             </div>
           </div>
-          {currentConversationId && messages && messages.length > 0 && (
-            <ShareConversationDialog conversationId={currentConversationId} />
-          )}
+          <div className="flex items-center gap-2">
+            {currentConversationId && messages && messages.length > 0 && (
+              <ShareConversationDialog conversationId={currentConversationId} />
+            )}
+            <UserMenu />
+          </div>
         </div>
       </header>
 
@@ -87,18 +91,7 @@ export default async function ChatPage({
         <aside className="w-64 border-r bg-card">
           <div className="flex h-full flex-col">
             <div className="border-b p-4">
-              <Button
-                className="w-full"
-                onClick={async () => {
-                  const result = await createConversation(workspaceId)
-                  if (result.data) {
-                    window.location.href = `/workspaces/${workspaceId}/chat?conversationId=${result.data.id}`
-                  }
-                }}
-              >
-                <MessageSquarePlus className="mr-2 h-4 w-4" />
-                New Chat
-              </Button>
+              <NewChatButton workspaceId={workspaceId} />
             </div>
             <ScrollArea className="flex-1">
               <div className="space-y-2 p-4">

@@ -21,6 +21,15 @@ export async function POST(req: Request) {
     const lastMessage = messages[messages.length - 1]
     const userQuery = lastMessage.content
 
+    // Save user message to database
+    if (lastMessage.role === "user") {
+      await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        role: "user",
+        content: userQuery,
+      })
+    }
+
     // Get relevant context from documents
     const { context, sources } = await getRelevantContext(workspaceId, userQuery)
 

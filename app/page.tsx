@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 export default function HomePage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-background to-muted/20">
-      <div className="container flex max-w-5xl flex-col items-center gap-8 px-4 text-center">
+      <div className="container mx-auto flex max-w-5xl flex-col items-center gap-8 px-4 text-center">
         <div className="flex flex-col gap-4">
           <h1 className="text-balance text-6xl font-bold tracking-tight lg:text-7xl">Welcome to AGORA</h1>
           <p className="text-balance text-xl text-muted-foreground lg:text-2xl">

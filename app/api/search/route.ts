@@ -14,11 +14,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Search documents
+    // Search documents (exclude archived and deleted)
     const { data: results, error } = await supabase
       .from("documents")
       .select("*")
       .eq("workspace_id", workspaceId)
+      .eq("status", "active") // Only search active documents
       .or(`title.ilike.%${query}%,content.ilike.%${query}%`)
       .limit(20)
 

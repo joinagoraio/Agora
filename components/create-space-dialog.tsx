@@ -22,27 +22,16 @@ import { Plus } from "lucide-react"
 export function CreateSpaceDialog() {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
-  const [slug, setSlug] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
-
-  const handleNameChange = (value: string) => {
-    setName(value)
-    // Auto-generate slug from name
-    const generatedSlug = value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-    setSlug(generatedSlug)
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError(null)
 
-    const result = await createSpace(name, slug)
+    const result = await createSpace(name)
 
     if (result.error) {
       setError(result.error)
@@ -50,7 +39,6 @@ export function CreateSpaceDialog() {
     } else {
       setOpen(false)
       setName("")
-      setSlug("")
       setIsLoading(false)
       router.push(`/spaces/${result.data.id}`)
     }
@@ -79,24 +67,9 @@ export function CreateSpaceDialog() {
                 id="name"
                 placeholder="My Organization"
                 value={name}
-                onChange={(e) => handleNameChange(e.target.value)}
+                onChange={(e) => setName(e.target.value)}
                 required
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="slug">Space URL</Label>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">agora.app/</span>
-                <Input
-                  id="slug"
-                  placeholder="my-organization"
-                  value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
-                  required
-                  pattern="[a-z0-9-]+"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">Only lowercase letters, numbers, and hyphens allowed</p>
             </div>
             {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
           </div>
@@ -113,3 +86,4 @@ export function CreateSpaceDialog() {
     </Dialog>
   )
 }
+

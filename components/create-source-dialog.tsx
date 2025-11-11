@@ -16,23 +16,24 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createConnector } from "@/lib/actions/connector"
+import { createSource } from "@/lib/actions/source"
 import { Plus } from "lucide-react"
 
-interface CreateConnectorDialogProps {
+interface CreateSourceDialogProps {
   workspaceId: string
   onSuccess?: () => void
 }
 
-const CONNECTOR_TYPES = [
+const SOURCE_TYPES = [
   { value: "google_drive", label: "Google Drive", description: "Sync documents from Google Drive" },
   { value: "notion", label: "Notion", description: "Connect your Notion workspace" },
   { value: "confluence", label: "Confluence", description: "Import Confluence pages" },
   { value: "sharepoint", label: "SharePoint", description: "Connect to SharePoint" },
   { value: "dropbox", label: "Dropbox", description: "Sync files from Dropbox" },
+  { value: "overheid_nl", label: "Overheid.nl", description: "Search Dutch government publications and regulations" },
 ] as const
 
-export function CreateConnectorDialog({ workspaceId, onSuccess }: CreateConnectorDialogProps) {
+export function CreateSourceDialog({ workspaceId, onSuccess }: CreateSourceDialogProps) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [type, setType] = useState<string>("")
@@ -45,11 +46,18 @@ export function CreateConnectorDialog({ workspaceId, onSuccess }: CreateConnecto
     setIsLoading(true)
     setError(null)
 
-    const config = {
-      api_key: apiKey,
+    let config: Record<string, any> = {}
+
+    if (type === "overheid_nl") {
+      // Overheid.nl doesn't need a query in config - users search when adding documents
+      config = {}
+    } else {
+      config = {
+        api_key: apiKey,
+      }
     }
 
-    const result = await createConnector(workspaceId, name, type as any, config)
+    const result = await createSource(workspaceId, name, type as any, config)
 
     if (result.error) {
       setError(result.error)
@@ -64,35 +72,35 @@ export function CreateConnectorDialog({ workspaceId, onSuccess }: CreateConnecto
     }
   }
 
-  const selectedConnector = CONNECTOR_TYPES.find((c) => c.value === type)
+  const selectedSource = SOURCE_TYPES.find((c) => c.value === type)
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
-          Add Connector
+          Add Source
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Add a new connector</DialogTitle>
+            <DialogTitle>Add a new source</DialogTitle>
             <DialogDescription>Connect external document sources to your workspace</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="connector-type">Connector Type</Label>
+              <Label htmlFor="source-type">Source Type</Label>
               <Select value={type} onValueChange={setType} required>
-                <SelectTrigger id="connector-type">
-                  <SelectValue placeholder="Select a connector type" />
+                <SelectTrigger id="source-type">
+                  <SelectValue placeholder="Select a source type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {CONNECTOR_TYPES.map((connector) => (
-                    <SelectItem key={connector.value} value={connector.value}>
+                  {SOURCE_TYPES.map((source) => (
+                    <SelectItem key={source.value} value={source.value}>
                       <div>
-                        <div className="font-medium">{connector.label}</div>
-                        <div className="text-xs text-muted-foreground">{connector.description}</div>
+                        <div className="font-medium">{source.label}</div>
+                        <div className="text-xs text-muted-foreground">{source.description}</div>
                       </div>
                     </SelectItem>
                   ))}
@@ -103,27 +111,36 @@ export function CreateConnectorDialog({ workspaceId, onSuccess }: CreateConnecto
             {type && (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="connector-name">Connector Name</Label>
+                  <Label htmlFor="source-name">Source Name</Label>
                   <Input
-                    id="connector-name"
-                    placeholder={`My ${selectedConnector?.label} Connection`}
+                    id="source-name"
+                    placeholder={`My ${selectedSource?.label} Source`}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="api-key">API Key / Token</Label>
-                  <Input
-                    id="api-key"
-                    type="password"
-                    placeholder="Enter your API key or access token"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    required
-                  />
-                  <p className="text-xs text-muted-foreground">This will be encrypted and stored securely</p>
-                </div>
+                {type === "overheid_nl" ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Overheid.nl source allows you to search and add Dutch government publications on demand.
+                      No configuration needed - you'll search when adding documents.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="api-key">API Key / Token</Label>
+                    <Input
+                      id="api-key"
+                      type="password"
+                      placeholder="Enter your API key or access token"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">This will be encrypted and stored securely</p>
+                  </div>
+                )}
               </>
             )}
 
@@ -133,8 +150,11 @@ export function CreateConnectorDialog({ workspaceId, onSuccess }: CreateConnecto
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isLoading}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading || !type}>
-              {isLoading ? "Connecting..." : "Add Connector"}
+            <Button
+              type="submit"
+              disabled={isLoading || !type || (type !== "overheid_nl" && !apiKey)}
+            >
+              {isLoading ? "Connecting..." : "Add Source"}
             </Button>
           </DialogFooter>
         </form>

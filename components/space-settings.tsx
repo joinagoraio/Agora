@@ -14,6 +14,17 @@ import { inviteUserToSpace } from "@/lib/actions/invitation"
 import { updateSpace, deleteSpace } from "@/lib/actions/space"
 import { useRouter } from "next/navigation"
 import { Trash2, Send } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 interface SpaceSettingsProps {
   space: any
@@ -28,6 +39,7 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
   const [isUpdating, setIsUpdating] = useState(false)
   const [isInviting, setIsInviting] = useState(false)
   const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [needsConfirmation, setNeedsConfirmation] = useState(false)
   const router = useRouter()
 
   const handleUpdateSpace = async () => {
@@ -38,11 +50,17 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
   }
 
   const handleDeleteSpace = async () => {
-    if (!confirm("Are you sure? This will delete all workspaces, documents, and conversations in this space.")) {
+    if (!needsConfirmation) {
+      setNeedsConfirmation(true)
       return
     }
+    
     await deleteSpace(space.id)
     router.push("/dashboard")
+  }
+
+  const handleDeleteDialogClose = (open: boolean) => {
+    setNeedsConfirmation(false)
   }
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -76,11 +94,6 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
             <div className="space-y-2">
               <Label htmlFor="space-name">Space Name</Label>
               <Input id="space-name" value={spaceName} onChange={(e) => setSpaceName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Space URL</Label>
-              <Input value={space.slug} disabled />
-              <p className="text-xs text-muted-foreground">The space URL cannot be changed</p>
             </div>
             <Button onClick={handleUpdateSpace} disabled={isUpdating}>
               {isUpdating ? "Saving..." : "Save Changes"}
@@ -208,10 +221,39 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
                   <h4 className="font-semibold">Delete Space</h4>
                   <p className="text-sm text-muted-foreground">Permanently delete this space and all its data</p>
                 </div>
-                <Button variant="destructive" onClick={handleDeleteSpace}>
+                <AlertDialog onOpenChange={handleDeleteDialogClose}>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive">
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete Space
                 </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete Space?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will delete all workspaces, documents, and conversations in this space.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {needsConfirmation && (
+                      <p className="text-sm text-destructive font-medium">
+                        This action cannot be undone.
+                      </p>
+                    )}
+                    <AlertDialogFooter>
+                      <AlertDialogCancel onClick={() => setNeedsConfirmation(false)}>Cancel</AlertDialogCancel>
+                      {needsConfirmation ? (
+                        <AlertDialogAction onClick={handleDeleteSpace} className="bg-destructive text-white hover:bg-destructive/90">
+                          Confirm?
+                        </AlertDialogAction>
+                      ) : (
+                        <Button onClick={() => setNeedsConfirmation(true)} className="bg-destructive text-white hover:bg-destructive/90">
+                          Delete Space
+                        </Button>
+                      )}
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </div>
           </CardContent>

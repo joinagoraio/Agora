@@ -32,7 +32,13 @@ export async function createWorkspace(spaceId: string, name: string, description
   return { data }
 }
 
-export async function updateWorkspace(workspaceId: string, name: string, description?: string) {
+export async function updateWorkspace(
+  workspaceId: string,
+  name: string,
+  description?: string,
+  context?: string,
+  location?: string
+) {
   const supabase = await createClient()
 
   const {
@@ -42,9 +48,26 @@ export async function updateWorkspace(workspaceId: string, name: string, descrip
     return { error: "Unauthorized" }
   }
 
+  const updateData: {
+    name: string
+    description?: string
+    context?: string
+    location?: string
+  } = { name }
+
+  if (description !== undefined) {
+    updateData.description = description
+  }
+  if (context !== undefined) {
+    updateData.context = context
+  }
+  if (location !== undefined) {
+    updateData.location = location
+  }
+
   const { data, error } = await supabase
     .from("workspaces")
-    .update({ name, description })
+    .update(updateData)
     .eq("id", workspaceId)
     .select()
     .single()

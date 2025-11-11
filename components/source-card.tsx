@@ -1,54 +1,82 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { syncConnector, deleteConnector } from "@/lib/actions/connector"
+import { syncSource, deleteSource } from "@/lib/actions/source"
 import { Cloud, MoreVertical, RefreshCw, Trash2, CheckCircle2, XCircle, AlertCircle } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
-interface ConnectorCardProps {
-  connector: {
+interface SourceCardProps {
+  source: {
     id: string
     name: string
     type: string
     status: string
     last_sync_at: string | null
   }
-  onUpdate: () => void
 }
 
-const CONNECTOR_ICONS: Record<string, string> = {
+const SOURCE_ICONS: Record<string, string> = {
   google_drive: "Google Drive",
   notion: "Notion",
   confluence: "Confluence",
   sharepoint: "SharePoint",
   dropbox: "Dropbox",
+  direct_upload: "Direct Upload",
+  overheid_nl: "Overheid.nl",
 }
 
-export function ConnectorCard({ connector, onUpdate }: ConnectorCardProps) {
+export function SourceCard({ source }: SourceCardProps) {
   const [isSyncing, setIsSyncing] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [needsConfirmation, setNeedsConfirmation] = useState(false)
+  const router = useRouter()
 
   const handleSync = async () => {
     setIsSyncing(true)
-    await syncConnector(connector.id)
+    await syncSource(source.id)
     setIsSyncing(false)
-    onUpdate()
+    router.refresh()
   }
 
   const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this connector? All associated documents will be removed.")) {
+    if (!needsConfirmation) {
+      setNeedsConfirmation(true)
       return
     }
+    
     setIsDeleting(true)
-    await deleteConnector(connector.id)
-    onUpdate()
+    await deleteSource(source.id)
+    setIsDeleting(false)
+    setDeleteDialogOpen(false)
+    setNeedsConfirmation(false)
+    router.refresh()
+  }
+
+  const handleDeleteDialogClose = (open: boolean) => {
+    if (!open) {
+      setDeleteDialogOpen(false)
+      setNeedsConfirmation(false)
+    }
   }
 
   const getStatusIcon = () => {
-    switch (connector.status) {
+    switch (source.status) {
       case "active":
         return <CheckCircle2 className="h-4 w-4 text-green-500" />
       case "error":
@@ -69,8 +97,8 @@ export function ConnectorCard({ connector, onUpdate }: ConnectorCardProps) {
               <Cloud className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <CardTitle className="text-lg">{connector.name}</CardTitle>
-              <CardDescription>{CONNECTOR_ICONS[connector.type] || connector.type}</CardDescription>
+              <CardTitle className="text-lg">{source.name}</CardTitle>
+              <CardDescription>{SOURCE_ICONS[source.type] || source.type}</CardDescription>
             </div>
           </div>
           <DropdownMenu>
@@ -84,7 +112,7 @@ export function ConnectorCard({ connector, onUpdate }: ConnectorCardProps) {
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Sync Now
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleDelete} className="text-destructive">
+              <DropdownMenuItem onClick={() => setDeleteDialogOpen(true)} className="text-destructive">
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
               </DropdownMenuItem>
@@ -96,11 +124,11 @@ export function ConnectorCard({ connector, onUpdate }: ConnectorCardProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {getStatusIcon()}
-            <Badge variant={connector.status === "active" ? "default" : "secondary"}>{connector.status}</Badge>
+            <Badge variant={source.status === "active" ? "default" : "secondary"}>{source.status}</Badge>
           </div>
-          {connector.last_sync_at && (
+          {source.last_sync_at && (
             <p className="text-xs text-muted-foreground">
-              Last sync: {new Date(connector.last_sync_at).toLocaleString()}
+              Last sync: {new Date(source.last_sync_at).toLocaleString()}
             </p>
           )}
         </div>
@@ -111,6 +139,34 @@ export function ConnectorCard({ connector, onUpdate }: ConnectorCardProps) {
           </div>
         )}
       </CardContent>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={handleDeleteDialogClose}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Source?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this source? All associated documents will be removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {needsConfirmation && (
+            <p className="text-sm text-destructive font-medium">
+              This action cannot be undone.
+            </p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setNeedsConfirmation(false)}>Cancel</AlertDialogCancel>
+            {needsConfirmation ? (
+              <AlertDialogAction onClick={handleDelete} className="bg-destructive text-white hover:bg-destructive/90" disabled={isDeleting}>
+                {isDeleting ? "Deleting..." : "Confirm?"}
+              </AlertDialogAction>
+            ) : (
+              <Button onClick={() => setNeedsConfirmation(true)} className="bg-destructive text-white hover:bg-destructive/90" disabled={isDeleting}>
+                Delete
+              </Button>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   )
 }

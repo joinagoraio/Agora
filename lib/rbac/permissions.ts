@@ -7,9 +7,9 @@ type Permission =
   | "workspace:create"
   | "workspace:update"
   | "workspace:delete"
-  | "connector:create"
-  | "connector:update"
-  | "connector:delete"
+  | "source:create"
+  | "source:update"
+  | "source:delete"
   | "conversation:create"
   | "conversation:view"
   | "conversation:share"
@@ -22,9 +22,9 @@ const rolePermissions: Record<Role, Permission[]> = {
     "workspace:create",
     "workspace:update",
     "workspace:delete",
-    "connector:create",
-    "connector:update",
-    "connector:delete",
+    "source:create",
+    "source:update",
+    "source:delete",
     "conversation:create",
     "conversation:view",
     "conversation:share",
@@ -35,9 +35,9 @@ const rolePermissions: Record<Role, Permission[]> = {
     "workspace:create",
     "workspace:update",
     "workspace:delete",
-    "connector:create",
-    "connector:update",
-    "connector:delete",
+    "source:create",
+    "source:update",
+    "source:delete",
     "conversation:create",
     "conversation:view",
     "conversation:share",
@@ -73,6 +73,6 @@ export function canManageWorkspaces(role: Role): boolean {
   return hasPermission(role, "workspace:create")
 }
 
-export function canManageConnectors(role: Role): boolean {
-  return hasPermission(role, "connector:create")
+export function canManageSources(role: Role): boolean {
+  return hasPermission(role, "source:create")
 }

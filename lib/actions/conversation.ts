@@ -152,3 +152,24 @@ export async function deleteConversation(conversationId: string) {
   revalidatePath("/")
   return { success: true }
 }
+
+export async function archiveConversation(conversationId: string) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  // For now, archive is the same as delete. Can be updated later to set a status field
+  const { error } = await supabase.from("conversations").delete().eq("id", conversationId)
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath("/")
+  return { success: true }
+}

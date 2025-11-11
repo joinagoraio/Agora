@@ -1,14 +1,18 @@
 import { redirect } from "next/navigation"
+import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/server"
-import { getConnectorsByWorkspace } from "@/lib/actions/connector"
-import { CreateConnectorDialog } from "@/components/create-connector-dialog"
-import { ConnectorCard } from "@/components/connector-card"
-import { DocumentSearch } from "@/components/document-search"
+import { getSourcesByWorkspace } from "@/lib/actions/source"
+import { getWorkspaceDocuments } from "@/lib/actions/document"
+import { DocumentsList } from "@/components/documents-list"
+import { UploadDocumentDialog } from "@/components/upload-document-dialog"
+import { AddFromSourceDialog } from "@/components/add-from-source-dialog"
+import { WorkspaceChatWrapper } from "@/components/workspace-chat-wrapper"
+import { WelcomeWorkspaceWrapper } from "@/components/welcome-workspace-wrapper"
+import { UserMenu } from "@/components/user-menu"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
-import { ArrowLeft, MessageSquare, FileText, Plug } from "lucide-react"
+import { FileText, Plug, Upload, Plus, MessageSquare, Settings, Info, ArrowLeft } from "lucide-react"
 
 export default async function WorkspacePage({
   params,
@@ -33,14 +37,22 @@ export default async function WorkspacePage({
     redirect("/dashboard")
   }
 
-  // Get connectors
-  const { data: connectors } = await getConnectorsByWorkspace(workspaceId)
+  // Get sources
+  const { data: sources } = await getSourcesByWorkspace(workspaceId)
 
-  // Get document count
+  // Filter out direct_upload sources to get available sources for adding documents
+  const availableSources = (sources || []).filter((source) => source.type !== "direct_upload")
+
+  // Get documents
+  const { data: documents } = await getWorkspaceDocuments(workspaceId)
+
+  // Get document count (excluding archived and deleted)
   const { count: documentCount } = await supabase
     .from("documents")
     .select("*", { count: "exact", head: true })
     .eq("workspace_id", workspaceId)
+    .neq("status", "deleted")
+    .neq("status", "archived")
 
   // Get conversation count
   const { count: conversationCount } = await supabase
@@ -50,109 +62,117 @@ export default async function WorkspacePage({
     .eq("user_id", user.id)
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="border-b bg-card">
-        <div className="container flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
-              <Link href={`/spaces/${workspace.spaces.id}`}>
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-            </Button>
-            <div>
-              <h1 className="text-xl font-bold">{workspace.name}</h1>
-              <p className="text-xs text-muted-foreground">{workspace.spaces.name}</p>
+    <WorkspaceChatWrapper workspaceId={workspaceId} workspaceName={workspace.name}>
+      <Suspense fallback={null}>
+        <WelcomeWorkspaceWrapper workspace={workspace} />
+      </Suspense>
+      <div className="flex min-h-screen flex-col">
+        <header className="bg-card">
+          <div className="flex h-16 items-center justify-between px-4">
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" asChild>
+                <Link href={`/spaces/${workspace.spaces.id}`}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  <span className="text-sm font-normal">Back to {workspace.spaces.name}</span>
+                </Link>
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" asChild>
+                <Link href={`/workspaces/${workspaceId}/properties`}>
+                  <Info className="h-5 w-5" />
+                </Link>
+              </Button>
+              <Button variant="ghost" size="icon" asChild>
+                <Link href={`/workspaces/${workspaceId}/settings`}>
+                  <Settings className="h-5 w-5" />
+                </Link>
+              </Button>
+              <UserMenu />
             </div>
           </div>
-          <Button asChild>
-            <Link href={`/workspaces/${workspaceId}/chat`}>
-              <MessageSquare className="mr-2 h-4 w-4" />
-              Start Chat
-            </Link>
-          </Button>
-        </div>
-      </header>
+        </header>
 
-      <main className="flex-1 bg-muted/20">
-        <div className="container py-8 px-4">
-          <div className="mb-8 grid gap-6 sm:grid-cols-3">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Documents</CardTitle>
-                <FileText className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{documentCount || 0}</div>
-                <p className="text-xs text-muted-foreground">Synced documents</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Connectors</CardTitle>
-                <Plug className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{connectors?.length || 0}</div>
-                <p className="text-xs text-muted-foreground">Active connections</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Conversations</CardTitle>
-                <MessageSquare className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{conversationCount || 0}</div>
-                <p className="text-xs text-muted-foreground">Your chats</p>
-              </CardContent>
-            </Card>
-          </div>
+        <main className="flex-1 bg-white">
+          <div className="container mx-auto py-8 px-4">
+            <div className="mb-8">
+              <h1 className="text-2xl font-semibold">{workspace.name}</h1>
+            </div>
+            <div className="mb-8 grid gap-6 sm:grid-cols-3">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium">Documents</CardTitle>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{documentCount || 0}</div>
+                  <p className="text-xs text-muted-foreground">Synced documents</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium">Sources</CardTitle>
+                  <Plug className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{sources?.length || 0}</div>
+                  <p className="text-xs text-muted-foreground">Active connections</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium">Conversations</CardTitle>
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{conversationCount || 0}</div>
+                  <p className="text-xs text-muted-foreground">Your chats</p>
+                </CardContent>
+              </Card>
+            </div>
 
-          <Tabs defaultValue="connectors" className="space-y-6">
-            <TabsList>
-              <TabsTrigger value="connectors">Connectors</TabsTrigger>
-              <TabsTrigger value="search">Search</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="connectors" className="space-y-6">
+            <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold">Document Connectors</h2>
-                  <p className="text-muted-foreground">Connect external sources to sync documents</p>
+                  <h2 className="text-2xl font-semibold">Documents</h2>
+                  <p className="text-sm text-muted-foreground">View and search all documents in this workspace</p>
                 </div>
-                <CreateConnectorDialog workspaceId={workspaceId} />
-              </div>
-
-              {connectors && connectors.length > 0 ? (
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                  {connectors.map((connector) => (
-                    <ConnectorCard key={connector.id} connector={connector} onUpdate={() => {}} />
-                  ))}
+                <div className="flex items-center gap-2">
+                  {availableSources.length === 0 ? (
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/workspaces/${workspaceId}/sources`}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Source
+                      </Link>
+                    </Button>
+                  ) : (
+                    <AddFromSourceDialog
+                      workspaceId={workspaceId}
+                      sources={sources || []}
+                      trigger={
+                        <Button variant="outline" size="sm">
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add from Source
+                        </Button>
+                      }
+                    />
+                  )}
+                  <UploadDocumentDialog
+                    workspaceId={workspaceId}
+                    trigger={
+                      <Button size="sm">
+                        <Upload className="mr-2 h-4 w-4" />
+                        Upload
+                      </Button>
+                    }
+                  />
                 </div>
-              ) : (
-                <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-12">
-                    <Plug className="mb-4 h-12 w-12 text-muted-foreground" />
-                    <h3 className="mb-2 text-lg font-semibold">No connectors yet</h3>
-                    <p className="mb-4 text-center text-sm text-muted-foreground">
-                      Add your first connector to start syncing documents
-                    </p>
-                    <CreateConnectorDialog workspaceId={workspaceId} />
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
-
-            <TabsContent value="search" className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold">Search Documents</h2>
-                <p className="text-muted-foreground">Find documents across all your connected sources</p>
               </div>
-              <DocumentSearch workspaceId={workspaceId} />
-            </TabsContent>
-          </Tabs>
-        </div>
-      </main>
-    </div>
+              <DocumentsList workspaceId={workspaceId} initialDocuments={documents || []} />
+            </div>
+          </div>
+        </main>
+      </div>
+    </WorkspaceChatWrapper>
   )
 }

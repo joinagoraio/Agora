@@ -2,10 +2,11 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getWorkspacesBySpace } from "@/lib/actions/workspace"
 import { CreateWorkspaceDialog } from "@/components/create-workspace-dialog"
+import { UserMenu } from "@/components/user-menu"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-import { Building2, FolderOpen, ArrowLeft } from "lucide-react"
+import { Layers, Settings, ArrowLeft } from "lucide-react"
 
 export default async function SpacePage({
   params,
@@ -43,39 +44,36 @@ export default async function SpacePage({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b bg-card">
-        <div className="container flex h-16 items-center justify-between px-4">
+      <header className="bg-card">
+        <div className="flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
+            <Button variant="ghost" asChild>
               <Link href="/dashboard">
-                <ArrowLeft className="h-5 w-5" />
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                <span className="text-sm font-normal">Back to Dashboard</span>
               </Link>
             </Button>
-            <div className="flex items-center gap-2">
-              <Building2 className="h-6 w-6" />
-              <div>
-                <h1 className="text-xl font-bold">{space.name}</h1>
-                <p className="text-xs text-muted-foreground">/{space.slug}</p>
-              </div>
-            </div>
           </div>
           <div className="flex items-center gap-4">
             <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
               {membership?.role}
             </span>
-            <Button variant="outline" asChild>
-              <Link href={`/spaces/${spaceId}/settings`}>Settings</Link>
+            <Button variant="ghost" size="icon" asChild>
+              <Link href={`/spaces/${spaceId}/settings`}>
+                <Settings className="h-5 w-5" />
+              </Link>
             </Button>
+            <UserMenu />
           </div>
         </div>
       </header>
 
-      <main className="flex-1 bg-muted/20">
-        <div className="container py-8 px-4">
+      <main className="flex-1 bg-white">
+        <div className="container mx-auto py-8 px-4">
           <div className="mb-8 flex items-center justify-between">
             <div>
-              <h2 className="text-3xl font-bold">Workspaces</h2>
-              <p className="text-muted-foreground">Organize your documents and conversations by topic</p>
+              <h2 className="text-2xl font-semibold">{space.name} Workspaces</h2>
+              <p className="text-sm text-muted-foreground">Organize your documents and conversations by topic</p>
             </div>
             <CreateWorkspaceDialog spaceId={spaceId} />
           </div>
@@ -84,9 +82,9 @@ export default async function SpacePage({
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {workspaces.map((workspace) => (
                 <Link key={workspace.id} href={`/workspaces/${workspace.id}`}>
-                  <Card className="transition-all hover:border-primary hover:shadow-md">
+                  <Card className="transition-all hover:shadow-md">
                     <CardHeader>
-                      <FolderOpen className="h-8 w-8 text-primary" />
+                      <Layers className="h-8 w-8 text-primary" />
                       <CardTitle className="mt-4">{workspace.name}</CardTitle>
                       {workspace.description && <CardDescription>{workspace.description}</CardDescription>}
                     </CardHeader>
@@ -102,7 +100,7 @@ export default async function SpacePage({
           ) : (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
-                <FolderOpen className="mb-4 h-12 w-12 text-muted-foreground" />
+                <Layers className="mb-4 h-12 w-12 text-muted-foreground" />
                 <h3 className="mb-2 text-lg font-semibold">No workspaces yet</h3>
                 <p className="mb-4 text-center text-sm text-muted-foreground">
                   Create your first workspace to start adding documents and having conversations.

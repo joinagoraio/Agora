@@ -2,10 +2,10 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getUserSpaces } from "@/lib/actions/space"
 import { CreateSpaceDialog } from "@/components/create-space-dialog"
-import { Button } from "@/components/ui/button"
+import { UserMenu } from "@/components/user-menu"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-import { Building2, Users } from "lucide-react"
+import { Layers2, Users } from "lucide-react"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -21,29 +21,21 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b bg-card">
-        <div className="container flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-6 w-6" />
-            <h1 className="text-xl font-bold">AGORA</h1>
-          </div>
+      <header className="bg-card">
+        <div className="flex h-16 items-center justify-between px-4">
+          <div></div>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">{user.email}</span>
-            <form action="/auth/sign-out" method="post">
-              <Button variant="outline" type="submit">
-                Sign Out
-              </Button>
-            </form>
+            <UserMenu />
           </div>
         </div>
       </header>
 
-      <main className="flex-1 bg-muted/20">
-        <div className="container py-8 px-4">
+      <main className="flex-1 bg-white">
+        <div className="container mx-auto py-8 px-4">
           <div className="mb-8 flex items-center justify-between">
             <div>
-              <h2 className="text-3xl font-bold">Your Spaces</h2>
-              <p className="text-muted-foreground">Select a space to get started or create a new one</p>
+              <h2 className="text-2xl font-semibold">Your Spaces</h2>
+              <p className="text-sm text-muted-foreground">Select a space to get started or create a new one</p>
             </div>
             <CreateSpaceDialog />
           </div>
@@ -52,16 +44,19 @@ export default async function DashboardPage() {
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {spaces.map((space: any) => (
                 <Link key={space.id} href={`/spaces/${space.id}`}>
-                  <Card className="transition-all hover:border-primary hover:shadow-md">
+                  <Card className="transition-all hover:shadow-md">
                     <CardHeader>
                       <div className="flex items-start justify-between">
-                        <Building2 className="h-8 w-8 text-primary" />
+                        <div className="flex items-center gap-3">
+                          <Layers2 className="h-5 w-5 text-primary" />
+                          <div>
+                            <CardTitle className="mt-0">{space.name}</CardTitle>
+                          </div>
+                        </div>
                         <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
                           {space.role}
                         </span>
                       </div>
-                      <CardTitle className="mt-4">{space.name}</CardTitle>
-                      <CardDescription>/{space.slug}</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -76,7 +71,7 @@ export default async function DashboardPage() {
           ) : (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
-                <Building2 className="mb-4 h-12 w-12 text-muted-foreground" />
+                <Layers2 className="mb-4 h-12 w-12 text-muted-foreground" />
                 <h3 className="mb-2 text-lg font-semibold">No spaces yet</h3>
                 <p className="mb-4 text-center text-sm text-muted-foreground">
                   Create your first space to start organizing your documents and conversations.

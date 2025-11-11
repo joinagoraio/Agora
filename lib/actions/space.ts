@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
 
-export async function createSpace(name: string, slug: string) {
+export async function createSpace(name: string) {
   const supabase = await createClient()
 
   const {
@@ -14,18 +14,34 @@ export async function createSpace(name: string, slug: string) {
     return { error: "Unauthorized" }
   }
 
-  const { data: existing } = await supabase.from("spaces").select("id").eq("slug", slug).maybeSingle()
+  const adminClient = createAdminClient()
 
-  if (existing) {
-    return { error: "This space name is already taken. Please choose another." }
+  // Ensure profile exists before creating space (owner_id references profiles.id)
+  const { data: profile } = await adminClient
+    .from("profiles")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  if (!profile) {
+    // Create profile if it doesn't exist (e.g., user created before trigger existed)
+    const { error: profileError } = await adminClient.from("profiles").insert({
+      id: user.id,
+      email: user.email || "",
+      full_name: user.user_metadata?.full_name || null,
+      avatar_url: user.user_metadata?.avatar_url || null,
+    })
+
+    if (profileError) {
+      console.error("[v0] Error creating profile:", profileError.message)
+      return { error: "Failed to create user profile" }
+    }
   }
 
-  const adminClient = createAdminClient()
   const { data: newSpace, error: spaceError } = await adminClient
     .from("spaces")
     .insert({
       name,
-      slug,
       owner_id: user.id,
     })
     .select()
