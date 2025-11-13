@@ -123,5 +123,3 @@ export function WorkspaceInheritedItems({ items }: WorkspaceInheritedItemsProps)
     </div>
   )
 }
-
-

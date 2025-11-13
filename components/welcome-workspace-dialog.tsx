@@ -188,4 +188,3 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
     </Dialog>
   )
 }
-

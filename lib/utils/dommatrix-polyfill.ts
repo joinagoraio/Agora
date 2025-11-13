@@ -54,4 +54,3 @@ if (typeof globalThis.DOMMatrix === "undefined") {
 
 // Side-effect export to ensure this module is executed
 export {}
-

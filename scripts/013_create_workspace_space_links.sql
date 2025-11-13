@@ -17,4 +17,3 @@ CREATE INDEX IF NOT EXISTS idx_workspace_space_links_relationship ON public.work
 -- Add comments
 COMMENT ON TABLE public.workspace_space_links IS 'Links workspaces to parent spaces for Reference inheritance (read-only mirrors)';
 COMMENT ON COLUMN public.workspace_space_links.relationship IS 'Type of relationship (currently only "reference" supported in Phase 1)';
-

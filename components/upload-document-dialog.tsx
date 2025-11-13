@@ -317,4 +317,3 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
     </Dialog>
   )
 }
-

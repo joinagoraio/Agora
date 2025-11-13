@@ -30,4 +30,3 @@ BEGIN
       CHECK (type IN ('google_drive', 'notion', 'confluence', 'sharepoint', 'dropbox', 'direct_upload', 'overheid_nl'));
   END IF;
 END $$;
-

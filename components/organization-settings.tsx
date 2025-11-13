@@ -148,4 +148,3 @@ export function OrganizationSettings({ space }: OrganizationSettingsProps) {
     </div>
   )
 }
-

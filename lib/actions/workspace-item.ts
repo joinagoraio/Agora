@@ -209,4 +209,3 @@ export async function deleteWorkspaceItem(itemId: string) {
   revalidatePath(`/workspaces/${item.workspace_id}`)
   return { success: true }
 }
-

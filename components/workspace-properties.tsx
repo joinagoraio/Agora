@@ -159,4 +159,3 @@ export function WorkspaceProperties({ workspace }: WorkspacePropertiesProps) {
     </div>
   )
 }
-

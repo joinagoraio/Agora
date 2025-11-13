@@ -111,4 +111,3 @@ export function buildDocumentUrlFromSource(
   console.log("[buildDocumentUrlFromSource] Output URL:", url)
   return url
 }
-

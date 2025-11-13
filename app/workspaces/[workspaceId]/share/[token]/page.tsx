@@ -173,4 +173,3 @@ export default async function WorkspaceSharePage({
     </div>
   )
 }
-

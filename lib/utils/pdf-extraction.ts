@@ -194,4 +194,3 @@ export function getHighlightCoordinates(
     height: maxY - minY,
   }
 }
-

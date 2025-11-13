@@ -154,4 +154,3 @@ function extractField(xml: string, fieldName: string): string | undefined {
 
   return undefined
 }
-

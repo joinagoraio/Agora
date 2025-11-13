@@ -156,4 +156,3 @@ export function DebugPanel({ request, response, error }: DebugPanelProps) {
     </div>
   )
 }
-

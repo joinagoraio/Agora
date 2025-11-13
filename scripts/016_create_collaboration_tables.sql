@@ -58,4 +58,3 @@ CREATE TRIGGER trigger_workspace_notes_updated_at
 COMMENT ON TABLE public.workspace_notes IS 'Notes within workspaces for collaboration';
 COMMENT ON TABLE public.workspace_comments IS 'Comments on workspace items';
 COMMENT ON TABLE public.workspace_activity IS 'Activity log for workspaces';
-

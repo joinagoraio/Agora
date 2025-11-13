@@ -5,4 +5,3 @@ alter table public.conversations
 
 create index if not exists conversations_workspace_context_idx
   on public.conversations (workspace_id, context_type, context_id);
-

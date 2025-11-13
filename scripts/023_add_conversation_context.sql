@@ -36,4 +36,3 @@ ALTER TABLE public.conversations
 -- Step 4: Create index if it doesn't exist
 CREATE INDEX IF NOT EXISTS conversations_workspace_context_idx
   ON public.conversations (workspace_id, context_type, context_id);
-

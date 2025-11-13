@@ -44,4 +44,3 @@ export async function refreshGoogleToken(refreshToken: string) {
   // For now, we'll return an error and let the user re-authenticate
   return { error: "Token refresh not implemented. Please re-authenticate with Google." }
 }
-

@@ -159,5 +159,3 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes }
     </div>
   )
 }
-
-

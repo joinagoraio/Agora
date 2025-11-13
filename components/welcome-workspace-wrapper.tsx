@@ -29,4 +29,3 @@ export function WelcomeWorkspaceWrapper({ workspace }: WelcomeWorkspaceWrapperPr
 
   return <WelcomeWorkspaceDialog workspace={workspace} open={open} onOpenChange={setOpen} />
 }
-

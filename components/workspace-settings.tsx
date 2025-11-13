@@ -171,4 +171,3 @@ export function WorkspaceSettings({ workspace }: WorkspaceSettingsProps) {
     </div>
   )
 }
-

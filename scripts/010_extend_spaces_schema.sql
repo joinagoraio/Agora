@@ -33,4 +33,3 @@ COMMENT ON COLUMN public.spaces.jurisdiction IS 'Jurisdiction information as JSO
 COMMENT ON COLUMN public.spaces.visibility IS 'Visibility level: public (federated), internal (tenant only), or confidential';
 COMMENT ON COLUMN public.spaces.metadata IS 'Additional metadata for the space';
 COMMENT ON COLUMN public.spaces.logo_url IS 'URL to the space logo/image';
-

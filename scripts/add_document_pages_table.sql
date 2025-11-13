@@ -50,4 +50,3 @@ CREATE TRIGGER update_document_pages_updated_at
   BEFORE UPDATE ON public.document_pages
   FOR EACH ROW 
   EXECUTE FUNCTION update_updated_at_column();
-

@@ -151,4 +151,3 @@ export default async function DocumentViewerPage({ params, searchParams }: Docum
     </WorkspaceChatWrapper>
   )
 }
-

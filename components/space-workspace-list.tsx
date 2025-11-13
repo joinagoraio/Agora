@@ -89,5 +89,3 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate }: SpaceWork
     </div>
   )
 }
-
-

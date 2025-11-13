@@ -26,10 +26,10 @@ This plan outlines the implementation of an in-app PDF viewer with AI-powered te
 **Status:** Pending  
 **Files:** `package.json`
 
-```bash
+\`\`\`bash
 pnpm add react-pdf
 pnpm add -D @types/react-pdf
-```
+\`\`\`
 
 **Dependencies:**
 - `react-pdf` - PDF rendering component
@@ -51,7 +51,7 @@ Create a new table to store page-level information:
 - Character offsets
 
 **Schema:**
-```sql
+\`\`\`sql
 create table if not exists public.document_pages (
   id uuid primary key default uuid_generate_v4(),
   document_id uuid references public.documents(id) on delete cascade not null,
@@ -65,7 +65,7 @@ create table if not exists public.document_pages (
 
 create index idx_document_pages_document_id on public.document_pages(document_id);
 create index idx_document_pages_page_number on public.document_pages(document_id, page_number);
-```
+\`\`\`
 
 ### Task 2.2: Add Highlight Metadata to Messages
 **Status:** Pending  
@@ -137,7 +137,7 @@ Create a reusable PDF viewer component with:
 - Error handling
 
 **Props:**
-```typescript
+\`\`\`typescript
 interface PDFViewerProps {
   url: string
   documentId: string
@@ -145,7 +145,7 @@ interface PDFViewerProps {
   onPageChange?: (page: number) => void
   initialPage?: number
 }
-```
+\`\`\`
 
 **Features:**
 - Render PDF pages using `react-pdf`
@@ -164,7 +164,7 @@ Create SVG overlay component for highlights:
 - Different highlight colors/styles
 
 **Props:**
-```typescript
+\`\`\`typescript
 interface HighlightOverlayProps {
   pageNumber: number
   highlights: Highlight[]
@@ -172,10 +172,10 @@ interface HighlightOverlayProps {
   pageHeight: number
   scale: number
 }
-```
+\`\`\`
 
 **Highlight Type:**
-```typescript
+\`\`\`typescript
 interface Highlight {
   id: string
   pageNumber: number
@@ -183,7 +183,7 @@ interface Highlight {
   coordinates?: { x: number; y: number; width: number; height: number }
   color?: string
 }
-```
+\`\`\`
 
 ### Task 4.3: Integrate Highlight Overlay with PDF Viewer
 **Status:** Pending  
@@ -231,9 +231,9 @@ Actions toolbar:
 **Files:** `lib/actions/document.ts`
 
 Add function to fetch document pages:
-```typescript
+\`\`\`typescript
 export async function getDocumentPages(documentId: string)
-```
+\`\`\`
 
 Returns:
 - All pages with text content
@@ -269,7 +269,7 @@ Modify `getRelevantContext` to return:
 - Optional bounding box coordinates
 
 **Source Format:**
-```typescript
+\`\`\`typescript
 {
   id: string
   title: string
@@ -278,7 +278,7 @@ Modify `getRelevantContext` to return:
   textSpan: { start: number; end: number }
   preview: string // Text preview around the match
 }
-```
+\`\`\`
 
 ### Task 6.3: Create Text Matching Utility
 **Status:** Pending  
@@ -334,10 +334,10 @@ Utility functions for:
 - Navigating to document with highlights
 
 **Functions:**
-```typescript
+\`\`\`typescript
 buildDocumentUrl(documentId: string, pageNumber?: number, highlight?: TextSpan)
 parseDocumentUrl(url: string): DocumentLinkParams
-```
+\`\`\`
 
 ---
 
@@ -521,4 +521,3 @@ Test:
 - Consider migration strategy for existing documents
 - Plan for future features (annotations, comments, etc.)
 - Document API changes for team reference
-

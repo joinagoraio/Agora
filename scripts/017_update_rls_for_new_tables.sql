@@ -281,4 +281,3 @@ CREATE POLICY "Documents are tenant-isolated"
     tenant_id IN (SELECT unnest(get_user_space_ids()))
     OR classification = 'public'
   );
-

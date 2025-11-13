@@ -41,4 +41,3 @@ COMMENT ON COLUMN public.workspace_items.source_space_item_id IS 'Reference to s
 COMMENT ON COLUMN public.workspace_items.inheritance IS 'Inheritance type: reference (read-only from parent space) or local (created in workspace)';
 COMMENT ON COLUMN public.workspace_items.classification IS 'Classification level: public, internal, or confidential';
 COMMENT ON COLUMN public.workspace_items.payload IS 'Item content and metadata as JSON';
-

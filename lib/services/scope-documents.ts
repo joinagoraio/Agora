@@ -162,5 +162,3 @@ export async function syncAllScopeDocumentsToWorkspace(spaceId: string, workspac
     await upsertWorkspaceDocumentForScope(spaceId, workspaceId, item as SpaceDocumentItem, adminClient)
   }
 }
-
-

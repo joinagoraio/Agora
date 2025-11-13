@@ -17,4 +17,3 @@
 -- Each script is idempotent and can be run multiple times safely
 
 SELECT 'Phase 1 migrations complete. Please run each script individually in order.' AS status;
-

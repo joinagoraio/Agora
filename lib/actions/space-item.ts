@@ -212,4 +212,3 @@ export async function updateSpaceItem(
   revalidatePath(`/spaces/${data.space_id}/items`)
   return { data }
 }
-

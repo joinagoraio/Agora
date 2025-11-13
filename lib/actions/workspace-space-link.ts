@@ -135,4 +135,3 @@ export async function getInheritedItems(workspaceId: string) {
 
   return { data: inheritedItems || [] }
 }
-

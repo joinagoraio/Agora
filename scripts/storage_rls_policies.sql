@@ -43,4 +43,3 @@ USING (
 
 -- Note: For UPDATE, you might want to add a policy if you need to update files
 -- For now, we'll skip UPDATE since we're just uploading new files
-

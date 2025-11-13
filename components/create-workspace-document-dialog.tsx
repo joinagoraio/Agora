@@ -165,4 +165,3 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
     </Dialog>
   )
 }
-

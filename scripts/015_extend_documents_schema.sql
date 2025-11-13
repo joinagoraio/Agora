@@ -33,4 +33,3 @@ COMMENT ON COLUMN public.documents.publication_date IS 'Publication date of the 
 COMMENT ON COLUMN public.documents.domain IS 'Domain tag for cross-domain organization';
 COMMENT ON COLUMN public.documents.municipality IS 'Municipality associated with the document';
 COMMENT ON COLUMN public.documents.classification IS 'Classification level: public, internal, or confidential';
-

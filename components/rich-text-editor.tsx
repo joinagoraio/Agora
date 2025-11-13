@@ -322,4 +322,3 @@ export function RichTextEditor({ content, onChange, placeholder, className }: Ri
     </div>
   )
 }
-

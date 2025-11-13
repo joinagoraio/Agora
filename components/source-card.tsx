@@ -215,4 +215,3 @@ export function SourceCard({ source }: SourceCardProps) {
     </Card>
   )
 }
-

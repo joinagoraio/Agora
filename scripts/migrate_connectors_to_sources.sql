@@ -152,4 +152,3 @@ BEGIN
   RAISE NOTICE '2. Column "source_id" exists in documents: %', EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'documents' AND column_name = 'source_id');
   RAISE NOTICE '3. Type "source_type" exists: %', EXISTS (SELECT 1 FROM pg_type WHERE typname = 'source_type');
 END $$;
-

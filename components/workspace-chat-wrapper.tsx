@@ -104,4 +104,3 @@ export function WorkspaceChatWrapper({
     </ChatContext.Provider>
   )
 }
-

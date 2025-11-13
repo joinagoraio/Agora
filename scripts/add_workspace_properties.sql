@@ -7,4 +7,3 @@ ADD COLUMN IF NOT EXISTS location TEXT;
 
 COMMENT ON COLUMN public.workspaces.context IS 'Additional context for the workspace to help AI understand search criteria and domain';
 COMMENT ON COLUMN public.workspaces.location IS 'Location associated with the workspace. If provided, this will be automatically included in searches.';
-

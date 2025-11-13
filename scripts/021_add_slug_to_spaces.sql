@@ -29,4 +29,3 @@ BEGIN
 END $$;
 
 COMMENT ON COLUMN spaces.slug IS 'URL-friendly identifier for the space';
-

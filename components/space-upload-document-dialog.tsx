@@ -162,5 +162,3 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
     </Dialog>
   )
 }
-
-

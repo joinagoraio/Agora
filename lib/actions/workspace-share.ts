@@ -176,4 +176,3 @@ export async function revokeWorkspaceShareLink(workspaceId: string, token: strin
   revalidatePath(`/workspaces/${workspaceId}`)
   return { success: true }
 }
-

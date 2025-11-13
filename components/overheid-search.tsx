@@ -1338,4 +1338,3 @@ export function OverheidSearch({ onDocumentsSelected, showSelection = true }: Ov
     </Tabs>
   )
 }
-

@@ -41,4 +41,3 @@ CREATE POLICY "Users can delete their search_queries"
 -- Add comments
 COMMENT ON TABLE public.search_queries IS 'Saved search queries for workspaces';
 COMMENT ON COLUMN public.search_queries.filters IS 'Search filters as JSON (domain, municipality, year, etc.)';
-

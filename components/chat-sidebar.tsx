@@ -886,4 +886,3 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
     </>
   )
 }
-

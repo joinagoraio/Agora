@@ -129,19 +129,19 @@ The `toDataStreamResponse()` method should work. If it doesn't, we need to:
 
 ### Fix #2: Standardize Model Format (MEDIUM PRIORITY)
 Use the provider instance format consistently:
-```typescript
+\`\`\`typescript
 model: openai("gpt-4o-mini")
-```
+\`\`\`
 
 ### Fix #3: Add API Key Validation (HIGH PRIORITY)
-```typescript
+\`\`\`typescript
 if (!process.env.OPENAI_API_KEY) {
   return new Response(
     JSON.stringify({ error: "OpenAI API key not configured" }),
     { status: 500, headers: { "Content-Type": "application/json" } }
   )
 }
-```
+\`\`\`
 
 ### Fix #4: Improve Error Handling (MEDIUM PRIORITY)
 Ensure errors are returned in a format `useChat` can handle.
@@ -201,4 +201,3 @@ The fallback pattern is still necessary because:
 2. Check browser console for the log message indicating which method was used
 3. Verify that useChat hook receives and processes the stream correctly
 4. Test error scenarios (missing key, invalid key, rate limits)
-

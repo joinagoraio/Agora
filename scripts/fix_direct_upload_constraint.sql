@@ -8,4 +8,3 @@ ALTER TABLE connectors DROP CONSTRAINT IF EXISTS connectors_type_check;
 ALTER TABLE connectors 
 ADD CONSTRAINT connectors_type_check 
 CHECK (type IN ('google_drive', 'notion', 'confluence', 'sharepoint', 'dropbox', 'direct_upload'));
-

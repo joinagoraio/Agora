@@ -134,5 +134,3 @@ function sanitizeScopeContent(text: string): string {
   sanitized = sanitized.replace(/\\(?![nrtbf\\'"xu0-7])/g, "")
   return sanitized.trim()
 }
-
-

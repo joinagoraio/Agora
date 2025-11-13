@@ -118,4 +118,3 @@ function parseOverheidSRUResponse(xmlText: string) {
 
   return { results, totalRecords }
 }
-

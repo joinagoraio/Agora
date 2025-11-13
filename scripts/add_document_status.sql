@@ -27,4 +27,3 @@ END $$;
 
 -- Update existing documents to 'active' status (in case any are NULL)
 UPDATE documents SET status = 'active' WHERE status IS NULL;
-

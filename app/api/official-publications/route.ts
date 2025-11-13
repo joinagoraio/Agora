@@ -128,4 +128,3 @@ function parsePublicationsResponse(xmlText: string) {
 
   return { publications, totalRecords }
 }
-

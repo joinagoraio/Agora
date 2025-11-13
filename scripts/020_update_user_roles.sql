@@ -119,4 +119,3 @@ BEGIN
     COMMENT ON TYPE user_role IS 'User roles: owner/tenant_admin (full control), admin/org_manager (settings/users), project_owner (workspaces/share), analyst/contributor (evidence/notes), viewer (read-only), external (shared views)';
   END IF;
 END $$;
-

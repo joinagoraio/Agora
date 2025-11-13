@@ -54,4 +54,3 @@ export async function GET(request: Request) {
 
   return NextResponse.redirect(new URL("/auth/login", requestUrl.origin))
 }
-

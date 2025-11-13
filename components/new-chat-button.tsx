@@ -26,4 +26,3 @@ export function NewChatButton({ workspaceId }: NewChatButtonProps) {
     </Button>
   )
 }
-

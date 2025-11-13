@@ -249,4 +249,3 @@ export function MyDocumentsList({ workspaceId, initialDocuments }: MyDocumentsLi
     </section>
   )
 }
-

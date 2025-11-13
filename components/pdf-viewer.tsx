@@ -674,4 +674,3 @@ function PDFHighlightOverlay({ highlights, scale, rotation }: PDFHighlightOverla
     </svg>
   )
 }
-

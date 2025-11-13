@@ -163,5 +163,3 @@ export function SpaceDocumentsPanel({ spaceId, initialDocuments }: SpaceDocument
     </div>
   )
 }
-
-

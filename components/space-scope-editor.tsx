@@ -200,5 +200,3 @@ export function SpaceScopeEditor({
     </Card>
   )
 }
-
-

@@ -45,4 +45,3 @@ COMMENT ON COLUMN public.space_items.payload IS 'Item content and metadata as JS
 COMMENT ON COLUMN public.space_items.source_url IS 'Source URL for provenance';
 COMMENT ON COLUMN public.space_items.source_doc_id IS 'Reference to source document if applicable';
 COMMENT ON COLUMN public.space_items.source_page IS 'Page number in source document if applicable';
-
