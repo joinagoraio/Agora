@@ -11,6 +11,9 @@ importers:
       '@ai-sdk/openai':
         specifier: ^2.0.65
         version: 2.0.65(zod@3.25.76)
+      '@ai-sdk/react':
+        specifier: latest
+        version: 2.0.93(react@19.2.0)(zod@3.25.76)
       '@hookform/resolvers':
         specifier: ^3.10.0
         version: 3.10.0(react-hook-form@7.60.0(react@19.2.0))
@@ -300,6 +303,16 @@ packages:
   '@ai-sdk/provider@2.0.0':
     resolution: {integrity: sha512-6o7Y2SeO9vFKB8lArHXehNuusnpddKPk7xqL7T2/b+OvXMRIXUO1rR4wcv1hAFUAT9avGZshty3Wlua/XA7TvA==}
     engines: {node: '>=18'}
+
+  '@ai-sdk/react@2.0.93':
+    resolution: {integrity: sha512-2TzhpQr10HuWxpqyHpSAUMRUqD1G2O73J2sAaJChomVDbjr7BwpM0mdR3aRamCXNtuLiJmTFQhbNzw8fXMBdYw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: ^18 || ^19 || ^19.0.0-rc
+      zod: ^3.25.76 || ^4.1.8
+    peerDependenciesMeta:
+      zod:
+        optional: true
 
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
@@ -3379,6 +3392,11 @@ packages:
     resolution: {integrity: sha512-RnyO9VXI85Bmsf4b8AuQFBKFYL3LKUl+ZrifOjvlrQoboAROj5IITVLK1yOXBjwUWUn2BI5cfmurktgCzuZ5QA==}
     engines: {node: '>=18'}
 
+  swr@2.3.6:
+    resolution: {integrity: sha512-wfHRmHWk/isGNMwlLGlZX5Gzz/uTgo0o2IRuTMcf4CPuPFJZlq0rDaKUx+ozB5nBOReNV1kiOyzMfj+MBMikLw==}
+    peerDependencies:
+      react: ^16.11.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
   tailwind-merge@2.5.5:
     resolution: {integrity: sha512-0LXunzzAZzo0tEPxV3I297ffKZPlKDrjj7NXphC8V5ak9yHC5zRmxnOe2m/Rd/7ivsOMJe3JZ2JVocoDdQTRBA==}
 
@@ -3410,6 +3428,10 @@ packages:
 
   tesseract.js@6.0.1:
     resolution: {integrity: sha512-/sPvMvrCtgxnNRCjbTYbr7BRu0yfWDsMZQ2a/T5aN/L1t8wUQN6tTWv6p6FwzpoEBA0jrN2UD2SX4QQFRdoDbA==}
+
+  throttleit@2.1.0:
+    resolution: {integrity: sha512-nt6AMGKW1p/70DF/hGBdJB57B8Tspmbp5gfJ8ilhLnt7kkr2ye7hzD6NVG8GGErk2HWF34igrL2CXmNIkzKqKw==}
+    engines: {node: '>=18'}
 
   tiny-invariant@1.3.3:
     resolution: {integrity: sha512-+FbBPE1o9QAYvviau/qC5SE3caw21q3xkvWKBtja5vgqOWIHHJ3ioaq1VPfn/Szqctz2bU/oYeKd9/z5BL+PVg==}
@@ -3616,6 +3638,16 @@ snapshots:
   '@ai-sdk/provider@2.0.0':
     dependencies:
       json-schema: 0.4.0
+
+  '@ai-sdk/react@2.0.93(react@19.2.0)(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider-utils': 3.0.17(zod@3.25.76)
+      ai: 5.0.93(zod@3.25.76)
+      react: 19.2.0
+      swr: 2.3.6(react@19.2.0)
+      throttleit: 2.1.0
+    optionalDependencies:
+      zod: 3.25.76
 
   '@alloc/quick-lru@5.2.0': {}
 
@@ -6860,6 +6892,12 @@ snapshots:
       zimmerframe: 1.1.4
     optional: true
 
+  swr@2.3.6(react@19.2.0):
+    dependencies:
+      dequal: 2.0.3
+      react: 19.2.0
+      use-sync-external-store: 1.6.0(react@19.2.0)
+
   tailwind-merge@2.5.5: {}
 
   tailwindcss-animate@1.0.7(tailwindcss@4.1.9):
@@ -6908,6 +6946,8 @@ snapshots:
       zlibjs: 0.3.1
     transitivePeerDependencies:
       - encoding
+
+  throttleit@2.1.0: {}
 
   tiny-invariant@1.3.3: {}
 

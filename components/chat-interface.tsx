@@ -1,23 +1,12 @@
 "use client"
 
-import { useChat } from "ai/react"
+import { useChat } from "@ai-sdk/react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Send, Loader2, ExternalLink, FileText, X, Plus, Sparkles, CircleStop } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import Link from "next/link"
@@ -130,9 +119,10 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                       updated[lastIndex] = {
                         ...lastMsg,
                         sources: dbLastMessage.sources || lastMsg.sources,
-                        thinking_duration: dbLastMessage.thinking_duration !== null && dbLastMessage.thinking_duration !== undefined
-                          ? dbLastMessage.thinking_duration
-                          : lastMsg.thinking_duration,
+                        thinking_duration:
+                          dbLastMessage.thinking_duration !== null && dbLastMessage.thinking_duration !== undefined
+                            ? dbLastMessage.thinking_duration
+                            : lastMsg.thinking_duration,
                       } as any
                     }
                   }
@@ -144,7 +134,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
             console.error("Failed to fetch message sources:", error)
           }
         }, 500) // Wait 500ms for DB write to complete
-        
+
         return () => clearTimeout(timer)
       }
     }
@@ -175,12 +165,12 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       prevConversationId: prevConversationIdForMessagesRef.current,
       isLoading,
     })
-    
+
     const conversationChanged = prevConversationIdForMessagesRef.current !== conversationId
     const initialMessagesChanged = prevInitialMessagesLengthRef.current !== initialMessages.length
-    
+
     let timeoutId: ReturnType<typeof setTimeout> | null = null
-    
+
     if (!hasLoadedInitial) {
       // Initial load - load messages from initialMessages
       console.log("[ChatInterface] Loading initial messages:", initialMessages.length)
@@ -224,7 +214,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       }
       prevInitialMessagesLengthRef.current = initialMessages.length
     }
-    
+
     // Cleanup function
     return () => {
       if (timeoutId) {
@@ -427,7 +417,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       <div
         className={cn(
           "flex-1 space-y-4 p-4",
-          messages.length > 0 ? "overflow-y-auto chat-scrollable" : "overflow-hidden"
+          messages.length > 0 ? "overflow-y-auto chat-scrollable" : "overflow-hidden",
         )}
       >
         {messages.length === 0 && !isLoading && !isSwitchingConversation && (
@@ -452,9 +442,10 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                     {(() => {
                       // First check if message has thinking_duration from database (past messages)
                       if (message.thinking_duration !== null && message.thinking_duration !== undefined) {
-                        const duration = typeof message.thinking_duration === 'number' 
-                          ? message.thinking_duration 
-                          : parseFloat(String(message.thinking_duration))
+                        const duration =
+                          typeof message.thinking_duration === "number"
+                            ? message.thinking_duration
+                            : Number.parseFloat(String(message.thinking_duration))
                         if (!isNaN(duration)) {
                           return `Thought for ${formatDuration(duration)} sec`
                         }
@@ -477,101 +468,104 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                   className={cn(
                     "max-w-[80%] sm:max-w-[60ch] rounded-2xl px-3 py-2 text-sm break-words",
                     isUser && "bg-primary/5 text-foreground",
-                    isAssistant && "space-y-2"
+                    isAssistant && "space-y-2",
                   )}
                 >
                   <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-0 prose-pre:whitespace-pre-wrap prose-pre:break-words prose-pre:text-sm">
                     <ReactMarkdown>{message.content}</ReactMarkdown>
                   </div>
-                  {isAssistant && message.sources && message.sources.length > 0 && (() => {
-                    // Hide sources if they're all from documents already shown in AI Context
-                    const availableDocumentIds = new Set(availableDocuments.map((d: any) => d.id))
-                    
-                    // Check if all sources are from available documents in AI Context
-                    const allSourcesInContext = message.sources.every((source: any) => {
-                      // Only check sources with document IDs (internal documents)
-                      if (source.id && typeof source.id === "string") {
-                        return availableDocumentIds.has(source.id)
-                      }
-                      // External sources (no document ID) should always be shown
-                      return false
-                    })
-                    
-                    // Check if there are any external sources (sources without document IDs)
-                    const hasExternalSources = message.sources.some((s: any) => !s.id || typeof s.id !== "string")
-                    
-                    // Check if any sources have highlight information (textSpan or pageNumber)
-                    // These should always be shown so users can jump to the specific section
-                    const hasHighlightInfo = message.sources.some((s: any) => 
-                      s.textSpan || (s.pageNumber !== undefined && s.pageNumber !== null)
-                    )
-                    
-                    // Hide sources if:
-                    // 1. All sources are from documents in AI Context (redundant)
-                    // 2. AND there are no external sources to show
-                    // 3. AND there's no highlight information to navigate to
-                    // Show sources if there are external sources, highlight info, or if not all sources are in context
-                    const shouldShowSources = hasExternalSources || !allSourcesInContext || hasHighlightInfo
-                    
-                    if (!shouldShowSources) {
-                      return null
-                    }
-                    
-                    return (
-                      <div className="pt-2 space-y-2 border-t border-border/60">
-                        <p className="text-xs font-medium">Sources:</p>
-                        <div className="flex flex-wrap gap-2">
-                          {message.sources.map((source: any, idx: number) => {
-                            // Check if source has document ID (for in-app viewing)
-                            const hasDocumentId = source.id && typeof source.id === "string"
-                            const hasPageInfo = source.pageNumber !== undefined
+                  {isAssistant &&
+                    message.sources &&
+                    message.sources.length > 0 &&
+                    (() => {
+                      // Hide sources if they're all from documents already shown in AI Context
+                      const availableDocumentIds = new Set(availableDocuments.map((d: any) => d.id))
 
-                            if (hasDocumentId) {
-                              // Link to in-app document viewer
-                              console.log("[ChatInterface] Building URL from source:", {
-                                sourceId: source.id,
-                                sourceTitle: source.title,
-                                pageNumber: source.pageNumber,
-                                textSpan: source.textSpan,
-                                hasPageNumber: source.pageNumber !== undefined,
-                                hasTextSpan: source.textSpan !== undefined,
-                                fullSource: JSON.stringify(source, null, 2),
-                              })
-                              const documentUrl = buildDocumentUrlFromSource(workspaceId, source)
-                              console.log("[ChatInterface] Built URL:", documentUrl)
-                              return (
-                                <Link key={idx} href={documentUrl}>
-                                  <Badge variant="secondary" className="text-xs cursor-pointer hover:bg-secondary/80">
-                                    <FileText className="mr-1 h-3 w-3" />
-                                    {source.title}
-                                    {hasPageInfo && (
-                                      <span className="ml-1 text-xs opacity-70">(Page {source.pageNumber})</span>
-                                    )}
-                                  </Badge>
-                                </Link>
-                              )
-                            } else {
-                              // Fallback to external URL
-                              return (
-                                <a
-                                  key={idx}
-                                  href={source.url || "#"}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1"
-                                >
-                                  <Badge variant="secondary" className="text-xs">
-                                    {source.title}
-                                    {source.url && <ExternalLink className="ml-1 h-3 w-3" />}
-                                  </Badge>
-                                </a>
-                              )
-                            }
-                          })}
+                      // Check if all sources are from available documents in AI Context
+                      const allSourcesInContext = message.sources.every((source: any) => {
+                        // Only check sources with document IDs (internal documents)
+                        if (source.id && typeof source.id === "string") {
+                          return availableDocumentIds.has(source.id)
+                        }
+                        // External sources (no document ID) should always be shown
+                        return false
+                      })
+
+                      // Check if there are any external sources (sources without document IDs)
+                      const hasExternalSources = message.sources.some((s: any) => !s.id || typeof s.id !== "string")
+
+                      // Check if any sources have highlight information (textSpan or pageNumber)
+                      // These should always be shown so users can jump to the specific section
+                      const hasHighlightInfo = message.sources.some(
+                        (s: any) => s.textSpan || (s.pageNumber !== undefined && s.pageNumber !== null),
+                      )
+
+                      // Hide sources if:
+                      // 1. All sources are from documents in AI Context (redundant)
+                      // 2. AND there are no external sources to show
+                      // 3. AND there's no highlight information to navigate to
+                      // Show sources if there are external sources, highlight info, or if not all sources are in context
+                      const shouldShowSources = hasExternalSources || !allSourcesInContext || hasHighlightInfo
+
+                      if (!shouldShowSources) {
+                        return null
+                      }
+
+                      return (
+                        <div className="pt-2 space-y-2 border-t border-border/60">
+                          <p className="text-xs font-medium">Sources:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {message.sources.map((source: any, idx: number) => {
+                              // Check if source has document ID (for in-app viewing)
+                              const hasDocumentId = source.id && typeof source.id === "string"
+                              const hasPageInfo = source.pageNumber !== undefined
+
+                              if (hasDocumentId) {
+                                // Link to in-app document viewer
+                                console.log("[ChatInterface] Building URL from source:", {
+                                  sourceId: source.id,
+                                  sourceTitle: source.title,
+                                  pageNumber: source.pageNumber,
+                                  textSpan: source.textSpan,
+                                  hasPageNumber: source.pageNumber !== undefined,
+                                  hasTextSpan: source.textSpan !== undefined,
+                                  fullSource: JSON.stringify(source, null, 2),
+                                })
+                                const documentUrl = buildDocumentUrlFromSource(workspaceId, source)
+                                console.log("[ChatInterface] Built URL:", documentUrl)
+                                return (
+                                  <Link key={idx} href={documentUrl}>
+                                    <Badge variant="secondary" className="text-xs cursor-pointer hover:bg-secondary/80">
+                                      <FileText className="mr-1 h-3 w-3" />
+                                      {source.title}
+                                      {hasPageInfo && (
+                                        <span className="ml-1 text-xs opacity-70">(Page {source.pageNumber})</span>
+                                      )}
+                                    </Badge>
+                                  </Link>
+                                )
+                              } else {
+                                // Fallback to external URL
+                                return (
+                                  <a
+                                    key={idx}
+                                    href={source.url || "#"}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1"
+                                  >
+                                    <Badge variant="secondary" className="text-xs">
+                                      {source.title}
+                                      {source.url && <ExternalLink className="ml-1 h-3 w-3" />}
+                                    </Badge>
+                                  </a>
+                                )
+                              }
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })()}
+                      )
+                    })()}
                 </div>
               </div>
             </div>
@@ -580,9 +574,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
 
         {isLoading && (
           <div className="flex justify-start">
-            <span className="px-2 text-sm italic text-muted-foreground">
-              {`Thinking${ellipsis.padEnd(3, ".")}`}
-            </span>
+            <span className="px-2 text-sm italic text-muted-foreground">{`Thinking${ellipsis.padEnd(3, ".")}`}</span>
           </div>
         )}
 
@@ -615,18 +607,18 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
               <CircleStop className="h-3 w-3" />
             </Button>
           )}
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             variant="ghost"
-            size="icon" 
-            disabled={isLoading || !input.trim()} 
+            size="icon"
+            disabled={isLoading || !input.trim()}
             className="absolute bottom-2 right-2 h-6 w-6 p-0"
           >
             {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
           </Button>
         </form>
         <p className="text-xs text-muted-foreground">Press Enter to send, Shift+Enter for new line</p>
-        
+
         {/* Document pills in accordion */}
         {!isLoadingDocuments && documents.length > 0 && (
           <Accordion type="single" collapsible defaultValue="documents" className="mt-4">
