@@ -31,16 +31,39 @@ export default async function ChatPage({
   }
 
   // Get workspace details
-  const { data: workspace } = await supabase.from("workspaces").select("*, spaces(*)").eq("id", workspaceId).single()
+  const { data: workspace, error: workspaceError } = await supabase
+    .from("workspaces")
+    .select("*")
+    .eq("id", workspaceId)
+    .single()
 
-  if (!workspace) {
+  if (workspaceError || !workspace) {
+    console.error("Error fetching workspace:", workspaceError)
     redirect("/dashboard")
+  }
+
+  // Get space details separately to avoid RLS issues with joins
+  const { data: space } = await supabase
+    .from("spaces")
+    .select("*")
+    .eq("id", workspace.space_id)
+    .single()
+
+  if (!space) {
+    console.error("Error fetching space for workspace")
+    redirect("/dashboard")
+  }
+
+  // Create workspace object with space attached for compatibility
+  const workspaceWithSpace = {
+    ...workspace,
+    spaces: space,
   }
 
   // Get or create conversation
   let currentConversationId = conversationId
   if (!currentConversationId) {
-    const result = await createConversation(workspaceId)
+    const result = await createConversation(workspaceId, { contextType: "workspace" })
     if (result.data) {
       currentConversationId = result.data.id
       redirect(`/workspaces/${workspaceId}/chat?conversationId=${currentConversationId}`)
@@ -48,7 +71,7 @@ export default async function ChatPage({
   }
 
   // Get all conversations
-  const { data: conversations } = await getUserConversations(workspaceId)
+  const { data: conversations } = await getUserConversations(workspaceId, { contextType: "workspace" })
 
   // Get current conversation messages
   const { data: messages } = currentConversationId ? await getConversationMessages(currentConversationId) : { data: [] }
@@ -67,9 +90,9 @@ export default async function ChatPage({
         <div className="flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" asChild>
-              <Link href={`/spaces/${workspace.spaces.id}`}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                <span className="text-sm font-normal">Back to {workspace.spaces.name}</span>
+              <Link href={`/spaces/${workspaceWithSpace.spaces.id}`}>
+                <ArrowLeft className="mr-2 h-3 w-3" />
+                <span className="text-xs font-normal">Back to {workspaceWithSpace.spaces.name}</span>
               </Link>
             </Button>
             <div>

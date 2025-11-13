@@ -3,8 +3,17 @@
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
+import OpenAI from "openai"
 
-export async function createSpace(name: string) {
+export async function createSpace(
+  name: string,
+  options?: {
+    spaceType?: "national" | "regional" | "municipal" | "party" | "other"
+    jurisdiction?: Record<string, any>
+    visibility?: "public" | "internal" | "confidential"
+    slug?: string
+  },
+) {
   const supabase = await createClient()
 
   const {
@@ -38,12 +47,26 @@ export async function createSpace(name: string) {
     }
   }
 
+  // Generate slug if not provided
+  const slug =
+    options?.slug ||
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "")
+
+  const spaceData: any = {
+    name,
+    slug,
+    owner_id: user.id,
+    space_type: options?.spaceType || "municipal",
+    visibility: options?.visibility || "internal",
+    jurisdiction: options?.jurisdiction || {},
+  }
+
   const { data: newSpace, error: spaceError } = await adminClient
     .from("spaces")
-    .insert({
-      name,
-      owner_id: user.id,
-    })
+    .insert(spaceData)
     .select()
     .single()
 
@@ -69,7 +92,17 @@ export async function createSpace(name: string) {
   return { data: newSpace }
 }
 
-export async function updateSpace(spaceId: string, name: string) {
+export async function updateSpace(
+  spaceId: string,
+  updates: {
+    name?: string
+    space_type?: "national" | "regional" | "municipal" | "party" | "other"
+    jurisdiction?: Record<string, any>
+    visibility?: "public" | "internal" | "confidential"
+    logo_url?: string
+    metadata?: Record<string, any>
+  },
+) {
   const supabase = await createClient()
 
   const {
@@ -79,7 +112,7 @@ export async function updateSpace(spaceId: string, name: string) {
     return { error: "Unauthorized" }
   }
 
-  const { data, error } = await supabase.from("spaces").update({ name }).eq("id", spaceId).select().single()
+  const { data, error } = await supabase.from("spaces").update(updates).eq("id", spaceId).select().single()
 
   if (error) {
     return { error: error.message }
@@ -87,6 +120,117 @@ export async function updateSpace(spaceId: string, name: string) {
 
   revalidatePath(`/spaces/${spaceId}`)
   return { data }
+}
+
+export async function updateSpaceScope(
+  spaceId: string,
+  scope: {
+    summary?: string | null
+    description?: string | null
+    timeframe?: string | null
+  },
+) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  const { data: existingSpace, error: fetchError } = await supabase
+    .from("spaces")
+    .select("description, metadata")
+    .eq("id", spaceId)
+    .single()
+
+  if (fetchError) {
+    return { error: fetchError.message }
+  }
+
+  const currentMetadata = (existingSpace?.metadata as Record<string, any> | null) ?? {}
+  const currentScope = (currentMetadata.scope as Record<string, any> | null) ?? {}
+
+  const nextMetadata = {
+    ...currentMetadata,
+    scope: {
+      ...currentScope,
+      ...(scope.description !== undefined ? { description: scope.description || null } : {}),
+      ...(scope.timeframe !== undefined ? { timeframe: scope.timeframe || null } : {}),
+    },
+  }
+
+  const updatesPayload: Record<string, any> = {
+    metadata: nextMetadata,
+  }
+
+  if (scope.summary !== undefined) {
+    updatesPayload.description = scope.summary && scope.summary.trim().length > 0 ? scope.summary : null
+  }
+
+  const { data, error } = await supabase.from("spaces").update(updatesPayload).eq("id", spaceId).select().single()
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath(`/spaces/${spaceId}`)
+  return { data }
+}
+
+export async function enhanceScopeText(text: string): Promise<{ enhanced?: string; error?: string }> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
+    return { error: "OpenAI API key not configured" }
+  }
+
+  if (!text || text.trim().length === 0) {
+    return { error: "Text is empty" }
+  }
+
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are a helpful assistant that writes clear, compelling scope descriptions for policy teams.
+The text you return will appear on a public-sector programme overview page and should:
+- Stay faithful to the original meaning
+- Highlight the policy domain, stakeholders, and key objectives
+- Remain concise (max 4 sentences)
+- Use neutral, professional language`,
+        },
+        {
+          role: "user",
+          content: text,
+        },
+      ],
+      max_tokens: 400,
+      temperature: 0.7,
+    })
+
+    const enhanced = response.choices[0]?.message?.content?.trim()
+    if (enhanced && enhanced.length > 0) {
+      return { enhanced }
+    }
+
+    return { error: "Failed to generate enhanced text" }
+  } catch (error) {
+    console.error("[enhanceScopeText] Error:", error)
+    return { error: error instanceof Error ? error.message : "Failed to enhance text" }
+  }
 }
 
 export async function deleteSpace(spaceId: string) {

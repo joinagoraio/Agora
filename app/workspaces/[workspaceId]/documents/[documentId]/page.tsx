@@ -1,11 +1,9 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getDocumentPages } from "@/lib/actions/document"
-import { PDFViewer } from "@/components/pdf-viewer"
-import { Button } from "@/components/ui/button"
-import { ArrowLeft, Download, ExternalLink } from "lucide-react"
-import Link from "next/link"
+import { DocumentViewerClient } from "@/components/document-viewer-client"
 import { getHighlightCoordinates, findTextSpan } from "@/lib/utils/pdf-extraction"
+import { WorkspaceChatWrapper } from "@/components/workspace-chat-wrapper"
 
 interface DocumentViewerPageProps {
   params: Promise<{
@@ -44,6 +42,13 @@ export default async function DocumentViewerPage({ params, searchParams }: Docum
     redirect(`/workspaces/${workspaceId}`)
   }
 
+  // Get workspace details for chat wrapper
+  const { data: workspace } = await supabase.from("workspaces").select("name").eq("id", workspaceId).single()
+
+  if (!workspace) {
+    redirect(`/workspaces/${workspaceId}`)
+  }
+
   // Fetch document pages
   const { data: pages } = await getDocumentPages(documentId)
 
@@ -51,15 +56,59 @@ export default async function DocumentViewerPage({ params, searchParams }: Docum
   const initialPage = pageParam ? parseInt(pageParam) : 1
   const highlights: any[] = []
 
-  if (highlightParam && textSpanParam && pages && pages.length > 0) {
+  console.log("[DocumentViewerPage] URL params:", {
+    pageParam,
+    highlightParam,
+    textSpanParam,
+    documentId,
+    documentTitle: document.title,
+  })
+
+  // Check if document is text/markdown (for simpler highlighting)
+  const documentType = document.metadata?.type || ""
+  const isTextDocument = 
+    documentType.includes("text") || 
+    documentType.includes("markdown") ||
+    document.title?.toLowerCase().endsWith(".md") ||
+    document.title?.toLowerCase().endsWith(".txt")
+  
+  console.log("[DocumentViewerPage] Document type check:", {
+    documentType,
+    isTextDocument,
+    title: document.title,
+  })
+
+  if (highlightParam && textSpanParam) {
     try {
+      const [start, end] = textSpanParam.split("-").map(Number)
+      const textSpan = { start, end }
       const highlightPage = pageParam ? parseInt(pageParam) : 1
+
+      console.log("[DocumentViewerPage] Parsing highlight:", {
+        highlightParam,
+        textSpanParam,
+        textSpan,
+        highlightPage,
+        isTextDocument,
+        pagesCount: pages?.length || 0,
+      })
+
+      if (isTextDocument) {
+        // For text/markdown documents, create a simple highlight with just textSpan
+        // No coordinates needed - the MultiFormatViewer will handle it
+        const highlight = {
+          id: highlightParam,
+          pageNumber: highlightPage,
+          textSpan,
+          color: "rgba(255, 255, 0, 0.3)",
+        }
+        highlights.push(highlight)
+        console.log("[DocumentViewerPage] Created text document highlight:", highlight)
+      } else if (pages && pages.length > 0) {
+        // For PDFs and other documents with pages, use coordinate-based highlighting
       const pageData = pages.find((p: any) => p.page_number === highlightPage)
 
-      if (pageData && textSpanParam) {
-        const [start, end] = textSpanParam.split("-").map(Number)
-        const textSpan = { start, end }
-
+        if (pageData) {
         // Get coordinates for the highlight
         const coordinates = getHighlightCoordinates(
           textSpan,
@@ -74,63 +123,32 @@ export default async function DocumentViewerPage({ params, searchParams }: Docum
           coordinates,
           color: "rgba(255, 255, 0, 0.3)",
         })
+        }
       }
     } catch (error) {
       console.error("Error parsing highlight:", error)
     }
   }
 
-  return (
-    <div className="flex h-screen flex-col">
-      {/* Header */}
-      <header className="border-b bg-card">
-        <div className="flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-4">
-            <Link href={`/workspaces/${workspaceId}`}>
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Workspace
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-2xl font-semibold">{document.title}</h1>
-              {pages && pages.length > 0 && (
-                <p className="text-sm text-muted-foreground">{pages.length} pages</p>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {document.url && (
-              <Button variant="outline" size="sm" asChild>
-                <a href={document.url} target="_blank" rel="noopener noreferrer">
-                  <Download className="mr-2 h-4 w-4" />
-                  Download
-                </a>
-              </Button>
-            )}
-          </div>
-        </div>
-      </header>
+  console.log("[DocumentViewerPage] Final highlights array:", highlights)
+  console.log("[DocumentViewerPage] Passing to DocumentViewerClient:", {
+    highlightsCount: highlights.length,
+    highlights,
+  })
 
-      {/* PDF Viewer */}
-      <div className="flex-1 overflow-hidden">
-        {document.url ? (
-          <PDFViewer
-            url={document.url}
-            documentId={documentId}
-            highlights={highlights}
-            initialPage={initialPage}
-            className="h-full"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            <div className="text-center">
-              <p className="text-muted-foreground">Document URL not available</p>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+  return (
+    <WorkspaceChatWrapper workspaceId={workspaceId} workspaceName={workspace.name} defaultOpen>
+      <DocumentViewerClient
+        workspaceId={workspaceId}
+        documentId={documentId}
+        documentTitle={document.title}
+        documentUrl={document.url}
+        pageCount={pages?.length || null}
+        highlights={highlights}
+        initialPage={initialPage}
+        documentMetadata={document.metadata}
+      />
+    </WorkspaceChatWrapper>
   )
 }
 

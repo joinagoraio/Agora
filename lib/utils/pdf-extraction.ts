@@ -1,13 +1,27 @@
 // Import polyfill FIRST before any pdf.js imports
 import "./dommatrix-polyfill"
 
+// Polyfill Promise.withResolvers for older Node.js versions (needed for pdfjs-dist)
+if (typeof Promise.withResolvers === 'undefined') {
+  (Promise as any).withResolvers = function<T>() {
+    let resolve!: (value: T | PromiseLike<T>) => void
+    let reject!: (reason?: any) => void
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res
+      reject = rej
+    })
+    return { promise, resolve, reject }
+  }
+}
+
 import * as pdfjs from "pdfjs-dist"
 import type { TextItem } from "pdfjs-dist/types/src/display/api"
 
 // Configure PDF.js worker
 if (typeof window === "undefined") {
-  // Server-side: Set up worker path
-  pdfjs.GlobalWorkerOptions.workerSrc = require.resolve("pdfjs-dist/build/pdf.worker.mjs")
+  // Server-side: Use legacy build or disable worker
+  // In server actions, we can't use require.resolve, so disable worker
+  pdfjs.GlobalWorkerOptions.workerSrc = ""
 } else {
   // Client-side: Use CDN or local worker
   pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
@@ -89,7 +103,9 @@ function buildCharacterOffsetMap(textItems: TextItemWithCoords[]): Record<number
  */
 export async function extractPdfPages(buffer: Buffer): Promise<PageData[]> {
   try {
-    const loadingTask = pdfjs.getDocument({ data: buffer })
+    // pdfjs-dist requires Uint8Array, not Buffer
+    const uint8Array = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)
+    const loadingTask = pdfjs.getDocument({ data: uint8Array })
     const pdf = await loadingTask.promise
     const numPages = pdf.numPages
     

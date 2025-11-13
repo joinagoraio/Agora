@@ -18,6 +18,9 @@ import { Plus, Loader2 } from "lucide-react"
 import { addDocumentsFromSource } from "@/lib/actions/document"
 import { useRouter } from "next/navigation"
 import { OverheidSearch } from "@/components/overheid-search"
+import { GoogleDriveSearch } from "@/components/google-drive-search"
+import { formatSourceType } from "@/lib/utils"
+import { getGoogleTokens } from "@/lib/actions/auth"
 
 interface AddFromSourceDialogProps {
   workspaceId: string
@@ -25,6 +28,7 @@ interface AddFromSourceDialogProps {
     id: string
     name: string
     type: string
+    config?: Record<string, any>
   }>
   trigger?: React.ReactNode
   onSuccess?: () => void
@@ -47,23 +51,45 @@ export function AddFromSourceDialog({
 }: AddFromSourceDialogProps) {
   const [open, setOpen] = useState(false)
   const [selectedSourceId, setSelectedSourceId] = useState<string>("")
+  const [classification, setClassification] = useState<"public" | "internal" | "confidential">("internal")
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null)
   const router = useRouter()
 
   // Filter out direct_upload sources since they have their own upload button
-  const availableSources = sources.filter((source) => source.type !== "direct_upload")
+  // Sort sources alphabetically by name
+  const availableSources = sources
+    .filter((source) => source.type !== "direct_upload")
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   const selectedSource = availableSources.find((c) => c.id === selectedSourceId)
-  
-  // Auto-select Overheid.nl source if only one exists when dialog opens
+
+  // Fetch fresh Google tokens when Google Drive source is selected
   useEffect(() => {
-    if (open && !selectedSourceId) {
-      const overheidSource = availableSources.find((s) => s.type === "overheid_nl")
-      if (overheidSource) {
-        setSelectedSourceId(overheidSource.id)
+    const fetchGoogleToken = async () => {
+      const selectedSource = availableSources.find((s) => s.id === selectedSourceId)
+      if (selectedSource?.type === "google_drive") {
+        try {
+          const tokens = await getGoogleTokens()
+          if (tokens.access_token && !tokens.error) {
+            setGoogleAccessToken(tokens.access_token)
+          } else {
+            // Fall back to source config token
+            setGoogleAccessToken(selectedSource.config?.access_token || null)
+          }
+        } catch (err) {
+          // Fall back to source config token
+          setGoogleAccessToken(selectedSource.config?.access_token || null)
+        }
+      } else {
+        setGoogleAccessToken(null)
       }
+    }
+
+    if (open && selectedSourceId) {
+      fetchGoogleToken()
     }
   }, [open, selectedSourceId, availableSources])
 
@@ -77,7 +103,7 @@ export function AddFromSourceDialog({
     setSuccess(null)
 
     try {
-      const result = await addDocumentsFromSource(workspaceId, selectedSourceId, documents)
+      const result = await addDocumentsFromSource(workspaceId, selectedSourceId, documents, classification)
 
       if (result.error) {
         setError(result.error)
@@ -88,6 +114,12 @@ export function AddFromSourceDialog({
         setSuccess(`Successfully added ${result.addedCount || 0} document(s)`)
         router.refresh()
         onSuccess?.()
+        
+        // Dispatch custom event to notify chat interface and other components
+        window.dispatchEvent(new CustomEvent("documentUploaded", { 
+          detail: { workspaceId } 
+        }))
+        
         setTimeout(() => {
           setOpen(false)
           setSuccess(null)
@@ -120,14 +152,14 @@ export function AddFromSourceDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="!max-w-[95vw] sm:!max-w-[1400px] w-full max-h-[90vh] flex flex-col p-0">
-        <DialogHeader className="px-6 pt-6 pb-4">
+      <DialogContent className="!max-w-[95vw] sm:!max-w-[1400px] w-full max-h-[90vh] flex flex-col p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0">
           <DialogTitle>Add Documents from Source</DialogTitle>
           <DialogDescription>Search and add documents from your connected sources</DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 pb-4">
-          <div className="space-y-6">
+        <div className="flex-1 overflow-y-auto px-6">
+          <div className="space-y-6 pb-4">
             {/* Source Selection */}
             {availableSources.length === 0 ? (
               <Alert>
@@ -146,12 +178,42 @@ export function AddFromSourceDialog({
                     <SelectContent>
                       {availableSources.map((source) => (
                         <SelectItem key={source.id} value={source.id}>
-                          {source.name} ({source.type})
+                          {source.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="classification">Classification</Label>
+                  <Select value={classification} onValueChange={(value: any) => setClassification(value)}>
+                    <SelectTrigger id="classification">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="public">Public</SelectItem>
+                      <SelectItem value="internal">Internal</SelectItem>
+                      <SelectItem value="confidential">Confidential</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {classification === "confidential" && (
+                    <Alert>
+                      <AlertDescription className="text-xs">
+                        Confidential documents cannot be shared externally or exported.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+
+                {/* Placeholder when no source is selected */}
+                {!selectedSourceId && (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      Please select a source to search and add documents.
+                    </p>
+                  </div>
+                )}
 
                 {/* Overheid.nl Search UI */}
                 {selectedSource?.type === "overheid_nl" && (
@@ -161,8 +223,27 @@ export function AddFromSourceDialog({
                   />
                 )}
 
+                {/* Google Drive Search UI */}
+                {selectedSource?.type === "google_drive" && (
+                  <>
+                    {googleAccessToken || selectedSource.config?.access_token ? (
+                      <GoogleDriveSearch
+                        accessToken={googleAccessToken || selectedSource.config?.access_token || ""}
+                        onDocumentsSelected={handleDocumentsSelected}
+                        showSelection={true}
+                      />
+                    ) : (
+                      <Alert variant="destructive">
+                        <AlertDescription>
+                          Google Drive source is missing access token. Please reconnect your Google account in the Sources settings.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </>
+                )}
+
                 {/* Other source types placeholder */}
-                {selectedSource && selectedSource.type !== "overheid_nl" && (
+                {selectedSource && selectedSource.type !== "overheid_nl" && selectedSource.type !== "google_drive" && (
                   <Alert>
                     <AlertDescription>
                       Search functionality for {selectedSource.type} source is not yet implemented.
@@ -175,16 +256,16 @@ export function AddFromSourceDialog({
         </div>
 
         {/* Footer with Error/Success Messages - Always visible */}
-        <DialogFooter className="px-6 py-4 border-t bg-background flex-col gap-2 sm:flex-row sm:justify-start">
-          <div className="flex-1 w-full">
+        <DialogFooter className="px-6 py-4 border-t border-border bg-background flex-col gap-2 sm:flex-row sm:justify-start min-h-[80px] flex-shrink-0">
+          <div className="flex-1 w-full min-h-[52px] flex items-start">
             {error && (
-              <Alert variant="destructive">
+              <Alert variant="destructive" className="w-full">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
 
             {success && (
-              <Alert>
+              <Alert className="w-full">
                 <AlertDescription>{success}</AlertDescription>
               </Alert>
             )}

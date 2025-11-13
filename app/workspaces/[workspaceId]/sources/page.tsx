@@ -26,14 +26,22 @@ export default async function SourcesPage({
   }
 
   // Get workspace details
-  const { data: workspace } = await supabase.from("workspaces").select("*, spaces(*)").eq("id", workspaceId).single()
+  const { data: workspace, error: workspaceError } = await supabase
+    .from("workspaces")
+    .select("*")
+    .eq("id", workspaceId)
+    .single()
 
-  if (!workspace) {
+  if (workspaceError || !workspace) {
+    console.error("Error fetching workspace:", workspaceError)
     redirect("/dashboard")
   }
 
   // Get sources
   const { data: sources } = await getSourcesByWorkspace(workspaceId)
+
+  // Filter out direct_upload sources - they shouldn't be displayed on the sources page
+  const displaySources = (sources || []).filter((source) => source.type !== "direct_upload")
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -42,8 +50,8 @@ export default async function SourcesPage({
           <div className="flex items-center gap-4">
             <Button variant="ghost" asChild>
               <Link href={`/workspaces/${workspaceId}`}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                <span className="text-sm font-normal">Back to {workspace.name}</span>
+                <ArrowLeft className="mr-2 h-3 w-3" />
+                <span className="text-xs font-normal">Back to {workspace.name}</span>
               </Link>
             </Button>
           </div>
@@ -58,12 +66,12 @@ export default async function SourcesPage({
               <h2 className="text-2xl font-semibold">{workspace.name} Sources</h2>
               <p className="text-sm text-muted-foreground">Connect external sources to sync documents</p>
             </div>
-            <CreateSourceDialog workspaceId={workspaceId} />
+            <CreateSourceDialog workspaceId={workspaceId} existingSources={displaySources} />
           </div>
 
-          {sources && sources.length > 0 ? (
+          {displaySources && displaySources.length > 0 ? (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {sources.map((source) => (
+              {displaySources.map((source) => (
                 <SourceCard key={source.id} source={source} />
               ))}
             </div>
@@ -75,7 +83,7 @@ export default async function SourcesPage({
                 <p className="mb-4 text-center text-sm text-muted-foreground">
                   Add your first source to start syncing documents
                 </p>
-                <CreateSourceDialog workspaceId={workspaceId} />
+                <CreateSourceDialog workspaceId={workspaceId} existingSources={displaySources} />
               </CardContent>
             </Card>
           )}

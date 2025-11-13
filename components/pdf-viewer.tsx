@@ -1,17 +1,59 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Document, Page, pdfjs } from "react-pdf"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw } from "lucide-react"
-import "react-pdf/dist/esm/Page/AnnotationLayer.css"
-import "react-pdf/dist/esm/Page/TextLayer.css"
+import {
+  ChevronLeft,
+  ChevronRight,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  ExternalLink,
+  ChevronsLeftRight,
+  ChevronsUpDown,
+  ChevronDown,
+} from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
-// Configure PDF.js worker
-if (typeof window !== "undefined") {
-  pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
+// Import react-pdf CSS for TextLayer and AnnotationLayer
+import "react-pdf/dist/Page/AnnotationLayer.css"
+import "react-pdf/dist/Page/TextLayer.css"
+
+// Configure PDF.js worker for Next.js
+// Use jsdelivr CDN which is more reliable
+pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+
+export type ViewerFitMode = "width" | "height"
+
+export const ZOOM_PRESETS = [0.5, 0.75, 0.9, 1, 1.25, 1.5, 2]
+
+export interface ViewerControls {
+  pageNumber: number
+  numPages: number | null
+  scale: number
+  minScale?: number
+  maxScale?: number
+  fitMode?: ViewerFitMode | null
+  changePage: (offset: number) => void
+  goToPage: (page: number) => void
+  zoomIn: () => void
+  zoomOut: () => void
+  rotate: () => void
+  fitToWidth?: () => void
+  fitToHeight?: () => void
+  setScale?: (value: number) => void
 }
+
+const MIN_SCALE = 0.5
+const MAX_SCALE = 5.0
 
 export interface Highlight {
   id: string
@@ -28,6 +70,9 @@ interface PDFViewerProps {
   onPageChange?: (page: number) => void
   initialPage?: number
   className?: string
+  hideControls?: boolean
+  viewportOffset?: number
+  onControlsReady?: (controls: ViewerControls) => void
 }
 
 export function PDFViewer({
@@ -37,13 +82,108 @@ export function PDFViewer({
   onPageChange,
   initialPage = 1,
   className = "",
+  hideControls = false,
+  onControlsReady,
+  viewportOffset = 0,
 }: PDFViewerProps) {
   const [numPages, setNumPages] = useState<number | null>(null)
+  const [documentReady, setDocumentReady] = useState(false)
   const [pageNumber, setPageNumber] = useState(initialPage)
   const [scale, setScale] = useState(1.0)
   const [rotation, setRotation] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null)
+  const [fitMode, setFitMode] = useState<ViewerFitMode | null>(null)
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 })
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+  const pageNumberRef = useRef(pageNumber)
+  const pageDimensionsRef = useRef<{ width: number; height: number } | null>(null)
+
+  const clampScale = useCallback((value: number) => {
+    return Math.min(Math.max(value, MIN_SCALE), MAX_SCALE)
+  }, [])
+
+  const setScaleValue = useCallback(
+    (value: number) => {
+      setFitMode(null)
+      setScale(clampScale(value))
+    },
+    [clampScale]
+  )
+
+  // Fetch PDF with credentials if it's our API route
+  useEffect(() => {
+    if (url.includes("/api/documents/")) {
+      setLoading(true)
+      setError(null)
+      setDocumentReady(false)
+      setNumPages(null)
+      
+      fetch(url, {
+        credentials: "include",
+        headers: {
+          "Accept": "application/pdf",
+        },
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            const text = await response.text()
+            try {
+              const errorData = JSON.parse(text)
+              throw new Error(errorData.error || `Failed to fetch PDF: ${response.status} ${response.statusText}`)
+            } catch {
+              throw new Error(`Failed to fetch PDF: ${response.status} ${response.statusText}`)
+            }
+          }
+          
+          // Check content type to ensure it's a PDF
+          const contentType = response.headers.get("content-type")
+          if (contentType && !contentType.includes("application/pdf")) {
+            throw new Error(`Invalid content type: ${contentType}. Expected application/pdf.`)
+          }
+          
+          return response.blob()
+        })
+        .then(async (blob) => {
+          if (!(blob instanceof Blob)) {
+            throw new Error("Invalid response format")
+          }
+          
+          // Verify it's actually a PDF by checking the first bytes
+          // Clone the blob first so we don't consume it
+          const headerBlob = blob.slice(0, 4)
+          const arrayBuffer = await headerBlob.arrayBuffer()
+          const bytes = new Uint8Array(arrayBuffer)
+          const pdfHeader = String.fromCharCode(...bytes)
+          
+          // PDF files start with "%PDF"
+          if (pdfHeader !== "%PDF") {
+            // Try to read as text to see if it's an error message
+            const textBlob = blob.slice(0, 100) // Only read first 100 bytes for error checking
+            const text = await textBlob.text()
+            try {
+              const errorData = JSON.parse(text)
+              throw new Error(errorData.error || "Invalid PDF file")
+            } catch {
+              throw new Error("Invalid PDF file: File does not appear to be a valid PDF")
+            }
+          }
+          
+          setPdfBlob(blob)
+          setLoading(false)
+        })
+        .catch((err) => {
+          console.error("Error fetching PDF:", err)
+          setError(err instanceof Error ? err.message : "Failed to fetch PDF")
+          setLoading(false)
+        })
+    } else {
+      // For non-API URLs, set loading to false so PDF.js can handle it
+      setLoading(false)
+    }
+  }, [url])
 
   useEffect(() => {
     setPageNumber(initialPage)
@@ -59,19 +199,44 @@ export function PDFViewer({
     setNumPages(numPages)
     setLoading(false)
     setError(null)
+    // Add a small delay to ensure document is fully ready
+    setTimeout(() => {
+      setDocumentReady(true)
+    }, 100)
   }
 
   function onDocumentLoadError(error: Error) {
     console.error("PDF load error:", error)
-    setError(`Failed to load PDF: ${error.message}`)
+    
+    // Provide more helpful error messages
+    let errorMessage = "Failed to load PDF"
+    if (error.message.includes("Invalid PDF")) {
+      errorMessage = "The file is not a valid PDF or may be corrupted. The URL might point to an HTML page instead of a PDF file."
+    } else if (error.message.includes("network") || error.message.includes("fetch")) {
+      errorMessage = "Failed to fetch PDF. The file may not be accessible or requires authentication."
+    } else {
+      errorMessage = `Failed to load PDF: ${error.message}`
+    }
+    
+    setError(errorMessage)
     setLoading(false)
+    setDocumentReady(false)
   }
 
   function changePage(offset: number) {
     setPageNumber((prev) => {
       const newPage = prev + offset
-      if (newPage < 1) return 1
-      if (numPages && newPage > numPages) return numPages
+      if (newPage < 1) return prev
+      if (numPages && newPage > numPages) return prev
+      
+      // Scroll to the new page
+      setTimeout(() => {
+        const pageEl = pageRefs.current.get(newPage)
+        if (pageEl && scrollContainerRef.current) {
+          pageEl.scrollIntoView({ behavior: "smooth", block: "center" })
+        }
+      }, 0)
+      
       return newPage
     })
   }
@@ -80,26 +245,209 @@ export function PDFViewer({
     if (page < 1) return
     if (numPages && page > numPages) return
     setPageNumber(page)
+    
+    // Scroll to the page element
+    const pageEl = pageRefs.current.get(page)
+    if (pageEl && scrollContainerRef.current) {
+      pageEl.scrollIntoView({ behavior: "smooth", block: "center" })
+    }
   }
 
-  function zoomIn() {
-    setScale((prev) => Math.min(prev + 0.25, 3.0))
-  }
+  const zoomIn = useCallback(() => {
+    setFitMode(null)
+    setScale((prev) => clampScale(prev + 0.25))
+  }, [clampScale])
 
-  function zoomOut() {
-    setScale((prev) => Math.max(prev - 0.25, 0.5))
-  }
+  const zoomOut = useCallback(() => {
+    setFitMode(null)
+    setScale((prev) => clampScale(prev - 0.25))
+  }, [clampScale])
 
-  function rotate() {
+  const rotate = useCallback(() => {
     setRotation((prev) => (prev + 90) % 360)
-  }
+  }, [])
 
-  // Get highlights for current page
-  const pageHighlights = highlights.filter((h) => h.pageNumber === pageNumber)
+  useEffect(() => {
+    pageNumberRef.current = pageNumber
+  }, [pageNumber])
+
+  // Track visible page on scroll
+  useEffect(() => {
+    if (!scrollContainerRef.current || !numPages) return
+
+    const container = scrollContainerRef.current
+    
+    const handleScroll = () => {
+      // Wait a bit for pages to be rendered
+      if (pageRefs.current.size === 0) return
+      
+      // Find which page is at the top of the viewport
+      // The current page is the one whose top is at or just above the viewport top,
+      // adjusted by any external header offset
+      const viewportTop = container.scrollTop + viewportOffset
+      
+      const currentPageNumber = pageNumberRef.current
+
+      let visiblePage = currentPageNumber
+      let bestPage = currentPageNumber
+      let bestPageTop = -Infinity
+
+      // Find the page whose top is closest to but not below the viewport top
+      pageRefs.current.forEach((pageEl, pageNum) => {
+        if (!pageEl) return
+        
+        const pageTop = pageEl.offsetTop
+        const pageBottom = pageTop + pageEl.offsetHeight
+        
+        // If this page contains the viewport top, it's definitely the current page
+        if (pageTop <= viewportTop && pageBottom > viewportTop) {
+          visiblePage = pageNum
+          bestPage = pageNum
+          bestPageTop = pageTop
+        } else if (pageTop <= viewportTop && pageTop > bestPageTop) {
+          // Otherwise, find the page with the highest top that's still above the viewport top
+          bestPage = pageNum
+          bestPageTop = pageTop
+        }
+      })
+
+      // Use the best page found
+      if (bestPage > 0) {
+        visiblePage = bestPage
+      }
+
+      if (visiblePage !== currentPageNumber && visiblePage > 0) {
+        setPageNumber(visiblePage)
+        if (onPageChange) {
+          onPageChange(visiblePage)
+        }
+      }
+    }
+
+    container.addEventListener("scroll", handleScroll, { passive: true })
+    
+    // Also check on initial load and after a short delay to ensure pages are rendered
+    setTimeout(() => {
+      handleScroll()
+    }, 100)
+
+    return () => {
+      container.removeEventListener("scroll", handleScroll)
+    }
+  }, [numPages, viewportOffset])
+
+  const updateContainerSize = useCallback(() => {
+    if (!scrollContainerRef.current) return
+    const node = scrollContainerRef.current
+    const styles = window.getComputedStyle(node)
+    const paddingX =
+      (parseFloat(styles.paddingLeft) || 0) + (parseFloat(styles.paddingRight) || 0)
+    const paddingY =
+      (parseFloat(styles.paddingTop) || 0) + (parseFloat(styles.paddingBottom) || 0)
+    setContainerSize({
+      width: node.clientWidth - paddingX,
+      height: node.clientHeight - paddingY,
+    })
+  }, [])
+
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    updateContainerSize()
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateContainerSize()
+    })
+
+    resizeObserver.observe(container)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [updateContainerSize])
+
+  const applyFit = useCallback(
+    (mode: ViewerFitMode) => {
+      const dims = pageDimensionsRef.current
+      if (!dims) return
+
+      let { width, height } = dims
+      if (rotation % 180 !== 0) {
+        const swapped = width
+        width = height
+        height = swapped
+      }
+
+      if (mode === "width") {
+        if (containerSize.width <= 0) return
+        setScale(clampScale(containerSize.width / width))
+      } else {
+        if (containerSize.height <= 0) return
+        setScale(clampScale(containerSize.height / height))
+      }
+    },
+    [clampScale, containerSize.height, containerSize.width, rotation]
+  )
+
+  const fitToWidth = useCallback(() => {
+    setFitMode("width")
+    applyFit("width")
+  }, [applyFit])
+
+  const fitToHeight = useCallback(() => {
+    setFitMode("height")
+    applyFit("height")
+  }, [applyFit])
+
+  useEffect(() => {
+    if (fitMode) {
+      applyFit(fitMode)
+    }
+  }, [fitMode, applyFit])
+
+  const handlePageLoadSuccess = useCallback(
+    (page: pdfjs.PDFPageProxy) => {
+      const width = (page as any).originalWidth ?? page.getViewport({ scale: 1 }).width
+      const height = (page as any).originalHeight ?? page.getViewport({ scale: 1 }).height
+      pageDimensionsRef.current = { width, height }
+      if (fitMode) {
+        applyFit(fitMode)
+      }
+    },
+    [applyFit, fitMode]
+  )
+
+  const getMinScale = useCallback(() => MIN_SCALE, [])
+  const getMaxScale = useCallback(() => MAX_SCALE, [])
+
+  // Expose controls to parent if callback provided
+  useEffect(() => {
+    if (onControlsReady) {
+      onControlsReady({
+        pageNumber,
+        numPages,
+        scale,
+        minScale: getMinScale(),
+        maxScale: getMaxScale(),
+        fitMode,
+        changePage,
+        goToPage,
+        zoomIn,
+        zoomOut,
+        rotate,
+        fitToWidth,
+        fitToHeight,
+        setScale: setScaleValue,
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageNumber, numPages, scale, fitMode])
 
   return (
     <div className={`flex flex-col ${className}`}>
       {/* Controls */}
+      {!hideControls && (
       <div className="flex items-center justify-between gap-4 border-b bg-card p-2">
         <div className="flex items-center gap-2">
           <Button
@@ -132,11 +480,50 @@ export function PDFViewer({
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={zoomOut} disabled={scale <= 0.5}>
+          <Button variant="outline" size="sm" onClick={zoomOut} disabled={scale <= MIN_SCALE}>
             <ZoomOut className="h-4 w-4" />
           </Button>
-          <span className="text-sm text-muted-foreground">{Math.round(scale * 100)}%</span>
-          <Button variant="outline" size="sm" onClick={zoomIn} disabled={scale >= 3.0}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2 px-2">
+                {fitMode === "width" ? (
+                  <span className="flex items-center gap-2">
+                    Fit
+                    <ChevronsLeftRight className="h-4 w-4" />
+                  </span>
+                ) : fitMode === "height" ? (
+                  <span className="flex items-center gap-2">
+                    Fit
+                    <ChevronsUpDown className="h-4 w-4" />
+                  </span>
+                ) : (
+                  <span>{Math.round(scale * 100)}%</span>
+                )}
+                <ChevronDown className="h-4 w-4 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-fit min-w-0">
+              {ZOOM_PRESETS.map((preset) => (
+                <DropdownMenuItem key={preset} onSelect={() => setScaleValue(preset)}>
+                  {Math.round(preset * 100)}%
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={fitToWidth}>
+                <span className="flex items-center gap-2">
+                  Fit
+                  <ChevronsLeftRight className="h-4 w-4" />
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={fitToHeight}>
+                <span className="flex items-center gap-2">
+                  Fit
+                  <ChevronsUpDown className="h-4 w-4" />
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="outline" size="sm" onClick={zoomIn} disabled={scale >= MAX_SCALE}>
             <ZoomIn className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm" onClick={rotate}>
@@ -144,48 +531,105 @@ export function PDFViewer({
           </Button>
         </div>
       </div>
+      )}
 
       {/* PDF Viewer */}
-      <div className="flex-1 overflow-auto bg-gray-100 p-4">
+      <div ref={scrollContainerRef} className="flex-1 overflow-auto bg-gray-100 p-4">
         {error ? (
           <div className="flex h-full items-center justify-center">
-            <div className="text-center">
-              <p className="text-destructive">{error}</p>
+            <div className="text-center space-y-4 max-w-md">
+              <p className="text-destructive font-medium">{error}</p>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  This might happen if:
+                </p>
+                <ul className="text-sm text-muted-foreground text-left list-disc list-inside space-y-1">
+                  <li>The URL points to an HTML page instead of a PDF</li>
+                  <li>The PDF file is corrupted or invalid</li>
+                  <li>The file requires authentication to access</li>
+                  <li>There are CORS restrictions preventing access</li>
+                </ul>
+                {url && (
+                  <div className="pt-4 flex gap-2 justify-center">
+                    <Button variant="outline" asChild>
+                      <a href={url} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        Open in new tab
+                      </a>
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ) : (
           <div className="flex justify-center">
-            <Document
-              file={url}
-              onLoadSuccess={onDocumentLoadSuccess}
-              onLoadError={onDocumentLoadError}
-              loading={
-                <div className="flex h-[800px] items-center justify-center">
-                  <div className="text-center">
-                    <p className="text-muted-foreground">Loading PDF...</p>
-                  </div>
+            {url.includes("/api/documents/") && !pdfBlob ? (
+              <div className="flex h-[800px] items-center justify-center">
+                <div className="text-center">
+                  <p className="text-muted-foreground">Loading PDF...</p>
                 </div>
-              }
-            >
-              <div className="relative">
-                <Page
-                  pageNumber={pageNumber}
-                  scale={scale}
-                  rotate={rotation}
-                  renderTextLayer={true}
-                  renderAnnotationLayer={true}
-                  className="shadow-lg"
-                />
-                {/* Highlight Overlay */}
-                {pageHighlights.length > 0 && (
-                  <PDFHighlightOverlay
-                    highlights={pageHighlights}
-                    scale={scale}
-                    rotation={rotation}
-                  />
-                )}
               </div>
+            ) : (
+              <Document
+                file={url.includes("/api/documents/") && pdfBlob ? pdfBlob : url}
+                onLoadSuccess={onDocumentLoadSuccess}
+                onLoadError={onDocumentLoadError}
+                loading={
+                  <div className="flex h-[800px] items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-muted-foreground">Loading PDF...</p>
+                    </div>
+                  </div>
+                }
+              >
+              {numPages && documentReady ? (
+                <div className="flex flex-col items-center gap-4">
+                  {Array.from(new Array(numPages), (el, index) => {
+                    const pageNum = index + 1
+                    return (
+                      <div
+                        key={`page_${pageNum}`}
+                        ref={(el) => {
+                          if (el) {
+                            pageRefs.current.set(pageNum, el)
+                          } else {
+                            pageRefs.current.delete(pageNum)
+                          }
+                        }}
+                        data-page-number={pageNum}
+                        className="relative"
+                      >
+                        <Page
+                          pageNumber={pageNum}
+                          scale={scale}
+                          rotate={rotation}
+                          onLoadSuccess={handlePageLoadSuccess}
+                          onLoadError={(error) => {
+                            console.error(`Error loading page ${pageNum}:`, error)
+                          }}
+                          renderTextLayer={true}
+                          renderAnnotationLayer={true}
+                          className="shadow-lg"
+                        />
+                        {/* Highlight Overlay */}
+                        {highlights
+                          .filter((h) => h.pageNumber === pageNum)
+                          .map((highlight) => (
+                            <PDFHighlightOverlay
+                              key={highlight.id}
+                              highlights={[highlight]}
+                              scale={scale}
+                              rotation={rotation}
+                            />
+                          ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : null}
             </Document>
+            )}
           </div>
         )}
       </div>

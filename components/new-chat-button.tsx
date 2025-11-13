@@ -13,7 +13,7 @@ export function NewChatButton({ workspaceId }: NewChatButtonProps) {
   const router = useRouter()
 
   const handleNewChat = async () => {
-    const result = await createConversation(workspaceId)
+    const result = await createConversation(workspaceId, { contextType: "workspace" })
     if (result.data) {
       router.push(`/workspaces/${workspaceId}/chat?conversationId=${result.data.id}`)
     }

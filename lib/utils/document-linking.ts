@@ -88,7 +88,18 @@ export function buildDocumentUrlFromSource(
     textSpan?: { start: number; end: number }
   },
 ): string {
-  return buildDocumentUrl(workspaceId, {
+  console.log("[buildDocumentUrlFromSource] Input:", {
+    workspaceId,
+    sourceId: source.id,
+    pageNumber: source.pageNumber,
+    textSpan: source.textSpan,
+    hasPageNumber: source.pageNumber !== undefined,
+    hasTextSpan: source.textSpan !== undefined,
+    textSpanType: typeof source.textSpan,
+    textSpanKeys: source.textSpan ? Object.keys(source.textSpan) : null,
+  })
+  
+  const url = buildDocumentUrl(workspaceId, {
     documentId: source.id,
     pageNumber: source.pageNumber,
     textSpan: source.textSpan,
@@ -96,5 +107,8 @@ export function buildDocumentUrlFromSource(
       ? `highlight-${source.id}-${source.pageNumber}` 
       : undefined,
   })
+  
+  console.log("[buildDocumentUrlFromSource] Output URL:", url)
+  return url
 }
 

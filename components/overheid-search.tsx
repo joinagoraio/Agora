@@ -9,6 +9,7 @@ import { Loader2, Search, CheckCircle2, ExternalLink, Plus, FileText, AlertCircl
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { FileIcon, defaultStyles } from "react-file-icon"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { DebugPanel } from "@/components/debug-panel"
 
@@ -226,10 +227,21 @@ function OverheidSearchTab({ onDocumentsSelected, showSelection = true }: Overhe
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-start gap-4">
+                      {result.type?.toLowerCase() === "pdf" ? (
+                        <div className="w-5 h-5 shrink-0 mt-0.5 flex items-center overflow-hidden [&>svg]:w-full [&>svg]:h-full [&>svg]:grayscale">
+                          <FileIcon
+                            extension="pdf"
+                            {...(defaultStyles.pdf || {})}
+                            label={false}
+                            glyphColor="#fff"
+                            color="#6b7280"
+                          />
+                        </div>
+                      ) : null}
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           {showSelection && isSelected && <CheckCircle2 className="h-5 w-5 text-green-600" />}
-                          <Badge variant="secondary">{result.type}</Badge>
+                          {result.type && result.type.toLowerCase() !== "pdf" && <Badge variant="secondary">{result.type}</Badge>}
                           {result.date && <span className="text-xs text-muted-foreground">{result.date}</span>}
                         </div>
                         <CardTitle className="text-base">{result.title}</CardTitle>
@@ -845,12 +857,24 @@ function SRUWebserviceTab({ onDocumentsSelected, showSelection = true }: Overhei
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-start gap-3">
-                      <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
+                      {record.type?.toLowerCase() === "pdf" ? (
+                        <div className="w-5 h-5 shrink-0 mt-0.5 flex items-center overflow-hidden [&>svg]:w-full [&>svg]:h-full [&>svg]:grayscale">
+                          <FileIcon
+                            extension="pdf"
+                            {...(defaultStyles.pdf || {})}
+                            label={false}
+                            glyphColor="#fff"
+                            color="#6b7280"
+                          />
+                        </div>
+                      ) : (
+                        <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
+                      )}
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           {showSelection && isSelected && <CheckCircle2 className="h-5 w-5 text-green-600" />}
                           {record.creator && <Badge variant="secondary">{record.creator}</Badge>}
-                          {record.type && <Badge variant="outline">{record.type}</Badge>}
+                          {record.type && record.type.toLowerCase() !== "pdf" && <Badge variant="outline">{record.type}</Badge>}
                         </div>
                         <CardTitle className="text-base">{record.title}</CardTitle>
                       </div>
@@ -1151,11 +1175,23 @@ function OfficialPublicationsTab({ onDocumentsSelected, showSelection = true }: 
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-start gap-4">
+                      {pub.type?.toLowerCase() === "pdf" ? (
+                        <div className="w-5 h-5 shrink-0 mt-0.5 flex items-center overflow-hidden [&>svg]:w-full [&>svg]:h-full [&>svg]:grayscale">
+                          <FileIcon
+                            extension="pdf"
+                            {...(defaultStyles.pdf || {})}
+                            label={false}
+                            glyphColor="#fff"
+                            color="#6b7280"
+                          />
+                        </div>
+                      ) : (
+                        <FileText className="h-4 w-4 text-muted-foreground mt-0.5" />
+                      )}
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           {showSelection && isSelected && <CheckCircle2 className="h-5 w-5 text-green-600" />}
-                          <FileText className="h-4 w-4 text-muted-foreground" />
-                          <Badge variant="secondary">{pub.type}</Badge>
+                          {pub.type && pub.type.toLowerCase() !== "pdf" && <Badge variant="secondary">{pub.type}</Badge>}
                         </div>
                         <CardTitle className="text-base">{pub.title}</CardTitle>
                         {pub.publisher && <CardDescription className="mt-1">{pub.publisher}</CardDescription>}

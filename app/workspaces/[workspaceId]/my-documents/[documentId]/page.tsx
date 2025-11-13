@@ -1,0 +1,88 @@
+import { redirect } from "next/navigation"
+import Link from "next/link"
+import { createClient } from "@/lib/supabase/server"
+import { WorkspaceChatWrapper } from "@/components/workspace-chat-wrapper"
+import { MyDocumentEditor } from "@/components/my-document-editor"
+import { Button } from "@/components/ui/button"
+import { UserMenu } from "@/components/user-menu"
+import { ArrowLeft } from "lucide-react"
+
+interface WorkspaceDocumentEditorPageProps {
+  params: Promise<{
+    workspaceId: string
+    documentId: string
+  }>
+}
+
+export default async function WorkspaceDocumentEditorPage({ params }: WorkspaceDocumentEditorPageProps) {
+  const { workspaceId, documentId } = await params
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect("/auth/login")
+  }
+
+  const { data: document, error: documentError } = await supabase
+    .from("documents")
+    .select("id, title, content, classification, metadata, updated_at, sources(type)")
+    .eq("id", documentId)
+    .eq("workspace_id", workspaceId)
+    .single()
+
+  if (documentError || !document || document.sources?.type !== "workspace_generated") {
+    redirect(`/workspaces/${workspaceId}`)
+  }
+
+  const { data: workspace, error: workspaceError } = await supabase
+    .from("workspaces")
+    .select("name")
+    .eq("id", workspaceId)
+    .single()
+
+  if (workspaceError || !workspace) {
+    redirect(`/workspaces/${workspaceId}`)
+  }
+
+  const metadata = (document.metadata as Record<string, any> | null) ?? null
+  const instructions = (metadata?.instructions as string | undefined) ?? ""
+  const lastEditedAt = (metadata?.lastEditedAt as string | undefined) ?? (document.updated_at as string | undefined)
+
+  return (
+    <WorkspaceChatWrapper workspaceId={workspaceId} workspaceName={workspace.name}>
+      <div className="flex min-h-screen flex-col">
+        <header className="bg-card">
+          <div className="flex h-16 items-center justify-between px-4">
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" asChild>
+                <Link href={`/workspaces/${workspaceId}`}>
+                  <ArrowLeft className="mr-2 h-3 w-3" />
+                  <span className="text-xs font-normal">Back to {workspace.name}</span>
+                </Link>
+              </Button>
+            </div>
+            <UserMenu />
+          </div>
+        </header>
+
+        <main className="flex-1 bg-white">
+          <div className="container mx-auto py-8 px-4">
+            <MyDocumentEditor
+              workspaceId={workspaceId}
+              documentId={documentId}
+              initialTitle={document.title}
+              initialContent={document.content || ""}
+              classification={(document.classification as "public" | "internal" | "confidential" | null) ?? null}
+              initialInstructions={instructions}
+              lastEditedAt={lastEditedAt ?? null}
+            />
+          </div>
+        </main>
+      </div>
+    </WorkspaceChatWrapper>
+  )
+}
+

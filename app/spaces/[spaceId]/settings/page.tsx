@@ -62,8 +62,8 @@ export default async function SpaceSettingsPage({
           <div className="flex items-center gap-4">
             <Button variant="ghost" asChild>
               <Link href={`/spaces/${spaceId}`}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                <span className="text-sm font-normal">Back to {space.name}</span>
+                <ArrowLeft className="mr-2 h-3 w-3" />
+                <span className="text-xs font-normal">Back to {space.name}</span>
               </Link>
             </Button>
           </div>

@@ -23,13 +23,14 @@ export default async function WorkspacePropertiesPage({
   }
 
   // Get workspace details
-  const { data: workspace } = await supabase
+  const { data: workspace, error: workspaceError } = await supabase
     .from("workspaces")
-    .select("*, spaces(*)")
+    .select("*")
     .eq("id", workspaceId)
     .single()
 
-  if (!workspace) {
+  if (workspaceError || !workspace) {
+    console.error("Error fetching workspace:", workspaceError)
     redirect("/dashboard")
   }
 
@@ -40,8 +41,8 @@ export default async function WorkspacePropertiesPage({
           <div className="flex items-center gap-4">
             <Button variant="ghost" asChild>
               <Link href={`/workspaces/${workspaceId}`}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                <span className="text-sm font-normal">Back to {workspace.name}</span>
+                <ArrowLeft className="mr-2 h-3 w-3" />
+                <span className="text-xs font-normal">Back to {workspace.name}</span>
               </Link>
             </Button>
           </div>

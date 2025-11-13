@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { cleanOverheidDescription } from "@/lib/utils"
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now()
@@ -97,7 +98,8 @@ function parseOverheidSRUResponse(xmlText: string) {
       const date = dateMatch ? dateMatch[1].trim() : undefined
 
       const descMatch = record.match(/<dcterms:description[^>]*>([\s\S]*?)<\/dcterms:description>/)
-      const description = descMatch ? descMatch[1].trim() : undefined
+      const rawDescription = descMatch ? descMatch[1].trim() : undefined
+      const description = cleanOverheidDescription(rawDescription)
 
       const url = identifier ? `https://zoek.officielebekendmakingen.nl/${identifier}` : undefined
 

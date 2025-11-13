@@ -2,17 +2,8 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
 export async function updateSession(request: NextRequest) {
-  // Debug: Log environment variable access
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  // Log for debugging (remove in production)
-  console.log("[Middleware] Environment check:", {
-    urlExists: !!supabaseUrl,
-    keyExists: !!supabaseAnonKey,
-    urlLength: supabaseUrl?.length || 0,
-    keyLength: supabaseAnonKey?.length || 0,
-  })
 
   if (!supabaseUrl || !supabaseAnonKey) {
     console.error("Missing Supabase environment variables:")
@@ -55,11 +46,12 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Redirect unauthenticated users to login
+  // Redirect unauthenticated users to login (but not for API routes)
   if (
     !user &&
     !request.nextUrl.pathname.startsWith("/auth") &&
     !request.nextUrl.pathname.startsWith("/shared") &&
+    !request.nextUrl.pathname.startsWith("/api") &&
     request.nextUrl.pathname !== "/"
   ) {
     const url = request.nextUrl.clone()

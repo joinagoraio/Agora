@@ -123,3 +123,144 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Word document content styling */
+.word-document-content {
+  @apply text-foreground;
+}
+
+.word-document-content p {
+  @apply mb-4;
+}
+
+.word-document-content h1,
+.word-document-content h2,
+.word-document-content h3,
+.word-document-content h4,
+.word-document-content h5,
+.word-document-content h6 {
+  @apply font-semibold mb-3 mt-6;
+}
+
+.word-document-content h1 {
+  @apply text-3xl;
+}
+
+.word-document-content h2 {
+  @apply text-2xl;
+}
+
+.word-document-content h3 {
+  @apply text-xl;
+}
+
+.word-document-content ul,
+.word-document-content ol {
+  @apply mb-4 ml-6;
+}
+
+.word-document-content ul {
+  @apply list-disc;
+}
+
+.word-document-content ol {
+  @apply list-decimal;
+}
+
+.word-document-content li {
+  @apply mb-1;
+}
+
+.word-document-content table {
+  @apply border-collapse border border-border mb-4 w-full;
+}
+
+.word-document-content th,
+.word-document-content td {
+  @apply border border-border p-2;
+}
+
+.word-document-content th {
+  @apply bg-muted font-semibold;
+}
+
+.word-document-content img {
+  @apply max-w-full h-auto my-4;
+}
+
+.word-document-content a {
+  @apply text-primary underline;
+}
+
+.word-document-content blockquote {
+  @apply border-l-4 border-muted-foreground pl-4 italic my-4;
+}
+
+.word-document-content code {
+  @apply bg-muted px-1 py-0.5 rounded text-sm font-mono;
+}
+
+.word-document-content pre {
+  @apply bg-muted p-4 rounded overflow-x-auto my-4;
+}
+
+.word-document-content pre code {
+  @apply bg-transparent p-0;
+}
+
+/* Accordion animations */
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+.animate-accordion-down {
+  animation: accordion-down 0.2s ease-out;
+}
+
+.animate-accordion-up {
+  animation: accordion-up 0.2s ease-out;
+}
+
+/* Chat scrollable area - uses default browser scrollbar to match document viewer */
+.chat-scrollable {
+  /* No custom scrollbar styling - uses default browser scrollbar */
+}
+
+/* Rich Text Editor Styles */
+.ProseMirror {
+  outline: none;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: oklch(0.556 0 0);
+  pointer-events: none;
+  height: 0;
+}
+
+.ProseMirror-focused p.is-editor-empty:first-child::before {
+  color: oklch(0.708 0 0);
+}
+
+.dark .ProseMirror p.is-editor-empty:first-child::before {
+  color: oklch(0.708 0 0);
+}
+
+.dark .ProseMirror-focused p.is-editor-empty:first-child::before {
+  color: oklch(0.556 0 0);
+}

@@ -8,15 +8,24 @@ interface ChatToggleButtonProps {
   onClick: () => void
   isOpen?: boolean
   className?: string
+  offsetRight?: number
+  offsetBottom?: number
 }
 
-export function ChatToggleButton({ onClick, isOpen = false, className }: ChatToggleButtonProps) {
+export function ChatToggleButton({
+  onClick,
+  isOpen = false,
+  className,
+  offsetRight = 24,
+  offsetBottom = 24,
+}: ChatToggleButtonProps) {
   return (
     <Button
       onClick={onClick}
       size="lg"
+      style={{ right: offsetRight, bottom: offsetBottom }}
       className={cn(
-        "absolute bottom-6 right-6 z-[60] h-10 w-10 rounded-full shadow-lg transition-all hover:scale-110",
+        "fixed z-[60] h-10 w-10 rounded-full shadow-lg transition-transform hover:scale-110",
         className
       )}
     >

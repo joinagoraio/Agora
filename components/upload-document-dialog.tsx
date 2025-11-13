@@ -14,8 +14,9 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Upload, FileText, X, Loader2 } from "lucide-react"
-import { uploadDocument } from "@/lib/actions/document"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertTriangle, Upload, FileText, X, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 interface UploadDocumentDialogProps {
@@ -27,6 +28,7 @@ interface UploadDocumentDialogProps {
 export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: UploadDocumentDialogProps) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState<File[]>([])
+  const [classification, setClassification] = useState<"public" | "internal" | "confidential">("internal")
   const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
@@ -45,6 +47,85 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
     setFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
+  const uploadFileWithProgress = (file: File): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      const fileId = `${file.name}-${file.size}`
+      const xhr = new XMLHttpRequest()
+      const formData = new FormData()
+      
+      formData.append("file", file)
+      formData.append("workspaceId", workspaceId)
+      formData.append("classification", classification)
+
+      let uploadComplete = false
+
+      // Track upload progress (file transfer only, not server processing)
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable && !uploadComplete) {
+          // Cap at 85% during upload, remaining 15% is for server processing
+          const uploadPercent = Math.round((e.loaded / e.total) * 85)
+          setUploadProgress((prev) => ({
+            ...prev,
+            [fileId]: Math.max(prev[fileId] || 0, uploadPercent),
+          }))
+        }
+      })
+
+      // Track when upload completes (but server is still processing)
+      xhr.upload.addEventListener("load", () => {
+        uploadComplete = true
+        // Set to 90% when upload transfer completes, server is processing
+        setUploadProgress((prev) => ({
+          ...prev,
+          [fileId]: 90,
+        }))
+      })
+
+      // Handle response completion
+      xhr.addEventListener("loadend", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const response = JSON.parse(xhr.responseText)
+            if (response.error) {
+              reject(new Error(response.error))
+            } else {
+              // Only set to 100% when we get the final successful response
+              setUploadProgress((prev) => ({
+                ...prev,
+                [fileId]: 100,
+              }))
+              // Small delay to ensure UI updates before resolving
+              setTimeout(() => resolve(response.data), 100)
+            }
+          } catch (err) {
+            reject(new Error("Failed to parse response"))
+          }
+        } else {
+          try {
+            const error = JSON.parse(xhr.responseText)
+            reject(new Error(error.error || `Upload failed with status ${xhr.status}`))
+          } catch {
+            reject(new Error(`Upload failed with status ${xhr.status}`))
+          }
+        }
+      })
+
+      // Handle errors
+      xhr.addEventListener("error", () => {
+        reject(new Error("Network error during upload"))
+      })
+
+      // Handle abort
+      xhr.addEventListener("abort", () => {
+        reject(new Error("Upload was cancelled"))
+      })
+
+      // Start upload
+      xhr.open("POST", "/api/documents/upload")
+      xhr.send(formData)
+    })
+  }
+
   const handleUpload = async () => {
     if (files.length === 0) {
       setError("Please select at least one file")
@@ -53,24 +134,16 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
 
     setIsUploading(true)
     setError(null)
-    const newProgress: Record<string, number> = {}
+    const initialProgress: Record<string, number> = {}
+    files.forEach((file) => {
+      const fileId = `${file.name}-${file.size}`
+      initialProgress[fileId] = 0
+    })
+    setUploadProgress(initialProgress)
 
     try {
       for (const file of files) {
-        const fileId = `${file.name}-${file.size}`
-        newProgress[fileId] = 0
-        setUploadProgress({ ...newProgress })
-
-        const result = await uploadDocument(workspaceId, file)
-
-        if (result.error) {
-          setError(`Failed to upload ${file.name}: ${result.error}`)
-          setIsUploading(false)
-          return
-        }
-
-        newProgress[fileId] = 100
-        setUploadProgress({ ...newProgress })
+        await uploadFileWithProgress(file)
       }
 
       // Clear files and reset
@@ -81,6 +154,11 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
       setOpen(false) // Close dialog on success
       onSuccess?.()
       router.refresh()
+      
+      // Dispatch custom event to notify chat interface and other components
+      window.dispatchEvent(new CustomEvent("documentUploaded", { 
+        detail: { workspaceId } 
+      }))
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred during upload")
     } finally {
@@ -113,6 +191,27 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
           <DialogDescription>Upload files directly to this workspace</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
+        <div className="space-y-2">
+          <Label htmlFor="classification">Classification</Label>
+          <Select value={classification} onValueChange={(value: any) => setClassification(value)}>
+            <SelectTrigger id="classification">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="public">Public</SelectItem>
+              <SelectItem value="internal">Internal</SelectItem>
+              <SelectItem value="confidential">Confidential</SelectItem>
+            </SelectContent>
+          </Select>
+          {classification === "confidential" && (
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                Confidential documents cannot be shared externally or exported.
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
         <div className="space-y-2">
           <Label htmlFor="file-upload">Select Files</Label>
           <div className="flex items-center gap-2">
@@ -171,10 +270,9 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
                         <X className="h-4 w-4" />
                       </Button>
                     )}
-                    {isUploading && progress < 100 && (
+                    {isUploading && (
                       <div className="flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="text-xs text-muted-foreground">{progress}%</span>
                       </div>
                     )}
                   </div>

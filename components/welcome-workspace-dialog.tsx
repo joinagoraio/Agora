@@ -16,8 +16,14 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { updateWorkspace } from "@/lib/actions/workspace"
-import { Sparkles, MapPin, FileText } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { updateWorkspace, enhanceContextText } from "@/lib/actions/workspace"
+import { MapPin, FileText, Wand2 } from "lucide-react"
 
 interface WelcomeWorkspaceDialogProps {
   workspace: {
@@ -36,6 +42,7 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
   const [location, setLocation] = useState(workspace.location || "")
   const [context, setContext] = useState(workspace.context || "")
   const [isSaving, setIsSaving] = useState(false)
+  const [isEnhancing, setIsEnhancing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleClose = (open: boolean) => {
@@ -73,18 +80,32 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
     handleClose(false)
   }
 
+  const handleEnhance = async () => {
+    if (!context || context.trim().length === 0) {
+      return
+    }
+
+    setIsEnhancing(true)
+    setError(null)
+
+    const result = await enhanceContextText(context)
+
+    if (result.error) {
+      setError(result.error)
+    } else if (result.enhanced) {
+      setContext(result.enhanced)
+    }
+
+    setIsEnhancing(false)
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="rounded-full bg-primary/10 p-2">
-              <Sparkles className="h-6 w-6 text-primary" />
-            </div>
-            <DialogTitle className="text-2xl">Welcome to {workspace.name}!</DialogTitle>
-          </div>
-          <DialogDescription className="text-base">
-            Help us understand your workspace better by adding some properties. This will improve AI search and
+          <DialogTitle className="text-2xl">Welcome to {workspace.name}!</DialogTitle>
+          <DialogDescription className="text-sm">
+            Help us understand your workspace better by adding some context. This will improve AI search and
             understanding of your documents.
           </DialogDescription>
         </DialogHeader>
@@ -107,18 +128,44 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
               </p>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 mt-6">
               <Label htmlFor="welcome-context" className="flex items-center gap-2">
                 <FileText className="h-4 w-4" />
                 Additional Context
               </Label>
-              <Textarea
-                id="welcome-context"
-                value={context}
-                onChange={(e) => setContext(e.target.value)}
-                placeholder="e.g., This workspace focuses on municipal policy documents for Amsterdam. Documents include city council decisions, policy proposals, and public consultations..."
-                rows={5}
-              />
+              <div className="relative">
+                <Textarea
+                  id="welcome-context"
+                  value={context}
+                  onChange={(e) => setContext(e.target.value)}
+                  placeholder="e.g., This workspace focuses on municipal policy documents for Amsterdam. Documents include city council decisions, policy proposals, and public consultations..."
+                  rows={8}
+                  className="pr-12 pb-10"
+                />
+                <div className="absolute bottom-2 right-2 z-20">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={handleEnhance}
+                          disabled={isEnhancing || !context || context.trim().length === 0}
+                          className="flex items-center justify-center h-8 w-8 rounded-md hover:bg-primary/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          {isEnhancing ? (
+                            <Wand2 className="h-4 w-4 text-purple-600 dark:text-purple-400 animate-pulse" />
+                          ) : (
+                            <Wand2 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                          )}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Enhance with AI</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
               <p className="text-xs text-muted-foreground">
                 Provide context about the workspace domain, document types, or any other information that would help the
                 AI better understand and search through your documents

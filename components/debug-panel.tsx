@@ -3,7 +3,6 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { ChevronDown } from "lucide-react"
-import { useEffect, useRef } from "react"
 
 interface RequestMetadata {
   endpoint: string
@@ -30,19 +29,11 @@ interface DebugPanelProps {
 }
 
 export function DebugPanel({ request, response, error }: DebugPanelProps) {
-  const detailsRef = useRef<HTMLDetailsElement>(null)
-
-  useEffect(() => {
-    if ((response || error) && detailsRef.current) {
-      detailsRef.current.open = true
-    }
-  }, [response, error])
-
   const hasData = request || response || error
 
   return (
-    <div className="border-t pt-4">
-      <details ref={detailsRef} className="space-y-3 group">
+    <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm border-t border-border/50 pt-4 mt-4">
+      <details className="group">
         <summary className="text-sm font-medium cursor-pointer hover:text-primary flex items-center gap-2 list-none">
           <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
           Request & Response Details
@@ -53,7 +44,7 @@ export function DebugPanel({ request, response, error }: DebugPanelProps) {
           )}
         </summary>
 
-        <div className="pl-4 space-y-3">
+        <div className="pl-4 space-y-3 pt-3 pb-2">
           {!hasData && (
             <Card>
               <CardContent className="pt-4">

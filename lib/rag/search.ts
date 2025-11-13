@@ -2,6 +2,62 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { findTextSpan } from "@/lib/utils/pdf-extraction"
+import OpenAI from "openai"
+
+// Helper function to rewrite/expand user query using AI for better search
+async function rewriteQueryForSearch(originalQuery: string): Promise<string> {
+  // Only use AI if OpenAI is configured and query is substantial
+  if (!process.env.OPENAI_API_KEY || originalQuery.length < 10) {
+    return originalQuery
+  }
+
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini", // Use cheaper model for query rewriting
+      messages: [
+        {
+          role: "system",
+          content: `You are a query rewriting assistant. Your job is to rewrite user questions into better search queries that will find relevant information in documents.
+
+Rules:
+- Extract key concepts, entities, and important terms from the question
+- Remove question words (what, which, how, etc.) and convert to searchable terms
+- Include synonyms or related terms that might appear in documents
+- Keep it concise (1-3 key phrases, max 20 words)
+- Focus on nouns and important verbs, remove filler words
+- If the question asks about a specific thing, include that thing as a search term
+
+Examples:
+- "which is the most critical issue?" → "critical issue"
+- "what are the security vulnerabilities?" → "security vulnerabilities"
+- "how do I configure the system?" → "configure system configuration`
+        },
+        {
+          role: "user",
+          content: originalQuery
+        }
+      ],
+      max_tokens: 50,
+      temperature: 0.3, // Lower temperature for more consistent results
+    })
+
+    const rewritten = response.choices[0]?.message?.content?.trim()
+    if (rewritten && rewritten.length > 0) {
+      console.log("[searchDocuments] Query rewritten:", {
+        original: originalQuery,
+        rewritten,
+      })
+      return rewritten
+    }
+  } catch (error) {
+    console.error("[searchDocuments] Error rewriting query:", error)
+  }
+
+  // Fallback to original query if AI rewriting fails
+  return originalQuery
+}
 
 export interface DocumentMatch {
   document: any
@@ -10,7 +66,13 @@ export interface DocumentMatch {
   preview?: string
 }
 
-export async function searchDocuments(workspaceId: string, query: string, limit = 5) {
+export async function searchDocuments(
+  workspaceId: string,
+  query: string,
+  limit = 5,
+  excludedDocumentIds: string[] = [],
+  includedDocumentIds?: string[],
+) {
   const supabase = await createClient()
 
   const {
@@ -27,60 +89,330 @@ export async function searchDocuments(workspaceId: string, query: string, limit 
     .eq("id", workspaceId)
     .single()
 
-  // If workspace has a location and it's not already in the query, add it
+  // Rewrite query using AI for better search results (optional, adds latency but improves quality)
+  // For now, we'll use AI rewriting only for document preview mode (includedDocumentIds) 
+  // to improve highlighting accuracy without adding latency to all searches
   let searchQuery = query
-  if (workspace?.location && !query.toLowerCase().includes(workspace.location.toLowerCase())) {
-    searchQuery = `${query} ${workspace.location}`
+  if (includedDocumentIds && includedDocumentIds.length > 0) {
+    // In document preview mode, use AI to rewrite query for better highlighting
+    searchQuery = await rewriteQueryForSearch(query)
+  }
+  
+  // If workspace has a location and it's not already in the query, add it
+  if (workspace?.location && !searchQuery.toLowerCase().includes(workspace.location.toLowerCase())) {
+    searchQuery = `${searchQuery} ${workspace.location}`
   }
 
   // Search documents table first
-  const { data: documents, error } = await supabase
+  if (includedDocumentIds && includedDocumentIds.length === 0) {
+    return { data: [] }
+  }
+
+  let documentsQuery = supabase
     .from("documents")
     .select("*")
     .eq("workspace_id", workspaceId)
     .eq("status", "active")
-    .or(`title.ilike.%${searchQuery}%,content.ilike.%${searchQuery}%`)
-    .limit(limit)
+
+  // If specific documents are included (e.g., document preview mode), fetch them directly
+  // Otherwise, search by text match
+  if (includedDocumentIds && includedDocumentIds.length > 0) {
+    // When documents are explicitly included, fetch them without requiring text match
+    documentsQuery = documentsQuery.in("id", includedDocumentIds)
+  } else {
+    // When searching all documents, require text match
+    documentsQuery = documentsQuery.or(`title.ilike.%${searchQuery}%,content.ilike.%${searchQuery}%`)
+  }
+
+  const { data: documents, error } = await documentsQuery.limit(limit * 2) // Fetch more to account for exclusions
 
   if (error) {
     return { data: [], error: error.message }
   }
 
+  // Filter out excluded documents
+  const excludedSet = new Set(excludedDocumentIds)
+  let filteredDocuments = (documents || []).filter((doc) => !excludedSet.has(doc.id))
+
+  if (includedDocumentIds && includedDocumentIds.length > 0) {
+    const includedOrder = new Map(includedDocumentIds.map((id, index) => [id, index]))
+    filteredDocuments = filteredDocuments
+      .slice()
+      .sort((a, b) => (includedOrder.get(a.id) ?? 0) - (includedOrder.get(b.id) ?? 0))
+  }
+
+  filteredDocuments = filteredDocuments.slice(0, limit)
+
   // For each document, try to find specific page matches
   const matches: DocumentMatch[] = []
 
-  for (const doc of documents || []) {
-    // Search document_pages for more precise matches
-    const { data: pages } = await supabase
-      .from("document_pages")
-      .select("*")
-      .eq("document_id", doc.id)
-      .ilike("text_content", `%${searchQuery}%`)
-      .limit(1)
-
-    if (pages && pages.length > 0) {
-      const page = pages[0]
-      const textSpan = findTextSpan(page.text_content || "", searchQuery)
-
-      // Get preview text around the match
-      let preview = ""
-      if (textSpan) {
-        const start = Math.max(0, textSpan.start - 50)
-        const end = Math.min((page.text_content || "").length, textSpan.end + 50)
-        preview = (page.text_content || "").substring(start, end)
+  for (const doc of filteredDocuments) {
+    // If this document is in the included list, try to find page matches
+    // Otherwise, only search if query matches
+    const isIncluded = includedDocumentIds && includedDocumentIds.length > 0 && includedDocumentIds.includes(doc.id)
+    
+    if (isIncluded) {
+      // For included documents, try to find a page with text match first
+      const { data: matchingPages } = await supabase
+        .from("document_pages")
+        .select("*")
+        .eq("document_id", doc.id)
+        .ilike("text_content", `%${searchQuery}%`)
+        .limit(1)
+      
+      let page = matchingPages?.[0]
+      
+      // If no match found but document is included, get first page anyway
+      if (!page) {
+        const { data: firstPage } = await supabase
+          .from("document_pages")
+          .select("*")
+          .eq("document_id", doc.id)
+          .order("page_number", { ascending: true })
+          .limit(1)
+          .single()
+        page = firstPage || undefined
       }
+      
+      if (page) {
+        // Common stop words to skip when searching
+        const stopWords = new Set([
+          "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
+          "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did",
+          "will", "would", "should", "could", "may", "might", "must", "can",
+          "this", "that", "these", "those", "which", "what", "who", "where", "when", "why", "how",
+          "i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them"
+        ])
+        
+        // Try to find textSpan using the search query first
+        let textSpan = findTextSpan(page.text_content || "", searchQuery)
+        
+        // If that doesn't work, try to find meaningful phrases from the search query
+        if (!textSpan && searchQuery) {
+          // Extract longer, more unique words (5+ characters, not stop words)
+          const words = searchQuery
+            .split(/\s+/)
+            .filter(w => w.length >= 5 && !stopWords.has(w.toLowerCase().replace(/[^\w]/g, "")))
+            .sort((a, b) => b.length - a.length) // Prefer longer words
+          
+          for (const word of words) {
+            textSpan = findTextSpan(page.text_content || "", word)
+            if (textSpan) {
+              console.log("[searchDocuments] Found textSpan using word:", word)
+              break
+            }
+          }
+          
+          // If still no match, try 2-3 word phrases (excluding stop words)
+          if (!textSpan) {
+            const meaningfulWords = searchQuery
+              .split(/\s+/)
+              .filter(w => !stopWords.has(w.toLowerCase().replace(/[^\w]/g, "")))
+            
+            // Try 3-word phrases, then 2-word phrases
+            for (let phraseLength = 3; phraseLength >= 2 && !textSpan; phraseLength--) {
+              for (let i = 0; i <= meaningfulWords.length - phraseLength; i++) {
+                const phrase = meaningfulWords.slice(i, i + phraseLength).join(" ")
+                if (phrase.length >= 10) {
+                  textSpan = findTextSpan(page.text_content || "", phrase)
+                  if (textSpan) {
+                    console.log("[searchDocuments] Found textSpan using phrase:", phrase)
+                    break
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        // If we found a textSpan from query matching, expand it to highlight a meaningful section
+        // Single words or short phrases aren't useful highlights - we want 100-200 characters
+        if (textSpan) {
+          const currentLength = textSpan.end - textSpan.start
+          const targetLength = 150 // Aim for ~150 characters of highlighted text
+          
+          if (currentLength < targetLength) {
+            const expandAmount = Math.floor((targetLength - currentLength) / 2)
+            const expandedStart = Math.max(0, textSpan.start - expandAmount)
+            const expandedEnd = Math.min((page.text_content || "").length, textSpan.end + expandAmount)
+            
+            textSpan = {
+              start: expandedStart,
+              end: expandedEnd,
+            }
+            
+            console.log("[searchDocuments] Expanded textSpan from query match:", {
+              originalLength: currentLength,
+              expandedLength: expandedEnd - expandedStart,
+              textSpan,
+            })
+          }
+        }
+        
+        // Get preview text around the match or from the beginning
+        let preview = ""
+        if (textSpan) {
+          const start = Math.max(0, textSpan.start - 50)
+          const end = Math.min((page.text_content || "").length, textSpan.end + 50)
+          preview = (page.text_content || "").substring(start, end)
+        } else if (page.text_content) {
+          // If no match, show first 200 chars
+          preview = page.text_content.substring(0, 200)
+        }
+        
+        // Now use the preview text to create a better textSpan
+        // The preview is already relevant content, so we should highlight where it appears
+        if (preview && page.text_content && !textSpan) {
+          // Try to find the preview text (or a substantial portion of it) in the document
+          // Use a sliding window approach to find the best match
+          const previewLength = preview.length
+          const minMatchLength = Math.min(100, Math.floor(previewLength * 0.6)) // Match at least 60% of preview
+          
+          // Try to find progressively smaller chunks of the preview
+          for (let chunkSize = previewLength; chunkSize >= minMatchLength; chunkSize -= 20) {
+            // Try different starting positions in the preview
+            for (let startPos = 0; startPos <= previewLength - chunkSize; startPos += 20) {
+              const chunk = preview.substring(startPos, startPos + chunkSize).trim()
+              
+              // Skip if chunk is too short or starts with just stop words
+              if (chunk.length < 50) continue
+              
+              const firstWords = chunk.split(/\s+/).slice(0, 3).join(" ").toLowerCase()
+              if (stopWords.has(firstWords.split(/\s+/)[0]?.replace(/[^\w]/g, ""))) {
+                continue
+              }
+              
+              const chunkSpan = findTextSpan(page.text_content, chunk)
+              if (chunkSpan) {
+                // Found a match! Expand it to highlight a meaningful section (100-150 chars)
+                const expandAmount = 50
+                const expandedStart = Math.max(0, chunkSpan.start - expandAmount)
+                const expandedEnd = Math.min(page.text_content.length, chunkSpan.end + expandAmount)
+                
+                textSpan = {
+                  start: expandedStart,
+                  end: expandedEnd,
+                }
+                
+                console.log("[searchDocuments] Found textSpan using preview chunk:", {
+                  chunkPreview: chunk.substring(0, 60),
+                  originalSpan: chunkSpan,
+                  expandedSpan: textSpan,
+                })
+                break
+              }
+            }
+            if (textSpan) break
+          }
+          
+          // If still no match, use the preview text directly (it's from the document, so it should match)
+          if (!textSpan && preview.length > 50) {
+            // Find where the preview starts in the document
+            const previewStart = page.text_content.indexOf(preview.substring(0, 100))
+            if (previewStart !== -1) {
+              // Highlight a meaningful section around where the preview appears
+              const highlightLength = Math.min(150, preview.length)
+              textSpan = {
+                start: previewStart,
+                end: previewStart + highlightLength,
+              }
+              console.log("[searchDocuments] Found textSpan using preview start position:", textSpan)
+            }
+          }
+        }
+        
+        console.log("[searchDocuments] Found page for included doc:", {
+          documentId: doc.id,
+          pageNumber: page.page_number,
+          pageTextLength: (page.text_content || "").length,
+          searchQuery,
+          textSpan,
+          hasTextSpan: !!textSpan,
+          previewLength: preview.length,
+        })
 
-      matches.push({
-        document: doc,
-        pageNumber: page.page_number,
-        textSpan: textSpan || undefined,
-        preview,
-      })
+        matches.push({
+          document: doc,
+          pageNumber: page.page_number,
+          textSpan: textSpan || undefined,
+          preview,
+        })
+      } else if (doc.content && doc.content.trim() && !doc.content.startsWith("[Failed") && !doc.content.startsWith("[Binary")) {
+        // No pages found, but we have document content - use it as a virtual page
+        // This enables highlighting for documents that were uploaded before page storage was implemented
+        const textSpan = findTextSpan(doc.content, searchQuery)
+        
+        let preview = ""
+        if (textSpan) {
+          const start = Math.max(0, textSpan.start - 50)
+          const end = Math.min(doc.content.length, textSpan.end + 50)
+          preview = doc.content.substring(start, end)
+        } else {
+          preview = doc.content.substring(0, 200)
+        }
+
+        matches.push({
+          document: doc,
+          pageNumber: 1, // Treat as page 1 for highlighting
+          textSpan: textSpan || undefined,
+          preview,
+        })
+      } else {
+        // No pages found and no content, use document-level match
+        matches.push({
+          document: doc,
+        })
+      }
     } else {
-      // No page match, use document-level match
-      matches.push({
-        document: doc,
-      })
+      // For non-included documents, only include if there's a text match
+      const { data: pages } = await supabase
+        .from("document_pages")
+        .select("*")
+        .eq("document_id", doc.id)
+        .ilike("text_content", `%${searchQuery}%`)
+        .limit(1)
+
+      if (pages && pages.length > 0) {
+        const page = pages[0]
+        const textSpan = findTextSpan(page.text_content || "", searchQuery)
+
+        // Get preview text around the match
+        let preview = ""
+        if (textSpan) {
+          const start = Math.max(0, textSpan.start - 50)
+          const end = Math.min((page.text_content || "").length, textSpan.end + 50)
+          preview = (page.text_content || "").substring(start, end)
+        }
+
+        matches.push({
+          document: doc,
+          pageNumber: page.page_number,
+          textSpan: textSpan || undefined,
+          preview,
+        })
+      } else if (doc.content && doc.content.trim() && !doc.content.startsWith("[Failed") && !doc.content.startsWith("[Binary")) {
+        // No pages found, but we have document content - use it as a virtual page
+        const textSpan = findTextSpan(doc.content, searchQuery)
+        
+        let preview = ""
+        if (textSpan) {
+          const start = Math.max(0, textSpan.start - 50)
+          const end = Math.min(doc.content.length, textSpan.end + 50)
+          preview = doc.content.substring(start, end)
+        }
+
+        matches.push({
+          document: doc,
+          pageNumber: 1, // Treat as page 1 for highlighting
+          textSpan: textSpan || undefined,
+          preview,
+        })
+      } else {
+        // No page match and no content, use document-level match
+        matches.push({
+          document: doc,
+        })
+      }
     }
   }
 
@@ -90,6 +422,8 @@ export async function searchDocuments(workspaceId: string, query: string, limit 
 export async function getRelevantContext(
   workspaceId: string,
   query: string,
+  excludedDocumentIds: string[] = [],
+  includedDocumentIds?: string[],
 ): Promise<{ context: string; sources: any[] }> {
   const supabase = await createClient()
 
@@ -100,7 +434,23 @@ export async function getRelevantContext(
     .eq("id", workspaceId)
     .single()
 
-  const { data: matches } = await searchDocuments(workspaceId, query, 3)
+  // If specific documents are included, use a limit that matches the number of included documents
+  // Otherwise, use the default limit of 3 for text-based search
+  const searchLimit = includedDocumentIds && includedDocumentIds.length > 0
+    ? includedDocumentIds.length // Include all specified documents
+    : 3 // Default limit for text-based search
+
+  console.log(`[getRelevantContext] Search parameters:`, {
+    workspaceId,
+    queryLength: query.length,
+    includedDocumentIds: includedDocumentIds?.length || 0,
+    excludedDocumentIds: excludedDocumentIds.length,
+    searchLimit,
+  })
+
+  const { data: matches } = await searchDocuments(workspaceId, query, searchLimit, excludedDocumentIds, includedDocumentIds)
+
+  console.log(`[getRelevantContext] Found ${matches?.length || 0} document matches`)
 
   // Build context string with workspace context if available
   let contextParts: string[] = []
@@ -124,18 +474,91 @@ export async function getRelevantContext(
   }
 
   // Combine document content for context
-  const documentContext = matches
-    .map((match) => {
-      const doc = match.document
-      const pageInfo = match.pageNumber 
-        ? ` (Page ${match.pageNumber})` 
-        : ""
-      const preview = match.preview 
-        ? `\nRelevant excerpt: ${match.preview}` 
-        : ""
-      return `Document: ${doc.title}${pageInfo}\n${doc.content?.substring(0, 1000) || ""}${preview}\n---`
-    })
-    .join("\n\n")
+  // For documents with no content but with pages, we'll aggregate page content
+  const documentContextPromises = matches.map(async (match) => {
+    const doc = match.document
+    const pageInfo = match.pageNumber 
+      ? ` (Page ${match.pageNumber})` 
+      : ""
+    const preview = match.preview 
+      ? `\nRelevant excerpt: ${match.preview}` 
+      : ""
+    
+    let content = doc.content || ""
+    const isIncluded = includedDocumentIds && includedDocumentIds.length > 0 && includedDocumentIds.includes(doc.id)
+    
+    // Always try to get content from pages for included documents, or if content is empty
+    if ((isIncluded || !content) && doc.id) {
+      try {
+        const { data: pages, error: pagesError } = await supabase
+          .from("document_pages")
+          .select("text_content, page_number")
+          .eq("document_id", doc.id)
+          .order("page_number", { ascending: true })
+          .limit(isIncluded ? 20 : 10) // Get more pages for included documents
+        
+        if (pagesError) {
+          console.error(`[getRelevantContext] Error fetching pages for doc ${doc.id}:`, pagesError)
+        }
+        
+        if (isIncluded) {
+          console.log(`[getRelevantContext] Document ${doc.id} (${doc.title}): Found ${pages?.length || 0} pages`)
+          if (pages && pages.length > 0) {
+            const totalChars = pages.reduce((sum, p) => sum + (p.text_content?.length || 0), 0)
+            console.log(`[getRelevantContext] Total characters from pages: ${totalChars}`)
+          }
+        }
+        
+        if (pages && pages.length > 0) {
+          const pageContent = pages
+            .map((p) => p.text_content || "")
+            .filter(Boolean)
+            .join("\n\n")
+          
+          if (pageContent.trim()) {
+            // For included documents, prioritize page content (it's more complete)
+            if (isIncluded) {
+              content = pageContent.substring(0, 8000) // More content for included documents
+              console.log(`[getRelevantContext] Using ${content.length} chars from pages for included doc ${doc.id}`)
+            } else if (!content) {
+              content = pageContent.substring(0, 2000)
+            } else if (pageContent.length > content.length) {
+              // Use page content if it's more complete
+              content = pageContent.substring(0, 2000)
+            }
+          } else if (isIncluded) {
+            console.warn(`[getRelevantContext] Pages exist but have no text_content for doc ${doc.id}`)
+          }
+        } else if (isIncluded) {
+          console.warn(`[getRelevantContext] No pages found in document_pages for doc ${doc.id}`)
+        }
+      } catch (error) {
+        console.error(`[getRelevantContext] Error processing pages for doc ${doc.id}:`, error)
+      }
+    }
+    
+    // Limit content length for context
+    if (content && content.length > 1000 && !isIncluded) {
+      content = content.substring(0, 1000)
+    } else if (content && content.length > 8000) {
+      content = content.substring(0, 8000)
+    }
+    
+    // Log for debugging
+    if (isIncluded) {
+      if (!content) {
+        console.warn(`[getRelevantContext] Included document ${doc.id} (${doc.title}) has no content`)
+        console.warn(`[getRelevantContext] Document content field: ${doc.content ? `${doc.content.length} chars` : 'empty'}`)
+      } else {
+        console.log(`[getRelevantContext] Included document ${doc.id} (${doc.title}) has ${content.length} chars of content`)
+      }
+    }
+    
+    return `Document: ${doc.title}${pageInfo}\n${content || "[No content available - document may need to be re-uploaded or processed]"}${preview}\n---`
+  })
+  
+  const documentContextArray = await Promise.all(documentContextPromises)
+  const documentContext = documentContextArray.join("\n\n")
 
   if (contextParts.length > 0) {
     contextParts.push(documentContext)
@@ -166,6 +589,14 @@ export async function getRelevantContext(
     if (match.preview) {
       source.preview = match.preview
     }
+
+    console.log("[getRelevantContext] Building source:", {
+      documentId: doc.id,
+      title: doc.title,
+      pageNumber: source.pageNumber,
+      textSpan: source.textSpan,
+      hasTextSpan: !!source.textSpan,
+    })
 
     return source
   })

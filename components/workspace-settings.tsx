@@ -140,12 +140,12 @@ export function WorkspaceSettings({ workspace }: WorkspaceSettingsProps) {
                 <AlertDialogDescription>
                   This will permanently delete the workspace and all of its data,
                   including:
-                  <ul className="mt-2 list-disc pl-5 space-y-1">
-                    <li>All sources and synced documents</li>
-                    <li>All conversations and messages</li>
-                    <li>All document embeddings</li>
-                  </ul>
                 </AlertDialogDescription>
+                <ul className="mt-2 list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                  <li>All sources and synced documents</li>
+                  <li>All conversations and messages</li>
+                  <li>All document embeddings</li>
+                </ul>
               </AlertDialogHeader>
               {needsConfirmation && (
                 <p className="text-sm text-destructive font-medium">

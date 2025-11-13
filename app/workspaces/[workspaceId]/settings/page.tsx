@@ -23,9 +23,25 @@ export default async function SettingsPage({
   }
 
   // Get workspace details
-  const { data: workspace } = await supabase.from("workspaces").select("*, spaces(*)").eq("id", workspaceId).single()
+  const { data: workspace, error: workspaceError } = await supabase
+    .from("workspaces")
+    .select("*")
+    .eq("id", workspaceId)
+    .single()
 
-  if (!workspace) {
+  if (workspaceError || !workspace) {
+    if (workspaceError) {
+      console.error("Error fetching workspace:", {
+        message: workspaceError.message || String(workspaceError),
+        code: workspaceError.code || "unknown",
+        details: workspaceError.details || null,
+        hint: workspaceError.hint || null,
+        workspaceId,
+        error: workspaceError,
+      })
+    } else {
+      console.error("Workspace not found:", workspaceId)
+    }
     redirect("/dashboard")
   }
 
@@ -35,15 +51,11 @@ export default async function SettingsPage({
         <div className="flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" asChild>
-              <Link href={`/spaces/${workspace.spaces.id}`}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                <span className="text-sm font-normal">Back to {workspace.spaces.name}</span>
+              <Link href={`/workspaces/${workspaceId}`}>
+                <ArrowLeft className="mr-2 h-3 w-3" />
+                <span className="text-xs font-normal">Back to {workspace.name}</span>
               </Link>
             </Button>
-            <div>
-              <h1 className="text-2xl font-semibold">Workspace Settings</h1>
-              <p className="text-sm text-muted-foreground">{workspace.name}</p>
-            </div>
           </div>
           <UserMenu />
         </div>
@@ -52,7 +64,7 @@ export default async function SettingsPage({
       <main className="flex-1 bg-white">
         <div className="container mx-auto py-8 px-4">
           <div className="mb-6">
-            <h2 className="text-2xl font-semibold">Settings</h2>
+            <h2 className="text-2xl font-semibold">{workspace.name} Settings</h2>
             <p className="text-sm text-muted-foreground">Manage your workspace name, description, and delete options</p>
           </div>
           <WorkspaceSettings workspace={workspace} />

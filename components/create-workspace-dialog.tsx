@@ -21,9 +21,10 @@ import { Plus } from "lucide-react"
 
 interface CreateWorkspaceDialogProps {
   spaceId: string
+  trigger?: React.ReactNode
 }
 
-export function CreateWorkspaceDialog({ spaceId }: CreateWorkspaceDialogProps) {
+export function CreateWorkspaceDialog({ spaceId, trigger }: CreateWorkspaceDialogProps) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -51,10 +52,12 @@ export function CreateWorkspaceDialog({ spaceId }: CreateWorkspaceDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          New Workspace
-        </Button>
+        {trigger ?? (
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            New Workspace
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <form onSubmit={handleSubmit}>
