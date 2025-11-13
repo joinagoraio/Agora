@@ -2,14 +2,20 @@ import { createClient } from "@/lib/supabase/server"
 import { getRelevantContext } from "@/lib/rag/search"
 import OpenAI from "openai"
 
-// Validate OpenAI API key on module load
-if (!process.env.OPENAI_API_KEY) {
-  console.error("[Chat API] OPENAI_API_KEY environment variable is not set")
-}
+let cachedOpenAIClient: OpenAI | null = null
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    return null
+  }
+
+  if (!cachedOpenAIClient) {
+    cachedOpenAIClient = new OpenAI({ apiKey })
+  }
+
+  return cachedOpenAIClient
+}
 
 // Increase timeout to 60 seconds to handle RAG search and OpenAI API calls
 // This is especially important when searching through multiple documents
@@ -17,8 +23,10 @@ export const maxDuration = 60
 
 export async function POST(req: Request) {
   try {
+    const openai = getOpenAIClient()
+
     // Validate API key before processing
-    if (!process.env.OPENAI_API_KEY) {
+    if (!openai) {
       console.error("[Chat API] OPENAI_API_KEY is missing")
       return new Response(
         JSON.stringify({ 
