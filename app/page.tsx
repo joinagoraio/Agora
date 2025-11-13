@@ -1,56 +1,39 @@
 import Link from "next/link"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Search, MessageSquare, Database, Users, Shield, Zap } from "lucide-react"
+import { LandingHeader } from "@/components/landing-header"
 
 export default function HomePage() {
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-white via-neutral-100 to-white">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <span className="text-lg font-bold">A</span>
-            </div>
-            <span className="text-xl font-bold">AGORA</span>
-          </div>
-          <nav className="hidden items-center gap-6 md:flex">
-            <Link
-              href="#features"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Features
-            </Link>
-            <Link
-              href="#how-it-works"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              How it Works
-            </Link>
-            <Link
-              href="/auth/login"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Sign In
-            </Link>
-            <Button asChild>
-              <Link href="/auth/sign-up">Get Started</Link>
-            </Button>
-          </nav>
-        </div>
-      </header>
+      <LandingHeader />
 
       {/* Hero Section */}
-      <section className="container relative flex flex-col items-center justify-center gap-8 py-24 text-center lg:py-32">
-        <div className="flex flex-col gap-4 max-w-4xl">
+      <section
+        data-hero
+        className="relative mx-auto flex w-full max-w-6xl flex-col items-center justify-center gap-0 px-4 pb-12 pt-6 text-center lg:px-6 lg:pb-20 lg:pt-12"
+      >
+        <div className="flex flex-col items-center gap-6 max-w-4xl">
+          <Image
+            src="/logo.svg"
+            alt="AGORA"
+            width={695}
+            height={136}
+            className="w-[520px] max-w-full h-auto pb-4"
+            priority
+          />
           <div className="inline-flex items-center justify-center">
-            <span className="rounded-full bg-accent/10 px-4 py-1.5 text-sm font-medium text-accent border border-accent/20">
+            <span className="rounded-full border border-border px-4 py-1.5 text-sm font-medium text-muted-foreground">
               AI-Powered Policy Management
             </span>
           </div>
           <h1 className="text-balance text-5xl font-bold tracking-tight lg:text-7xl">
-            Your team's intelligent
-            <span className="block text-accent">policy assistant</span>
+            <span className="bg-gradient-to-b from-foreground via-foreground to-muted-foreground bg-clip-text text-transparent">
+              Your team's intelligent
+            </span>
+            <span className="block text-foreground">policy assistant</span>
           </h1>
           <p className="text-balance text-xl text-muted-foreground lg:text-2xl max-w-3xl mx-auto leading-relaxed">
             Connect your policy documents, ask questions, and get instant AI-powered answers. Built for teams that need
@@ -59,13 +42,22 @@ export default function HomePage() {
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-4">
-          <Button asChild size="lg" className="text-base h-12 px-8">
+          <Button
+            asChild
+            size="lg"
+            className="h-12 px-8 text-base bg-foreground text-background hover:bg-foreground/90"
+          >
             <Link href="/auth/sign-up">
               Start Free Trial
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>
-          <Button asChild variant="outline" size="lg" className="text-base h-12 px-8 bg-transparent">
+          <Button
+            asChild
+            variant="outline"
+            size="lg"
+            className="h-12 px-8 text-base border-border bg-transparent text-foreground hover:bg-muted"
+          >
             <Link href="#how-it-works">See How it Works</Link>
           </Button>
         </div>
@@ -88,7 +80,7 @@ export default function HomePage() {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="container py-24 lg:py-32">
+      <section id="features" className="mx-auto w-full max-w-6xl px-6 py-24 lg:py-32">
         <div className="flex flex-col items-center gap-4 text-center mb-16">
           <h2 className="text-balance text-4xl font-bold tracking-tight lg:text-5xl">
             Everything you need to manage policies
@@ -99,8 +91,8 @@ export default function HomePage() {
         </div>
 
         <div className="grid gap-8 lg:grid-cols-3">
-          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-accent/50">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10 text-accent">
+          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-foreground/40">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-foreground">
               <Database className="h-6 w-6" />
             </div>
             <h3 className="text-2xl font-semibold">Document Connectors</h3>
@@ -110,8 +102,8 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-accent/50">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10 text-accent">
+          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-foreground/40">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-foreground">
               <MessageSquare className="h-6 w-6" />
             </div>
             <h3 className="text-2xl font-semibold">AI Assistant</h3>
@@ -121,8 +113,8 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-accent/50">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10 text-accent">
+          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-foreground/40">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-foreground">
               <Search className="h-6 w-6" />
             </div>
             <h3 className="text-2xl font-semibold">Smart Search</h3>
@@ -132,8 +124,8 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-accent/50">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10 text-accent">
+          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-foreground/40">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-foreground">
               <Users className="h-6 w-6" />
             </div>
             <h3 className="text-2xl font-semibold">Team Collaboration</h3>
@@ -142,8 +134,8 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-accent/50">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10 text-accent">
+          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-foreground/40">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-foreground">
               <Shield className="h-6 w-6" />
             </div>
             <h3 className="text-2xl font-semibold">Enterprise Security</h3>
@@ -152,8 +144,8 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-accent/50">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10 text-accent">
+          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-foreground/40">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-foreground">
               <Zap className="h-6 w-6" />
             </div>
             <h3 className="text-2xl font-semibold">Lightning Fast</h3>
@@ -165,7 +157,7 @@ export default function HomePage() {
       </section>
 
       {/* How It Works */}
-      <section id="how-it-works" className="container py-24 lg:py-32 border-t border-border">
+      <section id="how-it-works" className="mx-auto w-full max-w-6xl border-t border-border px-6 py-24 lg:py-32">
         <div className="flex flex-col items-center gap-4 text-center mb-16">
           <h2 className="text-balance text-4xl font-bold tracking-tight lg:text-5xl">Get started in minutes</h2>
           <p className="text-balance text-lg text-muted-foreground max-w-2xl">
@@ -175,7 +167,7 @@ export default function HomePage() {
 
         <div className="grid gap-12 lg:grid-cols-3">
           <div className="flex flex-col items-center gap-4 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent text-accent-foreground text-2xl font-bold">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground text-background text-2xl font-bold">
               1
             </div>
             <h3 className="text-2xl font-semibold">Connect Your Sources</h3>
@@ -185,7 +177,7 @@ export default function HomePage() {
           </div>
 
           <div className="flex flex-col items-center gap-4 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent text-accent-foreground text-2xl font-bold">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground text-background text-2xl font-bold">
               2
             </div>
             <h3 className="text-2xl font-semibold">Organize Workspaces</h3>
@@ -195,7 +187,7 @@ export default function HomePage() {
           </div>
 
           <div className="flex flex-col items-center gap-4 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent text-accent-foreground text-2xl font-bold">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground text-background text-2xl font-bold">
               3
             </div>
             <h3 className="text-2xl font-semibold">Ask Questions</h3>
@@ -207,7 +199,7 @@ export default function HomePage() {
       </section>
 
       {/* CTA Section */}
-      <section className="container py-24 lg:py-32">
+      <section className="mx-auto w-full max-w-6xl px-6 py-24 lg:py-32">
         <div className="flex flex-col items-center gap-8 rounded-2xl border bg-card p-12 text-center lg:p-20">
           <h2 className="text-balance text-4xl font-bold tracking-tight lg:text-5xl max-w-3xl">
             Ready to transform your policy management?
@@ -216,13 +208,22 @@ export default function HomePage() {
             Join teams already using AGORA to make their institutional knowledge instantly accessible
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
-            <Button asChild size="lg" className="text-base h-12 px-8">
+            <Button
+              asChild
+              size="lg"
+              className="h-12 px-8 text-base bg-foreground text-background hover:bg-foreground/90"
+            >
               <Link href="/auth/sign-up">
                 Get Started Free
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
-            <Button asChild variant="outline" size="lg" className="text-base h-12 px-8 bg-transparent">
+            <Button
+              asChild
+              variant="outline"
+              size="lg"
+              className="h-12 px-8 text-base border-border bg-transparent text-foreground hover:bg-muted"
+            >
               <Link href="/auth/login">Sign In</Link>
             </Button>
           </div>
@@ -230,15 +231,12 @@ export default function HomePage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border bg-muted/30">
-        <div className="container py-12">
+      <footer className="border-t border-border">
+        <div className="mx-auto w-full max-w-6xl px-6 py-12">
           <div className="grid gap-8 lg:grid-cols-4">
             <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                  <span className="text-lg font-bold">A</span>
-                </div>
-                <span className="text-xl font-bold">AGORA</span>
+              <div className="flex items-center">
+                <Image src="/logo.svg" alt="AGORA" width={695} height={136} className="w-24 h-auto" />
               </div>
               <p className="text-sm text-muted-foreground">
                 Your intelligent multi-tenant policy assistant powered by AI
