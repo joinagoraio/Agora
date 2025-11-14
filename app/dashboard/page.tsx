@@ -5,7 +5,7 @@ import { CreateSpaceDialog } from "@/components/create-space-dialog"
 import { UserMenu } from "@/components/user-menu"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-import { Layers2, Users } from "lucide-react"
+import { Layers2 } from "lucide-react"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -59,10 +59,11 @@ export default async function DashboardPage() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Users className="h-4 w-4" />
-                        <span>Team space</span>
-                      </div>
+                      {space.description && (
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                          {space.description}
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                 </Link>

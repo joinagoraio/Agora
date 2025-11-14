@@ -735,7 +735,9 @@ export function SpaceSetupWizard({
         <div className="space-y-6 px-6 py-6">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             {steps.map((step, index) => {
-              const isActive = index === currentStep
+              // Don't mark any step as active when on welcome step (index 0)
+              // Only mark steps as active if they're the current step AND not the welcome step
+              const isActive = currentStep !== 0 && index === currentStep
               const isComplete = index < currentStep
               const showChevron = index < steps.length - 1
 
@@ -744,23 +746,27 @@ export function SpaceSetupWizard({
                 void jumpToStep(index)
               }
 
+              // Explicitly prevent welcome step from appearing active
+              const isWelcomeStep = index === 0
+              const shouldAppearActive = isActive && !isWelcomeStep
+
               return (
                 <div key={step.key} className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={handleStepClick}
                     className={cn(
-                      "flex items-center gap-1 focus:outline-none focus:ring transition-colors",
-                      isActive ? "cursor-default" : "cursor-pointer",
-                      isSubmitting && !isActive ? "pointer-events-none opacity-60" : "",
+                      "flex items-center gap-1 border-0 bg-transparent p-0 focus:outline-none focus:ring-0 transition-colors",
+                      shouldAppearActive ? "cursor-default" : "cursor-pointer",
+                      isSubmitting && !shouldAppearActive ? "pointer-events-none opacity-60" : "",
                     )}
-                    aria-current={isActive ? "step" : undefined}
+                    aria-current={shouldAppearActive ? "step" : undefined}
                   >
                     {isComplete && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
                     <span
                       className={cn(
                         "uppercase tracking-wide",
-                        isComplete || isActive ? "font-semibold text-foreground" : "text-muted-foreground",
+                        isComplete || shouldAppearActive ? "font-semibold text-foreground" : "text-muted-foreground",
                       )}
                     >
                       {step.title}
