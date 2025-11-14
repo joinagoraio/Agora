@@ -23,7 +23,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { updateWorkspace, enhanceContextText } from "@/lib/actions/workspace"
-import { MapPin, FileText, Wand2 } from "lucide-react"
+import { MapPin, FileText, Wand2, RotateCcw, Loader2 } from "lucide-react"
 
 interface WelcomeWorkspaceDialogProps {
   workspace: {
@@ -44,6 +44,9 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
   const [isSaving, setIsSaving] = useState(false)
   const [isEnhancing, setIsEnhancing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [originalContext, setOriginalContext] = useState<string | null>(null)
+  const [enhancementCompleted, setEnhancementCompleted] = useState(false)
+  const [focusedField, setFocusedField] = useState<"context" | null>(null)
 
   const handleClose = (open: boolean) => {
     if (!open) {
@@ -85,6 +88,9 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
       return
     }
 
+    // Store original text before enhancement
+    setOriginalContext(context)
+
     setIsEnhancing(true)
     setError(null)
 
@@ -92,18 +98,29 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
 
     if (result.error) {
       setError(result.error)
+      // Clear original text if enhancement failed
+      setOriginalContext(null)
     } else if (result.enhanced) {
       setContext(result.enhanced)
+      setEnhancementCompleted(true)
     }
 
     setIsEnhancing(false)
+  }
+
+  const handleUndo = () => {
+    if (originalContext !== null) {
+      setContext(originalContext)
+      setOriginalContext(null)
+      setEnhancementCompleted(false)
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle className="text-2xl">Welcome to {workspace.name}!</DialogTitle>
+          <DialogTitle className="text-2xl">Welcome to {workspace.name}</DialogTitle>
           <DialogDescription className="text-sm">
             Help us understand your workspace better by adding some context. This will improve AI search and
             understanding of your documents.
@@ -115,23 +132,26 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
             <div className="space-y-2">
               <Label htmlFor="welcome-location" className="flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
-                Location
+                Jurisdiction
               </Label>
-              <Input
-                id="welcome-location"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="e.g., Amsterdam, Netherlands"
-              />
+              <div className="w-fit">
+                <Input
+                  id="welcome-location"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="e.g., Amsterdam, Netherlands"
+                  className="w-[300px]"
+                />
+              </div>
               <p className="text-xs text-muted-foreground">
-                If you specify a location, it will be automatically included in searches
+                The geographic or legal jurisdiction this workspace operates within.
               </p>
             </div>
 
             <div className="space-y-2 mt-6">
               <Label htmlFor="welcome-context" className="flex items-center gap-2">
                 <FileText className="h-4 w-4" />
-                Workspace Context
+                Workspace Scope
               </Label>
               <div className="relative">
                 <Textarea
@@ -140,35 +160,64 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
                   onChange={(e) => setContext(e.target.value)}
                   placeholder="e.g., This workspace focuses on municipal policy documents for Amsterdam. Documents include city council decisions, policy proposals, and public consultations..."
                   rows={8}
-                  className="pr-12 pb-10"
+                  className="pb-10"
+                  onFocus={() => setFocusedField("context")}
+                  onBlur={() => setFocusedField(null)}
                 />
-                <div className="absolute bottom-2 right-2 z-20">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={handleEnhance}
-                          disabled={isEnhancing || !context || context.trim().length === 0}
-                          className="flex items-center justify-center h-8 w-8 rounded-md hover:bg-primary/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          {isEnhancing ? (
-                            <Wand2 className="h-4 w-4 text-purple-600 dark:text-purple-400 animate-pulse" />
-                          ) : (
-                            <Wand2 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                          )}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Enhance with AI</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
+                {(focusedField === "context" || isEnhancing) && (
+                  <div className="absolute bottom-2 right-2 flex items-center gap-2">
+                    {enhancementCompleted && originalContext !== null && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={handleUndo}
+                              onMouseDown={(e) => e.preventDefault()}
+                              className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                              <span className="sr-only">Undo enhancement</span>
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Undo enhancement</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={handleEnhance}
+                            disabled={isEnhancing || !context || context.trim().length === 0}
+                            onMouseDown={(e) => e.preventDefault()}
+                            className="h-8 w-8 p-0 hover:bg-transparent group"
+                          >
+                            {isEnhancing ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
+                            ) : (
+                              <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
+                            )}
+                            <span className="sr-only">Enhance with AI</span>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Enhance with AI</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                )}
               </div>
               <p className="text-xs text-muted-foreground">
-                Provide context about the workspace domain, document types, or any other information that would help the
-                AI better understand and search through your documents
+                Describe the focus, document types, and key themes for this workspace. This helps the AI understand and search your documents.
               </p>
             </div>
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 
-import { PencilLine, Save, X, Loader2, Wand2, MoreVertical, Settings } from "lucide-react"
+import { PencilLine, Save, X, Loader2, Wand2, MoreVertical, Settings, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -59,6 +59,8 @@ export function WorkspaceOverview({
   const [enhancingField, setEnhancingField] = useState<"description" | "context" | null>(null)
   const [activeField, setActiveField] = useState<"description" | "context" | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [originalContext, setOriginalContext] = useState<string | null>(null)
+  const [enhancementCompleted, setEnhancementCompleted] = useState<{ context?: boolean }>({})
 
   const [draftName, setDraftName] = useState(initialName)
   const [draftDescription, setDraftDescription] = useState(initialDescription ?? "")
@@ -92,6 +94,11 @@ export function WorkspaceOverview({
       return
     }
 
+    // Store original text before enhancement
+    if (field === "context") {
+      setOriginalContext(value)
+    }
+
     setIsEnhancing(true)
     setEnhancingField(field)
     setError(null)
@@ -100,16 +107,29 @@ export function WorkspaceOverview({
 
     if (result.error) {
       setError(result.error)
+      // Clear original text if enhancement failed
+      if (field === "context") {
+        setOriginalContext(null)
+      }
     } else if (result.enhanced) {
       if (field === "description") {
         setDraftDescription(result.enhanced)
       } else {
         setDraftContext(result.enhanced)
+        setEnhancementCompleted((prev) => ({ ...prev, context: true }))
       }
     }
 
     setIsEnhancing(false)
     setEnhancingField(null)
+  }
+
+  const handleUndo = (field: "context") => {
+    if (field === "context" && originalContext !== null) {
+      setDraftContext(originalContext)
+      setOriginalContext(null)
+      setEnhancementCompleted((prev) => ({ ...prev, context: false }))
+    }
   }
 
   const handleSave = async () => {
@@ -234,26 +254,48 @@ export function WorkspaceOverview({
                 onBlur={() => setActiveField((current) => (current === "context" ? null : current))}
                 placeholder="Describe the focus, document types, and key themes for this workspace…"
                 rows={8}
-                className="pr-12 pb-12"
+                className="pb-10"
               />
-              {activeField === "context" && (
-                <div className="absolute bottom-3 right-3">
+              {(activeField === "context" || (enhancingField === "context" && isEnhancing)) && (
+                <div className="absolute bottom-2 right-2 flex items-center gap-2">
+                  {enhancementCompleted.context && originalContext !== null && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleUndo("context")}
+                            onMouseDown={(e) => e.preventDefault()}
+                            className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                            <span className="sr-only">Undo enhancement</span>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Undo enhancement</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
                           type="button"
-                          size="icon"
                           variant="ghost"
-                          className="h-8 w-8 text-purple-500 hover:text-purple-500"
+                          size="icon"
                           onClick={() => handleEnhance("context")}
                           disabled={isEnhancing || draftContext.trim().length === 0}
                           onMouseDown={(e) => e.preventDefault()}
+                          className="h-8 w-8 p-0 hover:bg-transparent group"
                         >
                           {isEnhancing && enhancingField === "context" ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
                           ) : (
-                            <Wand2 className="h-4 w-4" />
+                            <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
                           )}
                           <span className="sr-only">Enhance description with AI</span>
                         </Button>
@@ -267,8 +309,7 @@ export function WorkspaceOverview({
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Provide context about the workspace domain, document types, or any other information that helps search and AI
-              understanding.
+              Describe the focus, document types, and key themes for this workspace. This helps the AI understand and search your documents.
             </p>
           </div>
 
