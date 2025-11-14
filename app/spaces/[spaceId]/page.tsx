@@ -6,9 +6,7 @@ import { getWorkspacesBySpace } from "@/lib/actions/workspace"
 import { getSpaceItems } from "@/lib/actions/space-item"
 import { UserMenu } from "@/components/user-menu"
 import { Button } from "@/components/ui/button"
-import { SpaceScopeEditor } from "@/components/space-scope-editor"
-import { SpaceDocumentsPanel } from "@/components/space-documents-panel"
-import { SpaceWorkspaceList } from "@/components/space-workspace-list"
+import { SpacePageClient } from "@/components/space-page-client"
 import { Settings, ArrowLeft } from "lucide-react"
 
 export default async function SpacePage({
@@ -78,27 +76,22 @@ export default async function SpacePage({
       </header>
 
       <main className="flex-1 bg-white">
-        <div className="container mx-auto py-8 px-4">
-          <SpaceScopeEditor
-            spaceId={spaceId}
-            spaceName={space.name}
-            logoUrl={space.logo_url}
-            spaceType={space.space_type}
-            visibility={space.visibility}
-            jurisdiction={space.jurisdiction}
-            initialScope={{
-              summary: space.description,
-              description: (scopeDetails.description as string | undefined) ?? "",
-              timeframe: (scopeDetails.timeframe as string | undefined) ?? "",
-            }}
-          />
-
-          <div className="mt-10 space-y-12">
-            <SpaceDocumentsPanel spaceId={spaceId} initialDocuments={documents ?? []} />
-
-            <SpaceWorkspaceList spaceId={spaceId} workspaces={workspaces ?? []} canCreate={canManage} />
-          </div>
-        </div>
+        <SpacePageClient
+          spaceId={spaceId}
+          spaceName={space.name}
+          initialSpaceType={space.space_type}
+          initialVisibility={space.visibility}
+          initialJurisdiction={space.jurisdiction}
+          initialScope={{
+            summary: space.description,
+            description: (scopeDetails.description as string | undefined) ?? "",
+            timeframe: (scopeDetails.timeframe as string | undefined) ?? "",
+          }}
+          initialDocuments={documents ?? []}
+          initialWorkspaces={workspaces ?? []}
+          canManage={canManage}
+          wizardState={(space.metadata as Record<string, any> | null)?.setupWizard ?? null}
+        />
       </main>
     </div>
   )
