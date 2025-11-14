@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, Upload } from "lucide-react"
+import { Loader2, Upload, X } from "lucide-react"
 
 type SpaceDocument = any
 
@@ -108,21 +108,44 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
         <div className="space-y-4 py-2">
           <div className="space-y-2">
             <Label htmlFor="space-document-file">File</Label>
-            <Input
-              id="space-document-file"
-              type="file"
-              accept=".pdf,.doc,.docx,.txt,.md,.markdown"
-              onChange={(event) => {
-                const selectedFile = event.target.files?.[0] ?? null
-                setFile(selectedFile)
-                if (selectedFile) {
-                  // Extract filename without extension and set as title
-                  const fileName = selectedFile.name
-                  const nameWithoutExt = fileName.replace(/\.[^/.]+$/, "")
-                  setTitle(nameWithoutExt)
-                }
-              }}
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                id="space-document-file"
+                type="file"
+                accept=".pdf,.doc,.docx,.txt,.md,.markdown"
+                onChange={(event) => {
+                  const selectedFile = event.target.files?.[0] ?? null
+                  setFile(selectedFile)
+                  if (selectedFile) {
+                    // Extract filename without extension and set as title
+                    const fileName = selectedFile.name
+                    const nameWithoutExt = fileName.replace(/\.[^/.]+$/, "")
+                    setTitle(nameWithoutExt)
+                  }
+                }}
+                className="flex-1"
+              />
+              {file && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setFile(null)
+                    setTitle("")
+                    // Reset the file input
+                    const fileInput = document.getElementById("space-document-file") as HTMLInputElement
+                    if (fileInput) {
+                      fileInput.value = ""
+                    }
+                  }}
+                  className="h-10 w-10 hover:bg-red-500 group"
+                >
+                  <X className="h-4 w-4 group-hover:text-red-500" />
+                  <span className="sr-only">Remove file</span>
+                </Button>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">PDF, Word, or text files up to the limits of your Supabase project.</p>
           </div>
 

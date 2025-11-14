@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 
 import { updateSpace, updateSpaceScope, enhanceScopeText, updateSpaceSetupState } from "@/lib/actions/space"
 import { createWorkspace } from "@/lib/actions/workspace"
@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, RotateCcw, Sparkles, Wand2 } from "lucide-react"
+import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, RotateCcw, Sparkles, Upload, Wand2, X } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 type SetupWizardState = {
@@ -151,6 +151,13 @@ export function SpaceSetupWizard({
 
   const [stepError, setStepError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null)
+  const [localDocuments, setLocalDocuments] = useState<SpaceDocumentItem[]>(documents)
+
+  // Update local documents when prop changes
+  useEffect(() => {
+    setLocalDocuments(documents)
+  }, [documents])
 
   const isFirstStep = currentStep === 0
   const isLastStep = currentStep === steps.length - 1
@@ -391,7 +398,25 @@ export function SpaceSetupWizard({
 
   const handleDocumentUploaded = (document: SpaceDocumentItem) => {
     onDocumentUploaded(document)
+    setLocalDocuments([document, ...localDocuments])
     setStepError(null)
+  }
+
+  const handleDocumentDeleted = async (itemId: string) => {
+    setDeletingDocumentId(itemId)
+    setStepError(null)
+
+    const response = await fetch(`/api/spaces/${spaceId}/items/${itemId}`, { method: "DELETE" })
+    const payload = await response.json()
+
+    if (!response.ok) {
+      setStepError(payload.error || "Failed to delete document.")
+      setDeletingDocumentId(null)
+      return
+    }
+
+    setLocalDocuments(localDocuments.filter((doc) => doc.id !== itemId))
+    setDeletingDocumentId(null)
   }
 
   const handleCreateWorkspace = async () => {
@@ -714,7 +739,7 @@ export function SpaceSetupWizard({
         return (
           <div className="space-y-6">
             <div className="flex flex-col gap-2">
-              <h3 className="text-base font-semibold text-foreground">Add the key references</h3>
+              <h3 className="text-base font-semibold text-foreground">Add supporting documents</h3>
               <p className="text-sm text-muted-foreground">
                 Upload policies, briefing notes, or supporting research. Public documents are inherited by every workspace.
               </p>
@@ -722,28 +747,33 @@ export function SpaceSetupWizard({
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed p-4">
               <div>
                 <p className="text-sm font-medium text-foreground">
-                  {documents.length > 0 ? `${documents.length} document${documents.length === 1 ? "" : "s"} uploaded` : "No documents yet"}
+                  {localDocuments.length > 0 ? `${localDocuments.length} document${localDocuments.length === 1 ? "" : "s"} uploaded` : "No documents yet"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  You can add more later from the documents section below this wizard.
+                  You can add more later from the documents section.
                 </p>
               </div>
               <SpaceUploadDocumentDialog
                 spaceId={spaceId}
                 onUploaded={handleDocumentUploaded}
-                trigger={<Button variant="outline">Upload document</Button>}
+                trigger={
+                  <Button className="bg-black text-white hover:bg-black/90 gap-2">
+                    <Upload className="h-4 w-4" />
+                    Upload document
+                  </Button>
+                }
               />
             </div>
-            {documents.length === 0 ? (
+            {localDocuments.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border p-6 text-center text-sm text-muted-foreground">
                 <FileText className="h-8 w-8 text-muted-foreground/70" />
-                <p>Keep teammates aligned by adding the policies or directives that define this scope.</p>
+                <p>add the policies or directives that define this scope.</p>
               </div>
             ) : (
               <div className="space-y-3">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Recently added</p>
                 <div className="space-y-2">
-                  {documents.slice(0, 3).map((doc) => {
+                  {localDocuments.slice(0, 3).map((doc) => {
                     const title = doc.payload?.title || doc.payload?.file_name || "Untitled document"
                     return (
                       <div key={doc.id} className="flex items-center justify-between rounded-md border border-border/80 px-3 py-2">
@@ -753,13 +783,30 @@ export function SpaceSetupWizard({
                             Added {new Date(doc.created_at).toLocaleDateString()}
                           </span>
                         </div>
-                        {doc.classification && <Badge variant="outline">{doc.classification}</Badge>}
+                        <div className="flex items-center gap-2">
+                          {doc.classification && <Badge variant="outline">{doc.classification}</Badge>}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDocumentDeleted(doc.id)}
+                            disabled={deletingDocumentId === doc.id}
+                            className="h-8 w-8 hover:bg-red-100 group"
+                          >
+                            {deletingDocumentId === doc.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <X className="h-4 w-4 group-hover:text-red-500" />
+                            )}
+                            <span className="sr-only">Remove document</span>
+                          </Button>
+                        </div>
                       </div>
                     )
                   })}
-                  {documents.length > 3 && (
+                  {localDocuments.length > 3 && (
                     <p className="text-xs text-muted-foreground">
-                      +{documents.length - 3} more documents will appear in the panel below.
+                      +{localDocuments.length - 3} more documents will appear in the panel below.
                     </p>
                   )}
                 </div>
