@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const { messages, workspaceId, conversationId, excludedDocumentIds = [] } = await req.json()
+    const { messages, workspaceId, conversationId, excludedDocumentIds = [], excludedNoteIds = [], excludedEvidenceIds = [] } = await req.json()
 
     const supabase = await createClient()
     const {
@@ -130,7 +130,7 @@ export async function POST(req: Request) {
     // Get workspace to fetch additional context
     const { data: workspace } = await supabase
       .from("workspaces")
-      .select("context, location")
+      .select("context, location, description, metadata")
       .eq("id", workspaceId)
       .single()
 
@@ -143,6 +143,8 @@ export async function POST(req: Request) {
       userQuery,
       excludedDocumentIds,
       includedDocumentIds,
+      excludedNoteIds,
+      excludedEvidenceIds,
     )
     
     const contextDuration = (Date.now() - contextStartTime) / 1000
@@ -168,16 +170,45 @@ export async function POST(req: Request) {
 
     // Build workspace context section
     let workspaceContextSection = ""
-    const hasWorkspaceContext = !!(workspace?.context || workspace?.location)
+    const scopeMetadata = ((workspace?.metadata as Record<string, any> | null) ?? {}).scope as
+      | Record<string, any>
+      | null
+      | undefined
+    const scopeSummary = workspace?.description
+    const scopeDescription = scopeMetadata?.description as string | undefined
+    const scopeTimeframe = scopeMetadata?.timeframe as string | undefined
+
+    const hasWorkspaceContext = !!(
+      workspace?.context ||
+      workspace?.location ||
+      scopeSummary ||
+      scopeDescription ||
+      scopeTimeframe
+    )
     if (workspace?.context) {
-      workspaceContextSection = `\n\nAdditional workspace context (from workspace properties):\n${workspace.context}`
+      workspaceContextSection = `\n\nWorkspace context (from workspace properties):\n${workspace.context}`
     }
     if (workspace?.location) {
       workspaceContextSection += workspaceContextSection ? `\n\nLocation: ${workspace.location}` : `\n\nLocation: ${workspace.location}`
     }
+    if (scopeSummary) {
+      workspaceContextSection += workspaceContextSection
+        ? `\n\nMission statement:\n${scopeSummary}`
+        : `\n\nMission statement:\n${scopeSummary}`
+    }
+    if (scopeDescription) {
+      workspaceContextSection += workspaceContextSection
+        ? `\n\nScope details:\n${scopeDescription}`
+        : `\n\nScope details:\n${scopeDescription}`
+    }
+    if (scopeTimeframe) {
+      workspaceContextSection += workspaceContextSection
+        ? `\n\nProgramme timeframe: ${scopeTimeframe}`
+        : `\n\nProgramme timeframe: ${scopeTimeframe}`
+    }
     
     const contextMentionInstruction = hasWorkspaceContext 
-      ? "  2. The additional workspace context/properties (if provided)"
+      ? "  2. The additional workspace context/properties and scope information (if provided)"
       : ""
     
     const systemPrompt = `You are AGORA, an intelligent policy assistant. You help users find and understand information from their organization's documents.

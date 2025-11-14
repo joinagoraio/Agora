@@ -13,7 +13,7 @@ type SpaceDocumentPayload = {
   file_name?: string | null
 }
 
-type SpaceDocumentItem = {
+export type SpaceDocumentItem = {
   id: string
   space_id?: string
   classification?: "public" | "internal" | "confidential" | null
@@ -121,6 +121,13 @@ async function upsertWorkspaceDocumentForScope(
 export async function syncScopeDocumentToAllWorkspaces(spaceId: string, spaceItem: SpaceDocumentItem) {
   const adminClient = createAdminClient()
 
+  const classification = spaceItem.classification ?? "internal"
+
+  if (classification !== "public") {
+    await removeScopeDocumentFromAllWorkspaces(spaceId, spaceItem.id)
+    return
+  }
+
   const { data: workspaces, error } = await adminClient
     .from("workspaces")
     .select("id")
@@ -160,5 +167,39 @@ export async function syncAllScopeDocumentsToWorkspace(spaceId: string, workspac
 
   for (const item of scopeItems) {
     await upsertWorkspaceDocumentForScope(spaceId, workspaceId, item as SpaceDocumentItem, adminClient)
+  }
+}
+
+export async function removeScopeDocumentFromAllWorkspaces(spaceId: string, spaceItemId: string) {
+  const adminClient = createAdminClient()
+
+  const { data: documents, error } = await adminClient
+    .from("documents")
+    .select("id, workspace_id")
+    .contains("metadata", { sourceSpaceItemId: spaceItemId, sourceSpaceId: spaceId })
+
+  if (error) {
+    console.error("[ScopeDocuments] Failed to find workspace documents for removal:", error)
+    return
+  }
+
+  if (!documents || documents.length === 0) {
+    return
+  }
+
+  const documentIds = documents.map((doc) => doc.id)
+  const workspaceIds = Array.from(new Set(documents.map((doc) => doc.workspace_id)))
+
+  const { error: deleteError } = await adminClient
+    .from("documents")
+    .update({ status: "deleted", updated_at: new Date().toISOString() })
+    .in("id", documentIds)
+
+  if (deleteError) {
+    console.error("[ScopeDocuments] Failed to mark workspace documents as deleted:", deleteError)
+  }
+
+  for (const workspaceId of workspaceIds) {
+    revalidatePath(`/workspaces/${workspaceId}`)
   }
 }

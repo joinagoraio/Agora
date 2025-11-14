@@ -65,7 +65,7 @@ export default async function SettingsPage({
         <div className="container mx-auto py-8 px-4">
           <div className="mb-6">
             <h2 className="text-2xl font-semibold">{workspace.name} Settings</h2>
-            <p className="text-sm text-muted-foreground">Manage your workspace name, description, and delete options</p>
+            <p className="text-sm text-muted-foreground">Manage workspace settings and delete options</p>
           </div>
           <WorkspaceSettings workspace={workspace} />
         </div>

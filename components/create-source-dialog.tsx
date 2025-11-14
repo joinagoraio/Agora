@@ -29,6 +29,7 @@ interface CreateSourceDialogProps {
     id: string
     type: string
   }>
+  trigger?: React.ReactNode
 }
 
 const SOURCE_TYPES = [
@@ -36,7 +37,7 @@ const SOURCE_TYPES = [
   { value: "overheid_nl", label: "Overheid.nl", description: "Search Dutch government publications and regulations" },
 ].sort((a, b) => a.label.localeCompare(b.label)) as const
 
-export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [] }: CreateSourceDialogProps) {
+export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [], trigger }: CreateSourceDialogProps) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [type, setType] = useState<string>("")
@@ -262,12 +263,16 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Source
-        </Button>
-      </DialogTrigger>
+      {trigger ? (
+        <DialogTrigger asChild>{trigger}</DialogTrigger>
+      ) : (
+        <DialogTrigger asChild>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Source
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>

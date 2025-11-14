@@ -34,8 +34,8 @@ export default async function DashboardPage() {
         <div className="container mx-auto py-8 px-4">
           <div className="mb-8 flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-semibold">Your Spaces</h2>
-              <p className="text-sm text-muted-foreground">Select a space to get started or create a new one</p>
+              <h2 className="text-2xl font-semibold">Spaces</h2>
+              <p className="text-sm text-muted-foreground">Define the initiative that your workspaces execute within</p>
             </div>
             <CreateSpaceDialog />
           </div>
@@ -74,7 +74,7 @@ export default async function DashboardPage() {
                 <Layers2 className="mb-4 h-12 w-12 text-muted-foreground" />
                 <h3 className="mb-2 text-lg font-semibold">No spaces yet</h3>
                 <p className="mb-4 text-center text-sm text-muted-foreground">
-                  Create your first space to start organizing your documents and conversations.
+                Create your first space to define and organize the scope of your initiative.
                 </p>
                 <CreateSpaceDialog />
               </CardContent>

@@ -22,7 +22,7 @@ All 10 phases of the AGORA MVP implementation plan have been successfully comple
 
 **Key Features:**
 - Full Amendment A1 Phase 1 schema support
-- Space types: national, regional, municipal, party, other
+- Scopes: national, regional, municipal, party, other
 - Visibility levels: public, internal, confidential
 - Reference inheritance structure
 - Classification system for documents and items

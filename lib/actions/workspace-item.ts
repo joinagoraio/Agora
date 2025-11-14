@@ -142,6 +142,7 @@ export async function updateWorkspaceItem(
   updates: {
     classification?: "public" | "internal" | "confidential"
     payload?: Record<string, any>
+    include_in_ai_context?: boolean
   },
 ) {
   const supabase = await createClient()

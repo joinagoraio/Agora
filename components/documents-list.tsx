@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useCallback } from "react"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -27,12 +27,6 @@ import { deleteDocument, archiveDocument } from "@/lib/actions/document"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { formatSourceType } from "@/lib/utils"
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
 import { UploadDocumentDialog } from "@/components/upload-document-dialog"
 import { AddFromSourceDialog } from "@/components/add-from-source-dialog"
 import { FileIcon, defaultStyles } from "react-file-icon"
@@ -106,6 +100,22 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
   const [archivingDocId, setArchivingDocId] = useState<string | null>(null)
   const router = useRouter()
 
+  const emitWorkspaceContextUpdate = useCallback(
+    (payload?: Record<string, any>) => {
+      if (typeof window === "undefined") return
+
+      window.dispatchEvent(
+        new CustomEvent("workspaceContextUpdated", {
+          detail: {
+            workspaceId,
+            ...(payload || {}),
+          },
+        }),
+      )
+    },
+    [workspaceId],
+  )
+
   // Filter out direct_upload sources to get available sources for adding documents
   const availableSources = (sources || []).filter((source) => source.type !== "direct_upload")
 
@@ -119,6 +129,11 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
     if (result.error) {
       alert(`Failed to delete document: ${result.error}`)
     } else {
+      emitWorkspaceContextUpdate({
+        type: "document",
+        action: "deleted",
+        documentId,
+      })
       // Close dialog and refresh after animation completes
       setDeletingDocId(null)
       setNeedsConfirmation(false)
@@ -147,6 +162,11 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
       alert(`Failed to ${archive ? "archive" : "unarchive"} document: ${result.error}`)
     } else {
       setArchivingDocId(null)
+      emitWorkspaceContextUpdate({
+        type: "document",
+        action: archive ? "archived" : "unarchived",
+        documentId,
+      })
       router.refresh()
     }
   }
@@ -183,13 +203,13 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search documents..."
+            placeholder="Search sources..."
             className="pl-10 w-full"
             disabled
           />
         </div>
 
-        <Card>
+        <Card className="shadow">
           <CardContent className="flex flex-col items-center justify-center py-12 text-center space-y-4">
             <FileText className="mb-4 h-12 w-12 text-muted-foreground" />
             <h3 className="mb-2 text-lg font-semibold">No documents yet</h3>
@@ -239,23 +259,18 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
         <Input
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search documents..."
+          placeholder="Search sources..."
           className="pl-10 w-full"
         />
       </div>
-
+ 
       {displayDocuments.length > 0 ? (
-        <Accordion type="single" collapsible defaultValue="documents" className="w-full">
-          <AccordionItem value="documents" className="border-none">
-            <AccordionTrigger className="py-2 text-sm font-medium text-muted-foreground hover:no-underline">
-              <span>Uploaded Documents ({displayDocuments.length})</span>
-            </AccordionTrigger>
-            <AccordionContent className="pt-4">
-              <div className="grid gap-4">
-                {displayDocuments.map((doc: any) => {
+        <div className="space-y-4">
+          <div className="grid gap-4">
+            {displayDocuments.map((doc: any) => {
                   const fileExtension = getFileExtension(doc)
                   return (
-                  <Card key={doc.id} className="hover:shadow-md transition-shadow">
+                  <Card key={doc.id} className="shadow hover:shadow-md transition-shadow">
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -364,12 +379,10 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
             </Card>
           )
           })}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+          </div>
+        </div>
       ) : (
-        <Card>
+        <Card className="shadow">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Search className="mb-4 h-12 w-12 text-muted-foreground" />
             <h3 className="mb-2 text-lg font-semibold">No documents found</h3>

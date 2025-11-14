@@ -1,8 +1,12 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
-import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
+import {
+  removeScopeDocumentFromAllWorkspaces,
+  syncScopeDocumentToAllWorkspaces,
+  type SpaceDocumentItem,
+} from "@/lib/services/scope-documents"
 
 export async function updateSpaceType(
   spaceId: string,
@@ -96,7 +100,11 @@ export async function unpublishSpaceItem(itemId: string) {
   }
 
   // Get space_id first to check permissions
-  const { data: item } = await supabase.from("space_items").select("space_id").eq("id", itemId).single()
+  const { data: item } = await supabase
+    .from("space_items")
+    .select("space_id, item_type, classification")
+    .eq("id", itemId)
+    .single()
 
   if (!item) {
     return { error: "Item not found" }
@@ -106,6 +114,10 @@ export async function unpublishSpaceItem(itemId: string) {
 
   if (error) {
     return { error: error.message }
+  }
+
+  if (item.item_type === "document") {
+    await removeScopeDocumentFromAllWorkspaces(item.space_id, itemId)
   }
 
   revalidatePath(`/spaces/${item.space_id}/items`)
@@ -198,6 +210,16 @@ export async function updateSpaceItem(
     return { error: "Unauthorized" }
   }
 
+  const { data: existingItem } = await supabase
+    .from("space_items")
+    .select("space_id, item_type, classification")
+    .eq("id", itemId)
+    .single()
+
+  if (!existingItem) {
+    return { error: "Item not found" }
+  }
+
   const { data, error } = await supabase
     .from("space_items")
     .update(updates)
@@ -207,6 +229,21 @@ export async function updateSpaceItem(
 
   if (error) {
     return { error: error.message }
+  }
+
+  if (existingItem.item_type === "document") {
+    const spaceDocument: SpaceDocumentItem = {
+      id: data.id,
+      space_id: data.space_id,
+      classification: data.classification,
+      payload: data.payload,
+    }
+
+    if ((spaceDocument.classification ?? "internal") === "public") {
+      await syncScopeDocumentToAllWorkspaces(existingItem.space_id, spaceDocument)
+    } else {
+      await removeScopeDocumentFromAllWorkspaces(existingItem.space_id, itemId)
+    }
   }
 
   revalidatePath(`/spaces/${data.space_id}/items`)

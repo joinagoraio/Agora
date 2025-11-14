@@ -16,26 +16,16 @@ import { WorkspaceChatWrapper } from "@/components/workspace-chat-wrapper"
 import { WelcomeWorkspaceWrapper } from "@/components/welcome-workspace-wrapper"
 import { UserMenu } from "@/components/user-menu"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { FileText, Plug, Upload, Plus, MessageSquare, Settings, Info, ArrowLeft } from "lucide-react"
+import { FileText, Plug, Upload, Plus, MessageSquare, ArrowLeft } from "lucide-react"
 import { getWorkspaceItems } from "@/lib/actions/workspace-item"
 import { getInheritedItems } from "@/lib/actions/workspace-space-link"
-
-function titleCase(value: string | null | undefined) {
-  if (!value) {
-    return ""
-  }
-
-  return value
-    .toString()
-    .replace(/[_-]+/g, " ")
-    .split(" ")
-    .map((word) => (word ? word[0]?.toUpperCase() + word.slice(1) : ""))
-    .join(" ")
-}
+import { CreateWorkspaceDocumentDialog } from "@/components/create-workspace-document-dialog"
+import { WorkspaceOverview } from "@/components/workspace-overview"
+import { ManageSourcesDialog } from "@/components/manage-sources-dialog"
 
 type WorkspaceCommentRecord = {
   id: string
@@ -106,8 +96,21 @@ export default async function WorkspacePage({
   // Get documents
   const { data: documents } = await getWorkspaceDocuments(workspaceId)
   const documentsList = documents || []
-  const createdDocuments = documentsList.filter((doc: any) => doc?.sources?.type === "workspace_generated")
-  const uploadedDocuments = documentsList.filter((doc: any) => doc?.sources?.type !== "workspace_generated")
+  const getDocumentOrigin = (doc: any): string | null => {
+    const metadata = doc?.metadata
+    if (!metadata || typeof metadata !== "object") {
+      return null
+    }
+    const originValue = (metadata as Record<string, any>).origin
+    return typeof originValue === "string" ? originValue : null
+  }
+
+  const createdDocuments = documentsList.filter((doc: any) => getDocumentOrigin(doc) === "workspace_generated")
+  const inheritedDocuments = documentsList.filter((doc: any) => getDocumentOrigin(doc) === "space_scope")
+  const uploadedDocuments = documentsList.filter((doc: any) => {
+    const origin = getDocumentOrigin(doc)
+    return origin !== "workspace_generated" && origin !== "space_scope"
+  })
 
   // Get document count (excluding archived and deleted)
   const { count: documentCount } = await supabase
@@ -119,8 +122,11 @@ export default async function WorkspacePage({
 
   const uploadedDocumentCount = uploadedDocuments.length
   const createdDocumentCount = createdDocuments.length
+  const inheritedDocumentCount = inheritedDocuments.length
   const totalDocumentsCount =
-    typeof documentCount === "number" ? documentCount : uploadedDocumentCount + createdDocumentCount
+    typeof documentCount === "number"
+      ? documentCount
+      : uploadedDocumentCount + createdDocumentCount + inheritedDocumentCount
 
   // Get conversation count
   const { count: conversationCount } = await supabase
@@ -142,6 +148,8 @@ export default async function WorkspacePage({
         (space: any): space is { id: string; name: string; space_type?: string | null } => space !== null && space !== undefined,
       ) ?? []
 
+  const parentSpaceNameById = new Map(parentSpaces.map((space) => [space.id, space.name]))
+
   const [workspaceItemsResult, inheritedItemsResult] = await Promise.all([
     getWorkspaceItems(workspaceId, { inheritance: "local" }),
     getInheritedItems(workspaceId),
@@ -151,7 +159,9 @@ export default async function WorkspacePage({
   const inheritedItems = inheritedItemsResult.data ?? []
   const { data: notesData, error: notesError } = await supabase
     .from("workspace_notes")
-    .select("id, workspace_id, content, created_at, updated_at, created_by, author:profiles(id, full_name, email)")
+    .select(
+      "id, workspace_id, content, include_in_ai_context, created_at, updated_at, created_by, author:profiles(id, full_name, email)",
+    )
     .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false })
 
@@ -198,21 +208,6 @@ export default async function WorkspacePage({
               </Button>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" asChild title="Properties">
-                <Link href={`/workspaces/${workspaceId}/properties`}>
-                  <Info className="h-5 w-5" />
-                </Link>
-              </Button>
-              <Button variant="ghost" size="icon" asChild title="Sources">
-                <Link href={`/workspaces/${workspaceId}/sources`}>
-                  <Plug className="h-5 w-5" />
-                </Link>
-              </Button>
-              <Button variant="ghost" size="icon" asChild title="Settings">
-                <Link href={`/workspaces/${workspaceId}/settings`}>
-                  <Settings className="h-5 w-5" />
-                </Link>
-              </Button>
               <UserMenu />
             </div>
           </div>
@@ -221,32 +216,30 @@ export default async function WorkspacePage({
         <main className="flex-1 bg-white">
           <div className="container mx-auto py-8 px-4">
             <div className="mb-8">
-              <h1 className="text-2xl font-semibold">{workspace.name}</h1>
-              {parentSpaces.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {parentSpaces.map((parent) => (
-                    <Badge key={parent.id} variant="outline">
-                      {parent.name}
-                      {parent.space_type ? ` · ${titleCase(parent.space_type)}` : ""}
-                    </Badge>
-                  ))}
-                </div>
-              )}
+              <WorkspaceOverview
+                workspaceId={workspaceId}
+                initialName={workspace.name}
+                initialDescription={workspace.description}
+                initialContext={workspace.context}
+                initialLocation={workspace.location}
+                parentSpaces={parentSpaces}
+              />
             </div>
+
             <div className="mb-8 grid gap-6 sm:grid-cols-3">
-              <Card>
+              <Card className="shadow">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">Documents</CardTitle>
                   <FileText className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                <div className="text-2xl font-bold">{totalDocumentsCount}</div>
-                <p className="text-xs text-muted-foreground">
-                  Uploaded {uploadedDocumentCount} • Created {createdDocumentCount}
-                </p>
+                  <div className="text-2xl font-bold">{totalDocumentsCount}</div>
+                  <p className="text-xs text-muted-foreground">
+                    Uploaded {uploadedDocumentCount} • Created {createdDocumentCount} • Inherited {inheritedDocumentCount}
+                  </p>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="shadow">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">Sources</CardTitle>
                   <Plug className="h-4 w-4 text-muted-foreground" />
@@ -256,7 +249,7 @@ export default async function WorkspacePage({
                   <p className="text-xs text-muted-foreground">Active connections</p>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="shadow">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">Conversations</CardTitle>
                   <MessageSquare className="h-4 w-4 text-muted-foreground" />
@@ -268,63 +261,154 @@ export default async function WorkspacePage({
               </Card>
             </div>
 
-            <div className="space-y-10">
-              <MyDocumentsList workspaceId={workspaceId} initialDocuments={createdDocuments} />
-              <div className="space-y-6">
+            <div className="space-y-8">
+              <div className="space-y-5">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-semibold">Uploaded Documents</h2>
-                    <p className="text-sm text-muted-foreground">
-                      View and search all files and sources synced into this workspace
-                    </p>
+                  <div className="flex items-baseline gap-2">
+                    <h2 className="text-xl font-semibold text-foreground">My Documents</h2>
+                    <span className="text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
+                      ({createdDocuments.length})
+                    </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {availableSources.length === 0 ? (
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/workspaces/${workspaceId}/sources`}>
-                          <Plus className="mr-2 h-4 w-4" />
-                          Add Source
-                        </Link>
+                  <CreateWorkspaceDocumentDialog
+                    workspaceId={workspaceId}
+                    trigger={
+                      <Button size="sm">
+                        <Plus className="mr-2 h-4 w-4" />
+                        New Document
                       </Button>
-                    ) : (
-                      <AddFromSourceDialog
+                    }
+                  />
+                </div>
+                <MyDocumentsList workspaceId={workspaceId} initialDocuments={createdDocuments} showHeader={false} />
+              </div>
+
+              <div className="space-y-4">
+                <h2 className="text-xl font-semibold text-foreground">Workspace Knowledge</h2>
+                <Tabs defaultValue="sources" className="space-y-8">
+                  <TabsList className="grid w-full max-w-2xl grid-cols-4">
+                    <TabsTrigger value="sources">Sources</TabsTrigger>
+                    <TabsTrigger value="inherited">Inherited</TabsTrigger>
+                    <TabsTrigger value="evidence">Evidence</TabsTrigger>
+                    <TabsTrigger value="notes">Notes</TabsTrigger>
+                  </TabsList>
+
+                <TabsContent value="sources" className="space-y-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-baseline gap-2">
+                        <h3 className="text-lg font-semibold">Sources</h3>
+                        <span className="text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
+                          ({uploadedDocuments.length})
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        View and manage all files and connections synced into this workspace.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <ManageSourcesDialog
                         workspaceId={workspaceId}
-                        sources={sources || []}
+                        initialSources={sources || []}
                         trigger={
                           <Button variant="outline" size="sm">
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add from Source
+                            <Plug className="mr-2 h-4 w-4" />
+                            Manage Sources
                           </Button>
                         }
                       />
+                      {availableSources.length === 0 ? (
+                        <CreateSourceDialog
+                          workspaceId={workspaceId}
+                          existingSources={availableSources}
+                          trigger={
+                            <Button size="sm">
+                              <Plus className="mr-2 h-4 w-4" />
+                              Add Source
+                            </Button>
+                          }
+                        />
+                      ) : (
+                        <AddFromSourceDialog
+                          workspaceId={workspaceId}
+                          sources={sources || []}
+                          trigger={
+                            <Button size="sm">
+                              <Plus className="mr-2 h-4 w-4" />
+                              Add from Source
+                            </Button>
+                          }
+                        />
+                      )}
+                      <UploadDocumentDialog
+                        workspaceId={workspaceId}
+                        trigger={
+                          <Button size="sm">
+                            <Upload className="mr-2 h-4 w-4" />
+                            Upload
+                          </Button>
+                        }
+                      />
+                    </div>
+                  </div>
+                  <DocumentsList workspaceId={workspaceId} initialDocuments={uploadedDocuments} sources={sources || []} />
+                </TabsContent>
+
+                <TabsContent value="inherited" className="space-y-5">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-semibold">Inherited Items</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Read-only answers, policies, and documents inherited from linked parent spaces.
+                      </p>
+                    </div>
+                    {inheritedDocuments.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="grid gap-3">
+                          {inheritedDocuments.map((doc: any) => {
+                            const originSpaceId = (doc.metadata as Record<string, any> | null)?.sourceSpaceId as string | undefined
+                            const originSpaceName = originSpaceId ? parentSpaceNameById.get(originSpaceId) : undefined
+
+                            return (
+                              <Link key={doc.id} href={`/workspaces/${workspaceId}/documents/${doc.id}`} className="block">
+                                <Card className="border-border shadow cursor-pointer transition-all hover:shadow-md">
+                                  <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="space-y-1">
+                                      <div className="flex items-center gap-2">
+                                        <CardTitle className="text-sm font-semibold text-foreground">
+                                          {doc.title || doc.metadata?.sourceFileUrl || "Inherited document"}
+                                        </CardTitle>
+                                        {doc.classification && <Badge variant="outline">{doc.classification}</Badge>}
+                                      </div>
+                                      {originSpaceName && (
+                                        <CardDescription className="text-xs text-muted-foreground">
+                                          From {originSpaceName}
+                                        </CardDescription>
+                                      )}
+                                    </div>
+                                  </CardHeader>
+                                </Card>
+                              </Link>
+                            )
+                          })}
+                        </div>
+                      </div>
                     )}
-                    <UploadDocumentDialog
-                      workspaceId={workspaceId}
-                      trigger={
-                        <Button size="sm">
-                          <Upload className="mr-2 h-4 w-4" />
-                          Upload
-                        </Button>
-                      }
+                    <WorkspaceInheritedItems
+                      items={inheritedItems}
+                      showEmptyState={inheritedDocuments.length === 0}
                     />
                   </div>
-                </div>
-                <DocumentsList workspaceId={workspaceId} initialDocuments={uploadedDocuments} sources={sources || []} />
-              </div>
-              <section className="space-y-6">
-                <div>
-                  <h2 className="text-xl font-semibold">Workspace Intelligence</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Review saved evidence and public material inherited from parent spaces.
-                  </p>
-                </div>
-                <Tabs defaultValue="evidence" className="w-full">
-                  <TabsList className="grid w-full max-w-2xl grid-cols-3">
-                    <TabsTrigger value="evidence">Workspace Evidence</TabsTrigger>
-                    <TabsTrigger value="inherited">Inherited Items</TabsTrigger>
-                    <TabsTrigger value="notes">Notes</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="evidence" className="mt-6">
+                </TabsContent>
+
+                <TabsContent value="evidence" className="space-y-8">
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">Workspace Evidence</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Curated findings, insights, and references assembled within this workspace.
+                      </p>
+                    </div>
                     <WorkspaceEvidenceBoard
                       workspaceId={workspaceId}
                       currentUserId={user.id}
@@ -332,19 +416,18 @@ export default async function WorkspacePage({
                       initialComments={workspaceCommentsByItem}
                       parentSpaces={parentSpaces}
                     />
-                  </TabsContent>
-                  <TabsContent value="inherited" className="mt-6">
-                    <WorkspaceInheritedItems items={inheritedItems} />
-                  </TabsContent>
-                  <TabsContent value="notes" className="mt-6">
-                    <WorkspaceNotesPanel
-                      workspaceId={workspaceId}
-                      currentUserId={user.id}
-                      initialNotes={workspaceNotes}
-                    />
-                  </TabsContent>
-                </Tabs>
-              </section>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="notes" className="space-y-5">
+                  <WorkspaceNotesPanel
+                    workspaceId={workspaceId}
+                    currentUserId={user.id}
+                    initialNotes={workspaceNotes}
+                  />
+                </TabsContent>
+              </Tabs>
+              </div>
             </div>
           </div>
         </main>

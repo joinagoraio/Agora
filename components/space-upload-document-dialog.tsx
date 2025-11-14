@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2 } from "lucide-react"
+import { Loader2, Upload } from "lucide-react"
 
 type SpaceDocument = any
 
@@ -82,8 +82,20 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
     setClassification("public")
   }
 
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open)
+    if (!open) {
+      // Reset form when dialog closes
+      setFile(null)
+      setTitle("")
+      setNotes("")
+      setClassification("public")
+      setError(null)
+    }
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{trigger ?? <Button>Upload document</Button>}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -100,7 +112,16 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
               id="space-document-file"
               type="file"
               accept=".pdf,.doc,.docx,.txt,.md,.markdown"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              onChange={(event) => {
+                const selectedFile = event.target.files?.[0] ?? null
+                setFile(selectedFile)
+                if (selectedFile) {
+                  // Extract filename without extension and set as title
+                  const fileName = selectedFile.name
+                  const nameWithoutExt = fileName.replace(/\.[^/.]+$/, "")
+                  setTitle(nameWithoutExt)
+                }
+              }}
             />
             <p className="text-xs text-muted-foreground">PDF, Word, or text files up to the limits of your Supabase project.</p>
           </div>
@@ -111,7 +132,7 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
               id="space-document-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder={file?.name ?? "e.g., Sustainability Directive Briefing"}
+              placeholder="e.g., Sustainability Directive Briefing"
             />
           </div>
 
@@ -154,7 +175,10 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
                 Uploading…
               </>
             ) : (
-              "Upload"
+              <>
+                <Upload className="mr-2 h-4 w-4" />
+                Upload
+              </>
             )}
           </Button>
         </DialogFooter>

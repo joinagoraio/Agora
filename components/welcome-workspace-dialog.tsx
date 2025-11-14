@@ -131,7 +131,7 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
             <div className="space-y-2 mt-6">
               <Label htmlFor="welcome-context" className="flex items-center gap-2">
                 <FileText className="h-4 w-4" />
-                Additional Context
+                Workspace Context
               </Label>
               <div className="relative">
                 <Textarea

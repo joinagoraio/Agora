@@ -424,6 +424,8 @@ export async function getRelevantContext(
   query: string,
   excludedDocumentIds: string[] = [],
   includedDocumentIds?: string[],
+  excludedNoteIds: string[] = [],
+  excludedEvidenceIds: string[] = [],
 ): Promise<{ context: string; sources: any[] }> {
   const supabase = await createClient()
 
@@ -449,8 +451,9 @@ export async function getRelevantContext(
   })
 
   const { data: matches } = await searchDocuments(workspaceId, query, searchLimit, excludedDocumentIds, includedDocumentIds)
+  const documentMatches = matches ?? []
 
-  console.log(`[getRelevantContext] Found ${matches?.length || 0} document matches`)
+  console.log(`[getRelevantContext] Found ${documentMatches.length} document matches`)
 
   // Build context string with workspace context if available
   let contextParts: string[] = []
@@ -463,19 +466,81 @@ export async function getRelevantContext(
     contextParts.push(`Location: ${workspace.location}`)
   }
 
-  if (!matches || matches.length === 0) {
-    const baseContext = contextParts.length > 0 
-      ? contextParts.join("\n\n") + "\n\nNo relevant documents found in the workspace."
-      : "No relevant documents found in the workspace."
-    return {
-      context: baseContext,
-      sources: [],
-    }
+  const { data: notesData, error: notesError } = await supabase
+    .from("workspace_notes")
+    .select(
+      "id, content, include_in_ai_context, author:profiles(id, full_name, email)",
+    )
+    .eq("workspace_id", workspaceId)
+    .eq("include_in_ai_context", true)
+    .order("updated_at", { ascending: false })
+    .limit(20)
+
+  if (notesError) {
+    console.error("[getRelevantContext] Failed to load workspace notes:", notesError)
   }
+
+  const excludedNotesSet = new Set(excludedNoteIds)
+  const relevantNotes =
+    notesData
+      ?.filter((note) => !excludedNotesSet.has(note.id))
+      .map((note) => ({
+        id: note.id,
+        content: typeof note.content === "string" ? note.content : "",
+        authorName: note.author?.full_name || note.author?.email || "Workspace member",
+      })) ?? []
+
+  if (relevantNotes.length > 0) {
+    const noteSummaries = relevantNotes.map((note) => {
+      const trimmedContent = note.content.trim()
+      const preview =
+        trimmedContent.length > 600 ? `${trimmedContent.slice(0, 600).trimEnd()}...` : trimmedContent || "[No content provided]"
+      return `Author: ${note.authorName}\n${preview}`
+    })
+    contextParts.push(`Workspace Notes:\n${noteSummaries.join("\n\n")}`)
+  }
+
+  // Get evidence items (workspace_items with type="evidence" and include_in_ai_context=true)
+  const { data: evidenceItems, error: evidenceError } = await supabase
+    .from("workspace_items")
+    .select("id, payload, created_at, created_by:profiles(id, full_name, email)")
+    .eq("workspace_id", workspaceId)
+    .eq("inheritance", "local")
+    .eq("include_in_ai_context", true)
+    .order("created_at", { ascending: false })
+    .limit(10)
+
+  if (evidenceError) {
+    console.error("[getRelevantContext] Failed to load evidence items:", evidenceError)
+  }
+
+  const excludedEvidenceSet = new Set(excludedEvidenceIds)
+  const relevantEvidence = (evidenceItems ?? [])
+    .filter((item) => {
+      if (excludedEvidenceSet.has(item.id)) {
+        return false
+      }
+      const payload = item.payload as Record<string, any> | null
+      return payload?.type === "evidence" && payload?.question && payload?.answer
+    })
+    .map((item) => {
+      const payload = item.payload as Record<string, any>
+      const authorName = (item.created_by as any)?.full_name || (item.created_by as any)?.email || "Workspace member"
+      const question = typeof payload.question === "string" ? payload.question : ""
+      const answer = typeof payload.answer === "string" ? payload.answer : ""
+      const trimmedAnswer = answer.length > 800 ? `${answer.slice(0, 800).trimEnd()}...` : answer
+      return `Question: ${question}\nAnswer: ${trimmedAnswer}\nSaved by: ${authorName}`
+    })
+
+  if (relevantEvidence.length > 0) {
+    contextParts.push(`Workspace Evidence:\n${relevantEvidence.join("\n\n---\n\n")}`)
+  }
+
+  const sources: any[] = []
 
   // Combine document content for context
   // For documents with no content but with pages, we'll aggregate page content
-  const documentContextPromises = matches.map(async (match) => {
+  const documentContextPromises = documentMatches.map(async (match) => {
     const doc = match.document
     const pageInfo = match.pageNumber 
       ? ` (Page ${match.pageNumber})` 
@@ -560,46 +625,54 @@ export async function getRelevantContext(
   const documentContextArray = await Promise.all(documentContextPromises)
   const documentContext = documentContextArray.join("\n\n")
 
-  if (contextParts.length > 0) {
-    contextParts.push(documentContext)
+  if (documentMatches.length > 0) {
+    if (contextParts.length > 0) {
+      contextParts.push(documentContext)
+    } else {
+      contextParts = [documentContext]
+    }
+
+    // Build sources with page and highlight information
+    documentMatches.forEach((match) => {
+      const doc = match.document
+      const source: any = {
+        id: doc.id,
+        title: doc.title,
+        url: doc.url || doc.external_url,
+      }
+
+      if (match.pageNumber) {
+        source.pageNumber = match.pageNumber
+      }
+
+      if (match.textSpan) {
+        source.textSpan = match.textSpan
+      }
+
+      if (match.preview) {
+        source.preview = match.preview
+      }
+
+      console.log("[getRelevantContext] Building source:", {
+        documentId: doc.id,
+        title: doc.title,
+        pageNumber: source.pageNumber,
+        textSpan: source.textSpan,
+        hasTextSpan: !!source.textSpan,
+      })
+
+      sources.push(source)
+    })
   } else {
-    contextParts = [documentContext]
+    const noDocsMessage = "No relevant documents found in the workspace."
+    if (contextParts.length > 0) {
+      contextParts.push(noDocsMessage)
+    } else {
+      contextParts = [noDocsMessage]
+    }
   }
 
   const context = contextParts.join("\n\n")
-
-  // Build sources with page and highlight information
-  const sources = matches.map((match) => {
-    const doc = match.document
-    const source: any = {
-      id: doc.id,
-      title: doc.title,
-      url: doc.url || doc.external_url,
-    }
-
-    // Add page and text span information if available
-    if (match.pageNumber) {
-      source.pageNumber = match.pageNumber
-    }
-
-    if (match.textSpan) {
-      source.textSpan = match.textSpan
-    }
-
-    if (match.preview) {
-      source.preview = match.preview
-    }
-
-    console.log("[getRelevantContext] Building source:", {
-      documentId: doc.id,
-      title: doc.title,
-      pageNumber: source.pageNumber,
-      textSpan: source.textSpan,
-      hasTextSpan: !!source.textSpan,
-    })
-
-    return source
-  })
 
   return { context, sources }
 }

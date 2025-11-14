@@ -5,13 +5,11 @@ import type React from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { inviteUserToSpace } from "@/lib/actions/invitation"
-import { updateSpace, deleteSpace } from "@/lib/actions/space"
+import { deleteSpace } from "@/lib/actions/space"
 import { useRouter } from "next/navigation"
 import { Trash2, Send } from "lucide-react"
 import {
@@ -33,21 +31,12 @@ interface SpaceSettingsProps {
 }
 
 export function SpaceSettings({ space, members, invitations }: SpaceSettingsProps) {
-  const [spaceName, setSpaceName] = useState(space.name)
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<"member" | "admin" | "viewer">("member")
-  const [isUpdating, setIsUpdating] = useState(false)
   const [isInviting, setIsInviting] = useState(false)
   const [inviteLink, setInviteLink] = useState<string | null>(null)
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
   const router = useRouter()
-
-  const handleUpdateSpace = async () => {
-    setIsUpdating(true)
-    await updateSpace(space.id, spaceName)
-    setIsUpdating(false)
-    router.refresh()
-  }
 
   const handleDeleteSpace = async () => {
     if (!needsConfirmation) {
@@ -76,34 +65,15 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
   }
 
   return (
-    <Tabs defaultValue="general" className="space-y-6">
+    <Tabs defaultValue="members" className="space-y-6">
       <TabsList>
-        <TabsTrigger value="general">General</TabsTrigger>
         <TabsTrigger value="members">Members</TabsTrigger>
         <TabsTrigger value="invitations">Invitations</TabsTrigger>
         <TabsTrigger value="danger">Danger Zone</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="general">
-        <Card>
-          <CardHeader>
-            <CardTitle>Space Settings</CardTitle>
-            <CardDescription>Update your space information</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="space-name">Space Name</Label>
-              <Input id="space-name" value={spaceName} onChange={(e) => setSpaceName(e.target.value)} />
-            </div>
-            <Button onClick={handleUpdateSpace} disabled={isUpdating}>
-              {isUpdating ? "Saving..." : "Save Changes"}
-            </Button>
-          </CardContent>
-        </Card>
-      </TabsContent>
-
       <TabsContent value="members">
-        <Card>
+        <Card className="shadow">
           <CardHeader>
             <CardTitle>Space Members</CardTitle>
             <CardDescription>Manage who has access to this space</CardDescription>
@@ -136,7 +106,7 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
       </TabsContent>
 
       <TabsContent value="invitations">
-        <Card>
+        <Card className="shadow">
           <CardHeader>
             <CardTitle>Invite Members</CardTitle>
             <CardDescription>Send invitations to join this space</CardDescription>
@@ -144,13 +114,13 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
           <CardContent className="space-y-6">
             <form onSubmit={handleInvite} className="space-y-4">
               <div className="flex gap-2">
-                <Input
+                <input
                   type="email"
                   placeholder="email@example.com"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   required
-                  className="flex-1"
+                  className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
                 <select
                   value={inviteRole}
@@ -209,14 +179,14 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
       </TabsContent>
 
       <TabsContent value="danger">
-        <Card className="border-destructive">
-          <CardHeader>
-            <CardTitle className="text-destructive">Danger Zone</CardTitle>
-            <CardDescription>Irreversible actions that affect this space</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between rounded-md border border-destructive/50 p-4">
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold text-destructive">Danger Zone</h3>
+            <p className="text-sm text-muted-foreground">Irreversible actions that affect this space</p>
+          </div>
+          <Card className="border-destructive bg-destructive/10">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-semibold">Delete Space</h4>
                   <p className="text-sm text-muted-foreground">Permanently delete this space and all its data</p>
@@ -224,13 +194,13 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
                 <AlertDialog onOpenChange={handleDeleteDialogClose}>
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive">
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Space
-                </Button>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete Space
+                    </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Delete Space?</AlertDialogTitle>
+                      <AlertDialogTitle>Delete {space.name}?</AlertDialogTitle>
                       <AlertDialogDescription>
                         This will delete all workspaces, documents, and conversations in this space.
                       </AlertDialogDescription>
@@ -255,9 +225,9 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
                   </AlertDialogContent>
                 </AlertDialog>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </TabsContent>
     </Tabs>
   )

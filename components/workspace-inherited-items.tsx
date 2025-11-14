@@ -29,6 +29,7 @@ type InheritedItem = {
 
 interface WorkspaceInheritedItemsProps {
   items: InheritedItem[]
+  showEmptyState?: boolean
 }
 
 const itemTypeLabels: Record<string, string> = {
@@ -38,10 +39,14 @@ const itemTypeLabels: Record<string, string> = {
   note: "Note",
 }
 
-export function WorkspaceInheritedItems({ items }: WorkspaceInheritedItemsProps) {
+export function WorkspaceInheritedItems({ items, showEmptyState = true }: WorkspaceInheritedItemsProps) {
   if (items.length === 0) {
+    if (!showEmptyState) {
+      return null
+    }
+
     return (
-      <Card>
+      <Card className="shadow">
         <CardHeader>
           <CardTitle>No inherited items yet</CardTitle>
           <CardDescription>
@@ -65,7 +70,7 @@ export function WorkspaceInheritedItems({ items }: WorkspaceInheritedItemsProps)
         const description = item.payload?.summary ?? item.payload?.description ?? item.payload?.answer
 
         return (
-          <Card key={item.id}>
+          <Card key={item.id} className="shadow">
             <CardHeader className="space-y-3">
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <Badge variant="outline">{itemTypeLabels[item.item_type] ?? item.item_type}</Badge>

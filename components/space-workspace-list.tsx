@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Layers, Plus } from "lucide-react"
 
-type SpaceWorkspace = {
+export type SpaceWorkspace = {
   id: string
   name: string
   description?: string | null
@@ -19,16 +19,17 @@ interface SpaceWorkspaceListProps {
   spaceId: string
   workspaces: SpaceWorkspace[]
   canCreate: boolean
+  spaceName: string
 }
 
-export function SpaceWorkspaceList({ spaceId, workspaces, canCreate }: SpaceWorkspaceListProps) {
+export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }: SpaceWorkspaceListProps) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-xl font-semibold text-foreground">Workspaces using this scope</h3>
+          <h3 className="text-xl font-semibold text-foreground">Workspaces</h3>
           <p className="text-sm text-muted-foreground">
-            Each workspace inherits the scope description and any public documents you maintain above.
+            Each workspace inherits the {spaceName} summary, description, and any public documents maintained below.
           </p>
         </div>
         {canCreate && (
@@ -76,10 +77,10 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate }: SpaceWork
                   {workspace.description || "No additional description provided yet."}
                 </p>
                 <div className="flex items-center justify-between">
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/workspaces/${workspace.id}`}>Open workspace</Link>
-                  </Button>
                   <Badge variant="secondary">Inherits scope</Badge>
+                  <Button variant="ghost" size="sm" asChild className="px-2 text-primary hover:text-primary">
+                    <Link href={`/workspaces/${workspace.id}`}>Go to Workspace</Link>
+                  </Button>
                 </div>
               </CardContent>
             </Card>

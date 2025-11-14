@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Switch } from "@/components/ui/switch"
 import { Loader2, Trash2 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import {
@@ -36,6 +38,7 @@ type WorkspaceEvidenceItem = {
   id: string
   classification: "public" | "internal" | "confidential" | null
   created_at: string
+  include_in_ai_context?: boolean
   created_by?: {
     id: string
     full_name?: string
@@ -102,10 +105,44 @@ function EvidenceCard({ item, workspaceId, currentUserId, initialComments, paren
   const [isPublishing, setIsPublishing] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
   const [publishSuccess, setPublishSuccess] = useState<string | null>(null)
+  const [includeInAiContext, setIncludeInAiContext] = useState(item.include_in_ai_context ?? false)
+  const [isUpdatingAiContext, setIsUpdatingAiContext] = useState(false)
 
   const hasCitations = (item.payload?.citations?.length ?? 0) > 0
   const authorLabel =
     (item.created_by as any)?.full_name || (item.created_by as any)?.email || (item.created_by as any)?.id
+  const isOwner = (item.created_by as any)?.id === currentUserId
+
+  const handleToggleIncludeInAiContext = async (checked: boolean) => {
+    setIsUpdatingAiContext(true)
+    setIncludeInAiContext(checked)
+
+    try {
+      const response = await fetch(`/api/workspaces/${workspaceId}/items/${item.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ includeInAiContext: checked }),
+      })
+
+      const payload = await response.json()
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to update evidence.")
+      }
+
+      // Dispatch event to notify chat interface
+      window.dispatchEvent(
+        new CustomEvent("workspaceContextUpdated", {
+          detail: { workspaceId, type: "evidence", action: "updated" },
+        }),
+      )
+    } catch (err) {
+      setIncludeInAiContext(!checked) // Revert on error
+      console.error("Failed to update evidence AI context flag:", err)
+    } finally {
+      setIsUpdatingAiContext(false)
+    }
+  }
 
   const handleCreateComment = async () => {
     if (!draft.trim()) {
@@ -199,110 +236,134 @@ function EvidenceCard({ item, workspaceId, currentUserId, initialComments, paren
   }
 
   return (
-    <Card>
-      <CardHeader className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
+    <AccordionItem value={item.id} className="border rounded-lg mb-4 last:mb-0 last:border-b shadow">
+      <AccordionTrigger className="hover:no-underline px-4">
+        <div className="flex flex-wrap items-center gap-2 text-left flex-1">
+          <span className="text-sm font-semibold flex-shrink-0">{item.payload?.question ?? "Saved evidence"}</span>
           {item.payload?.confidence && (
-            <Badge variant={confidenceVariants[item.payload.confidence] ?? "secondary"}>
+            <Badge variant={confidenceVariants[item.payload.confidence] ?? "secondary"} className="flex-shrink-0">
               {item.payload.confidence} confidence
             </Badge>
           )}
           {item.classification && (
-            <Badge variant="outline">{classificationLabels[item.classification] ?? item.classification}</Badge>
+            <Badge variant="outline" className="flex-shrink-0">
+              {classificationLabels[item.classification] ?? item.classification}
+            </Badge>
           )}
           {item.created_at && (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground flex-shrink-0">
               Saved on {new Date(item.created_at).toLocaleString()}
             </span>
           )}
-          {authorLabel && <span className="text-xs text-muted-foreground">by {authorLabel}</span>}
+          {authorLabel && (
+            <span className="text-xs text-muted-foreground flex-shrink-0">by {authorLabel}</span>
+          )}
         </div>
-        <CardTitle className="text-lg">{item.payload?.question ?? "Saved evidence"}</CardTitle>
+      </AccordionTrigger>
+      <AccordionContent className="space-y-4 px-4 pb-4">
         {item.payload?.answer && (
-          <CardDescription className="prose prose-sm dark:prose-invert max-w-none">
+          <div className="prose prose-sm dark:prose-invert max-w-none">
             <ReactMarkdown>{item.payload.answer}</ReactMarkdown>
-          </CardDescription>
-        )}
-      </CardHeader>
-      {hasCitations && (
-        <>
-          <Separator />
-          <CardContent className="space-y-3">
-            <h4 className="text-sm font-medium">Citations</h4>
-            <ul className="space-y-2 text-sm">
-              {item.payload?.citations?.map((citation, index) => (
-                <li key={citation.url ?? citation.docId ?? index} className="space-y-1">
-                  <div className="font-medium">{citation.title ?? "Referenced source"}</div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    {citation.layer && <Badge variant="outline">{citation.layer}</Badge>}
-                    {citation.page !== undefined && citation.page !== null && <span>Page {citation.page}</span>}
-                    {citation.url && (
-                      <a href={citation.url} target="_blank" rel="noopener noreferrer" className="text-primary">
-                        View source
-                      </a>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </>
-      )}
-      <Separator />
-      <CardContent className="space-y-4">
-        {parentSpaces.length > 0 && (
-          <div className="space-y-3 rounded-lg border border-dashed bg-muted/20 p-3">
-            <div className="text-sm font-medium text-foreground">Publish to parent space</div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label htmlFor={`${item.id}-space`}>Parent space</Label>
-                <Select value={selectedSpaceId} onValueChange={setSelectedSpaceId}>
-                  <SelectTrigger id={`${item.id}-space`}>
-                    <SelectValue placeholder="Select space" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {parentSpaces.map((space) => (
-                      <SelectItem key={space.id} value={space.id}>
-                        {space.name}
-                        {space.space_type ? ` · ${space.space_type}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor={`${item.id}-classification`}>Classification</Label>
-                <Select
-                  value={selectedClassification}
-                  onValueChange={(value) => setSelectedClassification(value as "public" | "internal" | "confidential")}
-                >
-                  <SelectTrigger id={`${item.id}-classification`}>
-                    <SelectValue placeholder="Select classification" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="public">Public</SelectItem>
-                    <SelectItem value="internal">Internal</SelectItem>
-                    <SelectItem value="confidential">Confidential</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <Button onClick={handlePublish} disabled={isPublishing}>
-                {isPublishing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Publishing...
-                  </>
-                ) : (
-                  "Publish"
-                )}
-              </Button>
-              {publishError && <p className="text-sm text-destructive">{publishError}</p>}
-              {publishSuccess && <p className="text-sm text-emerald-600">{publishSuccess}</p>}
-            </div>
           </div>
         )}
+        {hasCitations && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium">Citations</h4>
+              <ul className="space-y-2 text-sm">
+                {item.payload?.citations?.map((citation, index) => (
+                  <li key={citation.url ?? citation.docId ?? index} className="space-y-1">
+                    <div className="font-medium">{citation.title ?? "Referenced source"}</div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      {citation.layer && <Badge variant="outline">{citation.layer}</Badge>}
+                      {citation.page !== undefined && citation.page !== null && <span>Page {citation.page}</span>}
+                      {citation.url && (
+                        <a href={citation.url} target="_blank" rel="noopener noreferrer" className="text-primary">
+                          View source
+                        </a>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+        <Separator />
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            {includeInAiContext ? "Included in AI context" : "Excluded from AI context"}
+            {isUpdatingAiContext && " · Updating..."}
+          </div>
+          {isOwner ? (
+            <Switch
+              checked={includeInAiContext}
+              onCheckedChange={handleToggleIncludeInAiContext}
+              disabled={isUpdatingAiContext}
+              aria-label={includeInAiContext ? "Remove from AI context" : "Add to AI context"}
+            />
+          ) : (
+            <Switch checked={includeInAiContext} disabled aria-hidden="true" />
+          )}
+        </div>
+        {parentSpaces.length > 0 && (
+          <>
+            <Separator />
+            <div className="space-y-3 rounded-lg border border-dashed bg-muted/20 p-3">
+              <div className="text-sm font-medium text-foreground">Publish to parent space</div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor={`${item.id}-space`}>Parent space</Label>
+                  <Select value={selectedSpaceId} onValueChange={setSelectedSpaceId}>
+                    <SelectTrigger id={`${item.id}-space`}>
+                      <SelectValue placeholder="Select space" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {parentSpaces.map((space) => (
+                        <SelectItem key={space.id} value={space.id}>
+                          {space.name}
+                          {space.space_type ? ` · ${space.space_type}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor={`${item.id}-classification`}>Classification</Label>
+                  <Select
+                    value={selectedClassification}
+                    onValueChange={(value) => setSelectedClassification(value as "public" | "internal" | "confidential")}
+                  >
+                    <SelectTrigger id={`${item.id}-classification`}>
+                      <SelectValue placeholder="Select classification" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="public">Public</SelectItem>
+                      <SelectItem value="internal">Internal</SelectItem>
+                      <SelectItem value="confidential">Confidential</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button onClick={handlePublish} disabled={isPublishing}>
+                  {isPublishing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Publishing...
+                    </>
+                  ) : (
+                    "Publish"
+                  )}
+                </Button>
+                {publishError && <p className="text-sm text-destructive">{publishError}</p>}
+                {publishSuccess && <p className="text-sm text-emerald-600">{publishSuccess}</p>}
+              </div>
+            </div>
+          </>
+        )}
+        <Separator />
         <div className="space-y-2">
           <Textarea
             value={draft}
@@ -363,8 +424,8 @@ function EvidenceCard({ item, workspaceId, currentUserId, initialComments, paren
             })}
           </ul>
         )}
-      </CardContent>
-    </Card>
+      </AccordionContent>
+    </AccordionItem>
   )
 }
 
@@ -382,7 +443,7 @@ export function WorkspaceEvidenceBoard({
 
   if (evidenceItems.length === 0) {
     return (
-      <Card>
+      <Card className="shadow">
         <CardHeader>
           <CardTitle>No workspace evidence yet</CardTitle>
           <CardDescription>
@@ -394,7 +455,7 @@ export function WorkspaceEvidenceBoard({
   }
 
   return (
-    <div className="space-y-4">
+    <Accordion type="single" collapsible className="w-full">
       {evidenceItems.map((item) => (
         <EvidenceCard
           key={item.id}
@@ -405,6 +466,6 @@ export function WorkspaceEvidenceBoard({
           parentSpaces={parentSpaces}
         />
       ))}
-    </div>
+    </Accordion>
   )
 }

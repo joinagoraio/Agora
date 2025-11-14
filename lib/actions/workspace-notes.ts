@@ -1,0 +1,46 @@
+"use server"
+
+import { createClient } from "@/lib/supabase/server"
+
+export interface WorkspaceNoteForContext {
+  id: string
+  workspace_id: string
+  content: string
+  include_in_ai_context: boolean
+  created_at: string
+  updated_at: string
+  created_by: string
+  author?: {
+    id: string
+    full_name?: string | null
+    email?: string | null
+  } | null
+}
+
+export async function getWorkspaceNotesForContext(workspaceId: string) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { data: [], error: "Unauthorized" }
+  }
+
+  const { data, error } = await supabase
+    .from("workspace_notes")
+    .select(
+      "id, workspace_id, content, include_in_ai_context, created_at, updated_at, created_by, author:profiles(id, full_name, email)",
+    )
+    .eq("workspace_id", workspaceId)
+    .eq("include_in_ai_context", true)
+    .order("updated_at", { ascending: false })
+
+  if (error) {
+    return { data: [], error: error.message }
+  }
+
+  return { data: (data as WorkspaceNoteForContext[]) ?? [] }
+}
+

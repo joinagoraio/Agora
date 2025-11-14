@@ -8,9 +8,17 @@ export async function PUT(
   try {
     const { workspaceId, noteId } = await params
     const body = await req.json()
-    const content = typeof body?.content === "string" ? body.content.trim() : ""
+    const hasContent = typeof body?.content === "string"
+    const content = hasContent ? body.content.trim() : undefined
+    const includeInAiContextRaw = body?.includeInAiContext ?? body?.include_in_ai_context
+    const includeInAiContext =
+      typeof includeInAiContextRaw === "boolean" ? includeInAiContextRaw : undefined
 
-    if (!content) {
+    if (!hasContent && includeInAiContext === undefined) {
+      return NextResponse.json({ error: "No fields provided to update." }, { status: 400 })
+    }
+
+    if (hasContent && !content) {
       return NextResponse.json({ error: "Content is required" }, { status: 400 })
     }
 
@@ -24,12 +32,24 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const updatePayload: Record<string, unknown> = {}
+
+    if (hasContent && content !== undefined) {
+      updatePayload.content = content
+    }
+
+    if (includeInAiContext !== undefined) {
+      updatePayload.include_in_ai_context = includeInAiContext
+    }
+
     const { data, error } = await supabase
       .from("workspace_notes")
-      .update({ content })
+      .update(updatePayload)
       .eq("id", noteId)
       .eq("workspace_id", workspaceId)
-      .select("id, workspace_id, content, created_at, updated_at, created_by, author:profiles(id, full_name, email)")
+      .select(
+        "id, workspace_id, content, include_in_ai_context, created_at, updated_at, created_by, author:profiles(id, full_name, email)",
+      )
       .single()
 
     if (error) {

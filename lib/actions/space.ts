@@ -179,7 +179,14 @@ export async function updateSpaceScope(
   return { data }
 }
 
-export async function enhanceScopeText(text: string): Promise<{ enhanced?: string; error?: string }> {
+export async function enhanceScopeText(
+  text: string,
+  options?: {
+    field?: "summary" | "description"
+    spaceName?: string
+    missionStatement?: string
+  },
+): Promise<{ enhanced?: string; error?: string }> {
   const supabase = await createClient()
 
   const {
@@ -197,27 +204,56 @@ export async function enhanceScopeText(text: string): Promise<{ enhanced?: strin
     return { error: "Text is empty" }
   }
 
+  const field = options?.field ?? "description"
+  const isMissionStatement = field === "summary"
+
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
+    // Build context for the prompt
+    let contextParts: string[] = []
+    if (isMissionStatement && options?.spaceName) {
+      contextParts.push(`Space name: ${options.spaceName}`)
+    }
+    if (!isMissionStatement && options?.missionStatement) {
+      contextParts.push(`Mission statement: ${options.missionStatement}`)
+    }
+
+    const contextText = contextParts.length > 0 ? `\n\nContext:\n${contextParts.join("\n")}` : ""
+
+    const systemPrompt = isMissionStatement
+      ? `You are a helpful assistant that writes clear, concise mission statements for policy initiatives.
+The mission statement you return should:
+- Be very brief and concise (1-2 sentences maximum, ideally one sentence)
+- Capture the core purpose and mandate of the initiative
+- Stay faithful to the original meaning
+- Use neutral, professional language
+- Be suitable as a high-level summary that appears at the top of a space overview`
+      : `You are a helpful assistant that writes clear, comprehensive descriptions for policy initiatives.
+The description you return should:
+- Be more extensive than the mission statement but still concise (3-5 sentences)
+- Expand on the mission statement with policy domain, stakeholders, and key objectives
+- Stay faithful to the original meaning
+- Use neutral, professional language
+- Provide enough detail for colleagues and AI assistants to understand the scope and act accurately`
+
+    const userPrompt = isMissionStatement
+      ? `Write a concise mission statement for this initiative:${contextText}\n\nCurrent text:\n${text}`
+      : `Write a comprehensive but concise description for this initiative:${contextText}\n\nCurrent text:\n${text}`
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: `You are a helpful assistant that writes clear, compelling scope descriptions for policy teams.
-The text you return will appear on a public-sector programme overview page and should:
-- Stay faithful to the original meaning
-- Highlight the policy domain, stakeholders, and key objectives
-- Remain concise (max 4 sentences)
-- Use neutral, professional language`,
+          content: systemPrompt,
         },
         {
           role: "user",
-          content: text,
+          content: userPrompt,
         },
       ],
-      max_tokens: 400,
+      max_tokens: isMissionStatement ? 150 : 400,
       temperature: 0.7,
     })
 
@@ -231,6 +267,70 @@ The text you return will appear on a public-sector programme overview page and s
     console.error("[enhanceScopeText] Error:", error)
     return { error: error instanceof Error ? error.message : "Failed to enhance text" }
   }
+}
+
+type SpaceSetupWizardState = {
+  current_step?: number
+  completed?: boolean
+  completed_at?: string | null
+  dismissed?: boolean
+}
+
+export async function updateSpaceSetupState(
+  spaceId: string,
+  updates: Partial<SpaceSetupWizardState>,
+) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  const { data: existingSpace, error: fetchError } = await supabase
+    .from("spaces")
+    .select("metadata")
+    .eq("id", spaceId)
+    .single()
+
+  if (fetchError) {
+    return { error: fetchError.message }
+  }
+
+  const currentMetadata = (existingSpace?.metadata as Record<string, any> | null) ?? {}
+  const currentWizard = (currentMetadata.setupWizard as Record<string, any> | null) ?? {}
+
+  const nextWizard: SpaceSetupWizardState = {
+    ...currentWizard,
+    ...updates,
+  }
+
+  if (updates.completed) {
+    nextWizard.completed_at = new Date().toISOString()
+  } else if (updates.completed === false && currentWizard.completed_at) {
+    nextWizard.completed_at = null
+  }
+
+  const nextMetadata = {
+    ...currentMetadata,
+    setupWizard: nextWizard,
+  }
+
+  const { data, error } = await supabase
+    .from("spaces")
+    .update({ metadata: nextMetadata })
+    .eq("id", spaceId)
+    .select()
+    .single()
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath(`/spaces/${spaceId}`)
+  return { data }
 }
 
 export async function deleteSpace(spaceId: string) {

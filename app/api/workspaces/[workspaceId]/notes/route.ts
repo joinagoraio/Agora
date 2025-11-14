@@ -19,7 +19,9 @@ export async function GET(
 
     const { data, error } = await supabase
       .from("workspace_notes")
-      .select("id, workspace_id, content, created_at, updated_at, created_by, author:profiles(id, full_name, email)")
+      .select(
+        "id, workspace_id, content, include_in_ai_context, created_at, updated_at, created_by, author:profiles(id, full_name, email)",
+      )
       .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false })
 
@@ -43,6 +45,8 @@ export async function POST(
     const { workspaceId } = await params
     const body = await req.json()
     const content = typeof body?.content === "string" ? body.content.trim() : ""
+    const includeInAiContextRaw = body?.includeInAiContext ?? body?.include_in_ai_context
+    const includeInAiContext = typeof includeInAiContextRaw === "boolean" ? includeInAiContextRaw : true
 
     if (!content) {
       return NextResponse.json({ error: "Content is required" }, { status: 400 })
@@ -63,9 +67,12 @@ export async function POST(
       .insert({
         workspace_id: workspaceId,
         content,
+        include_in_ai_context: includeInAiContext,
         created_by: user.id,
       })
-      .select("id, workspace_id, content, created_at, updated_at, created_by, author:profiles(id, full_name, email)")
+      .select(
+        "id, workspace_id, content, include_in_ai_context, created_at, updated_at, created_by, author:profiles(id, full_name, email)",
+      )
       .single()
 
     if (error) {

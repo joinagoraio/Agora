@@ -1,17 +1,38 @@
 "use client"
 
-import { useChat } from "@ai-sdk/react"
+import { useChat } from "ai/react"
 import { useState, useEffect, useRef, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Send, Loader2, ExternalLink, FileText, X, Plus, Sparkles, CircleStop } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Send, Loader2, ExternalLink, FileText, X, Plus, CircleStop } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import Link from "next/link"
 import { buildDocumentUrlFromSource } from "@/lib/utils/document-linking"
 import { getWorkspaceDocuments } from "@/lib/actions/document"
+import { getWorkspaceNotesForContext } from "@/lib/actions/workspace-notes"
+import type { WorkspaceNoteForContext } from "@/lib/actions/workspace-notes"
+import { getWorkspaceItems } from "@/lib/actions/workspace-item"
+import { getWorkspaceContextDetails } from "@/lib/actions/workspace"
 import { cn } from "@/lib/utils"
 
 interface ChatInterfaceProps {
@@ -24,8 +45,17 @@ interface ChatInterfaceProps {
 export function ChatInterface({ workspaceId, conversationId, initialMessages = [], documentId }: ChatInterfaceProps) {
   const [hasLoadedInitial, setHasLoadedInitial] = useState(false)
   const [documents, setDocuments] = useState<any[]>([])
+  const [contextNotes, setContextNotes] = useState<WorkspaceNoteForContext[]>([])
+  const [evidenceItems, setEvidenceItems] = useState<any[]>([])
+  const [workspaceContextText, setWorkspaceContextText] = useState<string | null>(null)
+  const [workspaceLocation, setWorkspaceLocation] = useState<string | null>(null)
+  const [hasLoadedWorkspaceMetadata, setHasLoadedWorkspaceMetadata] = useState(false)
   const [excludedDocumentIds, setExcludedDocumentIds] = useState<Set<string>>(new Set())
+  const [excludedNoteIds, setExcludedNoteIds] = useState<Set<string>>(new Set())
+  const [excludedEvidenceIds, setExcludedEvidenceIds] = useState<Set<string>>(new Set())
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(true)
+  const [isLoadingNotes, setIsLoadingNotes] = useState(true)
+  const [isLoadingEvidence, setIsLoadingEvidence] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const thinkingStartRef = useRef<number | null>(null)
@@ -34,56 +64,175 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   const [ellipsis, setEllipsis] = useState("...")
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false)
   const [isSwitchingConversation, setIsSwitchingConversation] = useState(false)
+  const router = useRouter()
+  const [pendingEvidence, setPendingEvidence] = useState<{
+    messageKey: string
+    question: string
+    answer: string
+    sources: any[]
+  } | null>(null)
+  const [evidenceConfidence, setEvidenceConfidence] = useState<"low" | "medium" | "high">("medium")
+  const [isSavingEvidence, setIsSavingEvidence] = useState(false)
+  const [evidenceError, setEvidenceError] = useState<string | null>(null)
+  const [evidenceStatusByMessage, setEvidenceStatusByMessage] = useState<
+    Record<string, { status: "idle" | "saving" | "success" | "error"; error?: string }>
+  >({})
 
   // Fetch workspace documents or single document
-  const loadDocuments = useCallback(async () => {
+  const loadContextItems = useCallback(async () => {
     setIsLoadingDocuments(true)
-    if (documentId) {
-      // In document viewer mode: fetch only the current document
-      const result = await getWorkspaceDocuments(workspaceId)
-      if (result.data) {
-        const currentDoc = result.data.find((doc: any) => doc.id === documentId)
-        setDocuments(currentDoc ? [currentDoc] : [])
+    setIsLoadingNotes(true)
+    setIsLoadingEvidence(true)
+    setHasLoadedWorkspaceMetadata(false)
+    setIsLoadingEvidence(true)
+    setIsLoadingEvidence(true)
+
+    try {
+      const documentsPromise = (async () => {
+        const result = await getWorkspaceDocuments(workspaceId)
+
+        if (result.error) {
+          console.error("[ChatInterface] Failed to fetch documents:", result.error)
+        }
+
+        if (documentId) {
+          if (result.data) {
+            const currentDoc = result.data.find((doc: any) => doc.id === documentId)
+            return currentDoc ? [currentDoc] : []
+          }
+          return []
+        }
+
+        return result.data ?? []
+      })()
+
+      const notesPromise = getWorkspaceNotesForContext(workspaceId)
+      const evidencePromise = (async () => {
+        const result = await getWorkspaceItems(workspaceId, { inheritance: "local" })
+        if (result.error) {
+          console.error("[ChatInterface] Failed to fetch evidence items:", result.error)
+          return []
+        }
+        // Filter for evidence items with include_in_ai_context=true
+        return (result.data ?? []).filter(
+          (item: any) => item.payload?.type === "evidence" && item.include_in_ai_context === true,
+        )
+      })()
+
+      const workspaceContextPromise = (async () => {
+        const result = await getWorkspaceContextDetails(workspaceId)
+        if (result.error) {
+          console.error("[ChatInterface] Failed to fetch workspace context:", result.error)
+          return { context: null, location: null }
+        }
+        return result.data ?? { context: null, location: null }
+      })()
+
+      const [documentsData, notesResult, evidenceData, workspaceContextData] = await Promise.all([
+        documentsPromise,
+        notesPromise,
+        evidencePromise,
+        workspaceContextPromise,
+      ])
+
+      setDocuments(documentsData)
+
+      if (notesResult.error) {
+        console.error("[ChatInterface] Failed to fetch workspace notes:", notesResult.error)
+        setContextNotes([])
+      } else {
+      setContextNotes(notesResult.data)
       }
-    } else {
-      // Normal mode: fetch all documents
-      const result = await getWorkspaceDocuments(workspaceId)
-      if (result.data) {
-        setDocuments(result.data)
-      }
+
+      setEvidenceItems(evidenceData)
+      setWorkspaceContextText(
+        typeof workspaceContextData.context === "string" ? workspaceContextData.context : null,
+      )
+      setWorkspaceLocation(typeof workspaceContextData.location === "string" ? workspaceContextData.location : null)
+      setHasLoadedWorkspaceMetadata(true)
+    } catch (error) {
+      console.error("[ChatInterface] Failed to load AI context items:", error)
+      setDocuments([])
+      setContextNotes([])
+      setWorkspaceContextText(null)
+      setWorkspaceLocation(null)
+      setEvidenceItems([])
+    } finally {
+      setIsLoadingDocuments(false)
+    setIsLoadingNotes(false)
+    setIsLoadingEvidence(false)
     }
-    setIsLoadingDocuments(false)
   }, [workspaceId, documentId])
 
   useEffect(() => {
-    loadDocuments()
-  }, [loadDocuments])
+    loadContextItems()
+  }, [loadContextItems])
 
   // Refresh documents when window gains focus (handles case where user uploads in another tab)
   useEffect(() => {
     const handleFocus = () => {
-      loadDocuments()
+      loadContextItems()
     }
     window.addEventListener("focus", handleFocus)
     return () => window.removeEventListener("focus", handleFocus)
-  }, [loadDocuments])
+  }, [loadContextItems])
 
   // Listen for document upload events
   useEffect(() => {
-    const handleDocumentUpload = (event: CustomEvent) => {
-      // Only refresh if the upload is for this workspace
-      if (event.detail?.workspaceId === workspaceId) {
-        console.log("[ChatInterface] Document uploaded, refreshing document list")
-        loadDocuments()
+    const refreshIfMatchingWorkspace = (event: CustomEvent<{ workspaceId?: string }>) => {
+      const eventWorkspaceId = event.detail?.workspaceId
+      if (!eventWorkspaceId || eventWorkspaceId === workspaceId) {
+        console.log(`[ChatInterface] Context event received (${event.type}), refreshing AI context items`)
+        loadContextItems()
       }
     }
-    window.addEventListener("documentUploaded" as any, handleDocumentUpload as EventListener)
-    return () => window.removeEventListener("documentUploaded" as any, handleDocumentUpload as EventListener)
-  }, [workspaceId, loadDocuments])
+
+    window.addEventListener("documentUploaded" as any, refreshIfMatchingWorkspace as EventListener)
+    window.addEventListener("workspaceContextUpdated" as any, refreshIfMatchingWorkspace as EventListener)
+
+    return () => {
+      window.removeEventListener("documentUploaded" as any, refreshIfMatchingWorkspace as EventListener)
+      window.removeEventListener("workspaceContextUpdated" as any, refreshIfMatchingWorkspace as EventListener)
+    }
+  }, [workspaceId, loadContextItems])
 
   useEffect(() => {
     setExcludedDocumentIds(new Set())
+    setExcludedNoteIds(new Set())
+    setExcludedEvidenceIds(new Set())
   }, [conversationId])
+
+  useEffect(() => {
+    setExcludedNoteIds((prev) => {
+      const validIds = new Set(contextNotes.map((note) => note.id))
+      let hasChanges = false
+      const next = new Set<string>()
+      prev.forEach((id) => {
+        if (validIds.has(id)) {
+          next.add(id)
+        } else {
+          hasChanges = true
+        }
+      })
+      return hasChanges ? next : prev
+    })
+  }, [contextNotes])
+
+  useEffect(() => {
+    setExcludedEvidenceIds((prev) => {
+      const validIds = new Set(evidenceItems.map((item) => item.id))
+      let hasChanges = false
+      const next = new Set<string>()
+      prev.forEach((id) => {
+        if (validIds.has(id)) {
+          next.add(id)
+        } else {
+          hasChanges = true
+        }
+      })
+      return hasChanges ? next : prev
+    })
+  }, [evidenceItems])
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages, stop, setInput } = useChat({
     api: "/api/chat",
@@ -91,6 +240,8 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       workspaceId,
       conversationId,
       excludedDocumentIds: Array.from(excludedDocumentIds),
+      excludedNoteIds: Array.from(excludedNoteIds),
+      excludedEvidenceIds: Array.from(excludedEvidenceIds),
     },
     initialMessages: hasLoadedInitial ? undefined : initialMessages,
   })
@@ -339,6 +490,38 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     })
   }
 
+  const handleRemoveNote = (noteId: string) => {
+    setExcludedNoteIds((prev) => {
+      const newSet = new Set(prev)
+      newSet.add(noteId)
+      return newSet
+    })
+  }
+
+  const handleRestoreNote = (noteId: string) => {
+    setExcludedNoteIds((prev) => {
+      const newSet = new Set(prev)
+      newSet.delete(noteId)
+      return newSet
+    })
+  }
+
+  const handleRemoveEvidence = (evidenceId: string) => {
+    setExcludedEvidenceIds((prev) => {
+      const newSet = new Set(prev)
+      newSet.add(evidenceId)
+      return newSet
+    })
+  }
+
+  const handleRestoreEvidence = (evidenceId: string) => {
+    setExcludedEvidenceIds((prev) => {
+      const newSet = new Set(prev)
+      newSet.delete(evidenceId)
+      return newSet
+    })
+  }
+
   const handleClearMessages = () => {
     setMessages([])
     setLastThinkingDuration(null)
@@ -365,8 +548,157 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     })
   }
 
-  const availableDocuments = documents.filter((doc) => !excludedDocumentIds.has(doc.id))
-  const excludedDocuments = documents.filter((doc) => excludedDocumentIds.has(doc.id))
+  const getMessageKey = (message: any, index: number) => {
+    if (message?.id && typeof message.id === "string") {
+      return message.id
+    }
+    return `index-${index}`
+  }
+
+  const findPreviousUserQuestion = (messageIndex: number) => {
+    for (let i = messageIndex - 1; i >= 0; i--) {
+      const candidate = messages[i]
+      if (candidate?.role === "user" && typeof candidate.content === "string" && candidate.content.trim().length > 0) {
+        return candidate.content
+      }
+    }
+    return ""
+  }
+
+  const updateEvidenceStatus = (messageKey: string, status: "idle" | "saving" | "success" | "error", error?: string) => {
+    setEvidenceStatusByMessage((prev) => ({
+      ...prev,
+      [messageKey]: { status, error },
+    }))
+  }
+
+  const handleOpenEvidenceDialog = (message: any, index: number) => {
+    const messageKey = getMessageKey(message, index)
+    const question = findPreviousUserQuestion(index)
+    if (!question) {
+      updateEvidenceStatus(messageKey, "error", "Could not locate the related question for this answer.")
+      setTimeout(() => {
+        setEvidenceStatusByMessage((prev) => {
+          const next = { ...prev }
+          if (next[messageKey]?.status === "error") {
+            next[messageKey] = { status: "idle" }
+          }
+          return next
+        })
+      }, 3000)
+      return
+    }
+
+    setEvidenceConfidence("medium")
+    setEvidenceError(null)
+    setPendingEvidence({
+      messageKey,
+      question,
+      answer: typeof message?.content === "string" ? message.content : "",
+      sources: Array.isArray(message?.sources) ? message.sources : [],
+    })
+  }
+
+  const handleCloseEvidenceDialog = () => {
+    if (isSavingEvidence) {
+      return
+    }
+    setPendingEvidence(null)
+    setEvidenceError(null)
+  }
+
+  const handleSaveEvidence = async () => {
+    if (!pendingEvidence) {
+      return
+    }
+
+    const { messageKey, question, answer, sources } = pendingEvidence
+
+    if (!question.trim() || !answer.trim()) {
+      setEvidenceError("The question or answer is empty. Try again after the response finishes.")
+      return
+    }
+
+    const citations = (sources ?? []).map((source: any) => ({
+      title: typeof source?.title === "string" && source.title.trim().length > 0 ? source.title : "Workspace document",
+      url: typeof source?.url === "string" ? source.url : undefined,
+      docId: typeof source?.id === "string" ? source.id : undefined,
+      page: typeof source?.pageNumber === "number" ? source.pageNumber : undefined,
+      layer:
+        source?.layer === "national" ||
+        source?.layer === "regional" ||
+        source?.layer === "municipal" ||
+        source?.layer === "local"
+          ? source.layer
+          : "local",
+    }))
+
+    setEvidenceError(null)
+    setIsSavingEvidence(true)
+    updateEvidenceStatus(messageKey, "saving")
+
+    try {
+      const response = await fetch("/api/evidence/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId,
+          question,
+          answer,
+          citations,
+          confidence: evidenceConfidence,
+        }),
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        const errorMessage = typeof payload?.error === "string" ? payload.error : "Failed to save evidence."
+        setEvidenceError(errorMessage)
+        updateEvidenceStatus(messageKey, "error", errorMessage)
+      } else {
+        updateEvidenceStatus(messageKey, "success")
+        setPendingEvidence(null)
+        router.refresh()
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to save evidence."
+      setEvidenceError(message)
+      updateEvidenceStatus(messageKey, "error", message)
+    } finally {
+      setIsSavingEvidence(false)
+    }
+  }
+
+  const getDocumentOrigin = (doc: any): string | null => {
+    const metadata = doc?.metadata
+    if (!metadata || typeof metadata !== "object") {
+      return null
+    }
+    const originValue = (metadata as Record<string, any>).origin
+    return typeof originValue === "string" ? originValue : null
+  }
+
+  const sourceDocuments = documents.filter((doc) => {
+    const origin = getDocumentOrigin(doc)
+    return origin !== "space_scope"
+  })
+  const inheritedDocuments = documents.filter((doc) => {
+    const origin = getDocumentOrigin(doc)
+    return origin === "space_scope"
+  })
+
+  const availableSourceDocuments = sourceDocuments.filter((doc) => !excludedDocumentIds.has(doc.id))
+  const excludedSourceDocuments = sourceDocuments.filter((doc) => excludedDocumentIds.has(doc.id))
+  const availableInheritedDocuments = inheritedDocuments.filter((doc) => !excludedDocumentIds.has(doc.id))
+  const excludedInheritedDocuments = inheritedDocuments.filter((doc) => excludedDocumentIds.has(doc.id))
+  
+  const availableNotes = contextNotes.filter((note) => !excludedNoteIds.has(note.id))
+  const excludedNotes = contextNotes.filter((note) => excludedNoteIds.has(note.id))
+  const availableEvidence = evidenceItems.filter((item) => !excludedEvidenceIds.has(item.id))
+  const excludedEvidence = evidenceItems.filter((item) => excludedEvidenceIds.has(item.id))
+  const isContextLoading = isLoadingDocuments || isLoadingNotes || isLoadingEvidence
+  const hasContextItems =
+    hasLoadedWorkspaceMetadata || documents.length > 0 || contextNotes.length > 0 || evidenceItems.length > 0
 
   const emptyStateDescription = documentId
     ? "Ask questions about your document and get instant answers"
@@ -433,6 +765,9 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           const isUser = message.role === "user"
           const isAssistant = message.role === "assistant"
           const isLastAssistant = isAssistant && index === messages.length - 1
+          const messageKey = getMessageKey(message, index)
+          const evidenceStatusEntry = evidenceStatusByMessage[messageKey]
+          const evidenceStatus = evidenceStatusEntry?.status ?? "idle"
 
           return (
             <div key={index} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -474,98 +809,35 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                   <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-0 prose-pre:whitespace-pre-wrap prose-pre:break-words prose-pre:text-sm">
                     <ReactMarkdown>{message.content}</ReactMarkdown>
                   </div>
-                  {isAssistant &&
-                    message.sources &&
-                    message.sources.length > 0 &&
-                    (() => {
-                      // Hide sources if they're all from documents already shown in AI Context
-                      const availableDocumentIds = new Set(availableDocuments.map((d: any) => d.id))
-
-                      // Check if all sources are from available documents in AI Context
-                      const allSourcesInContext = message.sources.every((source: any) => {
-                        // Only check sources with document IDs (internal documents)
-                        if (source.id && typeof source.id === "string") {
-                          return availableDocumentIds.has(source.id)
-                        }
-                        // External sources (no document ID) should always be shown
-                        return false
-                      })
-
-                      // Check if there are any external sources (sources without document IDs)
-                      const hasExternalSources = message.sources.some((s: any) => !s.id || typeof s.id !== "string")
-
-                      // Check if any sources have highlight information (textSpan or pageNumber)
-                      // These should always be shown so users can jump to the specific section
-                      const hasHighlightInfo = message.sources.some(
-                        (s: any) => s.textSpan || (s.pageNumber !== undefined && s.pageNumber !== null),
-                      )
-
-                      // Hide sources if:
-                      // 1. All sources are from documents in AI Context (redundant)
-                      // 2. AND there are no external sources to show
-                      // 3. AND there's no highlight information to navigate to
-                      // Show sources if there are external sources, highlight info, or if not all sources are in context
-                      const shouldShowSources = hasExternalSources || !allSourcesInContext || hasHighlightInfo
-
-                      if (!shouldShowSources) {
-                        return null
-                      }
-
-                      return (
-                        <div className="pt-2 space-y-2 border-t border-border/60">
-                          <p className="text-xs font-medium">Sources:</p>
-                          <div className="flex flex-wrap gap-2">
-                            {message.sources.map((source: any, idx: number) => {
-                              // Check if source has document ID (for in-app viewing)
-                              const hasDocumentId = source.id && typeof source.id === "string"
-                              const hasPageInfo = source.pageNumber !== undefined
-
-                              if (hasDocumentId) {
-                                // Link to in-app document viewer
-                                console.log("[ChatInterface] Building URL from source:", {
-                                  sourceId: source.id,
-                                  sourceTitle: source.title,
-                                  pageNumber: source.pageNumber,
-                                  textSpan: source.textSpan,
-                                  hasPageNumber: source.pageNumber !== undefined,
-                                  hasTextSpan: source.textSpan !== undefined,
-                                  fullSource: JSON.stringify(source, null, 2),
-                                })
-                                const documentUrl = buildDocumentUrlFromSource(workspaceId, source)
-                                console.log("[ChatInterface] Built URL:", documentUrl)
-                                return (
-                                  <Link key={idx} href={documentUrl}>
-                                    <Badge variant="secondary" className="text-xs cursor-pointer hover:bg-secondary/80">
-                                      <FileText className="mr-1 h-3 w-3" />
-                                      {source.title}
-                                      {hasPageInfo && (
-                                        <span className="ml-1 text-xs opacity-70">(Page {source.pageNumber})</span>
-                                      )}
-                                    </Badge>
-                                  </Link>
-                                )
-                              } else {
-                                // Fallback to external URL
-                                return (
-                                  <a
-                                    key={idx}
-                                    href={source.url || "#"}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1"
-                                  >
-                                    <Badge variant="secondary" className="text-xs">
-                                      {source.title}
-                                      {source.url && <ExternalLink className="ml-1 h-3 w-3" />}
-                                    </Badge>
-                                  </a>
-                                )
-                              }
-                            })}
-                          </div>
-                        </div>
-                      )
-                    })()}
+                  {isAssistant && (
+                    <div className="flex flex-wrap items-center justify-end gap-2 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => handleOpenEvidenceDialog(message, index)}
+                        disabled={evidenceStatus === "saving" || isLoading}
+                      >
+                        {evidenceStatus === "saving" ? (
+                          <>
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            Saving…
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="mr-1 h-3 w-3" />
+                            Save as evidence
+                          </>
+                        )}
+                      </Button>
+                      {evidenceStatus === "success" && (
+                        <span className="text-xs text-emerald-600">Saved to workspace evidence</span>
+                      )}
+                      {evidenceStatus === "error" && evidenceStatusEntry?.error && (
+                        <span className="text-xs text-destructive">{evidenceStatusEntry.error}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -619,8 +891,8 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
         </form>
         <p className="text-xs text-muted-foreground">Press Enter to send, Shift+Enter for new line</p>
 
-        {/* Document pills in accordion */}
-        {!isLoadingDocuments && documents.length > 0 && (
+        {/* AI context accordion */}
+        {!isContextLoading && hasContextItems && (
           <Accordion type="single" collapsible defaultValue="documents" className="mt-4">
             <AccordionItem value="documents" className="border-none">
               <AccordionTrigger className="py-2 text-xs font-medium text-muted-foreground hover:no-underline data-[state=closed]:inline-flex data-[state=closed]:items-center data-[state=closed]:rounded-full data-[state=closed]:bg-secondary data-[state=closed]:px-3 data-[state=closed]:py-1 data-[state=closed]:w-fit [&[data-state=closed]_svg]:translate-y-0">
@@ -629,67 +901,301 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
               <AccordionContent className="pt-2">
                 <TooltipProvider>
                   <div className="space-y-3">
-                    {availableDocuments.length > 0 && (
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Included in this conversation ({availableDocuments.length}):
-                          </p>
-                          {!documentId && <Sparkles className="h-4 w-4 text-purple-400" />}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {availableDocuments.map((doc) => (
-                            <Tooltip key={doc.id}>
-                              <TooltipTrigger asChild>
-                                <Badge
-                                  variant="secondary"
-                                  className={documentId ? "pr-1" : "cursor-pointer hover:bg-secondary/80 pr-1"}
-                                  onClick={documentId ? undefined : () => handleRemoveDocument(doc.id)}
-                                >
-                                  <FileText className="mr-1 h-3 w-3" />
-                                  <span className="max-w-[200px] truncate">{doc.title}</span>
-                                  {!documentId && <X className="ml-1 h-3 w-3" />}
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>{doc.title}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {!documentId && excludedDocuments.length > 0 && (
-                      <div>
-                        <p className="mb-2 text-xs font-medium text-muted-foreground">
-                          Excluded from this conversation ({excludedDocuments.length}):
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {excludedDocuments.map((doc) => (
-                            <Tooltip key={doc.id}>
-                              <TooltipTrigger asChild>
-                                <Badge
-                                  variant="outline"
-                                  className="cursor-pointer hover:bg-accent pr-1 opacity-60"
-                                  onClick={() => handleRestoreDocument(doc.id)}
-                                >
-                                  <FileText className="mr-1 h-3 w-3" />
-                                  <span className="max-w-[200px] truncate line-through">{doc.title}</span>
-                                  <Plus className="ml-1 h-3 w-3" />
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>{doc.title}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    <div className="rounded-md border border-border/60 bg-secondary/10 px-3 py-2">
+                      <p className="text-xs font-medium text-foreground/90">Workspace Details (always included)</p>
+                    </div>
+                    <Tabs defaultValue="sources" className="w-full">
+                      <TabsList className="grid w-full grid-cols-4 h-8">
+                        <TabsTrigger value="sources" className="text-xs">
+                          Sources ({availableSourceDocuments.length})
+                        </TabsTrigger>
+                        <TabsTrigger value="inherited" className="text-xs">
+                          Inherited ({availableInheritedDocuments.length})
+                        </TabsTrigger>
+                        <TabsTrigger value="evidence" className="text-xs">
+                          Evidence ({availableEvidence.length})
+                        </TabsTrigger>
+                        <TabsTrigger value="notes" className="text-xs">
+                          Notes ({availableNotes.length})
+                        </TabsTrigger>
+                      </TabsList>
+                      
+                      <TabsContent value="sources" className="space-y-3 mt-3">
+                        {availableSourceDocuments.length > 0 && (
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              Included ({availableSourceDocuments.length}):
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {availableSourceDocuments.map((doc) => (
+                                <Tooltip key={doc.id}>
+                                  <TooltipTrigger asChild>
+                                    <Badge
+                                      variant="secondary"
+                                      className={documentId ? "pr-1" : "cursor-pointer hover:bg-secondary/80 pr-1"}
+                                      onClick={documentId ? undefined : () => handleRemoveDocument(doc.id)}
+                                    >
+                                      <FileText className="mr-1 h-3 w-3" />
+                                      <span className="max-w-[200px] truncate">{doc.title}</span>
+                                      {!documentId && <X className="ml-1 h-3 w-3" />}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{doc.title}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {!documentId && excludedSourceDocuments.length > 0 && (
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              Excluded ({excludedSourceDocuments.length}):
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {excludedSourceDocuments.map((doc) => (
+                                <Tooltip key={doc.id}>
+                                  <TooltipTrigger asChild>
+                                    <Badge
+                                      variant="outline"
+                                      className="cursor-pointer hover:bg-accent pr-1 opacity-60"
+                                      onClick={() => handleRestoreDocument(doc.id)}
+                                    >
+                                      <FileText className="mr-1 h-3 w-3" />
+                                      <span className="max-w-[200px] truncate line-through">{doc.title}</span>
+                                      <Plus className="ml-1 h-3 w-3" />
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{doc.title}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {availableSourceDocuments.length === 0 && excludedSourceDocuments.length === 0 && (
+                          <p className="text-xs text-muted-foreground">No source documents</p>
+                        )}
+                      </TabsContent>
+
+                      <TabsContent value="inherited" className="space-y-3 mt-3">
+                        {availableInheritedDocuments.length > 0 && (
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              Included ({availableInheritedDocuments.length}):
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {availableInheritedDocuments.map((doc) => (
+                                <Tooltip key={doc.id}>
+                                  <TooltipTrigger asChild>
+                                    <Badge
+                                      variant="secondary"
+                                      className={documentId ? "pr-1" : "cursor-pointer hover:bg-secondary/80 pr-1"}
+                                      onClick={documentId ? undefined : () => handleRemoveDocument(doc.id)}
+                                    >
+                                      <FileText className="mr-1 h-3 w-3" />
+                                      <span className="max-w-[200px] truncate">{doc.title}</span>
+                                      {!documentId && <X className="ml-1 h-3 w-3" />}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{doc.title}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {!documentId && excludedInheritedDocuments.length > 0 && (
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              Excluded ({excludedInheritedDocuments.length}):
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {excludedInheritedDocuments.map((doc) => (
+                                <Tooltip key={doc.id}>
+                                  <TooltipTrigger asChild>
+                                    <Badge
+                                      variant="outline"
+                                      className="cursor-pointer hover:bg-accent pr-1 opacity-60"
+                                      onClick={() => handleRestoreDocument(doc.id)}
+                                    >
+                                      <FileText className="mr-1 h-3 w-3" />
+                                      <span className="max-w-[200px] truncate line-through">{doc.title}</span>
+                                      <Plus className="ml-1 h-3 w-3" />
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{doc.title}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {availableInheritedDocuments.length === 0 && excludedInheritedDocuments.length === 0 && (
+                          <p className="text-xs text-muted-foreground">No inherited documents</p>
+                        )}
+                      </TabsContent>
+
+                      <TabsContent value="evidence" className="space-y-3 mt-3">
+                        {availableEvidence.length > 0 && (
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              Included ({availableEvidence.length}):
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {availableEvidence.map((item) => {
+                                const question = item.payload?.question || "Saved evidence"
+                                const truncatedQuestion = question.length > 100 ? `${question.slice(0, 100)}...` : question
+                                return (
+                                  <Tooltip key={item.id}>
+                                    <TooltipTrigger asChild>
+                                      <Badge
+                                        variant="secondary"
+                                        className="cursor-pointer hover:bg-secondary/80 pr-1"
+                                        onClick={() => handleRemoveEvidence(item.id)}
+                                      >
+                                        <FileText className="mr-1 h-3 w-3" />
+                                        <span className="max-w-[200px] truncate">{truncatedQuestion}</span>
+                                        <X className="ml-1 h-3 w-3" />
+                                      </Badge>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>{question}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {excludedEvidence.length > 0 && (
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              Excluded ({excludedEvidence.length}):
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {excludedEvidence.map((item) => {
+                                const question = item.payload?.question || "Saved evidence"
+                                const truncatedQuestion = question.length > 100 ? `${question.slice(0, 100)}...` : question
+                                return (
+                                  <Tooltip key={item.id}>
+                                    <TooltipTrigger asChild>
+                                      <Badge
+                                        variant="outline"
+                                        className="cursor-pointer hover:bg-accent pr-1 opacity-60"
+                                        onClick={() => handleRestoreEvidence(item.id)}
+                                      >
+                                        <FileText className="mr-1 h-3 w-3" />
+                                        <span className="max-w-[200px] truncate line-through">{truncatedQuestion}</span>
+                                        <Plus className="ml-1 h-3 w-3" />
+                                      </Badge>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>{question}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {availableEvidence.length === 0 && excludedEvidence.length === 0 && (
+                          <p className="text-xs text-muted-foreground">No evidence items</p>
+                        )}
+                      </TabsContent>
+
+                      <TabsContent value="notes" className="space-y-3 mt-3">
+                        {availableNotes.length > 0 && (
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              Included ({availableNotes.length}):
+                            </p>
+                            <div className="space-y-2">
+                              {availableNotes.map((note) => {
+                                const authorName =
+                                  note.author?.full_name || note.author?.email || "Workspace member"
+                                const trimmedContent = note.content.trim()
+                                const preview =
+                                  trimmedContent.length > 200
+                                    ? `${trimmedContent.slice(0, 200).trimEnd()}...`
+                                    : trimmedContent || "[No content]"
+
+                                return (
+                                  <div
+                                    key={note.id}
+                                    className="rounded-md border border-border/60 bg-secondary/20 px-3 py-2 text-xs text-muted-foreground"
+                                  >
+                                    <div className="flex items-center justify-between gap-2 pb-1 text-[11px] uppercase tracking-wide text-muted-foreground/80">
+                                      <span className="truncate">{authorName}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveNote(note.id)}
+                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                        aria-label="Remove note from AI context"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                    <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">{preview}</p>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {excludedNotes.length > 0 && (
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              Excluded ({excludedNotes.length}):
+                            </p>
+                            <div className="space-y-2">
+                              {excludedNotes.map((note) => {
+                                const authorName =
+                                  note.author?.full_name || note.author?.email || "Workspace member"
+                                const trimmedContent = note.content.trim()
+                                const preview =
+                                  trimmedContent.length > 200
+                                    ? `${trimmedContent.slice(0, 200).trimEnd()}...`
+                                    : trimmedContent || "[No content]"
+
+                                return (
+                                  <div
+                                    key={note.id}
+                                    className="rounded-md border border-border/60 bg-secondary/10 px-3 py-2 text-xs text-muted-foreground opacity-70"
+                                  >
+                                    <div className="flex items-center justify-between gap-2 pb-1 text-[11px] uppercase tracking-wide text-muted-foreground/80">
+                                      <span className="truncate line-through">{authorName}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRestoreNote(note.id)}
+                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                        aria-label="Restore note to AI context"
+                                      >
+                                        <Plus className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                    <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/80 line-through">
+                                      {preview}
+                                    </p>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {availableNotes.length === 0 && excludedNotes.length === 0 && (
+                          <p className="text-xs text-muted-foreground">No notes</p>
+                        )}
+                      </TabsContent>
+                    </Tabs>
                     <p className="text-xs text-muted-foreground pt-2">
                       {documentId
-                        ? "The chat is context-aware to the document you're currently viewing."
-                        : "Select which documents to include in AI responses for this conversation. Excluding documents does not delete them."}
+                        ? "The chat is context-aware to the document you're currently viewing. Workspace Details are always included automatically."
+                        : "Workspace Details are always included automatically. Select which items to include for this conversation. Items marked for AI context are included by default. Excluding items does not delete them."}
                     </p>
                   </div>
                 </TooltipProvider>
@@ -698,6 +1204,71 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           </Accordion>
         )}
       </div>
+      <Dialog open={pendingEvidence !== null} onOpenChange={(open) => (!open ? handleCloseEvidenceDialog() : null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Save as workspace evidence</DialogTitle>
+            <DialogDescription>
+              Store this assistant response in the workspace evidence board so teammates can revisit it later.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingEvidence && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs font-medium uppercase text-muted-foreground">Question</p>
+                <p className="mt-1 text-sm text-foreground/90 whitespace-pre-wrap">
+                  {pendingEvidence.question.length > 600
+                    ? `${pendingEvidence.question.slice(0, 600)}…`
+                    : pendingEvidence.question}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase text-muted-foreground">Confidence</p>
+                <Select
+                  value={evidenceConfidence}
+                  onValueChange={(value) => setEvidenceConfidence(value as "low" | "medium" | "high")}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select confidence level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="high">High confidence</SelectItem>
+                    <SelectItem value="medium">Medium confidence</SelectItem>
+                    <SelectItem value="low">Low confidence</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase text-muted-foreground">Citations</p>
+                <p className="mt-1 text-sm text-foreground/80">
+                  {Array.isArray(pendingEvidence.sources) && pendingEvidence.sources.length > 0
+                    ? `${pendingEvidence.sources.length} source${
+                        pendingEvidence.sources.length === 1 ? "" : "s"
+                      } will be linked.`
+                    : "No supporting documents were detected for this answer."}
+                </p>
+              </div>
+              {evidenceError && <p className="text-sm text-destructive">{evidenceError}</p>}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseEvidenceDialog} disabled={isSavingEvidence}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEvidence} disabled={isSavingEvidence}>
+              {isSavingEvidence ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving
+                </>
+              ) : (
+                "Save to evidence"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
+
