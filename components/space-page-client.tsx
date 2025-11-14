@@ -8,7 +8,7 @@ import { SpaceWorkspaceList, type SpaceWorkspace } from "@/components/space-work
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { PencilLine, X, Loader2, Wand2, Undo2, Save, MoreVertical, Settings } from "lucide-react"
+import { PencilLine, X, Loader2, Wand2, RotateCcw, Save, MoreVertical, Settings } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -477,12 +477,12 @@ export function SpacePageClient({
                 onChange={(event) => setSummaryDraft(event.target.value)}
                 placeholder="Add summary"
                 rows={4}
-                className="pr-12 pb-12"
+                className="pb-10"
                 onFocus={() => setActiveField("summary")}
                 onBlur={() => setActiveField((current) => (current === "summary" ? null : current))}
               />
               {activeField === "summary" && (
-                <div className="absolute bottom-3 right-3 flex items-center gap-2">
+                <div className="absolute bottom-2 right-2 flex items-center gap-2">
                   {summaryPrevious !== null && (
                     <Button
                       type="button"
@@ -490,9 +490,9 @@ export function SpacePageClient({
                       size="icon"
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => handleUndoEnhance("summary")}
-                      className="h-8 w-8 text-muted-foreground hover:text-muted-foreground"
+                      className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
                     >
-                      <Undo2 className="h-4 w-4" />
+                      <RotateCcw className="h-4 w-4" />
                       <span className="sr-only">Undo mission statement enhancement</span>
                     </Button>
                   )}
@@ -506,12 +506,12 @@ export function SpacePageClient({
                           onMouseDown={(event) => event.preventDefault()}
                           onClick={() => handleEnhance("summary")}
                           disabled={isEnhancing || !summaryDraft || summaryDraft.trim().length === 0}
-                          className="h-8 w-8 text-purple-400 hover:bg-transparent hover:text-purple-500"
+                          className="h-8 w-8 p-0 hover:bg-transparent group"
                         >
                           {isEnhancing && enhancingField === "summary" ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
                           ) : (
-                            <Wand2 className="h-4 w-4" />
+                            <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
                           )}
                           <span className="sr-only">Enhance mission statement with AI</span>
                         </Button>
@@ -535,12 +535,12 @@ export function SpacePageClient({
                 onChange={(event) => setDescriptionDraft(event.target.value)}
                 placeholder="Add description"
                 rows={8}
-                className="pr-12 pb-12"
+                className="pb-10"
                 onFocus={() => setActiveField("description")}
                 onBlur={() => setActiveField((current) => (current === "description" ? null : current))}
               />
               {activeField === "description" && (
-                <div className="absolute bottom-3 right-3 flex items-center gap-2">
+                <div className="absolute bottom-2 right-2 flex items-center gap-2">
                   {descriptionPrevious !== null && (
                     <Button
                       type="button"
@@ -548,9 +548,9 @@ export function SpacePageClient({
                       size="icon"
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => handleUndoEnhance("description")}
-                      className="h-8 w-8 text-muted-foreground hover:text-muted-foreground"
+                      className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
                     >
-                      <Undo2 className="h-4 w-4" />
+                      <RotateCcw className="h-4 w-4" />
                       <span className="sr-only">Undo description enhancement</span>
                     </Button>
                   )}
@@ -564,12 +564,12 @@ export function SpacePageClient({
                           onMouseDown={(event) => event.preventDefault()}
                           onClick={() => handleEnhance("description")}
                           disabled={isEnhancing || !descriptionDraft || descriptionDraft.trim().length === 0}
-                          className="h-8 w-8 text-purple-400 hover:bg-transparent hover:text-purple-500"
+                          className="h-8 w-8 p-0 hover:bg-transparent group"
                         >
                           {isEnhancing && enhancingField === "description" ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
                           ) : (
-                            <Wand2 className="h-4 w-4" />
+                            <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
                           )}
                           <span className="sr-only">Enhance description with AI</span>
                         </Button>
