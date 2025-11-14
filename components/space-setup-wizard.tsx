@@ -750,7 +750,7 @@ export function SpaceSetupWizard({
                   {localDocuments.length > 0 ? `${localDocuments.length} document${localDocuments.length === 1 ? "" : "s"} uploaded` : "No documents yet"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  You can add more later from the documents section.
+                  You can add more later from the Documents section.
                 </p>
               </div>
               <SpaceUploadDocumentDialog
@@ -846,10 +846,10 @@ export function SpaceSetupWizard({
                 </Button>
                 {workspaceError && <p className="text-sm text-destructive">{workspaceError}</p>}
                 {createdWorkspace && (
-                  <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground">
-                    <CheckCircle2 className="h-4 w-4" />
+                  <div className="flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm text-foreground">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
                     <span>
-                      Workspace <span className="font-medium">{createdWorkspace.name}</span> is ready. You can open it after finishing the wizard.
+                      Workspace <span className="font-medium">{createdWorkspace.name}</span> is ready. You can open it after finishing the setup.
                     </span>
                   </div>
                 )}
@@ -858,7 +858,7 @@ export function SpaceSetupWizard({
             <Separator />
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <Badge variant="secondary">{workspaces.length} workspace{workspaces.length === 1 ? "" : "s"} in this space</Badge>
-              <span>Need more later? Use “New workspace” in the list below.</span>
+              <span>You can add more later from the Workspaces section.</span>
             </div>
           </div>
         )
