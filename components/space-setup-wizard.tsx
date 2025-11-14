@@ -16,7 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, Sparkles, Wand2 } from "lucide-react"
+import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, RotateCcw, Sparkles, Wand2 } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 type SetupWizardState = {
   current_step?: number
@@ -136,6 +137,9 @@ export function SpaceSetupWizard({
   const [timeframe, setTimeframe] = useState(scope.timeframe ?? "")
   const [timeframeError, setTimeframeError] = useState<string | null>(null)
 
+  const [originalSummary, setOriginalSummary] = useState<string | null>(null)
+  const [originalDescription, setOriginalDescription] = useState<string | null>(null)
+  const [enhancementCompleted, setEnhancementCompleted] = useState<{ summary?: boolean; description?: boolean }>({})
   const [focusedField, setFocusedField] = useState<"summary" | "description" | null>(null)
   const [enhancingField, setEnhancingField] = useState<"summary" | "description" | null>(null)
   const [isEnhancing, startEnhancing] = useTransition()
@@ -174,22 +178,48 @@ export function SpaceSetupWizard({
 
     setStepError(null)
     setEnhancingField(field)
+    // Store original text before enhancement
+    if (field === "summary") {
+      setOriginalSummary(targetText)
+    } else {
+      setOriginalDescription(targetText)
+    }
     startEnhancing(async () => {
       const result = await enhanceScopeText(targetText)
       if (result.error) {
         setStepError(result.error)
         setEnhancingField(null)
+        // Clear original text if enhancement failed
+        if (field === "summary") {
+          setOriginalSummary(null)
+        } else {
+          setOriginalDescription(null)
+        }
         return
       }
       if (result.enhanced) {
         if (field === "summary") {
           setSummary(result.enhanced)
+          setEnhancementCompleted((prev) => ({ ...prev, summary: true }))
         } else {
           setDescription(result.enhanced)
+          setEnhancementCompleted((prev) => ({ ...prev, description: true }))
         }
       }
       setEnhancingField(null)
     })
+  }
+
+  const handleUndo = (field: "summary" | "description") => {
+    if (field === "summary" && originalSummary !== null) {
+      setSummary(originalSummary)
+      setOriginalSummary(null)
+      setEnhancementCompleted((prev) => ({ ...prev, summary: false }))
+    } else if (field === "description" && originalDescription !== null) {
+      setDescription(originalDescription)
+      setOriginalDescription(null)
+      setEnhancementCompleted((prev) => ({ ...prev, description: false }))
+    }
   }
 
   const handleTimeframeChange = (value: string, inputType?: string | null) => {
@@ -514,7 +544,7 @@ export function SpaceSetupWizard({
             <div>
               <h3 className="text-base font-semibold text-foreground">Summarise the mandate</h3>
               <p className="text-sm text-muted-foreground">
-                This mandate is inherited by every workspace in the space and feeds the AI allow assistant automatically.
+                This mandate is inherited by every workspace in the space and feeds the AI assistant automatically.
               </p>
             </div>
             <div className="space-y-4">
@@ -527,31 +557,64 @@ export function SpaceSetupWizard({
                     onChange={(event) => setSummary(event.target.value)}
                     placeholder="High-level statement to align everyone on the mission."
                     rows={3}
-                    className="pr-12"
+                    className={cn("pb-10")}
                     onFocus={() => setFocusedField("summary")}
                     onBlur={(event) => {
                       setFocusedField((current) => (current === "summary" ? null : current))
                       setSummary(event.target.value)
                     }}
                   />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleEnhance("summary")}
-                    disabled={isEnhancing}
-                    className={cn(
-                      "absolute right-2 top-2 text-muted-foreground transition-opacity hover:text-foreground",
-                      focusedField === "summary" ? "opacity-100" : "opacity-0",
-                    )}
-                  >
-                    {isEnhancing && enhancingField === "summary" ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Wand2 className="h-4 w-4" />
-                    )}
-                    <span className="sr-only">Enhance mission statement with AI</span>
-                  </Button>
+                  {(focusedField === "summary" || (enhancingField === "summary" && isEnhancing)) && (
+                    <div className="absolute bottom-2 right-2 flex items-center gap-2">
+                      {enhancementCompleted.summary && originalSummary !== null && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleUndo("summary")}
+                                onMouseDown={(e) => e.preventDefault()}
+                                className="h-8 w-8 p-0 text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                                <span className="sr-only">Undo enhancement</span>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Undo enhancement</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEnhance("summary")}
+                              onMouseDown={(e) => e.preventDefault()}
+                              disabled={isEnhancing || !summary || summary.trim().length === 0}
+                              className="h-8 w-8 p-0 hover:bg-transparent group"
+                            >
+                              {isEnhancing && enhancingField === "summary" ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
+                              ) : (
+                                <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
+                              )}
+                              <span className="sr-only">Enhance mission statement with AI</span>
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Enhance with AI</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="space-y-2">
@@ -563,31 +626,64 @@ export function SpaceSetupWizard({
                     onChange={(event) => setDescription(event.target.value)}
                     placeholder="Describe the policy remit, stakeholders, and success criteria driving this programme."
                     rows={8}
-                    className="pr-12"
+                    className={cn("pb-10")}
                     onFocus={() => setFocusedField("description")}
                     onBlur={(event) => {
                       setFocusedField((current) => (current === "description" ? null : current))
                       setDescription(event.target.value)
                     }}
                   />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleEnhance("description")}
-                    disabled={isEnhancing}
-                    className={cn(
-                      "absolute right-2 top-2 text-muted-foreground transition-opacity hover:text-foreground",
-                      focusedField === "description" ? "opacity-100" : "opacity-0",
-                    )}
-                  >
-                    {isEnhancing && enhancingField === "description" ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Wand2 className="h-4 w-4" />
-                    )}
-                    <span className="sr-only">Enhance description with AI</span>
-                  </Button>
+                  {(focusedField === "description" || (enhancingField === "description" && isEnhancing)) && (
+                    <div className="absolute bottom-2 right-2 flex items-center gap-2">
+                      {enhancementCompleted.description && originalDescription !== null && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleUndo("description")}
+                                onMouseDown={(e) => e.preventDefault()}
+                                className="h-8 w-8 p-0 text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                                <span className="sr-only">Undo enhancement</span>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Undo enhancement</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEnhance("description")}
+                              onMouseDown={(e) => e.preventDefault()}
+                              disabled={isEnhancing || !description || description.trim().length === 0}
+                              className="h-8 w-8 p-0 hover:bg-transparent group"
+                            >
+                              {isEnhancing && enhancingField === "description" ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
+                              ) : (
+                                <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
+                              )}
+                              <span className="sr-only">Enhance description with AI</span>
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Enhance with AI</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Keep it concise but rich enough for colleagues and the assistant to act accurately.
