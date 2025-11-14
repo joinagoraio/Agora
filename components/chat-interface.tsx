@@ -902,8 +902,13 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                 <TooltipProvider>
                   <div className="space-y-3">
                     <div className="rounded-md border border-border/60 bg-secondary/10 px-3 py-2">
-                      <p className="text-xs font-medium text-foreground/90">Workspace Details (always included)</p>
+                      <p className="text-xs font-medium text-foreground/90">Space and Workspace Scope (always included)</p>
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      {documentId
+                        ? "The chat is context-aware to the document you're currently viewing. Space and Workspace Scope are always included automatically."
+                        : "Select which items to include in this conversation (excluding items does not delete them):"}
+                    </p>
                     <Tabs defaultValue="sources" className="w-full">
                       <TabsList className="grid w-full grid-cols-4 h-8">
                         <TabsTrigger value="sources" className="text-xs">
@@ -1192,11 +1197,6 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                         )}
                       </TabsContent>
                     </Tabs>
-                    <p className="text-xs text-muted-foreground pt-2">
-                      {documentId
-                        ? "The chat is context-aware to the document you're currently viewing. Workspace Details are always included automatically."
-                        : "Workspace Details are always included automatically. Select which items to include for this conversation. Items marked for AI context are included by default. Excluding items does not delete them."}
-                    </p>
                   </div>
                 </TooltipProvider>
               </AccordionContent>

@@ -130,9 +130,20 @@ export async function POST(req: Request) {
     // Get workspace to fetch additional context
     const { data: workspace } = await supabase
       .from("workspaces")
-      .select("context, location, description, metadata")
+      .select("context, location, description, metadata, space_id")
       .eq("id", workspaceId)
       .single()
+
+    // Get space details if workspace has a space_id
+    let space = null
+    if (workspace?.space_id) {
+      const { data: spaceData } = await supabase
+        .from("spaces")
+        .select("name, description, metadata, jurisdiction")
+        .eq("id", workspace.space_id)
+        .single()
+      space = spaceData
+    }
 
     // Get relevant context from documents, excluding specified document IDs
     const contextStartTime = Date.now()
@@ -170,6 +181,51 @@ export async function POST(req: Request) {
 
     // Build workspace context section
     let workspaceContextSection = ""
+    
+    // Space details
+    if (space?.name) {
+      workspaceContextSection = `\n\nSpace name: ${space.name}`
+    }
+    
+    // Space scope summary (from space.description)
+    if (space?.description) {
+      workspaceContextSection += workspaceContextSection
+        ? `\n\nSpace mission statement:\n${space.description}`
+        : `\n\nSpace mission statement:\n${space.description}`
+    }
+    
+    // Space scope details (from space.metadata.scope)
+    const spaceScopeMetadata = ((space?.metadata as Record<string, any> | null) ?? {}).scope as
+      | Record<string, any>
+      | null
+      | undefined
+    const spaceScopeDescription = spaceScopeMetadata?.description as string | undefined
+    const spaceScopeTimeframe = spaceScopeMetadata?.timeframe as string | undefined
+    
+    if (spaceScopeDescription) {
+      workspaceContextSection += workspaceContextSection
+        ? `\n\nSpace scope details:\n${spaceScopeDescription}`
+        : `\n\nSpace scope details:\n${spaceScopeDescription}`
+    }
+    if (spaceScopeTimeframe) {
+      workspaceContextSection += workspaceContextSection
+        ? `\n\nSpace programme timeframe: ${spaceScopeTimeframe}`
+        : `\n\nSpace programme timeframe: ${spaceScopeTimeframe}`
+    }
+    
+    // Space jurisdiction
+    if (space?.jurisdiction && typeof space.jurisdiction === "object") {
+      const jurisdictionValues = Object.values(space.jurisdiction as Record<string, any>)
+        .filter((value) => typeof value === "string" && value.trim().length > 0)
+        .map((value) => String(value).trim())
+      if (jurisdictionValues.length > 0) {
+        workspaceContextSection += workspaceContextSection
+          ? `\n\nSpace jurisdiction: ${jurisdictionValues.join(" • ")}`
+          : `\n\nSpace jurisdiction: ${jurisdictionValues.join(" • ")}`
+      }
+    }
+    
+    // Workspace details
     const scopeMetadata = ((workspace?.metadata as Record<string, any> | null) ?? {}).scope as
       | Record<string, any>
       | null
@@ -178,34 +234,42 @@ export async function POST(req: Request) {
     const scopeDescription = scopeMetadata?.description as string | undefined
     const scopeTimeframe = scopeMetadata?.timeframe as string | undefined
 
-    const hasWorkspaceContext = !!(
-      workspace?.context ||
-      workspace?.location ||
-      scopeSummary ||
-      scopeDescription ||
-      scopeTimeframe
-    )
     if (workspace?.context) {
-      workspaceContextSection = `\n\nWorkspace context (from workspace properties):\n${workspace.context}`
+      workspaceContextSection += workspaceContextSection
+        ? `\n\nWorkspace context (from workspace properties):\n${workspace.context}`
+        : `\n\nWorkspace context (from workspace properties):\n${workspace.context}`
     }
     if (workspace?.location) {
       workspaceContextSection += workspaceContextSection ? `\n\nLocation: ${workspace.location}` : `\n\nLocation: ${workspace.location}`
     }
     if (scopeSummary) {
       workspaceContextSection += workspaceContextSection
-        ? `\n\nMission statement:\n${scopeSummary}`
-        : `\n\nMission statement:\n${scopeSummary}`
+        ? `\n\nWorkspace mission statement:\n${scopeSummary}`
+        : `\n\nWorkspace mission statement:\n${scopeSummary}`
     }
     if (scopeDescription) {
       workspaceContextSection += workspaceContextSection
-        ? `\n\nScope details:\n${scopeDescription}`
-        : `\n\nScope details:\n${scopeDescription}`
+        ? `\n\nWorkspace scope details:\n${scopeDescription}`
+        : `\n\nWorkspace scope details:\n${scopeDescription}`
     }
     if (scopeTimeframe) {
       workspaceContextSection += workspaceContextSection
-        ? `\n\nProgramme timeframe: ${scopeTimeframe}`
-        : `\n\nProgramme timeframe: ${scopeTimeframe}`
+        ? `\n\nWorkspace programme timeframe: ${scopeTimeframe}`
+        : `\n\nWorkspace programme timeframe: ${scopeTimeframe}`
     }
+    
+    const hasWorkspaceContext = !!(
+      space?.name ||
+      space?.description ||
+      spaceScopeDescription ||
+      spaceScopeTimeframe ||
+      (space?.jurisdiction && typeof space.jurisdiction === "object" && Object.values(space.jurisdiction as Record<string, any>).some((v) => typeof v === "string" && v.trim().length > 0)) ||
+      workspace?.context ||
+      workspace?.location ||
+      scopeSummary ||
+      scopeDescription ||
+      scopeTimeframe
+    )
     
     const contextMentionInstruction = hasWorkspaceContext 
       ? "  2. The additional workspace context/properties and scope information (if provided)"
