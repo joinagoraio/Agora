@@ -132,7 +132,7 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
         <CreateWorkspaceDocumentDialog
           workspaceId={workspaceId}
           trigger={
-            <Button>
+            <Button variant="outline">
               <Edit3 className="mr-2 h-4 w-4" />
               Create your first document
             </Button>

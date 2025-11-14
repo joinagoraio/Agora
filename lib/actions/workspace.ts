@@ -28,6 +28,13 @@ export async function createWorkspace(spaceId: string, name: string, description
     .single()
 
   if (error) {
+    // Handle unique constraint violations with user-friendly messages
+    if (error.code === "23505" || error.message.includes("unique") || error.message.includes("duplicate")) {
+      return { 
+        error: `A workspace with the name "${name}" already exists in this space. Please choose a different name.` 
+      }
+    }
+    
     return { error: error.message }
   }
 
@@ -83,6 +90,13 @@ export async function updateWorkspace(
     .single()
 
   if (error) {
+    // Handle unique constraint violations with user-friendly messages
+    if (error.code === "23505" || error.message.includes("unique") || error.message.includes("duplicate")) {
+      return { 
+        error: `A workspace with the name "${name}" already exists in this space. Please choose a different name.` 
+      }
+    }
+    
     return { error: error.message }
   }
 

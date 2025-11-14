@@ -322,8 +322,8 @@ export function ManageSourcesDialog({
                       {checkingToken ? (
                         <div className="text-sm text-muted-foreground">Checking for Google account...</div>
                       ) : hasGoogleToken ? (
-                        <Alert>
-                          <CheckCircle2 className="h-4 w-4" />
+                        <Alert className="border-0 bg-green-50">
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
                           <AlertDescription>Google account connected</AlertDescription>
                         </Alert>
                       ) : (
@@ -408,7 +408,7 @@ export function ManageSourcesDialog({
                   <p className="mb-4 text-center text-sm text-muted-foreground">
                     Add your first source to start syncing documents
                   </p>
-                  <Button onClick={() => setShowCreateForm(true)}>
+                  <Button variant="outline" onClick={() => setShowCreateForm(true)}>
                     <Plus className="mr-2 h-4 w-4" />
                     Add Source
                   </Button>

@@ -26,6 +26,7 @@ import { getInheritedItems } from "@/lib/actions/workspace-space-link"
 import { CreateWorkspaceDocumentDialog } from "@/components/create-workspace-document-dialog"
 import { WorkspaceOverview } from "@/components/workspace-overview"
 import { ManageSourcesDialog } from "@/components/manage-sources-dialog"
+import { CreateSourceDialog } from "@/components/create-source-dialog"
 
 type WorkspaceCommentRecord = {
   id: string
@@ -89,9 +90,11 @@ export default async function WorkspacePage({
 
   // Get sources
   const { data: sources } = await getSourcesByWorkspace(workspaceId)
+  const sourcesArray = sources || []
 
   // Filter out direct_upload sources to get available sources for adding documents
-  const availableSources = (sources || []).filter((source) => source.type !== "direct_upload")
+  // Filter out workspace_generated sources since they're for internal workspace documents, not external sources
+  const availableSources = sourcesArray.filter((source) => source.type !== "direct_upload" && source.type !== "workspace_generated")
 
   // Get documents
   const { data: documents } = await getWorkspaceDocuments(workspaceId)
@@ -245,7 +248,7 @@ export default async function WorkspacePage({
                   <Plug className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{sources?.length || 0}</div>
+                  <div className="text-2xl font-bold">{sourcesArray.length}</div>
                   <p className="text-xs text-muted-foreground">Active connections</p>
                 </CardContent>
               </Card>
@@ -294,64 +297,18 @@ export default async function WorkspacePage({
                   </TabsList>
 
                 <TabsContent value="sources" className="space-y-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-baseline gap-2">
-                        <h3 className="text-lg font-semibold">Sources</h3>
-                        <span className="text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
-                          ({uploadedDocuments.length})
-                        </span>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        View and manage all files and connections synced into this workspace.
-                      </p>
+                  <div>
+                    <div className="flex items-baseline gap-2">
+                      <h3 className="text-lg font-semibold">Sources</h3>
+                      <span className="text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
+                        ({uploadedDocuments.length})
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <ManageSourcesDialog
-                        workspaceId={workspaceId}
-                        initialSources={sources || []}
-                        trigger={
-                          <Button variant="outline" size="sm">
-                            <Plug className="mr-2 h-4 w-4" />
-                            Manage Sources
-                          </Button>
-                        }
-                      />
-                      {availableSources.length === 0 ? (
-                        <CreateSourceDialog
-                          workspaceId={workspaceId}
-                          existingSources={availableSources}
-                          trigger={
-                            <Button size="sm">
-                              <Plus className="mr-2 h-4 w-4" />
-                              Add Source
-                            </Button>
-                          }
-                        />
-                      ) : (
-                        <AddFromSourceDialog
-                          workspaceId={workspaceId}
-                          sources={sources || []}
-                          trigger={
-                            <Button size="sm">
-                              <Plus className="mr-2 h-4 w-4" />
-                              Add from Source
-                            </Button>
-                          }
-                        />
-                      )}
-                      <UploadDocumentDialog
-                        workspaceId={workspaceId}
-                        trigger={
-                          <Button size="sm">
-                            <Upload className="mr-2 h-4 w-4" />
-                            Upload
-                          </Button>
-                        }
-                      />
-                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      View and manage all files and connections synced into this workspace.
+                    </p>
                   </div>
-                  <DocumentsList workspaceId={workspaceId} initialDocuments={uploadedDocuments} sources={sources || []} />
+                  <DocumentsList workspaceId={workspaceId} initialDocuments={uploadedDocuments} sources={sourcesArray} />
                 </TabsContent>
 
                 <TabsContent value="inherited" className="space-y-5">

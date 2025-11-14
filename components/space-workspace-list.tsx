@@ -55,7 +55,17 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
                 Create a workspace to start analysing documents and chatting with the assistant.
               </p>
             </div>
-            {canCreate && <CreateWorkspaceDialog spaceId={spaceId} />}
+            {canCreate && (
+              <CreateWorkspaceDialog
+                spaceId={spaceId}
+                trigger={
+                  <Button variant="outline">
+                    <Plus className="mr-2 h-4 w-4" />
+                    New workspace
+                  </Button>
+                }
+              />
+            )}
           </CardContent>
         </Card>
       ) : (

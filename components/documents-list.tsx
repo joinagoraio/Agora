@@ -22,13 +22,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { FileText, ExternalLink, Calendar, Search, MoreVertical, Archive, Trash2, ArchiveRestore, Plus, Upload, Download } from "lucide-react"
+import { FileText, ExternalLink, Calendar, Search, MoreVertical, Archive, Trash2, ArchiveRestore, Plus, Upload, Download, Plug } from "lucide-react"
 import { deleteDocument, archiveDocument } from "@/lib/actions/document"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { formatSourceType } from "@/lib/utils"
 import { UploadDocumentDialog } from "@/components/upload-document-dialog"
 import { AddFromSourceDialog } from "@/components/add-from-source-dialog"
+import { CreateSourceDialog } from "@/components/create-source-dialog"
+import { ManageSourcesDialog } from "@/components/manage-sources-dialog"
 import { FileIcon, defaultStyles } from "react-file-icon"
 
 interface DocumentsListProps {
@@ -117,7 +119,8 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
   )
 
   // Filter out direct_upload sources to get available sources for adding documents
-  const availableSources = (sources || []).filter((source) => source.type !== "direct_upload")
+  // Filter out workspace_generated sources since they're for internal workspace documents, not external sources
+  const availableSources = (sources || []).filter((source) => source.type !== "direct_upload" && source.type !== "workspace_generated")
 
   const handleDelete = async (documentId: string) => {
     if (!needsConfirmation) {
@@ -198,15 +201,69 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
   if (!initialDocuments || initialDocuments.length === 0) {
     return (
       <div className="space-y-6">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search sources..."
-            className="pl-10 w-full"
-            disabled
-          />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative max-w-md flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search sources..."
+              className="pl-10 w-full"
+              disabled
+            />
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {availableSources.length > 0 && (
+              <ManageSourcesDialog
+                workspaceId={workspaceId}
+                initialSources={sources as Array<{
+                  id: string
+                  name: string
+                  type: string
+                  status: string
+                  last_sync_at: string | null
+                }>}
+                trigger={
+                  <Button variant="outline" size="sm">
+                    <Plug className="mr-2 h-4 w-4" />
+                    Manage Sources
+                  </Button>
+                }
+              />
+            )}
+            {availableSources.length === 0 ? (
+              <CreateSourceDialog
+                workspaceId={workspaceId}
+                existingSources={availableSources}
+                trigger={
+                  <Button size="sm">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Source
+                  </Button>
+                }
+              />
+            ) : (
+              <AddFromSourceDialog
+                workspaceId={workspaceId}
+                sources={sources}
+                trigger={
+                  <Button size="sm">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add from Source
+                  </Button>
+                }
+              />
+            )}
+            <UploadDocumentDialog
+              workspaceId={workspaceId}
+              trigger={
+                <Button size="sm">
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Documents
+                </Button>
+              }
+            />
+          </div>
         </div>
 
         <Card className="shadow">
@@ -216,14 +273,18 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
             <p className="text-center text-sm text-muted-foreground">
               Upload documents or connect external sources to get started
             </p>
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
               {availableSources.length === 0 ? (
-                <Button variant="outline" asChild>
-                  <Link href={`/workspaces/${workspaceId}/sources`}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Source
-                  </Link>
-                </Button>
+                <CreateSourceDialog
+                  workspaceId={workspaceId}
+                  existingSources={availableSources}
+                  trigger={
+                    <Button variant="outline">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Source
+                    </Button>
+                  }
+                />
               ) : (
                 <AddFromSourceDialog
                   workspaceId={workspaceId}
@@ -239,9 +300,9 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
               <UploadDocumentDialog
                 workspaceId={workspaceId}
                 trigger={
-                  <Button>
+                  <Button variant="outline">
                     <Upload className="mr-2 h-4 w-4" />
-                    Upload documents
+                    Upload Documents
                   </Button>
                 }
               />
@@ -254,14 +315,68 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
 
   return (
     <div className="space-y-6">
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search sources..."
-          className="pl-10 w-full"
-        />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative max-w-md flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search sources..."
+            className="pl-10 w-full"
+          />
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {availableSources.length > 0 && (
+            <ManageSourcesDialog
+              workspaceId={workspaceId}
+              initialSources={sources as Array<{
+                id: string
+                name: string
+                type: string
+                status: string
+                last_sync_at: string | null
+              }>}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <Plug className="mr-2 h-4 w-4" />
+                  Manage Sources
+                </Button>
+              }
+            />
+          )}
+          {availableSources.length === 0 ? (
+            <CreateSourceDialog
+              workspaceId={workspaceId}
+              existingSources={availableSources}
+              trigger={
+                <Button size="sm">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Source
+                </Button>
+              }
+            />
+          ) : (
+            <AddFromSourceDialog
+              workspaceId={workspaceId}
+              sources={sources}
+              trigger={
+                <Button size="sm">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add from Source
+                </Button>
+              }
+            />
+          )}
+          <UploadDocumentDialog
+            workspaceId={workspaceId}
+            trigger={
+              <Button size="sm">
+                <Upload className="mr-2 h-4 w-4" />
+                Upload Documents
+              </Button>
+            }
+          />
+        </div>
       </div>
  
       {displayDocuments.length > 0 ? (

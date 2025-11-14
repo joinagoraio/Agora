@@ -72,6 +72,14 @@ export async function createSpace(
 
   if (spaceError) {
     console.error("[v0] Error creating space:", spaceError.message)
+    
+    // Handle duplicate slug error with user-friendly message
+    if (spaceError.code === "23505" || spaceError.message.includes("spaces_slug_unique")) {
+      return { 
+        error: `A space with the name "${name}" already exists. Please choose a different name.` 
+      }
+    }
+    
     return { error: spaceError.message }
   }
 
@@ -115,6 +123,14 @@ export async function updateSpace(
   const { data, error } = await supabase.from("spaces").update(updates).eq("id", spaceId).select().single()
 
   if (error) {
+    // Handle duplicate slug error with user-friendly message
+    if (error.code === "23505" || error.message.includes("spaces_slug_unique")) {
+      const spaceName = updates.name || "this space"
+      return { 
+        error: `A space with the name "${spaceName}" already exists. Please choose a different name.` 
+      }
+    }
+    
     return { error: error.message }
   }
 

@@ -336,8 +336,8 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
                     {checkingToken ? (
                       <div className="text-sm text-muted-foreground">Checking for Google account...</div>
                     ) : hasGoogleToken ? (
-                      <Alert>
-                        <CheckCircle2 className="h-4 w-4" />
+                      <Alert className="border-0 bg-green-50">
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
                         <AlertDescription>
                           Google account connected
                         </AlertDescription>
