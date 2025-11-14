@@ -45,6 +45,39 @@ export default async function SettingsPage({
     redirect("/dashboard")
   }
 
+  // Get parent space details
+  const { data: space } = await supabase.from("spaces").select("*").eq("id", workspace.space_id).single()
+
+  if (!space) {
+    redirect("/dashboard")
+  }
+
+  // Check if user is admin/owner of the space
+  const { data: membership } = await supabase
+    .from("space_members")
+    .select("role")
+    .eq("space_id", workspace.space_id)
+    .eq("user_id", user.id)
+    .single()
+
+  if (!membership || !["owner", "admin"].includes(membership.role)) {
+    redirect(`/workspaces/${workspaceId}`)
+  }
+
+  // Get members from parent space
+  const { data: members } = await supabase
+    .from("space_members")
+    .select("*, profiles(*)")
+    .eq("space_id", workspace.space_id)
+    .order("created_at", { ascending: false })
+
+  // Get invitations from parent space
+  const { data: invitations } = await supabase
+    .from("invitations")
+    .select("*")
+    .eq("space_id", workspace.space_id)
+    .order("created_at", { ascending: false })
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="bg-card">
@@ -62,12 +95,11 @@ export default async function SettingsPage({
       </header>
 
       <main className="flex-1 bg-white">
-        <div className="container mx-auto py-8 px-4">
+        <div className="container mx-auto max-w-4xl py-8 px-4">
           <div className="mb-6">
-            <h2 className="text-2xl font-semibold">{workspace.name} Settings</h2>
-            <p className="text-sm text-muted-foreground">Manage workspace settings and delete options</p>
+            <h1 className="text-2xl font-semibold">{workspace.name} Settings</h1>
           </div>
-          <WorkspaceSettings workspace={workspace} />
+          <WorkspaceSettings workspace={workspace} space={space} members={members || []} invitations={invitations || []} />
         </div>
       </main>
     </div>

@@ -59,8 +59,8 @@ export function WorkspaceOverview({
   const [enhancingField, setEnhancingField] = useState<"description" | "context" | null>(null)
   const [activeField, setActiveField] = useState<"description" | "context" | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [originalContext, setOriginalContext] = useState<string | null>(null)
-  const [enhancementCompleted, setEnhancementCompleted] = useState<{ context?: boolean }>({})
+  const [descriptionPrevious, setDescriptionPrevious] = useState<string | null>(null)
+  const [contextPrevious, setContextPrevious] = useState<string | null>(null)
 
   const [draftName, setDraftName] = useState(initialName)
   const [draftDescription, setDraftDescription] = useState(initialDescription ?? "")
@@ -84,51 +84,50 @@ export function WorkspaceOverview({
     setDraftLocation(location)
     setError(null)
     setActiveField(null)
+    setDescriptionPrevious(null)
+    setContextPrevious(null)
     setIsEditing(false)
   }
 
   const handleEnhance = async (field: "description" | "context") => {
-    const value = field === "description" ? draftDescription.trim() : draftContext.trim()
-    if (value.length === 0) {
-      setError(field === "description" ? "Add a summary before enhancing with AI." : "Add a description before enhancing with AI.")
+    const targetText = field === "description" ? draftDescription : draftContext
+    if (!targetText || targetText.trim().length === 0) {
       return
     }
 
-    // Store original text before enhancement
-    if (field === "context") {
-      setOriginalContext(value)
-    }
+    setError(null)
+    setEnhancingField(field)
 
     setIsEnhancing(true)
-    setEnhancingField(field)
-    setError(null)
-
-    const result = await enhanceContextText(value)
-
-    if (result.error) {
-      setError(result.error)
-      // Clear original text if enhancement failed
-      if (field === "context") {
-        setOriginalContext(null)
+    try {
+      const result = await enhanceContextText(targetText.trim())
+      if (result.error) {
+        setError(result.error)
+        return
       }
-    } else if (result.enhanced) {
-      if (field === "description") {
-        setDraftDescription(result.enhanced)
-      } else {
-        setDraftContext(result.enhanced)
-        setEnhancementCompleted((prev) => ({ ...prev, context: true }))
+      if (result.enhanced) {
+        if (field === "description") {
+          setDescriptionPrevious(draftDescription)
+          setDraftDescription(result.enhanced)
+        } else {
+          setContextPrevious(draftContext)
+          setDraftContext(result.enhanced)
+        }
       }
+    } finally {
+      setIsEnhancing(false)
+      setEnhancingField(null)
     }
-
-    setIsEnhancing(false)
-    setEnhancingField(null)
   }
 
-  const handleUndo = (field: "context") => {
-    if (field === "context" && originalContext !== null) {
-      setDraftContext(originalContext)
-      setOriginalContext(null)
-      setEnhancementCompleted((prev) => ({ ...prev, context: false }))
+  const handleUndoEnhance = (field: "description" | "context") => {
+    if (field === "description" && descriptionPrevious !== null) {
+      setDraftDescription(descriptionPrevious)
+      setDescriptionPrevious(null)
+    }
+    if (field === "context" && contextPrevious !== null) {
+      setDraftContext(contextPrevious)
+      setContextPrevious(null)
     }
   }
 
@@ -166,6 +165,8 @@ export function WorkspaceOverview({
     setLocation(normalizedLocation ?? "")
     setIsSaving(false)
     setActiveField(null)
+    setDescriptionPrevious(null)
+    setContextPrevious(null)
     setIsEditing(false)
     router.refresh()
   }
@@ -175,7 +176,7 @@ export function WorkspaceOverview({
       {isEditing ? (
         <div className="space-y-4 rounded-lg border border-border bg-card/50 p-4 shadow-lg">
           <h2 className="text-lg font-semibold text-foreground">
-            Editing <span className="text-primary">{name}</span>
+            Editing: <span className="text-primary">{name}</span>
           </h2>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
@@ -209,32 +210,45 @@ export function WorkspaceOverview({
                 onBlur={() => setActiveField((current) => (current === "description" ? null : current))}
                 placeholder="Give a quick summary of this workspace…"
                 rows={4}
-                className="pr-12 pb-12"
+                className="pb-10"
               />
               {activeField === "description" && (
-                <div className="absolute bottom-3 right-3">
+                <div className="absolute bottom-2 right-2 flex items-center gap-2">
+                  {descriptionPrevious !== null && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleUndoEnhance("description")}
+                      className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      <span className="sr-only">Undo summary enhancement</span>
+                    </Button>
+                  )}
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
                           type="button"
-                          size="icon"
                           variant="ghost"
-                          className="h-8 w-8 text-purple-500 hover:text-purple-500"
+                          size="icon"
+                          onMouseDown={(event) => event.preventDefault()}
                           onClick={() => handleEnhance("description")}
-                          disabled={isEnhancing || draftDescription.trim().length === 0}
-                          onMouseDown={(e) => e.preventDefault()}
+                          disabled={isEnhancing || !draftDescription || draftDescription.trim().length === 0}
+                          className="h-8 w-8 p-0 hover:bg-transparent group"
                         >
                           {isEnhancing && enhancingField === "description" ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
                           ) : (
-                            <Wand2 className="h-4 w-4" />
+                            <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
                           )}
                           <span className="sr-only">Enhance summary with AI</span>
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Enhance with AI</p>
+                      <TooltipContent side="left" align="center">
+                        Generate an improved summary with AI.
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -256,29 +270,20 @@ export function WorkspaceOverview({
                 rows={8}
                 className="pb-10"
               />
-              {(activeField === "context" || (enhancingField === "context" && isEnhancing)) && (
+              {activeField === "context" && (
                 <div className="absolute bottom-2 right-2 flex items-center gap-2">
-                  {enhancementCompleted.context && originalContext !== null && (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleUndo("context")}
-                            onMouseDown={(e) => e.preventDefault()}
-                            className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
-                          >
-                            <RotateCcw className="h-4 w-4" />
-                            <span className="sr-only">Undo enhancement</span>
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Undo enhancement</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                  {contextPrevious !== null && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleUndoEnhance("context")}
+                      className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      <span className="sr-only">Undo description enhancement</span>
+                    </Button>
                   )}
                   <TooltipProvider>
                     <Tooltip>
@@ -287,9 +292,9 @@ export function WorkspaceOverview({
                           type="button"
                           variant="ghost"
                           size="icon"
+                          onMouseDown={(event) => event.preventDefault()}
                           onClick={() => handleEnhance("context")}
-                          disabled={isEnhancing || draftContext.trim().length === 0}
-                          onMouseDown={(e) => e.preventDefault()}
+                          disabled={isEnhancing || !draftContext || draftContext.trim().length === 0}
                           className="h-8 w-8 p-0 hover:bg-transparent group"
                         >
                           {isEnhancing && enhancingField === "context" ? (
@@ -300,8 +305,8 @@ export function WorkspaceOverview({
                           <span className="sr-only">Enhance description with AI</span>
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Enhance with AI</p>
+                      <TooltipContent side="left" align="center">
+                        Ask AI to develop the description for you.
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
