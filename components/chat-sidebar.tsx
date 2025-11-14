@@ -35,6 +35,7 @@ import { Input } from "@/components/ui/input"
 import { X, Plus, MoreVertical, Archive, Trash2, List, GripVertical, Pencil, Loader2 } from "lucide-react"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface ChatSidebarProps {
   workspaceId: string
@@ -759,22 +760,25 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
         >
           <div className="flex h-full flex-col">
             <div className={cn("flex-1", conversations.length > 0 ? "overflow-y-auto" : "overflow-hidden")}>
-              <div className="space-y-0">
-                {conversations && conversations.length > 0 ? (
-                  conversations.map((conv) => (
-                    <div
-                      key={conv.id}
-                      className={`group relative flex items-center justify-between px-4 py-3 cursor-pointer transition-colors hover:bg-accent ${
-                        conv.id === currentConversationId ? "bg-accent" : ""
-                      }`}
-                      onClick={() => handleConversationSelect(conv.id)}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="truncate text-sm font-medium">{conv.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(conv.updated_at).toLocaleDateString()}
-                        </p>
-                      </div>
+              <TooltipProvider>
+                <div className="space-y-0">
+                  {conversations && conversations.length > 0 ? (
+                    conversations.map((conv) => (
+                      <div
+                        key={conv.id}
+                        className="group relative flex items-center justify-between px-4 py-1 m-1 cursor-pointer transition-colors rounded-md hover:bg-accent"
+                        onClick={() => handleConversationSelect(conv.id)}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <p className="truncate text-xs font-medium">{conv.title}</p>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{conv.title}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           asChild
@@ -815,7 +819,8 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
                 ) : (
                   <p className="text-center text-sm text-muted-foreground py-8">No conversations yet</p>
                 )}
-              </div>
+                </div>
+              </TooltipProvider>
             </div>
           </div>
         </aside>

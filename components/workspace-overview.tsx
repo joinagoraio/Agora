@@ -371,12 +371,12 @@ export function WorkspaceOverview({
             </DropdownMenu>
           </div>
           <div className="space-y-2">
+            {description.trim().length > 0 && (
+              <p className="whitespace-pre-line text-sm font-bold text-foreground">{description}</p>
+            )}
             <p className="whitespace-pre-line text-sm text-muted-foreground">
               {context.trim().length > 0 ? context : "No workspace context provided yet."}
             </p>
-            {description.trim().length > 0 && (
-              <p className="whitespace-pre-line text-sm text-muted-foreground/80">{description}</p>
-            )}
           </div>
         </div>
       )}

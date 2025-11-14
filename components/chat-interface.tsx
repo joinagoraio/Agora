@@ -860,7 +860,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
             value={input}
             onChange={handleInputChange}
             placeholder={inputPlaceholder}
-            className={cn("min-h-[60px] flex-1 resize-none", isLoading ? "pr-20" : "pr-10")}
+            className={cn("min-h-[60px] flex-1 resize-none shadow", isLoading ? "pr-20" : "pr-10")}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
@@ -874,7 +874,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
               variant="ghost"
               size="icon"
               onClick={handleStop}
-              className="absolute bottom-2 right-9 h-6 w-6 p-0"
+              className="absolute bottom-2 right-11 h-6 w-6 p-0"
             >
               <CircleStop className="h-3 w-3" />
             </Button>
@@ -884,18 +884,18 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
             variant="ghost"
             size="icon"
             disabled={isLoading || !input.trim()}
-            className="absolute bottom-2 right-2 h-6 w-6 p-0"
+            className="absolute bottom-2 right-3 h-6 w-6 p-0"
           >
             {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
           </Button>
         </form>
-        <p className="text-xs text-muted-foreground">Press Enter to send, Shift+Enter for new line</p>
+        <p className="text-xs text-muted-foreground pl-3">Press Enter to send, Shift+Enter for new line</p>
 
         {/* AI context accordion */}
         {!isContextLoading && hasContextItems && (
           <Accordion type="single" collapsible defaultValue="documents" className="mt-4">
             <AccordionItem value="documents" className="border-none">
-              <AccordionTrigger className="py-2 text-xs font-medium text-muted-foreground hover:no-underline data-[state=closed]:inline-flex data-[state=closed]:items-center data-[state=closed]:rounded-full data-[state=closed]:bg-secondary data-[state=closed]:px-3 data-[state=closed]:py-1 data-[state=closed]:w-fit [&[data-state=closed]_svg]:translate-y-0">
+              <AccordionTrigger className="py-3 text-xs font-medium text-muted-foreground hover:no-underline data-[state=closed]:inline-flex data-[state=closed]:items-center data-[state=closed]:rounded-full data-[state=closed]:bg-secondary data-[state=closed]:px-3 data-[state=closed]:py-2 data-[state=closed]:w-fit [&[data-state=closed]_svg]:translate-y-0">
                 <span>AI Context</span>
               </AccordionTrigger>
               <AccordionContent className="pt-2">
@@ -909,23 +909,48 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                         ? "The chat is context-aware to the document you're currently viewing. Space and Workspace Scope are always included automatically."
                         : "Select which items to include in this conversation (excluding items does not delete them):"}
                     </p>
-                    <Tabs defaultValue="sources" className="w-full">
-                      <TabsList className="grid w-full grid-cols-4 h-8">
-                        <TabsTrigger value="sources" className="text-xs">
-                          Sources ({availableSourceDocuments.length})
-                        </TabsTrigger>
-                        <TabsTrigger value="inherited" className="text-xs">
-                          Inherited ({availableInheritedDocuments.length})
-                        </TabsTrigger>
-                        <TabsTrigger value="evidence" className="text-xs">
-                          Evidence ({availableEvidence.length})
-                        </TabsTrigger>
-                        <TabsTrigger value="notes" className="text-xs">
-                          Notes ({availableNotes.length})
-                        </TabsTrigger>
-                      </TabsList>
-                      
-                      <TabsContent value="sources" className="space-y-3 mt-3">
+                    {documentId ? (
+                      // Simple view for document viewer - no tabs, just show the document
+                      <div className="space-y-3 mt-3">
+                        {(availableSourceDocuments.length > 0 || availableInheritedDocuments.length > 0) && (
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">Document:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {[...availableSourceDocuments, ...availableInheritedDocuments].map((doc) => (
+                                <Tooltip key={doc.id}>
+                                  <TooltipTrigger asChild>
+                                    <Badge variant="secondary" className="pr-1">
+                                      <FileText className="mr-1 h-3 w-3" />
+                                      <span className="max-w-[200px] truncate">{doc.title}</span>
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{doc.title}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <Tabs defaultValue="sources" className="w-full">
+                        <TabsList className="grid w-full grid-cols-4 h-8">
+                          <TabsTrigger value="sources" className="text-xs">
+                            Sources <span className="font-normal">({availableSourceDocuments.length})</span>
+                          </TabsTrigger>
+                          <TabsTrigger value="inherited" className="text-xs">
+                            Inherited <span className="font-normal">({availableInheritedDocuments.length})</span>
+                          </TabsTrigger>
+                          <TabsTrigger value="evidence" className="text-xs">
+                            Evidence <span className="font-normal">({availableEvidence.length})</span>
+                          </TabsTrigger>
+                          <TabsTrigger value="notes" className="text-xs">
+                            Notes <span className="font-normal">({availableNotes.length})</span>
+                          </TabsTrigger>
+                        </TabsList>
+                        
+                        <TabsContent value="sources" className="space-y-3 mt-3">
                         {availableSourceDocuments.length > 0 && (
                           <div>
                             <p className="mb-2 text-xs font-medium text-muted-foreground">
@@ -1197,6 +1222,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                         )}
                       </TabsContent>
                     </Tabs>
+                    )}
                   </div>
                 </TooltipProvider>
               </AccordionContent>

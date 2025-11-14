@@ -130,7 +130,7 @@ export async function POST(req: Request) {
     // Get workspace to fetch additional context
     const { data: workspace } = await supabase
       .from("workspaces")
-      .select("context, location, description, metadata, space_id")
+      .select("name, context, location, description, metadata, space_id")
       .eq("id", workspaceId)
       .single()
 
@@ -182,9 +182,48 @@ export async function POST(req: Request) {
     // Build workspace context section
     let workspaceContextSection = ""
     
-    // Space details
+    // Workspace details (shown first to emphasize workspace-specific context)
+    if (workspace?.name) {
+      workspaceContextSection = `\n\nWorkspace name: ${workspace.name}`
+    }
+    
+    const scopeMetadata = ((workspace?.metadata as Record<string, any> | null) ?? {}).scope as
+      | Record<string, any>
+      | null
+      | undefined
+    const workspaceSummary = workspace?.description
+    const workspaceScopeDescription = scopeMetadata?.description as string | undefined
+    const workspaceScopeTimeframe = scopeMetadata?.timeframe as string | undefined
+
+    if (workspace?.context) {
+      workspaceContextSection += workspaceContextSection
+        ? `\n\nWorkspace context:\n${workspace.context}`
+        : `\n\nWorkspace context:\n${workspace.context}`
+    }
+    if (workspace?.location) {
+      workspaceContextSection += workspaceContextSection ? `\n\nWorkspace location: ${workspace.location}` : `\n\nWorkspace location: ${workspace.location}`
+    }
+    if (workspaceSummary) {
+      workspaceContextSection += workspaceContextSection
+        ? `\n\nWorkspace summary:\n${workspaceSummary}`
+        : `\n\nWorkspace summary:\n${workspaceSummary}`
+    }
+    if (workspaceScopeDescription) {
+      workspaceContextSection += workspaceContextSection
+        ? `\n\nWorkspace description:\n${workspaceScopeDescription}`
+        : `\n\nWorkspace description:\n${workspaceScopeDescription}`
+    }
+    if (workspaceScopeTimeframe) {
+      workspaceContextSection += workspaceContextSection
+        ? `\n\nWorkspace programme timeframe: ${workspaceScopeTimeframe}`
+        : `\n\nWorkspace programme timeframe: ${workspaceScopeTimeframe}`
+    }
+    
+    // Space details (parent space context)
     if (space?.name) {
-      workspaceContextSection = `\n\nSpace name: ${space.name}`
+      workspaceContextSection += workspaceContextSection
+        ? `\n\n---\n\nParent Space name: ${space.name}`
+        : `\n\nParent Space name: ${space.name}`
     }
     
     // Space scope summary (from space.description)
@@ -225,50 +264,18 @@ export async function POST(req: Request) {
       }
     }
     
-    // Workspace details
-    const scopeMetadata = ((workspace?.metadata as Record<string, any> | null) ?? {}).scope as
-      | Record<string, any>
-      | null
-      | undefined
-    const scopeSummary = workspace?.description
-    const scopeDescription = scopeMetadata?.description as string | undefined
-    const scopeTimeframe = scopeMetadata?.timeframe as string | undefined
-
-    if (workspace?.context) {
-      workspaceContextSection += workspaceContextSection
-        ? `\n\nWorkspace context (from workspace properties):\n${workspace.context}`
-        : `\n\nWorkspace context (from workspace properties):\n${workspace.context}`
-    }
-    if (workspace?.location) {
-      workspaceContextSection += workspaceContextSection ? `\n\nLocation: ${workspace.location}` : `\n\nLocation: ${workspace.location}`
-    }
-    if (scopeSummary) {
-      workspaceContextSection += workspaceContextSection
-        ? `\n\nWorkspace mission statement:\n${scopeSummary}`
-        : `\n\nWorkspace mission statement:\n${scopeSummary}`
-    }
-    if (scopeDescription) {
-      workspaceContextSection += workspaceContextSection
-        ? `\n\nWorkspace scope details:\n${scopeDescription}`
-        : `\n\nWorkspace scope details:\n${scopeDescription}`
-    }
-    if (scopeTimeframe) {
-      workspaceContextSection += workspaceContextSection
-        ? `\n\nWorkspace programme timeframe: ${scopeTimeframe}`
-        : `\n\nWorkspace programme timeframe: ${scopeTimeframe}`
-    }
-    
     const hasWorkspaceContext = !!(
+      workspace?.name ||
+      workspace?.context ||
+      workspace?.location ||
+      workspaceSummary ||
+      workspaceScopeDescription ||
+      workspaceScopeTimeframe ||
       space?.name ||
       space?.description ||
       spaceScopeDescription ||
       spaceScopeTimeframe ||
-      (space?.jurisdiction && typeof space.jurisdiction === "object" && Object.values(space.jurisdiction as Record<string, any>).some((v) => typeof v === "string" && v.trim().length > 0)) ||
-      workspace?.context ||
-      workspace?.location ||
-      scopeSummary ||
-      scopeDescription ||
-      scopeTimeframe
+      (space?.jurisdiction && typeof space.jurisdiction === "object" && Object.values(space.jurisdiction as Record<string, any>).some((v) => typeof v === "string" && v.trim().length > 0))
     )
     
     const contextMentionInstruction = hasWorkspaceContext 

@@ -290,10 +290,10 @@ export default async function WorkspacePage({
                 <h2 className="text-xl font-semibold text-foreground">Workspace Knowledge</h2>
                 <Tabs defaultValue="sources" className="space-y-8">
                   <TabsList className="grid w-full max-w-2xl grid-cols-4">
-                    <TabsTrigger value="sources">Sources</TabsTrigger>
-                    <TabsTrigger value="inherited">Inherited</TabsTrigger>
-                    <TabsTrigger value="evidence">Evidence</TabsTrigger>
-                    <TabsTrigger value="notes">Notes</TabsTrigger>
+                    <TabsTrigger value="sources">Sources <span className="font-normal">({uploadedDocuments.length})</span></TabsTrigger>
+                    <TabsTrigger value="inherited">Inherited <span className="font-normal">({inheritedDocuments.length + inheritedItems.length})</span></TabsTrigger>
+                    <TabsTrigger value="evidence">Evidence <span className="font-normal">({localWorkspaceItems.length})</span></TabsTrigger>
+                    <TabsTrigger value="notes">Notes <span className="font-normal">({workspaceNotes.length})</span></TabsTrigger>
                   </TabsList>
 
                 <TabsContent value="sources" className="space-y-5">
@@ -327,25 +327,28 @@ export default async function WorkspacePage({
                             const originSpaceName = originSpaceId ? parentSpaceNameById.get(originSpaceId) : undefined
 
                             return (
-                              <Link key={doc.id} href={`/workspaces/${workspaceId}/documents/${doc.id}`} className="block">
-                                <Card className="border-border shadow cursor-pointer transition-all hover:shadow-md">
-                                  <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="space-y-1">
-                                      <div className="flex items-center gap-2">
-                                        <CardTitle className="text-sm font-semibold text-foreground">
-                                          {doc.title || doc.metadata?.sourceFileUrl || "Inherited document"}
-                                        </CardTitle>
-                                        {doc.classification && <Badge variant="outline">{doc.classification}</Badge>}
-                                      </div>
-                                      {originSpaceName && (
-                                        <CardDescription className="text-xs text-muted-foreground">
-                                          From {originSpaceName}
-                                        </CardDescription>
-                                      )}
+                              <Card key={doc.id} className="border-border shadow transition-all hover:shadow-md">
+                                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <CardTitle className="text-sm font-semibold text-foreground">
+                                        {doc.title || doc.metadata?.sourceFileUrl || "Inherited document"}
+                                      </CardTitle>
+                                      {doc.classification && <Badge variant="outline">{doc.classification}</Badge>}
                                     </div>
-                                  </CardHeader>
-                                </Card>
-                              </Link>
+                                    {originSpaceName && (
+                                      <CardDescription className="text-xs text-muted-foreground">
+                                        From {originSpaceName}
+                                      </CardDescription>
+                                    )}
+                                  </div>
+                                  <Button variant="outline" size="sm" className="h-7 text-xs px-2" asChild>
+                                    <Link href={`/workspaces/${workspaceId}/documents/${doc.id}`}>
+                                      View document
+                                    </Link>
+                                  </Button>
+                                </CardHeader>
+                              </Card>
                             )
                           })}
                         </div>
