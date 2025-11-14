@@ -461,7 +461,7 @@ export function SpaceSetupWizard({
                 Choose the scope, visibility, and jurisdiction of your space.
               </p>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-6">
               <div className="space-y-2">
               <Label htmlFor="wizard-space-scope">Scope</Label>
               <Select value={spaceTypeValue} onValueChange={setSpaceTypeValue}>
@@ -476,6 +476,7 @@ export function SpaceSetupWizard({
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">The administrative level or type of this space.</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="wizard-visibility">Visibility</Label>
@@ -489,15 +490,20 @@ export function SpaceSetupWizard({
                     <SelectItem value="confidential">Confidential – invite-only</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">Control who can discover and access this space.</p>
               </div>
-              <div className="space-y-2 pt-2">
+              <div className="space-y-2">
                 <Label htmlFor="wizard-jurisdiction">Jurisdiction (optional)</Label>
-                <Input
-                  id="wizard-jurisdiction"
-                  value={jurisdictionLabel}
-                  onChange={(event) => setJurisdictionLabel(event.target.value)}
-                  placeholder="e.g., City of Amsterdam"
-                />
+                <div className="w-fit">
+                  <Input
+                    id="wizard-jurisdiction"
+                    value={jurisdictionLabel}
+                    onChange={(event) => setJurisdictionLabel(event.target.value)}
+                    placeholder="e.g., City of Amsterdam"
+                    className="w-[300px]"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">The geographic or legal jurisdiction this space operates within.</p>
               </div>
             </div>
           </div>
