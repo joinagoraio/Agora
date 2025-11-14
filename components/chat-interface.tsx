@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Send, Loader2, ExternalLink, FileText, X, Plus, CircleStop } from "lucide-react"
+import { Send, Loader2, ExternalLink, FileText, X, Plus, CircleStop, Highlighter } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import Link from "next/link"
 import { buildDocumentUrlFromSource } from "@/lib/utils/document-linking"
@@ -607,6 +607,25 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     setEvidenceError(null)
   }
 
+  const handleHighlight = (message: any) => {
+    if (!documentId) {
+      return
+    }
+
+    const sources = Array.isArray(message?.sources) ? message.sources : []
+    // Find the first source that matches the current document and has highlight info
+    const relevantSource = sources.find(
+      (source: any) =>
+        source.id === documentId &&
+        (source.pageNumber !== undefined || source.textSpan !== undefined)
+    )
+
+    if (relevantSource) {
+      const url = buildDocumentUrlFromSource(workspaceId, relevantSource)
+      router.push(url)
+    }
+  }
+
   const handleSaveEvidence = async () => {
     if (!pendingEvidence) {
       return
@@ -811,30 +830,57 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                   </div>
                   {isAssistant && (
                     <div className="flex flex-wrap items-center justify-end gap-2 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => handleOpenEvidenceDialog(message, index)}
-                        disabled={evidenceStatus === "saving" || isLoading}
-                      >
-                        {evidenceStatus === "saving" ? (
-                          <>
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            Saving…
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="mr-1 h-3 w-3" />
-                            Save as evidence
-                          </>
-                        )}
-                      </Button>
-                      {evidenceStatus === "success" && (
-                        <span className="text-xs text-emerald-600">Saved to workspace evidence</span>
-                      )}
-                      {evidenceStatus === "error" && evidenceStatusEntry?.error && (
-                        <span className="text-xs text-destructive">{evidenceStatusEntry.error}</span>
+                      {documentId ? (
+                        // Document viewer mode: show Highlight button
+                        (() => {
+                          const sources = Array.isArray(message?.sources) ? message.sources : []
+                          const hasRelevantSource = sources.some(
+                            (source: any) =>
+                              source.id === documentId &&
+                              (source.pageNumber !== undefined || source.textSpan !== undefined)
+                          )
+                          return hasRelevantSource ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => handleHighlight(message)}
+                              disabled={isLoading}
+                            >
+                              <Highlighter className="mr-1 h-3 w-3" />
+                              Highlight
+                            </Button>
+                          ) : null
+                        })()
+                      ) : (
+                        // Workspace mode: show Save as evidence button
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => handleOpenEvidenceDialog(message, index)}
+                            disabled={evidenceStatus === "saving" || isLoading}
+                          >
+                            {evidenceStatus === "saving" ? (
+                              <>
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                Saving…
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="mr-1 h-3 w-3" />
+                                Save as evidence
+                              </>
+                            )}
+                          </Button>
+                          {evidenceStatus === "success" && (
+                            <span className="text-xs text-emerald-600">Saved to workspace evidence</span>
+                          )}
+                          {evidenceStatus === "error" && evidenceStatusEntry?.error && (
+                            <span className="text-xs text-destructive">{evidenceStatusEntry.error}</span>
+                          )}
+                        </>
                       )}
                     </div>
                   )}
