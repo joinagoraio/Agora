@@ -1,7 +1,7 @@
 "use client"
 
 import { useChat } from "ai/react"
-import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -927,6 +927,19 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     messages.forEach((message: any, index: number) => {
       const sources = Array.isArray(message?.sources) ? message.sources : []
       const content = typeof message?.content === 'string' ? message.content : ''
+      
+      // Debug logging for last message
+      if (index === messages.length - 1 && message.role === 'assistant') {
+        console.log("[ChatInterface] Pre-computing badges for message:", {
+          index,
+          contentLength: content.length,
+          contentPreview: content.substring(0, 300),
+          sourcesCount: sources.length,
+          hasQuotes: content.includes('"'),
+          hasDocCitations: content.includes('[doc]')
+        })
+      }
+      
       const quoteRegex = /"([^"]+)"(\s*\[doc\])?/g
       const badgeMap = new Map<string, { type: 'doc' | 'scope', source?: any, hasDocCitation: boolean }>()
       let match
@@ -1288,16 +1301,47 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                     <ReactMarkdown
                       components={{
                         p: ({ children, ...props }) => {
+                          // Debug: log the raw children to see what we're working with
+                          if (index === messages.length - 1 && isAssistant) {
+                            const rawContent = typeof message.content === 'string' ? message.content : ''
+                            console.log("[ChatInterface] Processing message content:", {
+                              messageIndex: index,
+                              rawContentLength: rawContent.length,
+                              rawContentPreview: rawContent.substring(0, 500),
+                              rawContentHasQuotes: rawContent.includes('"'),
+                              rawContentHasDoc: rawContent.includes('[doc]'),
+                              rawContentHasQuoteDocPattern: /"[^"]+"\s*\[doc\]/.test(rawContent),
+                              childrenType: typeof children,
+                              childrenIsArray: Array.isArray(children),
+                              childrenLength: Array.isArray(children) ? children.length : 'N/A',
+                              childrenPreview: Array.isArray(children) 
+                                ? children.map(c => {
+                                    if (typeof c === 'string') return c.substring(0, 100)
+                                    if (React.isValidElement(c)) return `[${c.type}]`
+                                    return String(c)
+                                  }).join(' | ')
+                                : (typeof children === 'string' ? children.substring(0, 200) : String(children)),
+                              hasSources: sources.length > 0,
+                              sourcesCount: sources.length,
+                              badgeInfoMapSize: badgeInfoMap.size,
+                              badgeInfoMapKeys: Array.from(badgeInfoMap.keys()).slice(0, 5)
+                            })
+                          }
                           // Process text nodes to add badges after quoted text and [doc] citations
                           const processTextNode = (text: string): any[] => {
+                            if (!text || typeof text !== 'string') return [text]
+                            
                             const parts: any[] = []
                             // Match quoted text, optionally followed by [doc] citation
                             // Pattern: "quoted text" [doc] or just "quoted text"
+                            // Also handle cases where [doc] might be on the same line but separated
                             const quoteRegex = /"([^"]+)"(\s*\[doc\])?/g
                             let lastIndex = 0
                             let match
+                            let matchCount = 0
                             
                             while ((match = quoteRegex.exec(text)) !== null) {
+                              matchCount++
                               // Add text before the quote
                               if (match.index > lastIndex) {
                                 parts.push(text.substring(lastIndex, match.index))
@@ -1314,8 +1358,18 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                                 ? { type: cachedBadgeInfo.type, source: cachedBadgeInfo.source }
                                 : findSourceForQuote(quotedText, hasDocCitation)
                               
+                              console.log("[ChatInterface] Found quote match:", { 
+                                quotedText: quotedText.substring(0, 50), 
+                                hasDocCitation, 
+                                badgeType,
+                                hasSource: !!sourceInfo.source,
+                                badgeInfoMapSize: badgeInfoMap.size,
+                                matchIndex: match.index,
+                                fullMatch: match[0]
+                              })
+                              
                               parts.push(
-                                <span key={match.index} className="inline-flex items-center gap-1">
+                                <span key={`quote-${match.index}-${index}`} className="inline-flex items-center gap-1">
                                   <span className="font-medium">"{quotedText}"</span>
                                   <Badge 
                                     variant={badgeType === 'doc' ? 'secondary' : 'outline'} 
@@ -1325,6 +1379,8 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                                     )}
                                     onClick={(e) => {
                                       e.stopPropagation()
+                                      e.preventDefault()
+                                      console.log("[ChatInterface] Badge clicked:", { quotedText: quotedText.substring(0, 50), badgeType, sourceInfo })
                                       if (badgeType === 'doc') {
                                         handleBadgeClick(quotedText, sourceInfo)
                                       }
@@ -1339,35 +1395,299 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                               lastIndex = match.index + match[0].length
                             }
                             
-                            // Add remaining text
+                            // Also check for standalone [doc] that might have been separated from quotes
+                            // This handles cases where ReactMarkdown splits the text
                             if (lastIndex < text.length) {
-                              parts.push(text.substring(lastIndex))
+                              const remainingText = text.substring(lastIndex)
+                              // Check if there's a [doc] that we might have missed
+                              const docMatch = remainingText.match(/^\s*\[doc\]/)
+                              if (docMatch && parts.length > 0) {
+                                // If we just added a quote part, this [doc] likely belongs to it
+                                const lastPart = parts[parts.length - 1]
+                                if (React.isValidElement(lastPart) && lastPart.type === 'span') {
+                                  // The badge should already be there, just skip the [doc] text
+                                  lastIndex += docMatch[0].length
+                                }
+                              } else {
+                                // Check for standalone [doc] without quotes - try to associate with previous quote
+                                const standaloneDocMatch = remainingText.match(/\s*\[doc\]/)
+                                if (standaloneDocMatch && parts.length > 0) {
+                                  // Look backwards for a quote in the parts
+                                  for (let pIdx = parts.length - 1; pIdx >= 0; pIdx--) {
+                                    const part = parts[pIdx]
+                                    if (React.isValidElement(part) && part.type === 'span') {
+                                      // Found a span, check if it's a quote span
+                                      const quoteSpan = part.props?.children?.[0]
+                                      if (quoteSpan && typeof quoteSpan.props?.children === 'string') {
+                                        const quoteText = quoteSpan.props.children.replace(/^"|"$/g, '')
+                                        // Use pre-computed badge info
+                                        const cachedBadgeInfo = badgeInfoMap.get(quoteText)
+                                        const badgeType = cachedBadgeInfo?.type || 'doc'
+                                        const sourceInfo = cachedBadgeInfo 
+                                          ? { type: cachedBadgeInfo.type, source: cachedBadgeInfo.source }
+                                          : findSourceForQuote(quoteText, true)
+                                        
+                                        // Replace the span with one that has a badge
+                                        parts[pIdx] = (
+                                          <span key={`quote-standalone-${pIdx}-${index}`} className="inline-flex items-center gap-1">
+                                            {quoteSpan}
+                                            <Badge 
+                                              variant={badgeType === 'doc' ? 'secondary' : 'outline'} 
+                                              className={cn(
+                                                "text-[10px] px-1.5 py-0 h-4",
+                                                badgeType === 'doc' && "cursor-pointer hover:bg-secondary/80 transition-colors"
+                                              )}
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                e.preventDefault()
+                                                if (badgeType === 'doc') {
+                                                  handleBadgeClick(quoteText, sourceInfo)
+                                                }
+                                              }}
+                                            >
+                                              {badgeType}
+                                            </Badge>
+                                          </span>
+                                        )
+                                        // Skip the [doc] text
+                                        lastIndex += standaloneDocMatch[0].length
+                                        break
+                                      }
+                                    }
+                                  }
+                                }
+                              }
                             }
                             
-                            return parts
+                            // Add remaining text (but skip standalone [doc] if we already processed it)
+                            if (lastIndex < text.length) {
+                              const remaining = text.substring(lastIndex)
+                              // Don't add standalone [doc] if it's not associated with a quote
+                              if (!/^\s*\[doc\]\s*$/.test(remaining)) {
+                                parts.push(remaining)
+                              }
+                            }
+                            
+                            // Debug: log processing results
+                            if (index === messages.length - 1 && isAssistant) {
+                              console.log("[ChatInterface] processTextNode result:", {
+                                matchCount,
+                                partsCount: parts.length,
+                                hasBadges: parts.some(p => React.isValidElement(p) && p.type === 'span'),
+                                textLength: text.length,
+                                textHasQuotes: text.includes('"'),
+                                textHasDoc: text.includes('[doc]'),
+                                textPreview: text.substring(0, 150)
+                              })
+                            }
+                            
+                            return parts.length > 0 ? parts : [text]
                           }
                           
-                          if (typeof children === 'string') {
-                            const processed = processTextNode(children)
-                            return <p {...props}>{processed.length > 0 ? processed : children}</p>
-                          }
-                          
-                          if (Array.isArray(children)) {
-                            return (
-                              <p {...props}>
-                                {children.map((child, idx) => {
-                                  if (typeof child === 'string') {
-                                    const processed = processTextNode(child)
-                                    return processed.length > 0 ? <>{processed}</> : child
+                          // Convert children to string for processing if needed
+                          // First, try to process the entire children as a string if possible
+                          const processChildren = (children: any): any => {
+                            // If children is a single string, process it directly
+                            if (typeof children === 'string') {
+                              const processed = processTextNode(children)
+                              return processed.length > 1 || (processed.length === 1 && processed[0] !== children) 
+                                ? processed 
+                                : children
+                            }
+                            
+                            // If children is an array, we need to handle it more carefully
+                            // ReactMarkdown might split text nodes, so we need to look for [doc] across nodes
+                            if (Array.isArray(children)) {
+                              // Strategy: Process all consecutive string children together
+                              // This handles cases where ReactMarkdown splits "text" and [doc] into separate text nodes
+                              const result: any[] = []
+                              let i = 0
+                              
+                              while (i < children.length) {
+                                const child = children[i]
+                                
+                                if (typeof child === 'string') {
+                                  // Check if this is a standalone [doc] text
+                                  if (/^\s*\[doc\]\s*$/.test(child.trim())) {
+                                    // This is standalone [doc] - try to associate with previous quote
+                                    let associated = false
+                                    for (let rIdx = result.length - 1; rIdx >= 0; rIdx--) {
+                                      const lastItem = result[rIdx]
+                                      if (React.isValidElement(lastItem) && lastItem.type === 'span') {
+                                        const spanChildren = lastItem.props?.children
+                                        if (Array.isArray(spanChildren)) {
+                                          // Check if this span contains a quote
+                                          const quoteSpan = spanChildren.find((c: any) => 
+                                            React.isValidElement(c) && c.type === 'span' && 
+                                            typeof c.props?.children === 'string' && 
+                                            c.props.children.startsWith('"')
+                                          )
+                                          if (quoteSpan) {
+                                            const quoteText = quoteSpan.props.children.replace(/^"|"$/g, '')
+                                            // Check if badge already exists
+                                            const hasBadge = spanChildren.some((c: any) => 
+                                              React.isValidElement(c) && (c.type?.displayName === 'Badge' || c.type?.name === 'Badge')
+                                            )
+                                            if (!hasBadge) {
+                                              const cachedBadgeInfo = badgeInfoMap.get(quoteText)
+                                              const badgeType = cachedBadgeInfo?.type || 'doc'
+                                              const sourceInfo = cachedBadgeInfo 
+                                                ? { type: cachedBadgeInfo.type, source: cachedBadgeInfo.source }
+                                                : findSourceForQuote(quoteText, true)
+                                              
+                                              result[rIdx] = (
+                                                <span key={`quote-doc-text-${rIdx}-${index}`} className="inline-flex items-center gap-1">
+                                                  {spanChildren}
+                                                  <Badge 
+                                                    variant={badgeType === 'doc' ? 'secondary' : 'outline'} 
+                                                    className={cn(
+                                                      "text-[10px] px-1.5 py-0 h-4",
+                                                      badgeType === 'doc' && "cursor-pointer hover:bg-secondary/80 transition-colors"
+                                                    )}
+                                                    onClick={(e) => {
+                                                      e.stopPropagation()
+                                                      e.preventDefault()
+                                                      if (badgeType === 'doc') {
+                                                        handleBadgeClick(quoteText, sourceInfo)
+                                                      }
+                                                    }}
+                                                  >
+                                                    {badgeType}
+                                                  </Badge>
+                                                </span>
+                                              )
+                                              associated = true
+                                              i++ // Skip the [doc] text
+                                              break
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                    if (!associated) {
+                                      // No quote found, skip the [doc] text
+                                      i++
+                                      continue
+                                    }
+                                  } else {
+                                    // Collect all consecutive strings
+                                    const stringGroup: string[] = [child]
+                                    let j = i + 1
+                                    while (j < children.length && typeof children[j] === 'string') {
+                                      stringGroup.push(children[j] as string)
+                                      j++
+                                    }
+                                    
+                                    // Process the group as one text
+                                    const combinedText = stringGroup.join('')
+                                    const processed = processTextNode(combinedText)
+                                    
+                                    // If we found matches, use processed version
+                                    if (processed.length > 1 || (processed.length === 1 && processed[0] !== combinedText)) {
+                                      processed.forEach((p, pIdx) => {
+                                        result.push(React.isValidElement(p) ? p : <React.Fragment key={`${i}-${pIdx}`}>{p}</React.Fragment>)
+                                      })
+                                    } else {
+                                      // No matches, add original strings
+                                      stringGroup.forEach((str, sIdx) => {
+                                        result.push(str)
+                                      })
+                                    }
+                                    
+                                    i = j // Skip all the strings we just processed
                                   }
-                                  return child
-                                })}
-                              </p>
-                            )
+                                } else {
+                                  // Non-string child - check if it's a [doc] link
+                                  if (React.isValidElement(child) && child.type === 'a') {
+                                    const linkText = typeof child.props?.children === 'string' 
+                                      ? child.props.children 
+                                      : (Array.isArray(child.props?.children) 
+                                          ? child.props.children.join('') 
+                                          : String(child.props?.children || ''))
+                                    
+                                    if (linkText === '[doc]' || child.props?.href === '[doc]') {
+                                      // Look backwards for a quote span in the result
+                                      for (let rIdx = result.length - 1; rIdx >= 0; rIdx--) {
+                                        const lastItem = result[rIdx]
+                                        if (React.isValidElement(lastItem) && lastItem.type === 'span') {
+                                          // Check if it's a quote span without a badge
+                                          const spanChildren = lastItem.props?.children
+                                          if (Array.isArray(spanChildren) && spanChildren.length === 1) {
+                                            const quoteSpan = spanChildren[0]
+                                            if (React.isValidElement(quoteSpan) && quoteSpan.type === 'span') {
+                                              const quoteText = quoteSpan.props?.children
+                                              if (quoteText && typeof quoteText === 'string' && quoteText.startsWith('"')) {
+                                                // Found a quote without badge - add badge and skip the [doc] link
+                                                const cleanQuoteText = quoteText.replace(/^"|"$/g, '')
+                                                const cachedBadgeInfo = badgeInfoMap.get(cleanQuoteText)
+                                                const badgeType = cachedBadgeInfo?.type || 'doc'
+                                                const sourceInfo = cachedBadgeInfo 
+                                                  ? { type: cachedBadgeInfo.type, source: cachedBadgeInfo.source }
+                                                  : findSourceForQuote(cleanQuoteText, true)
+                                                
+                                                result[rIdx] = (
+                                                  <span key={`quote-link-${rIdx}-${index}`} className="inline-flex items-center gap-1">
+                                                    {quoteSpan}
+                                                    <Badge 
+                                                      variant={badgeType === 'doc' ? 'secondary' : 'outline'} 
+                                                      className={cn(
+                                                        "text-[10px] px-1.5 py-0 h-4",
+                                                        badgeType === 'doc' && "cursor-pointer hover:bg-secondary/80 transition-colors"
+                                                      )}
+                                                      onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        e.preventDefault()
+                                                        if (badgeType === 'doc') {
+                                                          handleBadgeClick(cleanQuoteText, sourceInfo)
+                                                        }
+                                                      }}
+                                                    >
+                                                      {badgeType}
+                                                    </Badge>
+                                                  </span>
+                                                )
+                                                i++ // Skip the [doc] link
+                                                continue
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                  
+                                  // Regular non-string child
+                                  result.push(child)
+                                  i++
+                                }
+                              }
+                              
+                              return result.length > 0 ? result : children
+                            }
+                            
+                            return children
                           }
                           
-                          return <p {...props}>{children}</p>
+                          const processedChildren = processChildren(children)
+                          
+                          return <p {...props}>{processedChildren}</p>
                         },
+                        // Handle links - ReactMarkdown might convert [doc] to a link
+                        a: ({ href, children, ...props }: any) => {
+                          // Check if this is a [doc] citation that was converted to a link
+                          const linkText = typeof children === 'string' ? children : 
+                            (Array.isArray(children) ? children.join('') : String(children))
+                          
+                          if (linkText === '[doc]' || href === '[doc]') {
+                            // This is a [doc] link - try to find the preceding quote in the parent
+                            // For now, just render it as plain text [doc] so our text processing can catch it
+                            return <span>[doc]</span>
+                          }
+                          
+                          return <a href={href} {...props}>{children}</a>
+                        },
+                        // Handle text nodes that might contain standalone [doc]
+                        // Note: ReactMarkdown doesn't expose text as a component, so we handle it in the p component
                       }}
                     >
                       {message.content}

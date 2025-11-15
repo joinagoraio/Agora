@@ -560,7 +560,7 @@ export async function getRelevantContext(
           .select("text_content, page_number")
           .eq("document_id", doc.id)
           .order("page_number", { ascending: true })
-          .limit(isIncluded ? 20 : 10) // Get more pages for included documents
+          .limit(isIncluded ? 1000 : 10) // Get all pages for included documents (up to 1000)
         
         if (pagesError) {
           console.error(`[getRelevantContext] Error fetching pages for doc ${doc.id}:`, pagesError)
@@ -583,8 +583,10 @@ export async function getRelevantContext(
           if (pageContent.trim()) {
             // For included documents, prioritize page content (it's more complete)
             if (isIncluded) {
-              content = pageContent.substring(0, 8000) // More content for included documents
-              console.log(`[getRelevantContext] Using ${content.length} chars from pages for included doc ${doc.id}`)
+              // For included documents, use all available content (up to 50000 chars to avoid token limits)
+              // This ensures the AI has access to the full document when viewing it
+              content = pageContent.length > 50000 ? pageContent.substring(0, 50000) : pageContent
+              console.log(`[getRelevantContext] Using ${content.length} chars from ${pages.length} pages for included doc ${doc.id} (total available: ${pageContent.length} chars)`)
             } else if (!content) {
               content = pageContent.substring(0, 2000)
             } else if (pageContent.length > content.length) {
@@ -605,7 +607,10 @@ export async function getRelevantContext(
     // Limit content length for context
     if (content && content.length > 1000 && !isIncluded) {
       content = content.substring(0, 1000)
-    } else if (content && content.length > 8000) {
+    } else if (content && content.length > 50000 && isIncluded) {
+      // For included documents, allow up to 50000 chars (already limited above)
+      content = content.substring(0, 50000)
+    } else if (content && content.length > 8000 && !isIncluded) {
       content = content.substring(0, 8000)
     }
     

@@ -20,6 +20,7 @@ interface MultiFormatViewerProps {
   documentMetadata?: Record<string, any>
   viewportOffset?: number
   onControlsReady?: (controls: ViewerControls) => void
+  autoHighlight?: boolean
 }
 
 // Helper function to detect document type from URL, content type, or metadata
@@ -79,6 +80,7 @@ export function MultiFormatViewer({
   documentMetadata,
   viewportOffset = 0,
   onControlsReady,
+  autoHighlight = true,
 }: MultiFormatViewerProps) {
   const [documentType, setDocumentType] = useState<DocumentType>("unknown")
   const [loading, setLoading] = useState(true)
@@ -94,7 +96,7 @@ export function MultiFormatViewer({
   const containerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const innerContentRef = useRef<HTMLDivElement>(null)
-  const applyFitRef = useRef<(mode: ViewerFitMode) => void>()
+  const applyFitRef = useRef<((mode: ViewerFitMode) => void) | undefined>(undefined)
   const isApplyingFitRef = useRef(false)
 
   // Detect document type and load content
@@ -325,6 +327,20 @@ export function MultiFormatViewer({
     ? highlights.find((h) => !h.pageNumber || h.pageNumber === 1)
     : null
 
+  // Find the highlight for Word documents (page 1 or no page specified)
+  const wordHighlight = documentType === "word"
+    ? highlights.find((h) => !h.pageNumber || h.pageNumber === 1)
+    : null
+
+  // Extract plain text from HTML for Word documents (for highlighting)
+  const wordPlainText = useMemo(() => {
+    if (documentType !== "word" || !wordContent) return null
+    // Create a temporary DOM element to extract text
+    const tempDiv = document.createElement("div")
+    tempDiv.innerHTML = wordContent
+    return tempDiv.textContent || tempDiv.innerText || ""
+  }, [documentType, wordContent])
+
   // Debug logging
   useEffect(() => {
     if (documentType === "text") {
@@ -333,21 +349,435 @@ export function MultiFormatViewer({
       console.log("[MultiFormatViewer] Text highlight:", textHighlight)
       console.log("[MultiFormatViewer] Text content length:", textContent?.length || 0)
     }
-  }, [documentType, highlights, textHighlight, textContent])
+    if (documentType === "word") {
+      console.log("[MultiFormatViewer] Word document detected")
+      console.log("[MultiFormatViewer] Highlights:", highlights)
+      console.log("[MultiFormatViewer] Word highlight:", wordHighlight)
+      console.log("[MultiFormatViewer] Word plain text length:", wordPlainText?.length || 0)
+    }
+  }, [documentType, highlights, textHighlight, textContent, wordHighlight, wordPlainText])
 
-  // Scroll to highlight when text content loads
+  // Helper function to scroll to highlight
+  const scrollToTextHighlight = useCallback(() => {
+    if (documentType !== "text" || !textHighlight || !textContent || !containerRef.current) {
+      console.log("[MultiFormatViewer] Scroll skipped:", { 
+        documentType, 
+        hasTextHighlight: !!textHighlight, 
+        hasTextContent: !!textContent, 
+        hasContainer: !!containerRef.current 
+      })
+      return
+    }
+    
+    console.log("[MultiFormatViewer] Attempting to scroll to highlight:", { 
+      textHighlight, 
+      textContentLength: textContent.length 
+    })
+    
+    // Wait for the highlight to be rendered in the DOM
+    const timer = setTimeout(() => {
+      // Try to find the highlight element in the rendered content
+      const highlightElement = containerRef.current?.querySelector('span[class*="bg-yellow"]') as HTMLElement
+      
+      console.log("[MultiFormatViewer] Looking for highlight element:", { 
+        found: !!highlightElement, 
+        hasRef: !!highlightRef.current,
+        containerExists: !!containerRef.current
+      })
+      
+      if (highlightElement) {
+        highlightRef.current = highlightElement as HTMLSpanElement
+        
+        // Get the scrollable container
+        const scrollContainer = containerRef.current
+        if (scrollContainer) {
+          // Calculate scroll position relative to container
+          const containerRect = scrollContainer.getBoundingClientRect()
+          const elementRect = highlightElement.getBoundingClientRect()
+          
+          // Calculate the scroll position needed to position element at 10% from top
+          const elementTopRelative = elementRect.top - containerRect.top + scrollContainer.scrollTop
+          const containerHeight = scrollContainer.clientHeight
+          const scrollPosition = elementTopRelative - (containerHeight * 0.10) // 10% from top instead of center
+          
+          console.log("[MultiFormatViewer] Scrolling to position:", { scrollPosition, elementTopRelative, containerHeight })
+          
+          scrollContainer.scrollTo({
+            top: Math.max(0, scrollPosition),
+            behavior: "smooth",
+          })
+        }
+      } else if (highlightRef.current) {
+        // Fallback: use the ref if available, but calculate 10% position manually
+        console.log("[MultiFormatViewer] Using ref fallback for scrolling")
+        const scrollContainer = containerRef.current
+        if (scrollContainer && highlightRef.current) {
+          const elementRect = highlightRef.current.getBoundingClientRect()
+          const containerRect = scrollContainer.getBoundingClientRect()
+          const elementTopRelative = elementRect.top - containerRect.top + scrollContainer.scrollTop
+          const containerHeight = scrollContainer.clientHeight
+          const scrollPosition = elementTopRelative - (containerHeight * 0.10)
+          
+          scrollContainer.scrollTo({
+            top: Math.max(0, scrollPosition),
+            behavior: "smooth",
+          })
+        } else {
+          highlightRef.current.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          })
+        }
+      } else {
+        console.warn("[MultiFormatViewer] Could not find highlight element to scroll to")
+      }
+    }, 300) // Increased delay to ensure DOM is updated
+    
+    return () => clearTimeout(timer)
+  }, [documentType, textHighlight, textContent])
+
+  // Track previous autoHighlight state to detect when it's turned on
+  const prevAutoHighlightRef = useRef(autoHighlight)
+
+  // Scroll to highlight when text content loads or when autoHighlight is turned on
   useEffect(() => {
-    if (documentType === "text" && textHighlight && highlightRef.current && textContent) {
-      // Small delay to ensure the element is rendered
-      const timer = setTimeout(() => {
-        highlightRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        })
+    if (autoHighlight && documentType === "text" && textHighlight) {
+      scrollToTextHighlight()
+    }
+  }, [scrollToTextHighlight, autoHighlight, documentType, textHighlight])
+
+  // Auto-scroll when highlight toggle is turned on (changed from false to true)
+  useEffect(() => {
+    if (documentType === "text" && autoHighlight && !prevAutoHighlightRef.current && textHighlight) {
+      // autoHighlight just changed from false to true
+      console.log("[MultiFormatViewer] AutoHighlight turned on, scrolling to first highlight")
+      setTimeout(() => {
+        scrollToTextHighlight()
+      }, 200)
+    }
+    prevAutoHighlightRef.current = autoHighlight
+  }, [autoHighlight, documentType, textHighlight, scrollToTextHighlight])
+
+  // Listen for scrollToHighlight event for text documents
+  useEffect(() => {
+    if (documentType !== "text") return
+
+    const handleScrollToHighlight = (event: any) => {
+      const { highlight, pageNumber } = event.detail || {}
+      if (!highlight || pageNumber !== 1) return // Text documents are always page 1
+
+      console.log("[MultiFormatViewer] ScrollToHighlight event received for text document:", { highlight, pageNumber })
+      
+      // Trigger scroll after a short delay to ensure highlights are updated
+      setTimeout(() => {
+        scrollToTextHighlight()
       }, 100)
+    }
+
+    window.addEventListener("scrollToHighlight", handleScrollToHighlight as EventListener)
+    return () => window.removeEventListener("scrollToHighlight", handleScrollToHighlight as EventListener)
+  }, [documentType, scrollToTextHighlight])
+
+  // Function to render Word document with highlighting
+  const highlightedWordContent = useMemo(() => {
+    if (!wordContent || !wordHighlight || !wordHighlight.textSpan || !wordPlainText) {
+      return wordContent
+    }
+
+    const { start, end } = wordHighlight.textSpan
+
+    // Get the text to highlight from plain text
+    if (start < 0 || end > wordPlainText.length || end <= start) {
+      return wordContent
+    }
+
+    const textToHighlight = wordPlainText.substring(start, end).trim()
+    
+    if (textToHighlight.length === 0 || textToHighlight.length > 2000) {
+      return wordContent
+    }
+
+    // Strategy: Find the text in HTML by searching for it
+    // We'll search for the text (normalized) in the HTML and wrap it
+    const normalizedText = textToHighlight.replace(/\s+/g, ' ').trim()
+    
+    if (normalizedText.length < 10) {
+      return wordContent
+    }
+
+    // Create a temporary DOM to extract text and find positions
+    if (typeof document === 'undefined') {
+      return wordContent
+    }
+
+    const tempDiv = document.createElement("div")
+    tempDiv.innerHTML = wordContent
+    
+    // Extract all text nodes and track character positions
+    const textNodes: { node: Text; start: number; end: number }[] = []
+    let charCount = 0
+    
+    const walker = document.createTreeWalker(
+      tempDiv,
+      NodeFilter.SHOW_TEXT,
+      null
+    )
+    
+    let node: Node | null
+    while ((node = walker.nextNode())) {
+      const textNode = node as Text
+      const text = textNode.textContent || ""
+      const nodeStart = charCount
+      const nodeEnd = charCount + text.length
+      
+      textNodes.push({ node: textNode, start: nodeStart, end: nodeEnd })
+      charCount = nodeEnd
+    }
+    
+    // Find the nodes that contain our text span
+    const startNodeInfo = textNodes.find(n => start >= n.start && start < n.end)
+    const endNodeInfo = textNodes.find(n => end > n.start && end <= n.end)
+    
+    if (startNodeInfo && endNodeInfo) {
+      // We found the nodes - highlight them
+      if (startNodeInfo.node === endNodeInfo.node) {
+        // Same node - split it
+        const textNode = startNodeInfo.node
+        const text = textNode.textContent || ""
+        const nodeStart = startNodeInfo.start
+        const startOffset = start - nodeStart
+        const endOffset = end - nodeStart
+        
+        const before = text.substring(0, startOffset)
+        const highlighted = text.substring(startOffset, endOffset)
+        const after = text.substring(endOffset)
+        
+        // Create highlight span
+        const highlightSpan = document.createElement("span")
+        highlightSpan.className = "bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5"
+        highlightSpan.style.scrollMarginTop = "100px"
+        highlightSpan.textContent = highlighted
+        highlightSpan.setAttribute("data-highlight-ref", "true")
+        
+        // Replace the text node
+        const parent = textNode.parentNode
+        if (parent) {
+          if (before) {
+            parent.insertBefore(document.createTextNode(before), textNode)
+          }
+          parent.insertBefore(highlightSpan, textNode)
+          if (after) {
+            parent.insertBefore(document.createTextNode(after), textNode)
+          }
+          parent.removeChild(textNode)
+        }
+      } else {
+        // Multiple nodes - highlight from start node to end node
+        // We need to wrap all nodes between start and end
+        const startNode = startNodeInfo.node
+        const endNode = endNodeInfo.node
+        const startOffset = start - startNodeInfo.start
+        const endOffset = end - endNodeInfo.start
+        
+        // Find all nodes between start and end
+        const nodesToWrap: Text[] = []
+        let foundStart = false
+        
+        const walker2 = document.createTreeWalker(
+          tempDiv,
+          NodeFilter.SHOW_TEXT,
+          null
+        )
+        
+        let node2: Node | null
+        while ((node2 = walker2.nextNode())) {
+          const textNode = node2 as Text
+          if (textNode === startNode) {
+            foundStart = true
+            nodesToWrap.push(textNode)
+          } else if (foundStart) {
+            nodesToWrap.push(textNode)
+            if (textNode === endNode) {
+              break
+            }
+          }
+        }
+        
+        // Create a wrapper span for the entire highlight
+        const highlightSpan = document.createElement("span")
+        highlightSpan.className = "bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5"
+        highlightSpan.style.scrollMarginTop = "100px"
+        highlightSpan.setAttribute("data-highlight-ref", "true")
+        
+        // Process each node
+        for (let i = 0; i < nodesToWrap.length; i++) {
+          const textNode = nodesToWrap[i]
+          const text = textNode.textContent || ""
+          const nodeStart = textNodes.find(n => n.node === textNode)?.start || 0
+          
+          if (i === 0) {
+            // First node - split at start offset
+            const before = text.substring(0, startOffset)
+            const highlighted = text.substring(startOffset)
+            
+            if (before) {
+              const parent = textNode.parentNode
+              if (parent) {
+                parent.insertBefore(document.createTextNode(before), textNode)
+              }
+            }
+            
+            // Move the rest into the highlight span
+            if (highlighted) {
+              const fragment = document.createDocumentFragment()
+              fragment.appendChild(document.createTextNode(highlighted))
+              highlightSpan.appendChild(fragment)
+            }
+            
+            // Remove the original node
+            const parent = textNode.parentNode
+            if (parent) {
+              parent.removeChild(textNode)
+            }
+          } else if (i === nodesToWrap.length - 1) {
+            // Last node - split at end offset
+            const nodeStartPos = textNodes.find(n => n.node === textNode)?.start || 0
+            const endOffsetInNode = end - nodeStartPos
+            const highlighted = text.substring(0, endOffsetInNode)
+            const after = text.substring(endOffsetInNode)
+            
+            // Move highlighted portion into the highlight span
+            if (highlighted) {
+              const fragment = document.createDocumentFragment()
+              fragment.appendChild(document.createTextNode(highlighted))
+              highlightSpan.appendChild(fragment)
+            }
+            
+            // Replace the node with after portion
+            const parent = textNode.parentNode
+            if (parent) {
+              if (after) {
+                parent.insertBefore(document.createTextNode(after), textNode)
+              }
+              parent.removeChild(textNode)
+            }
+          } else {
+            // Middle nodes - move entire content into highlight span
+            const fragment = document.createDocumentFragment()
+            fragment.appendChild(document.createTextNode(text))
+            highlightSpan.appendChild(fragment)
+            
+            const parent = textNode.parentNode
+            if (parent) {
+              parent.removeChild(textNode)
+            }
+          }
+        }
+        
+        // Insert the highlight span where the first node was
+        const firstNodeParent = startNode.parentNode
+        if (firstNodeParent && highlightSpan.childNodes.length > 0) {
+          // Find where to insert - after the before text if it exists, or where startNode was
+          const beforeText = Array.from(firstNodeParent.childNodes).find(
+            (n) => n.nodeType === Node.TEXT_NODE && n.textContent && n.textContent.trim()
+          )
+          if (beforeText && beforeText.nextSibling) {
+            firstNodeParent.insertBefore(highlightSpan, beforeText.nextSibling)
+          } else {
+            firstNodeParent.insertBefore(highlightSpan, firstNodeParent.firstChild)
+          }
+        }
+        
+        return tempDiv.innerHTML
+      }
+      
+      // If multiple nodes or nodes not found, fall through to string-based search
+    }
+    
+    // Fallback: Try simple string search (more reliable for multi-node cases)
+    const htmlText = tempDiv.textContent || tempDiv.innerText || ""
+    const searchIndex = htmlText.toLowerCase().indexOf(normalizedText.toLowerCase())
+    
+    if (searchIndex !== -1) {
+      // Find the corresponding position in HTML
+      let htmlCharCount = 0
+      let htmlIndex = 0
+      
+      // Count characters in HTML (ignoring tags) to find start position
+      while (htmlIndex < wordContent.length && htmlCharCount < searchIndex) {
+        if (wordContent[htmlIndex] === '<') {
+          while (htmlIndex < wordContent.length && wordContent[htmlIndex] !== '>') {
+            htmlIndex++
+          }
+          htmlIndex++
+        } else {
+          htmlCharCount++
+          htmlIndex++
+        }
+      }
+      
+      // Find end position
+      let endHtmlIndex = htmlIndex
+      let endHtmlCharCount = htmlCharCount
+      while (endHtmlIndex < wordContent.length && endHtmlCharCount < searchIndex + normalizedText.length) {
+        if (wordContent[endHtmlIndex] === '<') {
+          while (endHtmlIndex < wordContent.length && wordContent[endHtmlIndex] !== '>') {
+            endHtmlIndex++
+          }
+          endHtmlIndex++
+        } else {
+          endHtmlCharCount++
+          endHtmlIndex++
+        }
+      }
+      
+      // Insert highlight span
+      const before = wordContent.substring(0, htmlIndex)
+      const highlighted = wordContent.substring(htmlIndex, endHtmlIndex)
+      const after = wordContent.substring(endHtmlIndex)
+      
+      return `${before}<span class="bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5" style="scroll-margin-top: 100px;" data-highlight-ref="true">${highlighted}</span>${after}`
+    }
+    
+    return wordContent
+  }, [wordContent, wordHighlight, wordPlainText])
+
+  // Scroll to highlight when Word content loads (after DOM update)
+  useEffect(() => {
+    if (documentType === "word" && wordHighlight && containerRef.current) {
+      // Wait longer for the DOM to be fully rendered with highlighted content
+      const timer = setTimeout(() => {
+        // Search in the inner content area for the highlight element
+        // The Word content is rendered inside innerContentRef, but we need to search in the rendered DOM
+        const wordContentDiv = containerRef.current?.querySelector('.word-document-content')
+        const highlightElement = wordContentDiv?.querySelector('[data-highlight-ref="true"]') as HTMLElement
+        
+        if (highlightElement && containerRef.current) {
+          highlightRef.current = highlightElement as HTMLSpanElement
+          
+          // Get the scrollable container (the one with overflow-y-auto)
+          const scrollContainer = containerRef.current
+          
+          // Calculate scroll position
+          // Get the position relative to the scroll container
+          const containerRect = scrollContainer.getBoundingClientRect()
+          const elementRect = highlightElement.getBoundingClientRect()
+          
+          // Calculate the scroll position needed to center the element
+          const elementTopRelative = elementRect.top - containerRect.top + scrollContainer.scrollTop
+          const containerHeight = scrollContainer.clientHeight
+          const elementHeight = highlightElement.offsetHeight
+          const scrollPosition = elementTopRelative - (containerHeight / 2) + (elementHeight / 2)
+          
+          scrollContainer.scrollTo({
+            top: Math.max(0, scrollPosition),
+            behavior: "smooth",
+          })
+        }
+      }, 400)
       return () => clearTimeout(timer)
     }
-  }, [documentType, textHighlight, textContent])
+  }, [documentType, wordHighlight, highlightedWordContent])
 
   if (loading) {
     return (
@@ -443,6 +873,7 @@ export function MultiFormatViewer({
   }
 
   if (documentType === "word") {
+
     return (
       <div className={`flex flex-col ${className}`}>
         {!hideControls && (
@@ -482,7 +913,7 @@ export function MultiFormatViewer({
                 }}
               >
                 <div
-                  dangerouslySetInnerHTML={{ __html: wordContent || "" }}
+                  dangerouslySetInnerHTML={{ __html: highlightedWordContent || "" }}
                   className="word-document-content"
                   style={{
                     fontFamily: "system-ui, -apple-system, sans-serif",

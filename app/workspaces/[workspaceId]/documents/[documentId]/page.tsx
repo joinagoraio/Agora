@@ -64,13 +64,16 @@ export default async function DocumentViewerPage({ params, searchParams }: Docum
     documentTitle: document.title,
   })
 
-  // Check if document is text/markdown (for simpler highlighting)
+  // Check if document is text/markdown/word (for simpler highlighting)
   const documentType = document.metadata?.type || ""
   const isTextDocument = 
     documentType.includes("text") || 
     documentType.includes("markdown") ||
+    documentType.includes("word") ||
     document.title?.toLowerCase().endsWith(".md") ||
-    document.title?.toLowerCase().endsWith(".txt")
+    document.title?.toLowerCase().endsWith(".txt") ||
+    document.title?.toLowerCase().endsWith(".docx") ||
+    document.title?.toLowerCase().endsWith(".doc")
   
   console.log("[DocumentViewerPage] Document type check:", {
     documentType,

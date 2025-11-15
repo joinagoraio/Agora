@@ -71,8 +71,11 @@ export function DocumentViewerClient({
     const isTextDocument = 
       documentType.includes("text") || 
       documentType.includes("markdown") ||
+      documentType.includes("word") ||
       documentTitle?.toLowerCase().endsWith(".md") ||
-      documentTitle?.toLowerCase().endsWith(".txt")
+      documentTitle?.toLowerCase().endsWith(".txt") ||
+      documentTitle?.toLowerCase().endsWith(".docx") ||
+      documentTitle?.toLowerCase().endsWith(".doc")
     
     if (isTextDocument) {
       // Text documents don't need coordinates
@@ -154,13 +157,16 @@ export function DocumentViewerClient({
       const textSpan = { start, end }
       const highlightPage = pageParam ? parseInt(pageParam) : 1
       
-      // Check if document is text/markdown
+      // Check if document is text/markdown/word
       const documentType = documentMetadata?.type || ""
       const isTextDocument = 
         documentType.includes("text") || 
         documentType.includes("markdown") ||
+        documentType.includes("word") ||
         documentTitle?.toLowerCase().endsWith(".md") ||
-        documentTitle?.toLowerCase().endsWith(".txt")
+        documentTitle?.toLowerCase().endsWith(".txt") ||
+        documentTitle?.toLowerCase().endsWith(".docx") ||
+        documentTitle?.toLowerCase().endsWith(".doc")
       
       if (isTextDocument) {
         // For text documents, simple highlight
@@ -325,7 +331,9 @@ export function DocumentViewerClient({
   const hasUrlHighlights = urlHighlights.length > 0 && 
     JSON.stringify(urlHighlights) !== JSON.stringify(initialHighlights)
   // Only show highlights if auto-highlight is enabled
-  const finalHighlights = autoHighlight ? (hasUrlHighlights ? urlHighlights : highlights) : []
+  // Ensure coordinates are computed for PDF highlights
+  const highlightsToUse = hasUrlHighlights ? urlHighlights : highlights
+  const finalHighlights = autoHighlight ? computeHighlightCoordinates(highlightsToUse) : []
 
   console.log("[DocumentViewerClient] Computed highlights:", {
     highlightsCount: finalHighlights.length,
@@ -473,6 +481,7 @@ export function DocumentViewerClient({
             documentMetadata={documentMetadata}
             viewportOffset={DOCUMENT_VIEWER_HEADER_HEIGHT}
             onControlsReady={setControls}
+            autoHighlight={autoHighlight}
           />
         ) : (
           <div className="flex h-full items-center justify-center">
