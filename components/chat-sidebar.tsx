@@ -571,8 +571,11 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return
       const newWidth = window.innerWidth - e.clientX
-      // Constrain width between minimum chat width and 90% of viewport
-      const minWidth = getMinChatWidth()
+      // Constrain width between minimum width and 90% of viewport
+      // When list is expanded, minimum width includes both chat and list widths
+      const listWidth = getListWidth()
+      const minChatWidth = getMinChatWidth()
+      const minWidth = isListExpanded ? minChatWidth + listWidth : minChatWidth
       const maxWidth = window.innerWidth * 0.9
       const constrainedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth))
       hasManuallyResizedRef.current = true
@@ -596,7 +599,7 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
       document.body.style.cursor = ""
       document.body.style.userSelect = ""
     }
-  }, [isResizing, setSidebarWidth])
+  }, [isResizing, setSidebarWidth, isListExpanded])
 
   useEffect(() => {
     setIsSidebarResizing(isResizing)
@@ -615,6 +618,19 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
   useEffect(() => {
     if (!isMounted || !isOpen) return
     
+    const listWidth = getListWidth()
+    const minChatWidth = getMinChatWidth()
+    const minSidebarWidth = isListExpanded ? minChatWidth + listWidth : minChatWidth
+    
+    // Always enforce minimum width (hard constraint)
+    // When list is expanded: minChatWidth + listWidth
+    // When list is collapsed: minChatWidth
+    if (sidebarWidth !== null && sidebarWidth < minSidebarWidth) {
+      console.log("[ChatSidebar] Enforcing minimum width:", { current: sidebarWidth, minimum: minSidebarWidth, isListExpanded })
+      setSidebarWidth(minSidebarWidth)
+      return
+    }
+    
     // Only auto-update width if user hasn't manually resized
     if (hasManuallyResizedRef.current && sidebarWidth !== null) {
       return
@@ -632,22 +648,18 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
       else newWidth = window.innerWidth
     } else {
       // Chat width + List width when conversations exist (list is expanded)
+      // Ensure we use at least minimum chat width + list width
       // List widths: w-48 (192px), sm:w-56 (224px), md:w-64 (256px)
       let chatWidth: number
-      let listWidth: number
       
       if (window.innerWidth >= 1280) {
-        chatWidth = 500 // xl chat
-        listWidth = 256 // md:w-64
+        chatWidth = Math.max(500, minChatWidth) // xl chat, but at least minChatWidth
       } else if (window.innerWidth >= 1024) {
-        chatWidth = 450 // lg chat
-        listWidth = 256 // md:w-64
+        chatWidth = Math.max(450, minChatWidth) // lg chat, but at least minChatWidth
       } else if (window.innerWidth >= 768) {
-        chatWidth = 400 // md chat
-        listWidth = 256 // md:w-64
+        chatWidth = Math.max(400, minChatWidth) // md chat, but at least minChatWidth
       } else if (window.innerWidth >= 640) {
-        chatWidth = 350 // sm chat
-        listWidth = 224 // sm:w-56
+        chatWidth = Math.max(350, minChatWidth) // sm chat, but at least minChatWidth
       } else {
         newWidth = window.innerWidth
         setSidebarWidth(newWidth)
@@ -655,9 +667,11 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
       }
       
       newWidth = chatWidth + listWidth
+      // Ensure we never go below the minimum
+      newWidth = Math.max(newWidth, minSidebarWidth)
     }
     
-    console.log("[ChatSidebar] Updating sidebar width:", { newWidth, hasConversations, isListExpanded, conversationsCount: conversations.length })
+    console.log("[ChatSidebar] Updating sidebar width:", { newWidth, hasConversations, isListExpanded, conversationsCount: conversations.length, minSidebarWidth })
     setSidebarWidth(newWidth)
   }, [conversations.length, isListExpanded, sidebarWidth, setSidebarWidth, isOpen, isMounted])
 
@@ -665,16 +679,16 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
   const isMobile = isMounted && typeof window !== "undefined" && window.innerWidth < 640
   
   // Calculate if list should be visible
-  // List should be hidden if sidebar width is less than min chat width + list width
+  // List should always be visible when expanded (no width check)
   const listWidth = isMounted ? getListWidth() : 256
   const minChatWidth = isMounted ? getMinChatWidth() : 300
-  const shouldShowList = isListExpanded && currentWidth >= (minChatWidth + listWidth)
+  const shouldShowList = isListExpanded
 
   return (
     <>
       <div
         className={`fixed inset-y-0 right-0 z-50 flex h-screen flex-col ${isMobile ? "border-l" : ""} bg-card shadow-lg ${
-          isResizing ? "" : "transition-transform duration-300 ease-out"
+          isResizing ? "" : "transition-[width,transform] duration-300 ease-out"
         } ${
           isOpen ? "translate-x-0" : "translate-x-full"
         } ${isMobile ? "w-full" : ""}`}
@@ -713,9 +727,31 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
               size="icon" 
               onClick={() => {
                 console.log("[ChatSidebar] Toggle list button clicked, current state:", isListExpanded)
+                const listWidth = getListWidth()
+                const currentWidth = sidebarWidth ?? getDefaultWidth()
+                
                 setIsListExpanded(prev => {
                   const newState = !prev
                   console.log("[ChatSidebar] Setting list expanded to:", newState)
+                  
+                  // When expanding: add list width to current width (preserve chat width)
+                  // When collapsing: subtract list width from current width (preserve chat width)
+                  if (newState) {
+                    // Expanding: add list width
+                    const newWidth = currentWidth + listWidth
+                    const minChatWidth = getMinChatWidth()
+                    const minSidebarWidth = minChatWidth + listWidth
+                    // Ensure we meet minimum width requirement
+                    setSidebarWidth(Math.max(newWidth, minSidebarWidth))
+                  } else {
+                    // Collapsing: subtract list width, but ensure we don't go below min chat width
+                    const newWidth = Math.max(currentWidth - listWidth, getMinChatWidth())
+                    setSidebarWidth(newWidth)
+                  }
+                  
+                  // Mark as manually adjusted so auto-update doesn't override
+                  hasManuallyResizedRef.current = true
+                  
                   return newState
                 })
               }} 
@@ -728,8 +764,11 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Main chat area - flexible width */}
-        <main className="flex flex-col flex-1 min-w-0">
+        {/* Main chat area - flexible width with minimum width */}
+        <main 
+          className="flex flex-col flex-1 min-w-0"
+          style={isMounted ? { minWidth: `${getMinChatWidth()}px` } : undefined}
+        >
           {currentConversationId ? (
             <ChatInterface
               workspaceId={workspaceId}

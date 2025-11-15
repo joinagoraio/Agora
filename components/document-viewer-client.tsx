@@ -9,7 +9,6 @@ import {
   Download,
   ZoomIn,
   ZoomOut,
-  RotateCw,
   ChevronsLeftRight,
   ChevronsUpDown,
   ChevronDown,
@@ -21,6 +20,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import Link from "next/link"
 
 interface DocumentViewerClientProps {
@@ -54,7 +59,8 @@ export function DocumentViewerClient({
   })
 
   return (
-    <div className="flex h-screen flex-col">
+    <TooltipProvider>
+      <div className="flex h-screen flex-col">
       {/* Header */}
       <header className="border-b bg-card">
         <div className="flex h-16 items-center justify-between px-4">
@@ -143,20 +149,23 @@ export function DocumentViewerClient({
                 >
                   <ZoomIn className="h-4 w-4" />
                 </Button>
-                <div className="h-6 w-px bg-border" />
-                <Button variant="ghost" size="sm" onClick={controls.rotate}>
-                  <RotateCw className="h-4 w-4" />
-                </Button>
               </>
             )}
             {documentUrl && (
               <>
                 <div className="h-6 w-px bg-border" />
-                <Button variant="ghost" size="icon" asChild>
-                  <a href={documentUrl} target="_blank" rel="noopener noreferrer">
-                    <Download className="h-4 w-4" />
-                  </a>
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" asChild>
+                      <a href={documentUrl} target="_blank" rel="noopener noreferrer">
+                        <Download className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Download</p>
+                  </TooltipContent>
+                </Tooltip>
               </>
             )}
           </div>
@@ -187,5 +196,6 @@ export function DocumentViewerClient({
         )}
       </div>
     </div>
+    </TooltipProvider>
   )
 }
