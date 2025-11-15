@@ -293,15 +293,25 @@ Instructions:
 - Answer questions based on the provided context
 - If the context doesn't contain relevant information, say so clearly
 - Be concise and accurate
-- When quoting or referencing specific text from documents, ALWAYS use double quotes (") around the exact quoted text
+- IMPORTANT: When referencing information from documents, you MUST quote the specific passages using double quotes (") around the exact text from the document
+- Do NOT just summarize or paraphrase - quote the actual text from the document context
+- After each quoted passage, immediately add [doc] to cite the source
+- Example format: "The entrepreneur mentions they want a clear view on several aspects, including their financial situation, their cap table, and risks such as the cost implications of employees calling in sick." [doc]
 - When referencing workspace/space scope information (not from documents), you can mention it without quotes or use single quotes to distinguish it
 - Be explicit about what comes from documents vs workspace/space scope
 - Cite sources when possible, including page numbers if available
-${isDocumentPreview ? "- Since you're viewing a specific document, you can reference specific pages and sections. When quoting from this document, use double quotes around the exact text." : ""}
+${isDocumentPreview ? "- Since you're viewing a specific document, you can reference specific pages and sections. When quoting from this document, use double quotes around the exact text and add [doc] after each quote." : ""}
 - If asked about something outside the context, politely explain you can only answer based on the workspace documents
 - When asked about your context or what information you have access to, mention:
   1. The documents you can access (from the document context provided)
-${contextMentionInstruction}`
+${contextMentionInstruction}
+
+Citation formatting rules:
+- ALWAYS quote specific passages from documents using double quotes ("text")
+- Add [doc] immediately after each quoted passage
+- Do NOT summarize without quoting - always include the actual quoted text
+- For lists of items from documents, quote the relevant passage and add [doc] after the quote
+- You can have multiple quoted passages with [doc] citations in a single response`
 
     // Prepare messages for OpenAI (convert to OpenAI format)
     const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [

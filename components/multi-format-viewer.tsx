@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { PDFViewer, Highlight, type ViewerControls } from "@/components/pdf-viewer"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import { PDFViewer, Highlight, type ViewerControls, type ViewerFitMode } from "@/components/pdf-viewer"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, ExternalLink, Download, RefreshCw } from "lucide-react"
@@ -88,7 +88,14 @@ export function MultiFormatViewer({
   const [textContent, setTextContent] = useState<string | null>(null)
   const [scale, setScale] = useState(1.0)
   const [rotation, setRotation] = useState(0)
+  const [fitMode, setFitMode] = useState<ViewerFitMode | null>(null)
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 })
   const highlightRef = useRef<HTMLSpanElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const innerContentRef = useRef<HTMLDivElement>(null)
+  const applyFitRef = useRef<(mode: ViewerFitMode) => void>()
+  const isApplyingFitRef = useRef(false)
 
   // Detect document type and load content
   useEffect(() => {
@@ -180,17 +187,81 @@ export function MultiFormatViewer({
     loadDocument()
   }, [url, documentMetadata])
 
+  const clampScale = useCallback((value: number) => {
+    return Math.min(Math.max(value, 0.5), 3.0)
+  }, [])
+
   function zoomIn() {
+    // Don't clear fit mode - zoom should work with fit mode
     setScale((prev) => Math.min(prev + 0.25, 3.0))
   }
 
   function zoomOut() {
+    // Don't clear fit mode - zoom should work with fit mode
     setScale((prev) => Math.max(prev - 0.25, 0.5))
   }
 
   function rotate() {
     setRotation((prev) => (prev + 90) % 360)
   }
+
+  // Track container size for fit calculations
+  useEffect(() => {
+    if (!containerRef.current) return
+
+    const updateContainerSize = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        // Account for padding (2rem = 32px on each side = 64px total)
+        setContainerSize({
+          width: rect.width - 64,
+          height: rect.height - 64,
+        })
+      }
+    }
+
+    updateContainerSize()
+
+    const resizeObserver = new ResizeObserver(updateContainerSize)
+    resizeObserver.observe(containerRef.current)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [documentType])
+
+  // Apply fit mode calculations
+  const applyFit = useCallback(
+    (mode: ViewerFitMode) => {
+      // Fit mode just sets the container width, it doesn't change scale
+      // Scale is only controlled by zoom
+      // This function is kept for compatibility but doesn't need to do anything
+      // since the container width is controlled by the fitMode state in the render
+    },
+    []
+  )
+
+  // Keep ref updated with latest applyFit function
+  useEffect(() => {
+    applyFitRef.current = applyFit
+  }, [applyFit])
+
+  const fitToWidth = useCallback(() => {
+    // Toggle fit mode - if already in fit mode, turn it off
+    setFitMode((prev) => (prev === "width" ? null : "width"))
+  }, [])
+
+
+  const handleSetScale = useCallback((value: number) => {
+    // Don't clear fit mode when setting scale from dropdown
+    setScale(() => clampScale(value))
+  }, [clampScale])
+
+  // Stable empty functions for controls
+  const noop = useCallback(() => {}, [])
+
+  // Fit mode is handled by CSS (container width changes based on fitMode state)
+  // No need to recalculate on container size changes
 
   // Expose controls for PDF viewer
   const handlePDFControlsReady = (controls: ViewerControls) => {
@@ -199,26 +270,55 @@ export function MultiFormatViewer({
     }
   }
 
-  // For non-PDF documents, create simplified controls
-  useEffect(() => {
-    if (onControlsReady && documentType !== "pdf" && !loading && !error) {
-      onControlsReady({
-        pageNumber: 1,
-        numPages: 1,
-        scale,
-        minScale: 0.5,
-        maxScale: 3.0,
-        changePage: () => {},
-        goToPage: () => {},
-        zoomIn,
-        zoomOut,
-        rotate,
-        setScale: (value: number) => {
-          setScale(() => Math.min(Math.max(value, 0.5), 3.0))
-        },
-      })
+  // Memoize controls object to prevent unnecessary re-renders
+  const controls = useMemo(() => {
+    if (documentType === "pdf" || loading || error) return null
+    
+    return {
+      pageNumber: 1,
+      numPages: 1,
+      scale,
+      minScale: 0.5,
+      maxScale: 3.0,
+      fitMode,
+      changePage: noop,
+      goToPage: noop,
+      zoomIn,
+      zoomOut,
+      rotate,
+      fitToWidth,
+      setScale: handleSetScale,
     }
-  }, [documentType, loading, error, scale, onControlsReady])
+  }, [documentType, loading, error, scale, fitMode, zoomIn, zoomOut, rotate, fitToWidth, handleSetScale, noop])
+
+  // Expose controls only when they change
+  const prevControlsRef = useRef<ViewerControls | null>(null)
+  const onControlsReadyRef = useRef(onControlsReady)
+  
+  // Keep ref updated
+  useEffect(() => {
+    onControlsReadyRef.current = onControlsReady
+  }, [onControlsReady])
+  
+  useEffect(() => {
+    if (!controls) {
+      if (prevControlsRef.current) {
+        prevControlsRef.current = null
+      }
+      return
+    }
+    
+    // Only call onControlsReady if controls actually changed meaningfully
+    const controlsChanged = 
+      !prevControlsRef.current ||
+      prevControlsRef.current.scale !== controls.scale ||
+      prevControlsRef.current.fitMode !== controls.fitMode
+    
+    if (controlsChanged && onControlsReadyRef.current) {
+      prevControlsRef.current = controls
+      onControlsReadyRef.current(controls)
+    }
+  }, [controls])
 
   // Find the highlight for text documents (page 1 or no page specified)
   const textHighlight = documentType === "text" 
@@ -361,23 +461,38 @@ export function MultiFormatViewer({
             </div>
           </div>
         )}
-        <div className="flex-1 overflow-auto bg-white p-8">
-          <div
-            className="mx-auto max-w-4xl"
-            style={{
-              transform: `scale(${scale}) rotate(${rotation}deg)`,
-              transformOrigin: "top center",
-            }}
-          >
+        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-white" ref={containerRef}>
+          <div className="w-full min-h-full flex items-start justify-center" style={{ padding: '2rem' }}>
             <div
-              dangerouslySetInnerHTML={{ __html: wordContent || "" }}
-              className="word-document-content"
+              ref={contentRef}
               style={{
-                fontFamily: "system-ui, -apple-system, sans-serif",
-                lineHeight: "1.6",
-                color: "#1f2937",
+                // Fixed width container - width changes only in fit mode
+                maxWidth: fitMode ? "100%" : "896px",
+                width: fitMode ? "100%" : "896px",
+                overflow: "hidden", // Prevent horizontal overflow
               }}
-            />
+            >
+              <div
+                ref={innerContentRef}
+                style={{
+                  transform: `scale(${scale}) rotate(${rotation}deg)`,
+                  transformOrigin: "top left",
+                  // Scale width inversely so scaled content fits within container
+                  width: `${100 / scale}%`,
+                }}
+              >
+                <div
+                  dangerouslySetInnerHTML={{ __html: wordContent || "" }}
+                  className="word-document-content"
+                  style={{
+                    fontFamily: "system-ui, -apple-system, sans-serif",
+                    lineHeight: "1.6",
+                    color: "#1f2937",
+                    width: "100%",
+                  }}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -555,15 +670,31 @@ export function MultiFormatViewer({
             </div>
           </div>
         )}
-        <div className="flex-1 overflow-auto bg-white p-8">
-          <div
-            className="mx-auto max-w-4xl font-mono text-sm whitespace-pre-wrap"
-            style={{
-              transform: `scale(${scale})`,
-              transformOrigin: "top center",
-            }}
-          >
-            {renderTextWithHighlight()}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-white" ref={containerRef}>
+          <div className="w-full min-h-full flex items-start justify-center" style={{ padding: '2rem' }}>
+            <div
+              ref={contentRef}
+              style={{
+                // Fixed width container - width changes only in fit mode
+                maxWidth: fitMode ? "100%" : "896px",
+                width: fitMode ? "100%" : "896px",
+                overflow: "hidden", // Prevent horizontal overflow
+              }}
+            >
+              <div
+                ref={innerContentRef}
+                style={{
+                  transform: `scale(${scale})`,
+                  transformOrigin: "top left",
+                  // Scale width inversely so scaled content fits within container
+                  width: `${100 / scale}%`,
+                }}
+              >
+                <div className="font-mono text-sm whitespace-pre-wrap">
+                  {renderTextWithHighlight()}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

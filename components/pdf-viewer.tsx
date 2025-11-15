@@ -247,11 +247,58 @@ export function PDFViewer({
     setPageNumber(page)
     
     // Scroll to the page element
-    const pageEl = pageRefs.current.get(page)
-    if (pageEl && scrollContainerRef.current) {
-      pageEl.scrollIntoView({ behavior: "smooth", block: "center" })
-    }
+    setTimeout(() => {
+      const pageEl = pageRefs.current.get(page)
+      if (pageEl && scrollContainerRef.current) {
+        pageEl.scrollIntoView({ behavior: "smooth", block: "center" })
+      }
+    }, 100)
   }
+
+  // Listen for scrollToPage event to scroll to a specific highlight
+  useEffect(() => {
+    const handleScrollToPage = (event: any) => {
+      const { pageNumber: targetPage, highlight } = event.detail || {}
+      if (!targetPage) return
+
+      console.log("[PDFViewer] ScrollToPage event received:", { targetPage, highlight })
+
+      // Navigate to the page first
+      if (targetPage >= 1 && (!numPages || targetPage <= numPages)) {
+        setPageNumber(targetPage)
+      }
+
+      // Scroll to the page, and if there's a highlight with coordinates, scroll to it
+      // Use a longer delay to ensure the page is fully rendered
+      setTimeout(() => {
+        const pageEl = pageRefs.current.get(targetPage)
+        if (pageEl && scrollContainerRef.current) {
+          // If we have a highlight with coordinates, try to scroll to that specific position
+          if (highlight?.coordinates && highlight.coordinates.y !== undefined) {
+            const { y } = highlight.coordinates
+            const container = scrollContainerRef.current
+            const pageTop = pageEl.offsetTop
+            // Calculate the scroll position: page top + highlight y position (scaled) - some offset for visibility
+            const scrollPosition = pageTop + (y * scale) - 100 // 100px offset from top for better visibility
+            console.log("[PDFViewer] Scrolling to highlight with coordinates:", { scrollPosition, pageTop, y, scale })
+            container.scrollTo({
+              top: Math.max(0, scrollPosition),
+              behavior: "smooth",
+            })
+          } else {
+            // No specific coordinates, just scroll to the page
+            console.log("[PDFViewer] Scrolling to page (no coordinates):", targetPage)
+            pageEl.scrollIntoView({ behavior: "smooth", block: "center" })
+          }
+        } else {
+          console.warn("[PDFViewer] Page element not found or container not ready:", { targetPage, hasPageEl: !!pageEl, hasContainer: !!scrollContainerRef.current })
+        }
+      }, 500) // Wait longer for the page to render
+    }
+
+    window.addEventListener("scrollToPage", handleScrollToPage as EventListener)
+    return () => window.removeEventListener("scrollToPage", handleScrollToPage as EventListener)
+  }, [numPages, scale])
 
   const zoomIn = useCallback(() => {
     setFitMode(null)

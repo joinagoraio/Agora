@@ -1,7 +1,7 @@
 "use client"
 
 import { useChat } from "ai/react"
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -920,6 +920,79 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     ? "Ask a question about your document..."
     : "Ask a question about your documents..."
 
+  // Pre-compute badge information for all messages to prevent flash
+  const allBadgeInfo = useMemo(() => {
+    const messageBadgeMaps = new Map<number, Map<string, { type: 'doc' | 'scope', source?: any, hasDocCitation: boolean }>>()
+    
+    messages.forEach((message: any, index: number) => {
+      const sources = Array.isArray(message?.sources) ? message.sources : []
+      const content = typeof message?.content === 'string' ? message.content : ''
+      const quoteRegex = /"([^"]+)"(\s*\[doc\])?/g
+      const badgeMap = new Map<string, { type: 'doc' | 'scope', source?: any, hasDocCitation: boolean }>()
+      let match
+      
+      while ((match = quoteRegex.exec(content)) !== null) {
+        const quotedText = match[1]
+        const hasDocCitation = !!match[2]
+        
+        // Determine badge type - if [doc] is present, it's always 'doc'
+        let badgeType: 'doc' | 'scope' = 'scope'
+        let source: any = undefined
+        
+        if (hasDocCitation) {
+          badgeType = 'doc'
+          // Try to find the source
+          source = sources.find((s: any) => {
+            if (documentId && s.id === documentId) {
+              if (s.preview && s.preview.toLowerCase().includes(quotedText.toLowerCase().substring(0, 20))) {
+                return true
+              }
+              if (s.textSpan || s.pageNumber !== undefined) {
+                return true
+              }
+            }
+            if (s.textSpan || s.pageNumber !== undefined) {
+              if (s.preview && s.preview.toLowerCase().includes(quotedText.toLowerCase().substring(0, 20))) {
+                return true
+              }
+              return true
+            }
+            return false
+          })
+        } else if (documentId) {
+          // Try to find a document source
+          source = sources.find((s: any) => {
+            if (s.id === documentId) {
+              if (s.preview && s.preview.toLowerCase().includes(quotedText.toLowerCase().substring(0, 20))) {
+                return true
+              }
+              if (s.textSpan || s.pageNumber !== undefined) {
+                return true
+              }
+            }
+            if (s.textSpan || s.pageNumber !== undefined) {
+              if (s.preview && s.preview.toLowerCase().includes(quotedText.toLowerCase().substring(0, 20))) {
+                return true
+              }
+              return true
+            }
+            return false
+          })
+          
+          if (source) {
+            badgeType = 'doc'
+          }
+        }
+        
+        badgeMap.set(quotedText, { type: badgeType, source, hasDocCitation })
+      }
+      
+      messageBadgeMaps.set(index, badgeMap)
+    })
+    
+    return messageBadgeMaps
+  }, [messages, documentId])
+
   return (
     <div className="flex h-full flex-col">
       {messages.length > 0 && (
@@ -982,14 +1055,197 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           const evidenceStatus = evidenceStatusEntry?.status ?? "idle"
           
           // Process message content to add source badges after quoted text
-          // We'll render badges separately, not through ReactMarkdown
           const sources = Array.isArray(message?.sources) ? message.sources : []
-          const hasDocumentSource = documentId && sources.some((s: any) => s.id === documentId)
           
-          // Extract quoted phrases for badge rendering
-          const quotedPhrases = isAssistant && message.content 
-            ? message.content.match(/"([^"]+)"/g) || []
-            : []
+          // Get pre-computed badge info for this message
+          const badgeInfoMap = allBadgeInfo.get(index) || new Map()
+          
+          // Function to find the source for a quoted phrase (uses pre-computed map)
+          const findSourceForQuote = (quotedText: string, hasDocCitation: boolean = false): { type: 'doc' | 'scope', source?: any } => {
+            // Use pre-computed badge info if available - this prevents flash
+            const cached = badgeInfoMap.get(quotedText)
+            if (cached) {
+              return { type: cached.type, source: cached.source }
+            }
+            
+            // Fallback: if [doc] citation is present, return doc type immediately
+            if (hasDocCitation) {
+              return { type: 'doc' }
+            }
+            
+            // Otherwise, return scope (shouldn't happen if badgeInfoMap is working correctly)
+            return { type: 'scope' }
+          }
+          
+          // Function to handle badge click - highlight specific reference
+          const handleBadgeClick = async (quotedText: string, sourceInfo: { type: 'doc' | 'scope', source?: any }) => {
+            if (sourceInfo.type === 'doc') {
+              // Get documentId from source if not provided in props
+              const targetDocumentId = documentId || sourceInfo.source?.id
+              if (!targetDocumentId) {
+                console.warn("[handleBadgeClick] No documentId available")
+                return
+              }
+              // If we have a source with pageNumber and textSpan, use them directly
+              if (sourceInfo.source && sourceInfo.source.pageNumber !== undefined && sourceInfo.source.textSpan) {
+                const source = sourceInfo.source
+                const highlight = {
+                  id: source.id || targetDocumentId,
+                  pageNumber: source.pageNumber,
+                  textSpan: source.textSpan,
+                  coordinates: source.coordinates,
+                  color: "rgba(255, 255, 0, 0.3)",
+                }
+                
+                // Build URL with this specific highlight
+                let url = buildDocumentUrlFromSource(workspaceId, {
+                  id: targetDocumentId,
+                  pageNumber: highlight.pageNumber,
+                  textSpan: highlight.textSpan,
+                })
+                
+                // Preserve conversationId
+                const currentConversationId = searchParams.get("conversationId")
+                if (currentConversationId) {
+                  const urlObj = new URL(url, window.location.origin)
+                  urlObj.searchParams.set("conversationId", currentConversationId)
+                  url = urlObj.pathname + urlObj.search
+                }
+                
+                // Navigate or update highlights
+                const currentPath = window.location.pathname
+                const targetPath = url.split("?")[0]
+                const isSamePage = currentPath === targetPath
+                
+                if (isSamePage) {
+                  window.history.replaceState({}, "", url)
+                  // Dispatch highlight update event
+                  window.dispatchEvent(new CustomEvent("highlightUpdated", {
+                    detail: { highlights: [highlight], scrollTo: true },
+                  }))
+                  // Also dispatch a scroll event to ensure scrolling happens
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent("scrollToHighlight", {
+                      detail: { highlight, pageNumber: highlight.pageNumber },
+                    }))
+                  }, 100)
+                    } else {
+                      if (typeof window !== "undefined") {
+                        sessionStorage.setItem(`highlights-${targetDocumentId}`, JSON.stringify([highlight]))
+                        // Store scroll instruction for when page loads
+                        sessionStorage.setItem(`scrollToHighlight-${targetDocumentId}`, JSON.stringify({
+                          highlight,
+                          pageNumber: highlight.pageNumber,
+                        }))
+                      }
+                      router.replace(url)
+                    }
+                return
+              }
+              
+              // Otherwise, search for this specific phrase in the document
+              try {
+                const response = await fetch(`/api/documents/${targetDocumentId}/search-phrases`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ phrases: [quotedText] }),
+                })
+                
+                if (response.ok) {
+                  const result = await response.json()
+                  const highlights = result.highlights || []
+                  
+                  if (highlights.length > 0) {
+                    // Use the first highlight found
+                    const highlight = highlights[0]
+                    
+                    // Build URL with this specific highlight
+                    const source = sourceInfo.source
+                    let url = buildDocumentUrlFromSource(workspaceId, {
+                      id: targetDocumentId,
+                      pageNumber: highlight.pageNumber || source?.pageNumber || 1,
+                      textSpan: highlight.textSpan || source?.textSpan,
+                    })
+                    
+                    // Preserve conversationId
+                    const currentConversationId = searchParams.get("conversationId")
+                    if (currentConversationId) {
+                      const urlObj = new URL(url, window.location.origin)
+                      urlObj.searchParams.set("conversationId", currentConversationId)
+                      url = urlObj.pathname + urlObj.search
+                    }
+                    
+                    // Navigate or update highlights
+                    const currentPath = window.location.pathname
+                    const targetPath = url.split("?")[0]
+                    const isSamePage = currentPath === targetPath
+                    
+                    console.log("[handleBadgeClick] Navigating to highlight:", {
+                      highlight,
+                      url,
+                      isSamePage,
+                      currentPath,
+                      targetPath,
+                    })
+                    
+                    if (isSamePage) {
+                      window.history.replaceState({}, "", url)
+                      // Dispatch highlight update event
+                      window.dispatchEvent(new CustomEvent("highlightUpdated", {
+                        detail: { highlights: [highlight], scrollTo: true },
+                      }))
+                      // Also dispatch a scroll event to ensure scrolling happens
+                      setTimeout(() => {
+                        window.dispatchEvent(new CustomEvent("scrollToHighlight", {
+                          detail: { highlight, pageNumber: highlight.pageNumber || source?.pageNumber || 1 },
+                        }))
+                      }, 100)
+                    } else {
+                      if (typeof window !== "undefined") {
+                        sessionStorage.setItem(`highlights-${targetDocumentId}`, JSON.stringify([highlight]))
+                        // Store scroll instruction for when page loads
+                        sessionStorage.setItem(`scrollToHighlight-${targetDocumentId}`, JSON.stringify({
+                          highlight,
+                          pageNumber: highlight.pageNumber || source?.pageNumber || 1,
+                        }))
+                      }
+                      router.replace(url)
+                    }
+                  } else {
+                    console.warn("[handleBadgeClick] No highlights found for phrase:", quotedText)
+                    // If no highlights found, still navigate to the document if we have a source
+                    const source = sourceInfo.source
+                    if (source && source.pageNumber) {
+                      let url = buildDocumentUrlFromSource(workspaceId, {
+                        id: targetDocumentId,
+                        pageNumber: source.pageNumber,
+                      })
+                      
+                      const currentConversationId = searchParams.get("conversationId")
+                      if (currentConversationId) {
+                        const urlObj = new URL(url, window.location.origin)
+                        urlObj.searchParams.set("conversationId", currentConversationId)
+                        url = urlObj.pathname + urlObj.search
+                      }
+                      
+                      router.replace(url)
+                    }
+                  }
+                } else {
+                  console.error("[handleBadgeClick] Search request failed:", response.status)
+                }
+              } catch (error) {
+                console.error("[handleBadgeClick] Error highlighting phrase:", error)
+              }
+            } else {
+              console.warn("[handleBadgeClick] Cannot handle badge click:", {
+                type: sourceInfo.type,
+                hasSource: !!sourceInfo.source,
+                hasDocumentId: !!documentId,
+                sourceId: sourceInfo.source?.id,
+              })
+            }
+          }
 
           return (
             <div key={index} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -1032,10 +1288,12 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                     <ReactMarkdown
                       components={{
                         p: ({ children, ...props }) => {
-                          // Process text nodes to add badges after quoted text
+                          // Process text nodes to add badges after quoted text and [doc] citations
                           const processTextNode = (text: string): any[] => {
                             const parts: any[] = []
-                            const quoteRegex = /"([^"]+)"/g
+                            // Match quoted text, optionally followed by [doc] citation
+                            // Pattern: "quoted text" [doc] or just "quoted text"
+                            const quoteRegex = /"([^"]+)"(\s*\[doc\])?/g
                             let lastIndex = 0
                             let match
                             
@@ -1047,20 +1305,37 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                               
                               // Add quoted text with badge
                               const quotedText = match[1]
-                              const badgeType = hasDocumentSource ? 'doc' : 'scope'
+                              const hasDocCitation = !!match[2] // Check if [doc] was found
+                              
+                              // Use pre-computed badge info to prevent flash
+                              const cachedBadgeInfo = badgeInfoMap.get(quotedText)
+                              const badgeType = cachedBadgeInfo?.type || (hasDocCitation ? 'doc' : 'scope')
+                              const sourceInfo = cachedBadgeInfo 
+                                ? { type: cachedBadgeInfo.type, source: cachedBadgeInfo.source }
+                                : findSourceForQuote(quotedText, hasDocCitation)
                               
                               parts.push(
                                 <span key={match.index} className="inline-flex items-center gap-1">
                                   <span className="font-medium">"{quotedText}"</span>
                                   <Badge 
                                     variant={badgeType === 'doc' ? 'secondary' : 'outline'} 
-                                    className="text-[10px] px-1.5 py-0 h-4"
+                                    className={cn(
+                                      "text-[10px] px-1.5 py-0 h-4",
+                                      badgeType === 'doc' && "cursor-pointer hover:bg-secondary/80 transition-colors"
+                                    )}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (badgeType === 'doc') {
+                                        handleBadgeClick(quotedText, sourceInfo)
+                                      }
+                                    }}
                                   >
                                     {badgeType}
                                   </Badge>
                                 </span>
                               )
                               
+                              // Move past the entire match (quote + optional [doc])
                               lastIndex = match.index + match[0].length
                             }
                             
@@ -1100,29 +1375,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                   </div>
                   {isAssistant && (
                     <div className="flex flex-wrap items-center justify-end gap-2 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {documentId ? (
-                        // Document viewer mode: show Highlight button
-                        (() => {
-                          const sources = Array.isArray(message?.sources) ? message.sources : []
-                          // Show highlight button if there are ANY sources for this document
-                          // (even without textSpan, we can extract phrases from the response)
-                          const hasRelevantSource = sources.some(
-                            (source: any) => source.id === documentId
-                          )
-                          return hasRelevantSource ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs"
-                              onClick={() => handleHighlight(message)}
-                              disabled={isLoading}
-                            >
-                              <Highlighter className="mr-1 h-3 w-3" />
-                              Highlight
-                            </Button>
-                          ) : null
-                        })()
-                      ) : (
+                      {!documentId && (
                         // Workspace mode: show Save as evidence button
                         <>
                           <Button

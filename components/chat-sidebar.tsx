@@ -839,11 +839,13 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
                       <div
                         key={conv.id}
                         className={cn(
-                          "group relative flex items-center justify-between px-4 py-1 m-1 cursor-pointer transition-colors rounded-md hover:bg-accent"
+                          "group relative flex items-center gap-2 px-3 py-2 m-1 cursor-pointer transition-all rounded-md",
+                          "hover:bg-accent hover:shadow-sm",
+                          isActive && "bg-accent/50"
                         )}
                         onClick={() => handleConversationSelect(conv.id)}
                       >
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 pr-2">
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <p className={cn(
@@ -860,9 +862,9 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
                         <DropdownMenuTrigger
                           asChild
                           onClick={(e) => e.stopPropagation()}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-auto"
                         >
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 p-1.5 hover:bg-accent-foreground/10">
                             <MoreVertical className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>

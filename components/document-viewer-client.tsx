@@ -12,8 +12,8 @@ import {
   ZoomIn,
   ZoomOut,
   ChevronsLeftRight,
-  ChevronsUpDown,
   ChevronDown,
+  Highlighter,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -28,6 +28,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 import Link from "next/link"
 
 interface DocumentViewerClientProps {
@@ -55,6 +56,7 @@ export function DocumentViewerClient({
   documentMetadata,
   pages,
 }: DocumentViewerClientProps) {
+  const [autoHighlight, setAutoHighlight] = useState(true)
   const [controls, setControls] = useState<ViewerControls | null>(null)
   const searchParams = useSearchParams()
   const [urlHighlights, setUrlHighlights] = useState<any[]>(initialHighlights)
@@ -207,6 +209,26 @@ export function DocumentViewerClient({
         // Compute coordinates for PDF highlights
         const processedHighlights = computeHighlightCoordinates(event.detail.highlights)
         setUrlHighlights(processedHighlights)
+        
+        // If scrollTo is requested, trigger scrolling after a short delay to allow coordinates to be computed
+        if (event.detail?.scrollTo && processedHighlights.length > 0) {
+          const firstHighlight = processedHighlights[0]
+          const pageNumber = firstHighlight.pageNumber || 1
+          
+          console.log("[DocumentViewerClient] Triggering scroll for highlight:", { firstHighlight, pageNumber })
+          
+          // Navigate to the page first
+          if (controls && controls.goToPage) {
+            controls.goToPage(pageNumber)
+          }
+          
+          // Then scroll to the highlight - use processed highlight with coordinates
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent("scrollToHighlight", {
+              detail: { highlight: firstHighlight, pageNumber },
+            }))
+          }, 300)
+        }
       } else {
         // Fallback to URL-based highlighting (single highlight)
         const newHighlights = computeHighlightsFromUrl(true)
@@ -216,7 +238,7 @@ export function DocumentViewerClient({
     
     window.addEventListener("highlightUpdated", handleHighlightUpdate as EventListener)
     return () => window.removeEventListener("highlightUpdated", handleHighlightUpdate as EventListener)
-  }, [computeHighlightsFromUrl, computeHighlightCoordinates])
+  }, [computeHighlightsFromUrl, computeHighlightCoordinates, controls])
   
   // Also watch for popstate events (back/forward navigation)
   useEffect(() => {
@@ -229,13 +251,81 @@ export function DocumentViewerClient({
     window.addEventListener("popstate", handlePopState)
     return () => window.removeEventListener("popstate", handlePopState)
   }, [computeHighlightsFromUrl])
+
+  // Listen for scrollToHighlight event to scroll to a specific highlight
+  useEffect(() => {
+    const handleScrollToHighlight = (event: any) => {
+      const { highlight, pageNumber } = event.detail || {}
+      if (!highlight || !pageNumber) return
+
+      console.log("[DocumentViewerClient] ScrollToHighlight event received:", { highlight, pageNumber })
+
+      // If we have controls, navigate to the page first
+      if (controls && controls.goToPage) {
+        controls.goToPage(pageNumber)
+      }
+
+      // For text documents, the MultiFormatViewer will handle scrolling automatically
+      // For PDFs, we need to wait a bit for the page to render, then scroll
+      // The PDF viewer should handle scrolling when the page is set
+      setTimeout(() => {
+        // Dispatch a scroll event that the PDF viewer can listen to
+        window.dispatchEvent(new CustomEvent("scrollToPage", {
+          detail: { pageNumber, highlight },
+        }))
+      }, 300)
+    }
+
+    window.addEventListener("scrollToHighlight", handleScrollToHighlight as EventListener)
+    return () => window.removeEventListener("scrollToHighlight", handleScrollToHighlight as EventListener)
+  }, [controls])
+
+  // Check sessionStorage for scroll instruction on mount (when navigating from another page)
+  useEffect(() => {
+    if (typeof window === "undefined" || !documentId) return
+
+    const scrollData = sessionStorage.getItem(`scrollToHighlight-${documentId}`)
+    if (scrollData) {
+      try {
+        const { highlight, pageNumber } = JSON.parse(scrollData)
+        // Clear the stored instruction
+        sessionStorage.removeItem(`scrollToHighlight-${documentId}`)
+        
+        // Wait for controls to be ready, then scroll
+        if (controls && controls.goToPage) {
+          controls.goToPage(pageNumber)
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent("scrollToPage", {
+              detail: { pageNumber, highlight },
+            }))
+          }, 300)
+        } else {
+          // If controls aren't ready yet, wait a bit and try again
+          const timer = setTimeout(() => {
+            if (controls && controls.goToPage) {
+              controls.goToPage(pageNumber)
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent("scrollToPage", {
+                  detail: { pageNumber, highlight },
+                }))
+              }, 300)
+            }
+          }, 500)
+          return () => clearTimeout(timer)
+        }
+      } catch (error) {
+        console.error("[DocumentViewerClient] Error parsing scroll instruction:", error)
+      }
+    }
+  }, [controls, documentId])
   
   // Use highlights computed from useMemo (reacts to searchParams changes)
   // urlHighlights is updated via events for window.history.replaceState() changes
   // Prefer urlHighlights if it's been set (not equal to initial), otherwise use highlights
   const hasUrlHighlights = urlHighlights.length > 0 && 
     JSON.stringify(urlHighlights) !== JSON.stringify(initialHighlights)
-  const finalHighlights = hasUrlHighlights ? urlHighlights : highlights
+  // Only show highlights if auto-highlight is enabled
+  const finalHighlights = autoHighlight ? (hasUrlHighlights ? urlHighlights : highlights) : []
 
   console.log("[DocumentViewerClient] Computed highlights:", {
     highlightsCount: finalHighlights.length,
@@ -285,19 +375,7 @@ export function DocumentViewerClient({
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="gap-2 px-2">
-                      {controls.fitMode === "width" ? (
-                        <span className="flex items-center gap-2">
-                          Fit
-                          <ChevronsLeftRight className="h-4 w-4" />
-                        </span>
-                      ) : controls.fitMode === "height" ? (
-                        <span className="flex items-center gap-2">
-                          Fit
-                          <ChevronsUpDown className="h-4 w-4" />
-                        </span>
-                      ) : (
-                        <span>{Math.round(controls.scale * 100)}%</span>
-                      )}
+                      <span>{Math.round(controls.scale * 100)}%</span>
                       <ChevronDown className="h-4 w-4 opacity-60" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -311,23 +389,6 @@ export function DocumentViewerClient({
                         {Math.round(preset * 100)}%
                       </DropdownMenuItem>
                     ))}
-                    {(controls.fitToWidth || controls.fitToHeight) && <DropdownMenuSeparator />}
-                    {controls.fitToWidth && (
-                      <DropdownMenuItem onSelect={controls.fitToWidth}>
-                        <span className="flex items-center gap-2">
-                          Fit
-                          <ChevronsLeftRight className="h-4 w-4" />
-                        </span>
-                      </DropdownMenuItem>
-                    )}
-                    {controls.fitToHeight && (
-                      <DropdownMenuItem onSelect={controls.fitToHeight}>
-                        <span className="flex items-center gap-2">
-                          Fit
-                          <ChevronsUpDown className="h-4 w-4" />
-                        </span>
-                      </DropdownMenuItem>
-                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Button
@@ -338,6 +399,43 @@ export function DocumentViewerClient({
                 >
                   <ZoomIn className="h-4 w-4" />
                 </Button>
+                {controls.fitToWidth && (
+                  <>
+                    <div className="h-6 w-px bg-border" />
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant={controls.fitMode === "width" ? "secondary" : "ghost"}
+                          size="sm"
+                          onClick={controls.fitToWidth}
+                        >
+                          <ChevronsLeftRight className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{controls.fitMode === "width" ? "Disable fit to width" : "Fit to width"}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </>
+                )}
+                <div className="h-6 w-px bg-border" />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={autoHighlight ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setAutoHighlight(!autoHighlight)}
+                    >
+                      <Highlighter className={cn(
+                        "h-4 w-4",
+                        autoHighlight && "text-primary"
+                      )} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{autoHighlight ? "Hide highlights" : "Show highlights"}</p>
+                  </TooltipContent>
+                </Tooltip>
               </>
             )}
             {documentUrl && (
