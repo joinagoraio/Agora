@@ -1,8 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import { MultiFormatViewer } from "@/components/multi-format-viewer"
 import { ZOOM_PRESETS, type ViewerControls } from "@/components/pdf-viewer"
+import { getHighlightCoordinates } from "@/lib/utils/pdf-extraction"
 import { Button } from "@/components/ui/button"
 import {
   ArrowLeft,
@@ -37,6 +39,7 @@ interface DocumentViewerClientProps {
   highlights: any[]
   initialPage: number
   documentMetadata?: Record<string, any>
+  pages?: any[] // Pass pages data for client-side highlight computation
 }
 
 const DOCUMENT_VIEWER_HEADER_HEIGHT = 64
@@ -47,20 +50,206 @@ export function DocumentViewerClient({
   documentTitle,
   documentUrl,
   pageCount,
-  highlights,
+  highlights: initialHighlights,
   initialPage,
   documentMetadata,
+  pages,
 }: DocumentViewerClientProps) {
   const [controls, setControls] = useState<ViewerControls | null>(null)
+  const searchParams = useSearchParams()
+  const [urlHighlights, setUrlHighlights] = useState<any[]>(initialHighlights)
+  
+  // Function to compute coordinates for highlights that need them (for PDFs)
+  const computeHighlightCoordinates = useCallback((highlights: any[]): any[] => {
+    if (!pages || pages.length === 0) {
+      return highlights
+    }
+    
+    const documentType = documentMetadata?.type || ""
+    const isTextDocument = 
+      documentType.includes("text") || 
+      documentType.includes("markdown") ||
+      documentTitle?.toLowerCase().endsWith(".md") ||
+      documentTitle?.toLowerCase().endsWith(".txt")
+    
+    if (isTextDocument) {
+      // Text documents don't need coordinates
+      return highlights
+    }
+    
+    // For PDFs, compute coordinates for highlights that don't have them
+    return highlights.map((highlight) => {
+      if (highlight.coordinates || !highlight.textSpan) {
+        return highlight
+      }
+      
+      const pageData = pages.find((p: any) => p.page_number === highlight.pageNumber)
+      if (pageData) {
+        const coordinates = getHighlightCoordinates(
+          highlight.textSpan,
+          pageData.text_items || [],
+          pageData.character_offsets || {},
+        )
+        return {
+          ...highlight,
+          coordinates,
+        }
+      }
+      
+      return highlight
+    })
+  }, [pages, documentMetadata, documentTitle])
+  
+  // Check sessionStorage for highlights on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedHighlights = sessionStorage.getItem(`highlights-${documentId}`)
+      if (storedHighlights) {
+        try {
+          const parsed = JSON.parse(storedHighlights)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            console.log("[DocumentViewerClient] Found highlights in sessionStorage:", parsed)
+            // Compute coordinates for PDF highlights
+            const processedHighlights = computeHighlightCoordinates(parsed)
+            setUrlHighlights(processedHighlights)
+            // Clear sessionStorage after reading
+            sessionStorage.removeItem(`highlights-${documentId}`)
+          }
+        } catch (error) {
+          console.error("[DocumentViewerClient] Error parsing stored highlights:", error)
+        }
+      }
+    }
+  }, [documentId, computeHighlightCoordinates])
+  
+  // Function to compute highlights from URL params
+  const computeHighlightsFromUrl = useCallback((forceFromWindow = false) => {
+    let highlightParam: string | null
+    let textSpanParam: string | null
+    let pageParam: string | null
+    
+    if (forceFromWindow && typeof window !== "undefined") {
+      // Read directly from window.location when forceFromWindow is true
+      // This is needed when URL changes via window.history.replaceState()
+      const urlParams = new URLSearchParams(window.location.search)
+      highlightParam = urlParams.get("highlight")
+      textSpanParam = urlParams.get("textSpan")
+      pageParam = urlParams.get("page")
+    } else {
+      // Use Next.js searchParams hook (updates on router navigation)
+      highlightParam = searchParams.get("highlight")
+      textSpanParam = searchParams.get("textSpan")
+      pageParam = searchParams.get("page")
+    }
+    
+    // If no highlight params in URL, use initial highlights from server
+    if (!highlightParam || !textSpanParam) {
+      return initialHighlights
+    }
+    
+    try {
+      const [start, end] = textSpanParam.split("-").map(Number)
+      const textSpan = { start, end }
+      const highlightPage = pageParam ? parseInt(pageParam) : 1
+      
+      // Check if document is text/markdown
+      const documentType = documentMetadata?.type || ""
+      const isTextDocument = 
+        documentType.includes("text") || 
+        documentType.includes("markdown") ||
+        documentTitle?.toLowerCase().endsWith(".md") ||
+        documentTitle?.toLowerCase().endsWith(".txt")
+      
+      if (isTextDocument) {
+        // For text documents, simple highlight
+        return [{
+          id: highlightParam,
+          pageNumber: highlightPage,
+          textSpan,
+          color: "rgba(255, 255, 0, 0.3)",
+        }]
+      } else if (pages && pages.length > 0) {
+        // For PDFs, compute coordinates
+        const pageData = pages.find((p: any) => p.page_number === highlightPage)
+        if (pageData) {
+          const coordinates = getHighlightCoordinates(
+            textSpan,
+            pageData.text_items || [],
+            pageData.character_offsets || {},
+          )
+          return [{
+            id: highlightParam,
+            pageNumber: highlightPage,
+            textSpan,
+            coordinates,
+            color: "rgba(255, 255, 0, 0.3)",
+          }]
+        }
+      }
+    } catch (error) {
+      console.error("[DocumentViewerClient] Error parsing highlight from URL:", error)
+    }
+    
+    return initialHighlights
+  }, [searchParams, initialHighlights, pages, documentMetadata, documentTitle])
+  
+  // Watch for URL changes and compute highlights dynamically
+  const highlights = useMemo(() => {
+    return computeHighlightsFromUrl()
+  }, [computeHighlightsFromUrl])
+  
+  // Listen for highlightUpdated custom event (from window.history.replaceState)
+  useEffect(() => {
+    const handleHighlightUpdate = (event: any) => {
+      // Check if event has highlights array in detail (multiple highlights)
+      if (event.detail?.highlights && Array.isArray(event.detail.highlights)) {
+        console.log("[DocumentViewerClient] Received multiple highlights from event:", event.detail.highlights)
+        // Compute coordinates for PDF highlights
+        const processedHighlights = computeHighlightCoordinates(event.detail.highlights)
+        setUrlHighlights(processedHighlights)
+      } else {
+        // Fallback to URL-based highlighting (single highlight)
+        const newHighlights = computeHighlightsFromUrl(true)
+        setUrlHighlights(newHighlights)
+      }
+    }
+    
+    window.addEventListener("highlightUpdated", handleHighlightUpdate as EventListener)
+    return () => window.removeEventListener("highlightUpdated", handleHighlightUpdate as EventListener)
+  }, [computeHighlightsFromUrl, computeHighlightCoordinates])
+  
+  // Also watch for popstate events (back/forward navigation)
+  useEffect(() => {
+    const handlePopState = () => {
+      // Read directly from window.location for popstate events too
+      const newHighlights = computeHighlightsFromUrl(true)
+      setUrlHighlights(newHighlights)
+    }
+    
+    window.addEventListener("popstate", handlePopState)
+    return () => window.removeEventListener("popstate", handlePopState)
+  }, [computeHighlightsFromUrl])
+  
+  // Use highlights computed from useMemo (reacts to searchParams changes)
+  // urlHighlights is updated via events for window.history.replaceState() changes
+  // Prefer urlHighlights if it's been set (not equal to initial), otherwise use highlights
+  const hasUrlHighlights = urlHighlights.length > 0 && 
+    JSON.stringify(urlHighlights) !== JSON.stringify(initialHighlights)
+  const finalHighlights = hasUrlHighlights ? urlHighlights : highlights
 
-  console.log("[DocumentViewerClient] Received highlights:", {
-    highlightsCount: highlights.length,
-    highlights,
+  console.log("[DocumentViewerClient] Computed highlights:", {
+    highlightsCount: finalHighlights.length,
+    highlights: finalHighlights,
+    urlParams: {
+      highlight: searchParams.get("highlight"),
+      textSpan: searchParams.get("textSpan"),
+      page: searchParams.get("page"),
+    },
   })
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col">
       {/* Header */}
       <header className="border-b bg-card">
         <div className="flex h-16 items-center justify-between px-4">
@@ -156,11 +345,11 @@ export function DocumentViewerClient({
                 <div className="h-6 w-px bg-border" />
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" asChild>
-                      <a href={documentUrl} target="_blank" rel="noopener noreferrer">
-                        <Download className="h-4 w-4" />
-                      </a>
-                    </Button>
+                <Button variant="ghost" size="icon" asChild>
+                  <a href={documentUrl} target="_blank" rel="noopener noreferrer">
+                    <Download className="h-4 w-4" />
+                  </a>
+                </Button>
                   </TooltipTrigger>
                   <TooltipContent>
                     <p>Download</p>
@@ -179,7 +368,7 @@ export function DocumentViewerClient({
             url={`/api/documents/${documentId}/pdf`}
             documentId={documentId}
             documentTitle={documentTitle}
-            highlights={highlights}
+            highlights={finalHighlights}
             initialPage={initialPage}
             className="h-full"
             hideControls={true}

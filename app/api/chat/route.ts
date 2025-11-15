@@ -293,8 +293,11 @@ Instructions:
 - Answer questions based on the provided context
 - If the context doesn't contain relevant information, say so clearly
 - Be concise and accurate
+- When quoting or referencing specific text from documents, ALWAYS use double quotes (") around the exact quoted text
+- When referencing workspace/space scope information (not from documents), you can mention it without quotes or use single quotes to distinguish it
+- Be explicit about what comes from documents vs workspace/space scope
 - Cite sources when possible, including page numbers if available
-${isDocumentPreview ? "- Since you're viewing a specific document, you can reference specific pages and sections" : ""}
+${isDocumentPreview ? "- Since you're viewing a specific document, you can reference specific pages and sections. When quoting from this document, use double quotes around the exact text." : ""}
 - If asked about something outside the context, politely explain you can only answer based on the workspace documents
 - When asked about your context or what information you have access to, mention:
   1. The documents you can access (from the document context provided)

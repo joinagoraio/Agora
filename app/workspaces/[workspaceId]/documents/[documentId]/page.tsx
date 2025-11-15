@@ -147,6 +147,7 @@ export default async function DocumentViewerPage({ params, searchParams }: Docum
         highlights={highlights}
         initialPage={initialPage}
         documentMetadata={document.metadata}
+        pages={pages || []}
       />
     </WorkspaceChatWrapper>
   )

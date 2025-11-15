@@ -99,13 +99,18 @@ export function buildDocumentUrlFromSource(
     textSpanKeys: source.textSpan ? Object.keys(source.textSpan) : null,
   })
   
+  // Generate highlight ID if we have a textSpan (required for highlighting to work)
+  // For text documents without a pageNumber, default to page 1 for the highlight ID
+  const pageForHighlight = source.pageNumber ?? 1
+  const highlightId = source.textSpan 
+    ? `highlight-${source.id}-${pageForHighlight}` 
+    : undefined
+  
   const url = buildDocumentUrl(workspaceId, {
     documentId: source.id,
     pageNumber: source.pageNumber,
     textSpan: source.textSpan,
-    highlightId: source.pageNumber && source.textSpan 
-      ? `highlight-${source.id}-${source.pageNumber}` 
-      : undefined,
+    highlightId,
   })
   
   console.log("[buildDocumentUrlFromSource] Output URL:", url)

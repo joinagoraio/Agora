@@ -115,7 +115,8 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
       const queryString = params.toString()
       const targetUrl = queryString ? `${pathname}?${queryString}` : pathname
       isUpdatingUrlRef.current = true
-      router.push(targetUrl)
+      // Use replace instead of push to avoid full page refresh
+      router.replace(targetUrl)
       // Reset flag after a short delay
       setTimeout(() => {
         isUpdatingUrlRef.current = false
@@ -364,6 +365,16 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
     
     const wasActiveConversation = conversationToDelete === currentConversationId
     
+    // Mark as deleting to prevent width updates during deletion
+    isDeletingRef.current = true
+    
+    // Reset chat state first to prevent shaking
+    if (wasActiveConversation) {
+      setCurrentConversationId(null)
+      setMessages([])
+      setHasLoadedInitial(false)
+    }
+    
     const result = await deleteConversation(conversationToDelete)
     if (result.success) {
       // Reload conversations to get updated list
@@ -372,16 +383,27 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
       if (wasActiveConversation) {
         if (updated.length > 0) {
           const mostRecent = updated[0]
+          // Small delay to ensure state is reset before loading new conversation
+          await new Promise(resolve => setTimeout(resolve, 50))
           setCurrentConversationId(mostRecent.id)
           updateConversationId(mostRecent.id)
           await loadMessages(mostRecent.id)
+          setHasLoadedInitial(true)
         } else {
+          // No conversations left - ensure state is fully reset
           setCurrentConversationId(null)
           setMessages([])
           updateConversationId(null)
+          setHasLoadedInitial(true)
         }
       }
     }
+    
+    // Reset deletion flag after a short delay to allow state to settle
+    setTimeout(() => {
+      isDeletingRef.current = false
+    }, 200)
+    
     setDeleteDialogOpen(false)
     setConversationToDelete(null)
     setNeedsConfirmation(false)
@@ -612,11 +634,18 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
 
   // Track if user has manually resized
   const hasManuallyResizedRef = useRef(false)
+  // Track if we're currently deleting to prevent width updates during deletion
+  const isDeletingRef = useRef(false)
   
   // Update sidebar width when conversations or list expansion changes
   // Only update if user hasn't manually resized
   useEffect(() => {
     if (!isMounted || !isOpen) return
+    
+    // Skip width updates during deletion to prevent shaking
+    if (isDeletingRef.current) {
+      return
+    }
     
     const listWidth = getListWidth()
     const minChatWidth = getMinChatWidth()
@@ -669,6 +698,11 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
       newWidth = chatWidth + listWidth
       // Ensure we never go below the minimum
       newWidth = Math.max(newWidth, minSidebarWidth)
+    }
+    
+    // Only update if width actually changed to prevent unnecessary re-renders
+    if (sidebarWidth !== null && Math.abs(sidebarWidth - newWidth) < 1) {
+      return
     }
     
     console.log("[ChatSidebar] Updating sidebar width:", { newWidth, hasConversations, isListExpanded, conversationsCount: conversations.length, minSidebarWidth })
@@ -729,31 +763,28 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
                 console.log("[ChatSidebar] Toggle list button clicked, current state:", isListExpanded)
                 const listWidth = getListWidth()
                 const currentWidth = sidebarWidth ?? getDefaultWidth()
+                const newState = !isListExpanded
                 
-                setIsListExpanded(prev => {
-                  const newState = !prev
-                  console.log("[ChatSidebar] Setting list expanded to:", newState)
-                  
-                  // When expanding: add list width to current width (preserve chat width)
-                  // When collapsing: subtract list width from current width (preserve chat width)
-                  if (newState) {
-                    // Expanding: add list width
-                    const newWidth = currentWidth + listWidth
-                    const minChatWidth = getMinChatWidth()
-                    const minSidebarWidth = minChatWidth + listWidth
-                    // Ensure we meet minimum width requirement
-                    setSidebarWidth(Math.max(newWidth, minSidebarWidth))
-                  } else {
-                    // Collapsing: subtract list width, but ensure we don't go below min chat width
-                    const newWidth = Math.max(currentWidth - listWidth, getMinChatWidth())
-                    setSidebarWidth(newWidth)
-                  }
-                  
-                  // Mark as manually adjusted so auto-update doesn't override
-                  hasManuallyResizedRef.current = true
-                  
-                  return newState
-                })
+                console.log("[ChatSidebar] Setting list expanded to:", newState)
+                
+                // Calculate new width based on expansion state
+                let newWidth: number
+                if (newState) {
+                  // Expanding: add list width to current width (preserve chat width)
+                  const minChatWidth = getMinChatWidth()
+                  const minSidebarWidth = minChatWidth + listWidth
+                  newWidth = Math.max(currentWidth + listWidth, minSidebarWidth)
+                } else {
+                  // Collapsing: subtract list width, but ensure we don't go below min chat width
+                  newWidth = Math.max(currentWidth - listWidth, getMinChatWidth())
+                }
+                
+                // Update states separately to avoid updating parent during render
+                setIsListExpanded(newState)
+                setSidebarWidth(newWidth)
+                
+                // Mark as manually adjusted so auto-update doesn't override
+                hasManuallyResizedRef.current = true
               }} 
               title={isListExpanded ? "Collapse list" : "Expand list"}
             >
@@ -802,16 +833,23 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
               <TooltipProvider>
                 <div className="space-y-0">
                   {conversations && conversations.length > 0 ? (
-                    conversations.map((conv) => (
+                    conversations.map((conv) => {
+                      const isActive = conv.id === currentConversationId
+                      return (
                       <div
                         key={conv.id}
-                        className="group relative flex items-center justify-between px-4 py-1 m-1 cursor-pointer transition-colors rounded-md hover:bg-accent"
+                        className={cn(
+                          "group relative flex items-center justify-between px-4 py-1 m-1 cursor-pointer transition-colors rounded-md hover:bg-accent"
+                        )}
                         onClick={() => handleConversationSelect(conv.id)}
                       >
                         <div className="flex-1 min-w-0">
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <p className="truncate text-xs font-medium">{conv.title}</p>
+                              <p className={cn(
+                                "truncate text-xs",
+                                isActive ? "font-bold" : "font-medium"
+                              )}>{conv.title}</p>
                             </TooltipTrigger>
                             <TooltipContent>
                               <p>{conv.title}</p>
@@ -854,8 +892,9 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
-                  ))
-                ) : (
+                    )
+                    })
+                  ) : (
                   <p className="text-center text-sm text-muted-foreground py-8">No conversations yet</p>
                 )}
                 </div>

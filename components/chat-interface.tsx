@@ -2,7 +2,7 @@
 
 import { useChat } from "ai/react"
 import { useState, useEffect, useRef, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
@@ -65,6 +65,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false)
   const [isSwitchingConversation, setIsSwitchingConversation] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [pendingEvidence, setPendingEvidence] = useState<{
     messageKey: string
     question: string
@@ -607,22 +608,214 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     setEvidenceError(null)
   }
 
-  const handleHighlight = (message: any) => {
+  const handleHighlight = async (message: any) => {
     if (!documentId) {
+      console.warn("[handleHighlight] No documentId provided")
       return
     }
 
     const sources = Array.isArray(message?.sources) ? message.sources : []
-    // Find the first source that matches the current document and has highlight info
-    const relevantSource = sources.find(
+    console.log("[handleHighlight] Looking for relevant sources:", {
+      documentId,
+      sourcesCount: sources.length,
+      sources: sources.map((s: any) => ({
+        id: s.id,
+        pageNumber: s.pageNumber,
+        textSpan: s.textSpan,
+        matches: s.id === documentId,
+      })),
+    })
+
+    // Find ALL sources that match the current document and have highlight info
+    let relevantSources = sources.filter(
       (source: any) =>
         source.id === documentId &&
         (source.pageNumber !== undefined || source.textSpan !== undefined)
     )
 
-    if (relevantSource) {
-      const url = buildDocumentUrlFromSource(workspaceId, relevantSource)
-      router.push(url)
+    // Always try to extract quoted phrases from the AI response to find additional highlights
+    // This ensures we highlight all phrases the AI mentions, not just what's in the sources
+    if (message.content) {
+      console.log("[handleHighlight] Extracting phrases from AI response to find highlights")
+      
+      // Extract quoted phrases from the message content
+      // Look for phrases in quotes - these are the most reliable
+      const quotedPhrases = message.content.match(/"([^"]+)"/g) || []
+      const extractedPhrases = quotedPhrases.map((q: string) => q.replace(/"/g, "").trim())
+      
+      console.log("[handleHighlight] Extracted quoted phrases:", extractedPhrases)
+      
+      // Also extract phrases that match common patterns
+      // Pattern 1: "clear view of X" (with or without quotes)
+      const clearViewMatches = message.content.match(/(?:the\s+)?(?:need\s+for\s+)?(?:a\s+)?(?:clear\s+view\s+of\s+[^.,!?]+)/gi) || []
+      
+      // Pattern 2: Phrases after "mentions", "refers to", etc.
+      const mentionMatches = message.content.match(/(?:mentions?|refers? to|discusses?|talks? about|says?|states?|notes?|indicates?|expresses?)\s+(?:the\s+)?(?:need\s+for\s+)?(?:a\s+)?(?:clear\s+view\s+of\s+[^.,!?]+)/gi) || []
+      
+      // Clean up matches: remove leading words like "mentions", "refers to", etc.
+      const cleanedMentionMatches = mentionMatches.map((m: string) => {
+        return m.replace(/^(?:mentions?|refers? to|discusses?|talks? about|says?|states?|notes?|indicates?|expresses?)\s+/i, "").trim()
+      })
+      
+      // Combine all phrases and clean them up
+      // Prioritize quoted phrases as they're most likely to be exact matches
+      const allPhrases = [...new Set([
+        ...extractedPhrases, // Quoted phrases first (most reliable)
+        ...clearViewMatches.map((m: string) => m.trim()),
+        ...cleanedMentionMatches,
+      ])]
+        .map((p: string) => p.replace(/^["']|["']$/g, "").trim()) // Remove quotes
+        .filter((p: string) => p.length >= 5 && p.length < 300) // More lenient length filter
+        .slice(0, 15) // Increase limit to 15 phrases
+      
+      console.log("[handleHighlight] All extracted phrases:", allPhrases)
+      
+      if (allPhrases.length > 0) {
+        try {
+          // Search for phrases in the document
+          const response = await fetch(`/api/documents/${documentId}/search-phrases`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phrases: allPhrases }),
+          })
+          
+          if (response.ok) {
+            const result = await response.json()
+            const foundHighlights = result.highlights || []
+            console.log("[handleHighlight] Found highlights from phrase search:", foundHighlights)
+            
+            if (foundHighlights && foundHighlights.length > 0) {
+              // Combine highlights from sources and phrase search
+              // Sources with textSpan take priority, but add phrase-based highlights too
+              const sourceHighlights = relevantSources.map((source: any, index: number) => {
+                const pageForHighlight = source.pageNumber ?? 1
+                const highlightId = source.textSpan 
+                  ? `highlight-${source.id}-${pageForHighlight}-${index}` 
+                  : undefined
+                
+                return {
+                  id: highlightId || `highlight-${index}`,
+                  pageNumber: pageForHighlight,
+                  textSpan: source.textSpan,
+                  color: "rgba(255, 255, 0, 0.3)",
+                }
+              })
+              
+              // Combine and deduplicate highlights (prefer source-based if same textSpan)
+              const combinedHighlights = [...sourceHighlights, ...foundHighlights]
+              const uniqueHighlights = combinedHighlights.filter((h, index, self) => 
+                index === self.findIndex((h2) => 
+                  h2.pageNumber === h.pageNumber &&
+                  h2.textSpan?.start === h.textSpan?.start &&
+                  h2.textSpan?.end === h.textSpan?.end
+                )
+              )
+              
+              // Use the first source for navigation, or create a default one
+              const firstSource = sources.find((s: any) => s.id === documentId) || {
+                id: documentId,
+                pageNumber: uniqueHighlights[0]?.pageNumber || 1,
+              }
+              
+              let url = buildDocumentUrlFromSource(workspaceId, firstSource)
+              
+              // Preserve conversationId from current URL if it exists
+              const currentConversationId = searchParams.get("conversationId")
+              if (currentConversationId) {
+                const urlObj = new URL(url, window.location.origin)
+                urlObj.searchParams.set("conversationId", currentConversationId)
+                url = urlObj.pathname + urlObj.search
+              }
+              
+              // Check if we're already on this document page
+              const currentPath = window.location.pathname
+              const targetPath = url.split("?")[0]
+              const isSamePage = currentPath === targetPath
+              
+              if (isSamePage) {
+                window.history.replaceState({}, "", url)
+                window.dispatchEvent(new CustomEvent("highlightUpdated", {
+                  detail: { highlights: uniqueHighlights },
+                }))
+              } else {
+                // Store highlights in sessionStorage for the new page
+                if (typeof window !== "undefined") {
+                  sessionStorage.setItem(`highlights-${documentId}`, JSON.stringify(uniqueHighlights))
+                }
+                router.replace(url)
+              }
+              return
+            }
+          }
+        } catch (error) {
+          console.error("[handleHighlight] Error searching for phrases:", error)
+        }
+      }
+    }
+
+    // Fallback: if we have sources with textSpan but no phrase matches, use those
+    if (relevantSources.length > 0) {
+      console.log("[handleHighlight] Found relevant sources:", relevantSources.length, relevantSources)
+      
+      // Use the first source for URL navigation (to go to the right page)
+      const firstSource = relevantSources[0]
+      let url = buildDocumentUrlFromSource(workspaceId, firstSource)
+      
+      // Preserve conversationId from current URL if it exists
+      const currentConversationId = searchParams.get("conversationId")
+      if (currentConversationId) {
+        const urlObj = new URL(url, window.location.origin)
+        urlObj.searchParams.set("conversationId", currentConversationId)
+        url = urlObj.pathname + urlObj.search
+      }
+      
+      // Build highlights array from all relevant sources
+      const highlights = relevantSources.map((source: any, index: number) => {
+        const pageForHighlight = source.pageNumber ?? 1
+        const highlightId = source.textSpan 
+          ? `highlight-${source.id}-${pageForHighlight}-${index}` 
+          : undefined
+        
+        return {
+          id: highlightId || `highlight-${index}`,
+          pageNumber: pageForHighlight,
+          textSpan: source.textSpan,
+          color: "rgba(255, 255, 0, 0.3)",
+        }
+      })
+      
+      console.log("[handleHighlight] Built highlights array:", highlights)
+      console.log("[handleHighlight] Navigating to:", url)
+      
+      // Check if we're already on this document page
+      const currentPath = window.location.pathname
+      const targetPath = url.split("?")[0]
+      const isSamePage = currentPath === targetPath
+      
+      if (isSamePage) {
+        // If we're already on the same page, update URL without navigation to avoid refresh
+        // This prevents the document from reloading
+        window.history.replaceState({}, "", url)
+        // Dispatch a custom event to notify the document viewer to update highlights
+        // Pass all highlights, not just the first one
+        window.dispatchEvent(new CustomEvent("highlightUpdated", { 
+          detail: { 
+            highlights: highlights, // Pass all highlights
+            highlight: new URL(url, window.location.origin).searchParams.get("highlight"),
+            textSpan: new URL(url, window.location.origin).searchParams.get("textSpan"),
+            page: new URL(url, window.location.origin).searchParams.get("page"),
+          } 
+        }))
+      } else {
+        // If we're on a different page, use router.replace to navigate
+        // Store highlights in sessionStorage to pass them to the new page
+        if (typeof window !== "undefined" && highlights.length > 0) {
+          sessionStorage.setItem(`highlights-${documentId}`, JSON.stringify(highlights))
+        }
+        router.replace(url)
+      }
+    } else {
+      console.warn("[handleHighlight] No relevant source found with highlight info")
     }
   }
 
@@ -787,6 +980,16 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           const messageKey = getMessageKey(message, index)
           const evidenceStatusEntry = evidenceStatusByMessage[messageKey]
           const evidenceStatus = evidenceStatusEntry?.status ?? "idle"
+          
+          // Process message content to add source badges after quoted text
+          // We'll render badges separately, not through ReactMarkdown
+          const sources = Array.isArray(message?.sources) ? message.sources : []
+          const hasDocumentSource = documentId && sources.some((s: any) => s.id === documentId)
+          
+          // Extract quoted phrases for badge rendering
+          const quotedPhrases = isAssistant && message.content 
+            ? message.content.match(/"([^"]+)"/g) || []
+            : []
 
           return (
             <div key={index} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -826,7 +1029,74 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                   )}
                 >
                   <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-0 prose-pre:whitespace-pre-wrap prose-pre:break-words prose-pre:text-sm">
-                    <ReactMarkdown>{message.content}</ReactMarkdown>
+                    <ReactMarkdown
+                      components={{
+                        p: ({ children, ...props }) => {
+                          // Process text nodes to add badges after quoted text
+                          const processTextNode = (text: string): any[] => {
+                            const parts: any[] = []
+                            const quoteRegex = /"([^"]+)"/g
+                            let lastIndex = 0
+                            let match
+                            
+                            while ((match = quoteRegex.exec(text)) !== null) {
+                              // Add text before the quote
+                              if (match.index > lastIndex) {
+                                parts.push(text.substring(lastIndex, match.index))
+                              }
+                              
+                              // Add quoted text with badge
+                              const quotedText = match[1]
+                              const badgeType = hasDocumentSource ? 'doc' : 'scope'
+                              
+                              parts.push(
+                                <span key={match.index} className="inline-flex items-center gap-1">
+                                  <span className="font-medium">"{quotedText}"</span>
+                                  <Badge 
+                                    variant={badgeType === 'doc' ? 'secondary' : 'outline'} 
+                                    className="text-[10px] px-1.5 py-0 h-4"
+                                  >
+                                    {badgeType}
+                                  </Badge>
+                                </span>
+                              )
+                              
+                              lastIndex = match.index + match[0].length
+                            }
+                            
+                            // Add remaining text
+                            if (lastIndex < text.length) {
+                              parts.push(text.substring(lastIndex))
+                            }
+                            
+                            return parts
+                          }
+                          
+                          if (typeof children === 'string') {
+                            const processed = processTextNode(children)
+                            return <p {...props}>{processed.length > 0 ? processed : children}</p>
+                          }
+                          
+                          if (Array.isArray(children)) {
+                            return (
+                              <p {...props}>
+                                {children.map((child, idx) => {
+                                  if (typeof child === 'string') {
+                                    const processed = processTextNode(child)
+                                    return processed.length > 0 ? <>{processed}</> : child
+                                  }
+                                  return child
+                                })}
+                              </p>
+                            )
+                          }
+                          
+                          return <p {...props}>{children}</p>
+                        },
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
                   </div>
                   {isAssistant && (
                     <div className="flex flex-wrap items-center justify-end gap-2 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -834,10 +1104,10 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                         // Document viewer mode: show Highlight button
                         (() => {
                           const sources = Array.isArray(message?.sources) ? message.sources : []
+                          // Show highlight button if there are ANY sources for this document
+                          // (even without textSpan, we can extract phrases from the response)
                           const hasRelevantSource = sources.some(
-                            (source: any) =>
-                              source.id === documentId &&
-                              (source.pageNumber !== undefined || source.textSpan !== undefined)
+                            (source: any) => source.id === documentId
                           )
                           return hasRelevantSource ? (
                             <Button
