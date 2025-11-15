@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import { MultiFormatViewer } from "@/components/multi-format-viewer"
+import { useHighlightContext } from "@/lib/contexts/highlight-context"
 import { ZOOM_PRESETS, type ViewerControls } from "@/components/pdf-viewer"
 import { getHighlightCoordinates } from "@/lib/utils/pdf-extraction"
 import { Button } from "@/components/ui/button"
@@ -14,6 +15,8 @@ import {
   ChevronsLeftRight,
   ChevronDown,
   Highlighter,
+  ChevronUp,
+  ChevronDown as ChevronDownIcon,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -56,10 +59,49 @@ export function DocumentViewerClient({
   documentMetadata,
   pages,
 }: DocumentViewerClientProps) {
-  const [autoHighlight, setAutoHighlight] = useState(true)
+  const highlightContext = useHighlightContext()
+  const { 
+    highlights: highlightsMap,
+    getHighlightsForDocument, 
+    autoHighlight, 
+    setAutoHighlight, 
+    setActiveDocument 
+  } = highlightContext
+  
   const [controls, setControls] = useState<ViewerControls | null>(null)
   const searchParams = useSearchParams()
-  const [urlHighlights, setUrlHighlights] = useState<any[]>(initialHighlights)
+  
+  // Check if there's an active conversation - only show highlights if there is one
+  const conversationId = searchParams.get("conversationId")
+  
+  // Set active document when component mounts
+  useEffect(() => {
+    setActiveDocument(documentId)
+    
+    // Initialize context with server-side highlights if provided and context is empty
+    if (initialHighlights && initialHighlights.length > 0) {
+      const currentHighlights = getHighlightsForDocument(documentId)
+      if (currentHighlights.length === 0) {
+        // Convert initial highlights to context format
+        const contextHighlights = initialHighlights.map((h: any) => ({
+          id: h.id || `highlight-${documentId}-${h.pageNumber || 1}-${Date.now()}`,
+          documentId,
+          textSpan: h.textSpan,
+          pageNumber: h.pageNumber || 1,
+          quote: "",
+          source: 'url' as const,
+          color: h.color || "rgba(255, 255, 0, 0.3)",
+          coordinates: h.coordinates,
+        }))
+        highlightContext.setHighlights(documentId, contextHighlights)
+      }
+    }
+    
+    return () => {
+      // Optionally clear highlights when leaving document
+      // For now, we'll keep them so they persist when navigating back
+    }
+  }, [documentId, setActiveDocument, initialHighlights, getHighlightsForDocument, highlightContext])
   
   // Function to compute coordinates for highlights that need them (for PDFs)
   const computeHighlightCoordinates = useCallback((highlights: any[]): any[] => {
@@ -105,244 +147,106 @@ export function DocumentViewerClient({
     })
   }, [pages, documentMetadata, documentTitle])
   
-  // Check sessionStorage for highlights on mount
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedHighlights = sessionStorage.getItem(`highlights-${documentId}`)
-      if (storedHighlights) {
-        try {
-          const parsed = JSON.parse(storedHighlights)
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            console.log("[DocumentViewerClient] Found highlights in sessionStorage:", parsed)
-            // Compute coordinates for PDF highlights
-            const processedHighlights = computeHighlightCoordinates(parsed)
-            setUrlHighlights(processedHighlights)
-            // Clear sessionStorage after reading
-            sessionStorage.removeItem(`highlights-${documentId}`)
-          }
-        } catch (error) {
-          console.error("[DocumentViewerClient] Error parsing stored highlights:", error)
-        }
-      }
-    }
-  }, [documentId, computeHighlightCoordinates])
+  // Get highlights from context (reactive - will update when highlightsMap changes)
+  const contextHighlights = useMemo(() => {
+    return getHighlightsForDocument(documentId)
+  }, [getHighlightsForDocument, documentId, highlightsMap])
   
-  // Function to compute highlights from URL params
-  const computeHighlightsFromUrl = useCallback((forceFromWindow = false) => {
-    let highlightParam: string | null
-    let textSpanParam: string | null
-    let pageParam: string | null
+  // Determine which highlights to show based on context and auto-highlight toggle
+  const hasActiveConversation = !!conversationId
+  
+  // Filter highlights based on source and auto-highlight state
+  const highlightsToUse = useMemo(() => {
+    if (!hasActiveConversation && contextHighlights.length === 0) {
+      return [] // No conversation and no highlights
+    }
     
-    if (forceFromWindow && typeof window !== "undefined") {
-      // Read directly from window.location when forceFromWindow is true
-      // This is needed when URL changes via window.history.replaceState()
-      const urlParams = new URLSearchParams(window.location.search)
-      highlightParam = urlParams.get("highlight")
-      textSpanParam = urlParams.get("textSpan")
-      pageParam = urlParams.get("page")
+    if (autoHighlight) {
+      // Auto-highlight ON: show all highlights from context
+      return contextHighlights
     } else {
-      // Use Next.js searchParams hook (updates on router navigation)
-      highlightParam = searchParams.get("highlight")
-      textSpanParam = searchParams.get("textSpan")
-      pageParam = searchParams.get("page")
+      // Auto-highlight OFF: only show highlights from user clicks (not AI responses)
+      return contextHighlights.filter(h => h.source === 'user_click')
     }
-    
-    // If no highlight params in URL, use initial highlights from server
-    if (!highlightParam || !textSpanParam) {
-      return initialHighlights
-    }
-    
-    try {
-      const [start, end] = textSpanParam.split("-").map(Number)
-      const textSpan = { start, end }
-      const highlightPage = pageParam ? parseInt(pageParam) : 1
-      
-      // Check if document is text/markdown/word
-      const documentType = documentMetadata?.type || ""
-      const isTextDocument = 
-        documentType.includes("text") || 
-        documentType.includes("markdown") ||
-        documentType.includes("word") ||
-        documentTitle?.toLowerCase().endsWith(".md") ||
-        documentTitle?.toLowerCase().endsWith(".txt") ||
-        documentTitle?.toLowerCase().endsWith(".docx") ||
-        documentTitle?.toLowerCase().endsWith(".doc")
-      
-      if (isTextDocument) {
-        // For text documents, simple highlight
-        return [{
-          id: highlightParam,
-          pageNumber: highlightPage,
-          textSpan,
-          color: "rgba(255, 255, 0, 0.3)",
-        }]
-      } else if (pages && pages.length > 0) {
-        // For PDFs, compute coordinates
-        const pageData = pages.find((p: any) => p.page_number === highlightPage)
-        if (pageData) {
-          const coordinates = getHighlightCoordinates(
-            textSpan,
-            pageData.text_items || [],
-            pageData.character_offsets || {},
-          )
-          return [{
-            id: highlightParam,
-            pageNumber: highlightPage,
-            textSpan,
-            coordinates,
-            color: "rgba(255, 255, 0, 0.3)",
-          }]
-        }
-      }
-    } catch (error) {
-      console.error("[DocumentViewerClient] Error parsing highlight from URL:", error)
-    }
-    
-    return initialHighlights
-  }, [searchParams, initialHighlights, pages, documentMetadata, documentTitle])
+  }, [contextHighlights, autoHighlight, hasActiveConversation])
   
-  // Watch for URL changes and compute highlights dynamically
-  const highlights = useMemo(() => {
-    return computeHighlightsFromUrl()
-  }, [computeHighlightsFromUrl])
+  // Compute coordinates for PDF highlights
+  const finalHighlights = useMemo(() => {
+    return computeHighlightCoordinates(highlightsToUse)
+  }, [highlightsToUse, computeHighlightCoordinates])
   
-  // Listen for highlightUpdated custom event (from window.history.replaceState)
-  useEffect(() => {
-    const handleHighlightUpdate = (event: any) => {
-      // Check if event has highlights array in detail (multiple highlights)
-      if (event.detail?.highlights && Array.isArray(event.detail.highlights)) {
-        console.log("[DocumentViewerClient] Received multiple highlights from event:", event.detail.highlights)
-        // Compute coordinates for PDF highlights
-        const processedHighlights = computeHighlightCoordinates(event.detail.highlights)
-        setUrlHighlights(processedHighlights)
-        
-        // If scrollTo is requested, trigger scrolling after a short delay to allow coordinates to be computed
-        if (event.detail?.scrollTo && processedHighlights.length > 0) {
-          const firstHighlight = processedHighlights[0]
-          const pageNumber = firstHighlight.pageNumber || 1
-          
-          console.log("[DocumentViewerClient] Triggering scroll for highlight:", { firstHighlight, pageNumber })
-          
-          // Navigate to the page first
-          if (controls && controls.goToPage) {
-            controls.goToPage(pageNumber)
-          }
-          
-          // Then scroll to the highlight - use processed highlight with coordinates
-          setTimeout(() => {
-            window.dispatchEvent(new CustomEvent("scrollToHighlight", {
-              detail: { highlight: firstHighlight, pageNumber },
-            }))
-          }, 300)
-        }
-      } else {
-        // Fallback to URL-based highlighting (single highlight)
-        const newHighlights = computeHighlightsFromUrl(true)
-        setUrlHighlights(newHighlights)
-      }
-    }
-    
-    window.addEventListener("highlightUpdated", handleHighlightUpdate as EventListener)
-    return () => window.removeEventListener("highlightUpdated", handleHighlightUpdate as EventListener)
-  }, [computeHighlightsFromUrl, computeHighlightCoordinates, controls])
+  // Track current highlight index for navigation
+  const [currentHighlightIndex, setCurrentHighlightIndex] = useState<number | null>(null)
   
-  // Also watch for popstate events (back/forward navigation)
+  // Initialize current highlight index when highlights change
   useEffect(() => {
-    const handlePopState = () => {
-      // Read directly from window.location for popstate events too
-      const newHighlights = computeHighlightsFromUrl(true)
-      setUrlHighlights(newHighlights)
+    if (finalHighlights.length > 0 && currentHighlightIndex === null) {
+      setCurrentHighlightIndex(0)
+    } else if (finalHighlights.length === 0) {
+      setCurrentHighlightIndex(null)
     }
+  }, [finalHighlights.length, currentHighlightIndex])
+          
+  // Navigation functions
+  const navigateToHighlight = useCallback((index: number) => {
+    if (index < 0 || index >= finalHighlights.length) return
+    setCurrentHighlightIndex(index)
     
-    window.addEventListener("popstate", handlePopState)
-    return () => window.removeEventListener("popstate", handlePopState)
-  }, [computeHighlightsFromUrl])
-
-  // Listen for scrollToHighlight event to scroll to a specific highlight
-  useEffect(() => {
-    const handleScrollToHighlight = (event: any) => {
-      const { highlight, pageNumber } = event.detail || {}
-      if (!highlight || !pageNumber) return
-
-      console.log("[DocumentViewerClient] ScrollToHighlight event received:", { highlight, pageNumber })
-
-      // If we have controls, navigate to the page first
-      if (controls && controls.goToPage) {
-        controls.goToPage(pageNumber)
+    const highlight = finalHighlights[index]
+    if (controls && controls.goToPage && highlight.pageNumber) {
+      controls.goToPage(highlight.pageNumber)
       }
 
-      // For text documents, the MultiFormatViewer will handle scrolling automatically
-      // For PDFs, we need to wait a bit for the page to render, then scroll
-      // The PDF viewer should handle scrolling when the page is set
+    // Dispatch scroll event for text documents
       setTimeout(() => {
-        // Dispatch a scroll event that the PDF viewer can listen to
-        window.dispatchEvent(new CustomEvent("scrollToPage", {
-          detail: { pageNumber, highlight },
+      window.dispatchEvent(new CustomEvent("scrollToHighlight", {
+        detail: { highlight, pageNumber: highlight.pageNumber },
         }))
       }, 300)
-    }
-
-    window.addEventListener("scrollToHighlight", handleScrollToHighlight as EventListener)
-    return () => window.removeEventListener("scrollToHighlight", handleScrollToHighlight as EventListener)
-  }, [controls])
-
-  // Check sessionStorage for scroll instruction on mount (when navigating from another page)
+  }, [finalHighlights, controls])
+  
+  const navigateToNextHighlight = useCallback(() => {
+    if (currentHighlightIndex === null || finalHighlights.length === 0) return
+    const nextIndex = (currentHighlightIndex + 1) % finalHighlights.length
+    navigateToHighlight(nextIndex)
+  }, [currentHighlightIndex, finalHighlights.length, navigateToHighlight])
+  
+  const navigateToPreviousHighlight = useCallback(() => {
+    if (currentHighlightIndex === null || finalHighlights.length === 0) return
+    const prevIndex = currentHighlightIndex === 0 
+      ? finalHighlights.length - 1 
+      : currentHighlightIndex - 1
+    navigateToHighlight(prevIndex)
+  }, [currentHighlightIndex, finalHighlights.length, navigateToHighlight])
+  
+  // Keyboard shortcuts for highlight navigation
   useEffect(() => {
-    if (typeof window === "undefined" || !documentId) return
-
-    const scrollData = sessionStorage.getItem(`scrollToHighlight-${documentId}`)
-    if (scrollData) {
-      try {
-        const { highlight, pageNumber } = JSON.parse(scrollData)
-        // Clear the stored instruction
-        sessionStorage.removeItem(`scrollToHighlight-${documentId}`)
-        
-        // Wait for controls to be ready, then scroll
-        if (controls && controls.goToPage) {
-          controls.goToPage(pageNumber)
-          setTimeout(() => {
-            window.dispatchEvent(new CustomEvent("scrollToPage", {
-              detail: { pageNumber, highlight },
-            }))
-          }, 300)
-        } else {
-          // If controls aren't ready yet, wait a bit and try again
-          const timer = setTimeout(() => {
-            if (controls && controls.goToPage) {
-              controls.goToPage(pageNumber)
-              setTimeout(() => {
-                window.dispatchEvent(new CustomEvent("scrollToPage", {
-                  detail: { pageNumber, highlight },
-                }))
-              }, 300)
-            }
-          }, 500)
-          return () => clearTimeout(timer)
-        }
-      } catch (error) {
-        console.error("[DocumentViewerClient] Error parsing scroll instruction:", error)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle if we have highlights and user is not typing in an input
+      if (finalHighlights.length === 0) return
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      
+      // 'n' key for next highlight, 'p' key for previous highlight
+      if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        e.preventDefault()
+        navigateToNextHighlight()
+      } else if (e.key === 'p' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        e.preventDefault()
+        navigateToPreviousHighlight()
       }
     }
-  }, [controls, documentId])
-  
-  // Use highlights computed from useMemo (reacts to searchParams changes)
-  // urlHighlights is updated via events for window.history.replaceState() changes
-  // Prefer urlHighlights if it's been set (not equal to initial), otherwise use highlights
-  const hasUrlHighlights = urlHighlights.length > 0 && 
-    JSON.stringify(urlHighlights) !== JSON.stringify(initialHighlights)
-  // Only show highlights if auto-highlight is enabled
-  // Ensure coordinates are computed for PDF highlights
-  const highlightsToUse = hasUrlHighlights ? urlHighlights : highlights
-  const finalHighlights = autoHighlight ? computeHighlightCoordinates(highlightsToUse) : []
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [finalHighlights.length, navigateToNextHighlight, navigateToPreviousHighlight])
 
   console.log("[DocumentViewerClient] Computed highlights:", {
     highlightsCount: finalHighlights.length,
     highlights: finalHighlights,
-    urlParams: {
-      highlight: searchParams.get("highlight"),
-      textSpan: searchParams.get("textSpan"),
-      page: searchParams.get("page"),
-    },
+    contextHighlightsCount: contextHighlights.length,
+    autoHighlight,
+    hasActiveConversation,
+    currentHighlightIndex,
   })
 
   return (
@@ -427,6 +331,56 @@ export function DocumentViewerClient({
                   </>
                 )}
                 <div className="h-6 w-px bg-border" />
+                {finalHighlights.length > 0 && (
+                  <>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={navigateToPreviousHighlight}
+                          disabled={finalHighlights.length === 0}
+                        >
+                          <ChevronUp className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Previous highlight</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span 
+                          className="text-xs text-muted-foreground min-w-[3rem] text-center cursor-default"
+                          aria-label={`Highlight ${currentHighlightIndex !== null ? currentHighlightIndex + 1 : 0} of ${finalHighlights.length}`}
+                        >
+                          {currentHighlightIndex !== null && finalHighlights.length > 0
+                            ? `${currentHighlightIndex + 1} / ${finalHighlights.length}`
+                            : ""}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Use <kbd className="px-1 py-0.5 text-xs font-semibold bg-muted rounded">n</kbd> for next, <kbd className="px-1 py-0.5 text-xs font-semibold bg-muted rounded">p</kbd> for previous</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={navigateToNextHighlight}
+                          disabled={finalHighlights.length === 0}
+                        >
+                          <ChevronDownIcon className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Next highlight</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <div className="h-6 w-px bg-border" />
+                  </>
+                )}
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button

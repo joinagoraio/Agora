@@ -4,7 +4,11 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { PDFViewer, Highlight, type ViewerControls, type ViewerFitMode } from "@/components/pdf-viewer"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, ExternalLink, Download, RefreshCw } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { findTextSpan } from "@/lib/utils/pdf-extraction"
+import type { Highlight as ContextHighlight } from "@/lib/contexts/highlight-context"
 
 export type DocumentType = "pdf" | "word" | "html" | "text" | "unknown"
 
@@ -106,6 +110,59 @@ export function MultiFormatViewer({
       setError(null)
 
       try {
+        // For text/markdown documents, use document_pages.text_content API for consistency
+        // This ensures the content matches what RAG/search uses
+        const isTextOrMarkdown = 
+          documentMetadata?.type?.includes("text") ||
+          documentMetadata?.type?.includes("markdown") ||
+          documentTitle?.toLowerCase().endsWith(".md") ||
+          documentTitle?.toLowerCase().endsWith(".txt")
+
+        if (isTextOrMarkdown) {
+          // Use the text-content API endpoint which fetches from document_pages
+          const textContentResponse = await fetch(`/api/documents/${documentId}/text-content`, {
+            credentials: "include",
+            headers: {
+              Accept: "text/plain",
+            },
+            cache: "no-store",
+          })
+
+          if (!textContentResponse.ok) {
+            if (textContentResponse.status === 401) {
+              if (retryCount === 0) {
+                await new Promise(resolve => setTimeout(resolve, 500))
+                return loadDocument(1)
+              }
+              throw new Error("Authentication required. Please refresh the page and try again.")
+            }
+            if (textContentResponse.status === 403) {
+              throw new Error("You don't have permission to access this document.")
+            }
+            if (textContentResponse.status === 404) {
+              throw new Error("Document content not found. The document may need to be re-uploaded.")
+            }
+            
+            let errorMessage = `Failed to fetch document content: ${textContentResponse.status} ${textContentResponse.statusText}`
+            try {
+              const errorData = await textContentResponse.json()
+              if (errorData.error) {
+                errorMessage = errorData.error
+              }
+            } catch {
+              // If response isn't JSON, use default message
+            }
+            throw new Error(errorMessage)
+          }
+
+          const textContent = await textContentResponse.text()
+          setDocumentType("text")
+          setTextContent(textContent)
+          setLoading(false)
+          return
+        }
+
+        // For other document types, fetch from the original URL
         // Fetch document to detect type
         // For API routes, ensure cookies are included for authentication
         const response = await fetch(url, {
@@ -187,7 +244,7 @@ export function MultiFormatViewer({
     }
 
     loadDocument()
-  }, [url, documentMetadata])
+  }, [url, documentMetadata, documentId, documentTitle])
 
   const clampScale = useCallback((value: number) => {
     return Math.min(Math.max(value, 0.5), 3.0)
@@ -322,10 +379,239 @@ export function MultiFormatViewer({
     }
   }, [controls])
 
-  // Find the highlight for text documents (page 1 or no page specified)
-  const textHighlight = documentType === "text" 
-    ? highlights.find((h) => !h.pageNumber || h.pageNumber === 1)
-    : null
+  // Find all highlights for text documents (page 1 or no page specified)
+  // Sort by start position to render in order
+  // Memoize to avoid recomputing on every render
+  const textHighlights = useMemo(() => {
+    if (documentType !== "text") return []
+    
+    return highlights
+      .filter((h) => !h.pageNumber || h.pageNumber === 1)
+      .filter((h) => h.textSpan && h.textSpan.start !== undefined && h.textSpan.end !== undefined)
+      .sort((a, b) => {
+        const aStart = a.textSpan?.start ?? 0
+        const bStart = b.textSpan?.start ?? 0
+        return aStart - bStart
+      })
+  }, [documentType, highlights])
+  
+  // For backward compatibility, keep textHighlight for single highlight logic
+  const textHighlight = textHighlights.length > 0 ? textHighlights[0] : null
+  
+  // Memoize the deduplication and merging logic (must be at top level, not conditional)
+  const processedHighlights = useMemo(() => {
+    // Only process if document type is text and we have highlights
+    if (documentType !== "text" || textHighlights.length === 0) return []
+    
+    // First, deduplicate and merge overlapping highlights
+    // Sort highlights by start position
+    const sortedHighlights = [...textHighlights].sort((a, b) => {
+      const aStart = a.textSpan?.start ?? 0
+      const bStart = b.textSpan?.start ?? 0
+      if (aStart !== bStart) return aStart - bStart
+      // If same start, prefer longer highlight
+      const aEnd = a.textSpan?.end ?? 0
+      const bEnd = b.textSpan?.end ?? 0
+      return bEnd - aEnd
+    })
+    
+    // Deduplicate: remove exact duplicates and merge overlapping highlights
+    const deduplicatedHighlights: typeof sortedHighlights = []
+    for (let i = 0; i < sortedHighlights.length; i++) {
+      const current = sortedHighlights[i]
+      const currentStart = current.textSpan?.start ?? 0
+      const currentEnd = current.textSpan?.end ?? 0
+      
+      if (currentStart === undefined || currentEnd === undefined || currentStart >= currentEnd) {
+        continue // Skip invalid highlights
+      }
+      
+      // Check if this highlight is a duplicate of an existing one
+      const isDuplicate = deduplicatedHighlights.some(existing => {
+        const existingStart = existing.textSpan?.start ?? 0
+        const existingEnd = existing.textSpan?.end ?? 0
+        return existingStart === currentStart && existingEnd === currentEnd
+      })
+      
+      if (isDuplicate) {
+        continue // Skip duplicates
+      }
+      
+      // Check if this highlight overlaps with an existing one
+      const overlappingIndex = deduplicatedHighlights.findIndex(existing => {
+        const existingStart = existing.textSpan?.start ?? 0
+        const existingEnd = existing.textSpan?.end ?? 0
+        // Check if they overlap (one starts before the other ends)
+        return (currentStart < existingEnd && currentEnd > existingStart)
+      })
+      
+      if (overlappingIndex >= 0) {
+        // Merge overlapping highlights by taking the union (min start, max end)
+        const existing = deduplicatedHighlights[overlappingIndex]
+        const existingStart = existing.textSpan?.start ?? 0
+        const existingEnd = existing.textSpan?.end ?? 0
+        const mergedStart = Math.min(existingStart, currentStart)
+        const mergedEnd = Math.max(existingEnd, currentEnd)
+        
+        deduplicatedHighlights[overlappingIndex] = {
+          ...existing,
+          textSpan: { start: mergedStart, end: mergedEnd }
+        }
+      } else {
+        // No overlap, add as new highlight
+        deduplicatedHighlights.push(current)
+      }
+    }
+    
+    // Re-sort after merging (in case merging changed positions)
+    return [...deduplicatedHighlights].sort((a, b) => {
+      const aStart = a.textSpan?.start ?? 0
+      const bStart = b.textSpan?.start ?? 0
+      return aStart - bStart
+    })
+  }, [documentType, textHighlights])
+  
+  // Helper function to find textSpan with fallback strategies (must be defined before useMemo)
+  const findTextSpanWithFallback = useCallback((expectedTextSpan: { start: number; end: number }, searchText?: string): { start: number; end: number; confidence: 'exact' | 'normalized' | 'fuzzy' | 'approximate' } | null => {
+    if (!textContent) return null
+    
+    const { start: expectedStart, end: expectedEnd } = expectedTextSpan
+    
+    // Strategy 1: Try exact position match
+    if (expectedStart >= 0 && expectedEnd <= textContent.length && expectedEnd > expectedStart) {
+      const exactText = textContent.substring(expectedStart, expectedEnd)
+      if (exactText.length > 0 && exactText.length < 2000 && exactText.trim().length > 0) {
+        return { start: expectedStart, end: expectedEnd, confidence: 'exact' }
+      }
+    }
+    
+    // Strategy 2: If we have search text, try normalized match
+    if (searchText && searchText.length > 5) {
+      const normalizedMatch = findTextSpan(textContent, searchText, { useNormalization: true, fuzzy: false })
+      if (normalizedMatch) {
+        return { ...normalizedMatch, confidence: 'normalized' }
+      }
+      
+      // Strategy 3: Try fuzzy match
+      const fuzzyMatch = findTextSpan(textContent, searchText, { useNormalization: true, fuzzy: true })
+      if (fuzzyMatch) {
+        return { ...fuzzyMatch, confidence: 'fuzzy' }
+      }
+    }
+    
+    // Strategy 4: Last resort - highlight around expected position (approximate)
+    // This at least gets the user to the right area of the document
+    if (expectedStart > 0 && expectedStart < textContent.length) {
+      const safeStart = Math.max(0, Math.min(expectedStart, textContent.length - 200))
+      const safeEnd = Math.min(textContent.length, safeStart + Math.max(50, expectedEnd - expectedStart))
+      if (safeEnd > safeStart) {
+        return { start: safeStart, end: safeEnd, confidence: 'approximate' }
+      }
+    }
+    
+    return null
+  }, [textContent])
+  
+  // Memoize segment creation to avoid recomputing on every render (must be at top level)
+  const segments = useMemo(() => {
+    // Only process if document type is text
+    if (documentType !== "text" || !textContent || processedHighlights.length === 0) {
+      return []
+    }
+    
+    const segmentArray: Array<{ type: 'text' | 'highlight', content: string, highlightIndex?: number, confidence?: string }> = []
+    let lastIndex = 0
+    
+    for (let i = 0; i < processedHighlights.length; i++) {
+      const highlight = processedHighlights[i]
+      const { start: originalStart, end: originalEnd } = highlight.textSpan || {}
+      
+      // Try to find the textSpan with fallback strategies
+      let finalTextSpan: { start: number; end: number; confidence: string } | null = null
+      
+      if (originalStart !== undefined && originalEnd !== undefined) {
+        // Try exact match first
+        if (originalStart >= 0 && originalEnd <= textContent.length && originalEnd > originalStart) {
+          const exactText = textContent.substring(originalStart, originalEnd)
+          if (exactText.length > 0 && exactText.length < 2000 && exactText.trim().length > 0) {
+            finalTextSpan = { start: originalStart, end: originalEnd, confidence: 'exact' }
+          }
+        }
+        
+        // If exact match failed, try fallback strategies
+        if (!finalTextSpan) {
+          const fallbackResult = findTextSpanWithFallback(
+            { start: originalStart, end: originalEnd },
+            undefined
+          )
+          
+          if (fallbackResult) {
+            finalTextSpan = {
+              start: fallbackResult.start,
+              end: fallbackResult.end,
+              confidence: fallbackResult.confidence
+            }
+            
+            if (fallbackResult.confidence !== 'exact') {
+              console.warn(`[MultiFormatViewer] Highlight ${i} used ${fallbackResult.confidence} match`, {
+                original: { start: originalStart, end: originalEnd },
+                found: { start: fallbackResult.start, end: fallbackResult.end },
+              })
+            }
+          }
+        }
+      }
+      
+      // If we still don't have a valid textSpan, skip this highlight
+      if (!finalTextSpan) {
+        console.warn("[MultiFormatViewer] Could not find valid textSpan for highlight", i, {
+          originalStart,
+          originalEnd,
+          textContentLength: textContent.length,
+        })
+        continue
+      }
+      
+      const { start, end, confidence } = finalTextSpan
+      
+      // Add text before this highlight
+      if (start > lastIndex) {
+        segmentArray.push({
+          type: 'text',
+          content: textContent.substring(lastIndex, start),
+        })
+      }
+      
+      // Add the highlighted text
+      const highlightedText = textContent.substring(start, end)
+      if (highlightedText.length > 0 && highlightedText.length < 2000 && highlightedText.trim().length > 0) {
+        segmentArray.push({
+          type: 'highlight',
+          content: highlightedText,
+          highlightIndex: i,
+          confidence,
+        })
+        lastIndex = end
+      } else {
+        console.warn("[MultiFormatViewer] Highlight text invalid after fallback for highlight", i, {
+          length: highlightedText.length,
+          trimmed: highlightedText.trim().length,
+          confidence,
+        })
+        lastIndex = start // Skip this highlight but don't advance past it
+      }
+    }
+    
+    // Add remaining text after last highlight
+    if (lastIndex < textContent.length) {
+      segmentArray.push({
+        type: 'text',
+        content: textContent.substring(lastIndex),
+      })
+    }
+    
+    return segmentArray
+  }, [documentType, textContent, processedHighlights, findTextSpanWithFallback])
 
   // Find the highlight for Word documents (page 1 or no page specified)
   const wordHighlight = documentType === "word"
@@ -439,24 +725,25 @@ export function MultiFormatViewer({
   // Track previous autoHighlight state to detect when it's turned on
   const prevAutoHighlightRef = useRef(autoHighlight)
 
-  // Scroll to highlight when text content loads or when autoHighlight is turned on
+  // Scroll to first highlight when text content loads or when autoHighlight is turned on
   useEffect(() => {
-    if (autoHighlight && documentType === "text" && textHighlight) {
+    if (autoHighlight && documentType === "text" && textHighlights.length > 0) {
+      // Scroll to the first highlight (topmost)
       scrollToTextHighlight()
     }
-  }, [scrollToTextHighlight, autoHighlight, documentType, textHighlight])
+  }, [scrollToTextHighlight, autoHighlight, documentType, textHighlights.length])
 
   // Auto-scroll when highlight toggle is turned on (changed from false to true)
   useEffect(() => {
-    if (documentType === "text" && autoHighlight && !prevAutoHighlightRef.current && textHighlight) {
+    if (documentType === "text" && autoHighlight && !prevAutoHighlightRef.current && textHighlights.length > 0) {
       // autoHighlight just changed from false to true
-      console.log("[MultiFormatViewer] AutoHighlight turned on, scrolling to first highlight")
+      console.log("[MultiFormatViewer] AutoHighlight turned on, scrolling to first highlight of", textHighlights.length, "highlights")
       setTimeout(() => {
         scrollToTextHighlight()
       }, 200)
     }
     prevAutoHighlightRef.current = autoHighlight
-  }, [autoHighlight, documentType, textHighlight, scrollToTextHighlight])
+  }, [autoHighlight, documentType, textHighlights.length, scrollToTextHighlight])
 
   // Listen for scrollToHighlight event for text documents
   useEffect(() => {
@@ -468,15 +755,45 @@ export function MultiFormatViewer({
 
       console.log("[MultiFormatViewer] ScrollToHighlight event received for text document:", { highlight, pageNumber })
       
-      // Trigger scroll after a short delay to ensure highlights are updated
-      setTimeout(() => {
-        scrollToTextHighlight()
-      }, 100)
+      // If a specific highlight is provided, scroll to that one
+      // Otherwise, scroll to the first highlight
+      if (highlight.textSpan) {
+        // Find the highlight in our list and scroll to it
+        const highlightIndex = textHighlights.findIndex(h => 
+          h.textSpan?.start === highlight.textSpan?.start && 
+          h.textSpan?.end === highlight.textSpan?.end
+        )
+        
+        if (highlightIndex >= 0) {
+          // Update highlightRef to point to this specific highlight
+          // We'll need to find it in the DOM after render
+          setTimeout(() => {
+            const highlightElements = containerRef.current?.querySelectorAll('span[class*="bg-yellow"]')
+            if (highlightElements && highlightElements[highlightIndex]) {
+              highlightRef.current = highlightElements[highlightIndex] as HTMLSpanElement
+              scrollToTextHighlight()
+            } else {
+              // Fallback: scroll to first highlight
+              scrollToTextHighlight()
+            }
+          }, 100)
+        } else {
+          // Fallback: scroll to first highlight
+          setTimeout(() => {
+            scrollToTextHighlight()
+          }, 100)
+        }
+      } else {
+        // No specific highlight, scroll to first
+        setTimeout(() => {
+          scrollToTextHighlight()
+        }, 100)
+      }
     }
 
     window.addEventListener("scrollToHighlight", handleScrollToHighlight as EventListener)
     return () => window.removeEventListener("scrollToHighlight", handleScrollToHighlight as EventListener)
-  }, [documentType, scrollToTextHighlight])
+  }, [documentType, scrollToTextHighlight, textHighlights])
 
   // Function to render Word document with highlighting
   const highlightedWordContent = useMemo(() => {
@@ -962,125 +1279,71 @@ export function MultiFormatViewer({
   }
 
   if (documentType === "text") {
-    // Render text with highlighting
-    const renderTextWithHighlight = () => {
+    // Render text with multiple highlights
+    const renderTextWithHighlights = () => {
       if (!textContent) {
         console.log("[MultiFormatViewer] No text content available")
         return null
       }
       
-      if (textHighlight && textHighlight.textSpan) {
-        const { start, end } = textHighlight.textSpan
-        console.log("[MultiFormatViewer] Attempting to highlight textSpan:", { start, end, textContentLength: textContent.length })
-        
-        // Strategy 1: Try exact position match (works if content matches exactly)
-        if (start >= 0 && end <= textContent.length && end > start) {
-          const highlighted = textContent.substring(start, end)
-          console.log("[MultiFormatViewer] Exact match - highlighted text length:", highlighted.length, "preview:", highlighted.substring(0, 50))
-          // Only use if it's a reasonable length and contains actual text
-          if (highlighted.length > 0 && highlighted.length < 2000 && highlighted.trim().length > 0) {
-            const before = textContent.substring(0, start)
-            const after = textContent.substring(end)
-            
-            console.log("[MultiFormatViewer] Using exact match highlighting")
-            return (
-              <>
-                {before}
-                <span
-                  ref={highlightRef}
-                  className="bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5"
-                  style={{
-                    scrollMarginTop: "100px",
-                  }}
-                >
-                  {highlighted}
-                </span>
-                {after}
-              </>
-            )
-          } else {
-            console.log("[MultiFormatViewer] Exact match failed - highlighted text invalid:", { length: highlighted.length, trimmed: highlighted.trim().length })
-          }
-        } else {
-          console.log("[MultiFormatViewer] Exact match failed - position out of bounds:", { start, end, textContentLength: textContent.length })
-        }
-        
-        // Strategy 2: If exact position doesn't work, try to find text near the expected position
-        // This handles cases where document.content and file content differ slightly
-        if (start > 0 && start < textContent.length) {
-          // Get a sample of text around the expected position to use as a search pattern
-          const sampleStart = Math.max(0, Math.min(start, textContent.length - 100))
-          const sampleEnd = Math.min(textContent.length, Math.max(end, sampleStart + 100))
-          const sample = textContent.substring(sampleStart, sampleEnd)
-          
-          // Extract a unique phrase from the sample (3-5 words that are likely to be unique)
-          const words = sample.split(/\s+/).filter(w => w.length > 2)
-          if (words.length >= 3) {
-            // Try different phrase lengths
-            for (let phraseLength = Math.min(5, words.length); phraseLength >= 3; phraseLength--) {
-              const phrase = words.slice(0, phraseLength).join(" ")
-              const normalizedPhrase = phrase.toLowerCase().trim()
-              
-              if (normalizedPhrase.length > 10) {
-                // Search for this phrase in the full content
-                const foundIndex = textContent.toLowerCase().indexOf(normalizedPhrase)
-                
-                if (foundIndex !== -1) {
-                  // Found it! Highlight a reasonable section around it
-                  const highlightStart = Math.max(0, foundIndex - 30)
-                  const highlightEnd = Math.min(textContent.length, foundIndex + phrase.length + 150)
-                  const before = textContent.substring(0, highlightStart)
-                  const highlighted = textContent.substring(highlightStart, highlightEnd)
-                  const after = textContent.substring(highlightEnd)
-                  
-                  return (
-                    <>
-                      {before}
-                      <span
-                        ref={highlightRef}
-                        className="bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5"
-                        style={{
-                          scrollMarginTop: "100px",
-                        }}
-                      >
-                        {highlighted}
-                      </span>
-                      {after}
-                    </>
-                  )
-                }
-              }
-            }
-          }
-          
-          // Strategy 3: Last resort - highlight around the expected position even if we can't find exact match
-          // This at least gets the user to the right area of the document
-          const safeStart = Math.max(0, Math.min(start, textContent.length - 200))
-          const safeEnd = Math.min(textContent.length, safeStart + 200)
-          const before = textContent.substring(0, safeStart)
-          const highlighted = textContent.substring(safeStart, safeEnd)
-          const after = textContent.substring(safeEnd)
-          
-          return (
-            <>
-              {before}
-              <span
-                ref={highlightRef}
-                className="bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5"
-                style={{
-                  scrollMarginTop: "100px",
-                }}
-              >
-                {highlighted}
-              </span>
-              {after}
-            </>
-          )
-        }
+      // If no highlights, return plain text
+      if (segments.length === 0) {
+        return textContent
       }
       
-      // No highlight found or invalid textSpan
-      return textContent
+      console.log("[MultiFormatViewer] Rendering with", processedHighlights.length, "highlights")
+      
+      // Render segments with highlights
+      return (
+        <>
+          {segments.map((segment, index) => {
+            if (segment.type === 'highlight') {
+              // Use highlightRef only for the first highlight (for scrolling)
+              const isFirstHighlight = segment.highlightIndex === 0
+              // Use slightly different styling for approximate matches to indicate uncertainty
+              const isApproximate = segment.confidence === 'approximate'
+              // Get quote from highlight if available
+              const highlight = processedHighlights[segment.highlightIndex ?? 0] as ContextHighlight | undefined
+              const quote = highlight?.quote || segment.content
+              
+              return (
+                <Tooltip key={`highlight-${index}`}>
+                  <TooltipTrigger asChild>
+                    <span
+                      ref={isFirstHighlight ? highlightRef : undefined}
+                      className={cn(
+                        isApproximate 
+                          ? "bg-yellow-200/40 dark:bg-yellow-400/20 rounded px-0.5 border border-yellow-400/50 border-dashed"
+                          : "bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5",
+                        "animate-in fade-in duration-300 transition-colors hover:bg-yellow-400/60 dark:hover:bg-yellow-500/40",
+                        "cursor-pointer"
+                      )}
+                      style={{
+                        scrollMarginTop: "100px",
+                      }}
+                      role="mark"
+                      aria-label={`Highlighted quote: ${quote.substring(0, 50)}${quote.length > 50 ? '...' : ''}`}
+                    >
+                      {segment.content}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-md">
+                    <p className="text-sm font-medium mb-1">Quoted text:</p>
+                    <p className="text-xs text-muted-foreground">"{quote}"</p>
+                    {isApproximate && (
+                      <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                        ⚠️ Approximate match - text position may be slightly off
+                      </p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              )
+            } else {
+              return <span key={`text-${index}`}>{segment.content}</span>
+            }
+          })}
+        </>
+      )
     }
     
     return (
@@ -1121,9 +1384,11 @@ export function MultiFormatViewer({
                   width: `${100 / scale}%`,
                 }}
               >
-                <div className="font-mono text-sm whitespace-pre-wrap">
-                  {renderTextWithHighlight()}
-                </div>
+                <TooltipProvider>
+                  <div className="font-mono text-sm whitespace-pre-wrap">
+                    {renderTextWithHighlights()}
+                  </div>
+                </TooltipProvider>
               </div>
             </div>
           </div>

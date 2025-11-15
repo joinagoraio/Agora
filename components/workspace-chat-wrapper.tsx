@@ -4,6 +4,7 @@ import { useState, useEffect, createContext, useContext } from "react"
 import { useSearchParams } from "next/navigation"
 import { ChatSidebar } from "@/components/chat-sidebar"
 import { ChatToggleButton } from "@/components/chat-toggle-button"
+import { HighlightProvider } from "@/lib/contexts/highlight-context"
 
 interface WorkspaceChatWrapperProps {
   workspaceId: string
@@ -44,12 +45,13 @@ export function WorkspaceChatWrapper({
   const [isSidebarResizing, setIsSidebarResizing] = useState(false)
 
   // Auto-open chat if conversationId is in URL
+  // Only open if not already open to avoid closing/reopening loops
   useEffect(() => {
     const conversationId = searchParams.get("conversationId")
-    if (conversationId) {
+    if (conversationId && !isChatOpen) {
       setIsChatOpen(true)
     }
-  }, [searchParams])
+  }, [searchParams, isChatOpen])
 
   const handleClose = () => {
     setIsChatOpen(false)
@@ -78,6 +80,7 @@ export function WorkspaceChatWrapper({
   const toggleOffsetBottom = isMobile ? 16 : 24
 
   return (
+    <HighlightProvider>
     <ChatContext.Provider
       value={{ isChatOpen, setIsChatOpen, sidebarWidth, setSidebarWidth, isSidebarResizing, setIsSidebarResizing }}
     >
@@ -102,5 +105,6 @@ export function WorkspaceChatWrapper({
         />
       </div>
     </ChatContext.Provider>
+    </HighlightProvider>
   )
 }

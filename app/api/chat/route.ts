@@ -293,25 +293,59 @@ Instructions:
 - Answer questions based on the provided context
 - If the context doesn't contain relevant information, say so clearly
 - Be concise and accurate
-- IMPORTANT: When referencing information from documents, you MUST quote the specific passages using double quotes (") around the exact text from the document
-- Do NOT just summarize or paraphrase - quote the actual text from the document context
+
+CRITICAL QUOTING REQUIREMENTS:
+- When referencing information from documents, you MUST quote the specific passages using double quotes (") around the EXACT text from the document context
+- The quoted text MUST match character-for-character with the text in the context provided above
+- Do NOT modify, paraphrase, or summarize the quoted text - copy it EXACTLY as it appears
+- Do NOT change punctuation, capitalization, or wording in quotes
+- Do NOT add or remove words from the original text
+- If you cannot find the exact text in the context, do NOT quote it - instead, describe what you found
 - After each quoted passage, immediately add [doc] to cite the source
-- Example format: "The entrepreneur mentions they want a clear view on several aspects, including their financial situation, their cap table, and risks such as the cost implications of employees calling in sick." [doc]
+- When listing multiple items from the document, quote EACH item separately with [doc] after each one
+- Do NOT just list items without quotes - each item must be quoted individually
+
+STRUCTURED CITATION FORMAT (PREFERRED - enables perfect highlighting):
+- For each quote, STRONGLY PREFERRED to include structured citation data in this format: [citation:{"quote":"exact quoted text","documentId":"doc-id","textSpan":{"start":100,"end":200},"pageNumber":1}]
+- The quote field MUST contain the EXACT text you're quoting (character-for-character match)
+- The documentId should match the document ID from the sources provided
+- The textSpan should indicate the character positions (start and end) of the quote in the document
+- The pageNumber should indicate which page the quote is on
+- Structured citations enable 100% accurate highlighting - use them whenever possible
+- Example: "The entrepreneur mentions the need for a clear view" [citation:{"quote":"The entrepreneur mentions the need for a clear view","documentId":"doc-123","textSpan":{"start":150,"end":200},"pageNumber":1}] [doc]
+- FALLBACK: If you cannot determine the exact textSpan, you can use the simple "[doc]" format after the quote, but structured citations are strongly preferred
+
+Example of CORRECT quoting:
+Context contains: "The entrepreneur mentions the need for a clear view of my financial situation and a clear view of risks, like employees calling in sick or inability to fire them, and what that can cost."
+Your response: "The entrepreneur mentions the need for a 'clear view of my financial situation' and a 'clear view of risks, like employees calling in sick or inability to fire them, and what that can cost.'" [doc]
+
+Example of CORRECT list quoting:
+Context contains: "Authentication & Authorization\nEncryption & Secrets Management\nAPI Security\nCode Organization"
+Your response: There are four items: "Authentication & Authorization" [doc], "Encryption & Secrets Management" [doc], "API Security" [doc], and "Code Organization" [doc].
+
+Example of INCORRECT quoting (DO NOT DO THIS):
+Context contains: "The entrepreneur mentions the need for a clear view of my financial situation"
+Your response: "The entrepreneur wants to see their finances" [doc] ❌ WRONG - this is paraphrased, not quoted
+Your response: "The entrepreneur mentions the need for a clear view of their financial situation" [doc] ❌ WRONG - changed "my" to "their"
+Your response: There are four items: Authentication & Authorization, Encryption & Secrets Management, API Security, Code Organization. [doc] ❌ WRONG - items are not quoted individually
+
 - When referencing workspace/space scope information (not from documents), you can mention it without quotes or use single quotes to distinguish it
 - Be explicit about what comes from documents vs workspace/space scope
 - Cite sources when possible, including page numbers if available
-${isDocumentPreview ? "- Since you're viewing a specific document, you can reference specific pages and sections. When quoting from this document, use double quotes around the exact text and add [doc] after each quote." : ""}
+${isDocumentPreview ? "- Since you're viewing a specific document, you can reference specific pages and sections. When quoting from this document, use double quotes around the EXACT text (character-for-character match) and add [doc] after each quote." : ""}
 - If asked about something outside the context, politely explain you can only answer based on the workspace documents
 - When asked about your context or what information you have access to, mention:
   1. The documents you can access (from the document context provided)
 ${contextMentionInstruction}
 
 Citation formatting rules:
-- ALWAYS quote specific passages from documents using double quotes ("text")
-- Add [doc] immediately after each quoted passage
-- Do NOT summarize without quoting - always include the actual quoted text
-- For lists of items from documents, quote the relevant passage and add [doc] after the quote
-- You can have multiple quoted passages with [doc] citations in a single response`
+- ALWAYS quote specific passages from documents using double quotes ("text") with EXACT character-for-character match
+- PREFERRED: Use structured citations [citation:{...}] for each quote (enables perfect highlighting)
+- FALLBACK: If structured citations aren't possible, add [doc] immediately after each quoted passage
+- Do NOT summarize, paraphrase, or modify quoted text - copy it EXACTLY
+- For lists of items from documents, quote the relevant passage EXACTLY and add structured citation or [doc] after the quote
+- You can have multiple quoted passages with citations in a single response
+- If a quote spans multiple sentences, include the entire passage in one quote with citation at the end`
 
     // Prepare messages for OpenAI (convert to OpenAI format)
     const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
@@ -329,8 +363,11 @@ Citation formatting rules:
     // Create a streaming response
     // Note: maxDuration (60s) handles overall route timeout
     // The OpenAI SDK will handle connection timeouts internally
+    // Use gpt-4o for document view mode (better exact quoting accuracy for highlighting)
+    // Use gpt-4o-mini for workspace mode (cost-effective for general queries)
+    const model = isDocumentPreview ? "gpt-4o" : "gpt-4o-mini"
     const stream = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model,
       messages: openaiMessages,
       temperature: 0.7,
       stream: true,
@@ -383,6 +420,7 @@ Citation formatting rules:
             if (conversation.title === "New Conversation") {
               try {
                 // Generate a short, descriptive title based on the user's question
+                // Using gpt-4o-mini for title generation (simpler task, cost-effective)
                 const titleResponse = await openai.chat.completions.create({
                   model: "gpt-4o-mini",
                   messages: [

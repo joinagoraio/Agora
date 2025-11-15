@@ -241,10 +241,15 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
 
       if (!targetConversationId || contextChanged || !hasTargetConversation) {
         // No conversationId in URL, context changed, or conversation not found - show empty state
+        // BUT: Don't clear conversationId from URL if we have messages (user might be in middle of conversation)
         console.log("[ChatSidebar] No conversation selected, showing empty state")
         setCurrentConversationId(null)
         setMessages([])
+        // Only clear conversationId if context changed (switched to different context) or no conversations exist
+        // Don't clear if conversation just not found - might be a timing issue
+        if (contextChanged || data.length === 0) {
         updateConversationId(null)
+        }
         setHasLoadedInitial(true)
         return
       } else {
