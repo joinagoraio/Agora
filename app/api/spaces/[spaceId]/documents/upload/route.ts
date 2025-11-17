@@ -3,7 +3,6 @@ import { type NextRequest, NextResponse } from "next/server"
 import { Buffer } from "node:buffer"
 
 import { publishSpaceItem } from "@/lib/actions/space-item"
-import { syncScopeDocumentToAllWorkspaces } from "@/lib/services/scope-documents"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
@@ -92,7 +91,7 @@ export async function POST(
           ? sanitizedFullText.slice(0, 1200)
           : undefined
 
-    const { data, error } = await publishSpaceItem(spaceId, {
+    const { data, error, warnings } = await publishSpaceItem(spaceId, {
       item_type: "document",
       classification,
       payload: {
@@ -111,14 +110,7 @@ export async function POST(
       return NextResponse.json({ error }, { status: 400 })
     }
 
-    // Replicate content to all workspaces in this space so the assistant can use full context
-    try {
-      await syncScopeDocumentToAllWorkspaces(spaceId, data)
-    } catch (syncError) {
-      console.error("[SpaceUpload] Failed to sync scope document to workspaces:", syncError)
-    }
-
-    return NextResponse.json({ data }, { status: 201 })
+    return NextResponse.json({ data, warnings }, { status: 201 })
   } catch (error) {
     console.error("[SpaceUpload] Unexpected error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

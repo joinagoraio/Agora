@@ -10,13 +10,13 @@ export async function PUT(
     const { itemId } = await params
     const body = await req.json()
 
-    const { data, error } = await updateSpaceItem(itemId, body)
+    const { data, error, warnings } = await updateSpaceItem(itemId, body)
 
     if (error) {
       return NextResponse.json({ error }, { status: 400 })
     }
 
-    return NextResponse.json({ data })
+    return NextResponse.json({ data, warnings })
   } catch (error) {
     console.error("[v0] Space item API error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

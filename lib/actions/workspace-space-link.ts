@@ -139,10 +139,10 @@ export async function getInheritedItems(workspaceId: string) {
   const { data: inheritedItems, error } = await supabase
     .from("space_items")
     .select(
-      "*, created_by:profiles(id, email, full_name), source_doc:documents(id, title, url), spaces(id, name, space_type)",
+      "*, created_by:profiles(id, email, full_name), source_doc:documents(id, title, url), spaces!inner(id, name, space_type, visibility)",
     )
     .in("space_id", spaceIds)
-    .eq("classification", "public")
+    .or("classification.eq.public,spaces.visibility.eq.public")
     .order("created_at", { ascending: false })
 
   if (error) {

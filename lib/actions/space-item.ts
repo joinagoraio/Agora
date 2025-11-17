@@ -7,6 +7,7 @@ import {
   syncScopeDocumentToAllWorkspaces,
   type SpaceDocumentItem,
 } from "@/lib/services/scope-documents"
+import { resolveSpaceItemClassification, shouldSyncSpaceDocument } from "@/lib/utils/space-items"
 
 export async function updateSpaceType(
   spaceId: string,
@@ -70,12 +71,14 @@ export async function publishSpaceItem(
     return { error: "Unauthorized" }
   }
 
+  const resolvedClassification = resolveSpaceItemClassification(itemData.item_type, itemData.classification)
+
   const { data, error } = await supabase
     .from("space_items")
     .insert({
       space_id: spaceId,
       ...itemData,
-      classification: itemData.classification || "internal",
+      classification: resolvedClassification,
       created_by: user.id,
     })
     .select()
@@ -85,7 +88,23 @@ export async function publishSpaceItem(
     return { error: error.message }
   }
 
+  const warnings: string[] = []
+
+  if (data && shouldSyncSpaceDocument(itemData.item_type, resolvedClassification)) {
+    try {
+      await syncScopeDocumentToAllWorkspaces(spaceId, data as SpaceDocumentItem)
+    } catch (syncError) {
+      console.error("[SpaceItems] Failed to sync document to linked workspaces:", syncError)
+      warnings.push(
+        "Document uploaded, but we could not sync it to linked workspaces. Try re-linking the space or contact support if it keeps failing.",
+      )
+    }
+  }
+
   revalidatePath(`/spaces/${spaceId}/items`)
+  if (warnings.length > 0) {
+    return { data, warnings }
+  }
   return { data }
 }
 
@@ -231,6 +250,8 @@ export async function updateSpaceItem(
     return { error: error.message }
   }
 
+  const warnings: string[] = []
+
   if (existingItem.item_type === "document") {
     const spaceDocument: SpaceDocumentItem = {
       id: data.id,
@@ -240,12 +261,22 @@ export async function updateSpaceItem(
     }
 
     if ((spaceDocument.classification ?? "internal") === "public") {
-      await syncScopeDocumentToAllWorkspaces(existingItem.space_id, spaceDocument)
+      try {
+        await syncScopeDocumentToAllWorkspaces(existingItem.space_id, spaceDocument)
+      } catch (syncError) {
+        console.error("[SpaceItems] Failed to sync updated document to linked workspaces:", syncError)
+        warnings.push(
+          "Updated document, but syncing to linked workspaces failed. Try re-linking the space or contact support if the issue persists.",
+        )
+      }
     } else {
       await removeScopeDocumentFromAllWorkspaces(existingItem.space_id, itemId)
     }
   }
 
   revalidatePath(`/spaces/${data.space_id}/items`)
+  if (warnings.length > 0) {
+    return { data, warnings }
+  }
   return { data }
 }

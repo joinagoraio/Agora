@@ -12,13 +12,13 @@ import {
   WorkspaceInheritedItems,
   WorkspaceNotesPanel,
 } from "@/components/workspace-page-client"
+import type { WorkspaceNote } from "@/components/workspace-notes-panel"
 import { WorkspaceChatWrapper } from "@/components/workspace-chat-wrapper"
 import { WelcomeWorkspaceWrapper } from "@/components/welcome-workspace-wrapper"
 import { UserMenu } from "@/components/user-menu"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { FileText, Plug, Upload, Plus, MessageSquare, ArrowLeft } from "lucide-react"
 import { getWorkspaceItems } from "@/lib/actions/workspace-item"
@@ -151,7 +151,7 @@ export default async function WorkspacePage({
         (space: any): space is { id: string; name: string; space_type?: string | null } => space !== null && space !== undefined,
       ) ?? []
 
-  const parentSpaceNameById = new Map(parentSpaces.map((space) => [space.id, space.name]))
+  const parentSpaceById = new Map(parentSpaces.map((space) => [space.id, space]))
 
   const [workspaceItemsResult, inheritedItemsResult] = await Promise.all([
     getWorkspaceItems(workspaceId, { inheritance: "local" }),
@@ -160,6 +160,44 @@ export default async function WorkspacePage({
 
   const localWorkspaceItems = workspaceItemsResult.data ?? []
   const inheritedItems = inheritedItemsResult.data ?? []
+
+  const inheritedDocumentsNormalized = inheritedDocuments.map((doc: any) => {
+    const metadata = (doc.metadata ?? {}) as Record<string, any>
+    const originSpaceId = typeof metadata.sourceSpaceId === "string" ? metadata.sourceSpaceId : undefined
+    const originSpace = originSpaceId ? parentSpaceById.get(originSpaceId) : undefined
+    const summaryFromMetadata = typeof metadata.summary === "string" ? metadata.summary : undefined
+    const summaryFromContent = typeof doc.content === "string" ? doc.content.slice(0, 280) : undefined
+
+    return {
+      id: doc.id,
+      item_type: "document",
+      classification: doc.classification ?? "public",
+      created_at: doc.created_at,
+      payload: {
+        title: doc.title || (metadata.sourceFileUrl as string | undefined) || "Inherited document",
+        summary: summaryFromMetadata ?? summaryFromContent ?? undefined,
+        file_url: (metadata.sourceFileUrl as string | undefined) ?? (typeof doc.url === "string" ? doc.url : undefined),
+      },
+      spaces: originSpace
+        ? {
+            id: originSpace.id,
+            name: originSpace.name,
+            space_type: originSpace.space_type ?? null,
+          }
+        : null,
+      source_doc: {
+        id: doc.id,
+        title: doc.title || "View document",
+        url: `/workspaces/${workspaceId}/documents/${doc.id}`,
+      },
+    }
+  })
+
+  const inheritedNonDocumentItems = inheritedItems.filter((item: any) => item.item_type !== "document")
+
+  const combinedInheritedItems = [...inheritedDocumentsNormalized, ...inheritedNonDocumentItems].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  )
   const { data: notesData, error: notesError } = await supabase
     .from("workspace_notes")
     .select(
@@ -172,7 +210,26 @@ export default async function WorkspacePage({
     console.error("[workspace-notes] Failed to load notes:", notesError)
   }
 
-  const workspaceNotes = notesData ?? []
+  const workspaceNotes: WorkspaceNote[] =
+    notesData?.map((note: Record<string, any>) => {
+      const authorValue = Array.isArray(note.author) ? note.author[0] : note.author
+      return {
+        id: String(note.id),
+        workspace_id: String(note.workspace_id),
+        content: note.content ?? "",
+        include_in_ai_context: Boolean(note.include_in_ai_context),
+        created_at: note.created_at,
+        updated_at: note.updated_at,
+        created_by: String(note.created_by),
+        author: authorValue
+          ? {
+              id: String(authorValue.id),
+              full_name: authorValue.full_name ?? null,
+              email: authorValue.email ?? null,
+            }
+          : null,
+      }
+    }) ?? []
   const { data: commentsData, error: commentsError } = await supabase
     .from("workspace_comments")
     .select("id, workspace_id, workspace_item_id, content, created_at, created_by, author:profiles(id, full_name, email)")
@@ -291,7 +348,7 @@ export default async function WorkspacePage({
                 <Tabs defaultValue="sources" className="space-y-8">
                   <TabsList className="grid w-full max-w-2xl grid-cols-4">
                     <TabsTrigger value="sources">Sources <span className="font-normal">({uploadedDocuments.length})</span></TabsTrigger>
-                    <TabsTrigger value="inherited">Inherited <span className="font-normal">({inheritedDocuments.length + inheritedItems.length})</span></TabsTrigger>
+                    <TabsTrigger value="inherited">Inherited <span className="font-normal">({combinedInheritedItems.length})</span></TabsTrigger>
                     <TabsTrigger value="evidence">Evidence <span className="font-normal">({localWorkspaceItems.length})</span></TabsTrigger>
                     <TabsTrigger value="notes">Notes <span className="font-normal">({workspaceNotes.length})</span></TabsTrigger>
                   </TabsList>
@@ -319,45 +376,7 @@ export default async function WorkspacePage({
                         Read-only answers, policies, and documents inherited from linked parent spaces.
                       </p>
                     </div>
-                    {inheritedDocuments.length > 0 && (
-                      <div className="space-y-3">
-                        <div className="grid gap-3">
-                          {inheritedDocuments.map((doc: any) => {
-                            const originSpaceId = (doc.metadata as Record<string, any> | null)?.sourceSpaceId as string | undefined
-                            const originSpaceName = originSpaceId ? parentSpaceNameById.get(originSpaceId) : undefined
-
-                            return (
-                              <Card key={doc.id} className="border-border shadow transition-all hover:shadow-md">
-                                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                  <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                      <CardTitle className="text-sm font-semibold text-foreground">
-                                        {doc.title || doc.metadata?.sourceFileUrl || "Inherited document"}
-                                      </CardTitle>
-                                      {doc.classification && <Badge variant="outline">{doc.classification}</Badge>}
-                                    </div>
-                                    {originSpaceName && (
-                                      <CardDescription className="text-xs text-muted-foreground">
-                                        From {originSpaceName}
-                                      </CardDescription>
-                                    )}
-                                  </div>
-                                  <Button variant="outline" size="sm" className="h-7 text-xs px-2" asChild>
-                                    <Link href={`/workspaces/${workspaceId}/documents/${doc.id}`}>
-                                      View document
-                                    </Link>
-                                  </Button>
-                                </CardHeader>
-                              </Card>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    <WorkspaceInheritedItems
-                      items={inheritedItems}
-                      showEmptyState={inheritedDocuments.length === 0}
-                    />
+                    <WorkspaceInheritedItems items={combinedInheritedItems} />
                   </div>
                 </TabsContent>
 

@@ -76,16 +76,21 @@ async function upsertWorkspaceDocumentForScope(
   workspaceId: string,
   spaceItem: SpaceDocumentItem,
   adminClient = createAdminClient(),
-) {
+): Promise<boolean> {
   const payload = spaceItem.payload || {}
   const title = (payload.title || payload.file_name || "Scope document").trim()
-  const contentSource = payload.full_text || payload.summary || ""
-  const content = sanitizeScopeContent(contentSource)
+  const sanitizedFullText = sanitizeScopeContent(payload.full_text || "")
+  const sanitizedSummary = sanitizeScopeContent(payload.summary || "")
+  let content = sanitizedFullText || sanitizedSummary
 
   if (content.length === 0) {
-    console.warn("[ScopeDocuments] Skipping scope document without content", { spaceItemId: spaceItem.id })
-    return
+    if (payload.file_url) {
+      content = `See original file: ${payload.file_url}`
+    } else {
+      content = title
+    }
   }
+  const hasLimitedContent = sanitizedFullText.length === 0
 
   async function upsertDocumentPageContent(documentId: string) {
     if (!content || content.length === 0) return
@@ -109,7 +114,7 @@ async function upsertWorkspaceDocumentForScope(
 
     if (pageFetchError) {
       console.error("[ScopeDocuments] Failed to check existing document page:", pageFetchError)
-      return
+      return false
     }
 
     if (existingPage) {
@@ -147,6 +152,7 @@ async function upsertWorkspaceDocumentForScope(
     sourceFileUrl: payload.file_url || null,
     type: payload.mime_type || null,
     origin: "space_scope",
+    hasLimitedContent,
   }
 
   if (lookupError) {
@@ -172,13 +178,13 @@ async function upsertWorkspaceDocumentForScope(
       .eq("id", existingDoc.id)
 
     if (updateError) {
-      console.error("[ScopeDocuments] Failed to update existing document:", updateError)
-    } else {
+        console.error("[ScopeDocuments] Failed to update existing document:", updateError)
+        return false
+      }
+
       await upsertDocumentPageContent(existingDoc.id)
       revalidatePath(`/workspaces/${workspaceId}`)
-    }
-
-    return
+      return true
   }
 
   const { data: workspaceRecord, error: workspaceError } = await adminClient
@@ -189,7 +195,7 @@ async function upsertWorkspaceDocumentForScope(
 
   if (workspaceError || !workspaceRecord) {
     console.error("[ScopeDocuments] Failed to fetch workspace for scope document:", workspaceError)
-    return
+    return false
   }
 
   let sourceId: string
@@ -197,7 +203,7 @@ async function upsertWorkspaceDocumentForScope(
     sourceId = await ensureWorkspaceGeneratedSourceAdmin(workspaceId, adminClient, workspaceRecord.created_by)
   } catch (sourceError) {
     console.error("[ScopeDocuments] Failed to ensure workspace source for scope document:", sourceError)
-    return
+    return false
   }
 
   const now = new Date().toISOString()
@@ -227,7 +233,7 @@ async function upsertWorkspaceDocumentForScope(
 
   if (createError || !newDoc) {
     console.error("[ScopeDocuments] Failed to create workspace document from scope:", createError)
-    return
+    return false
   }
 
   const mergedMetadata = {
@@ -254,6 +260,7 @@ async function upsertWorkspaceDocumentForScope(
   })
 
   revalidatePath(`/workspaces/${workspaceId}`)
+  return true
 }
 
 export async function syncScopeDocumentToAllWorkspaces(spaceId: string, spaceItem: SpaceDocumentItem) {
@@ -272,13 +279,11 @@ export async function syncScopeDocumentToAllWorkspaces(spaceId: string, spaceIte
   ])
 
   if (workspacesError) {
-    console.error("[ScopeDocuments] Failed to fetch workspaces for scope sync:", workspacesError)
-    return
+    throw new Error(`[ScopeDocuments] Failed to fetch workspaces for scope sync: ${workspacesError.message}`)
   }
 
   if (linksError) {
-    console.error("[ScopeDocuments] Failed to fetch linked workspaces for scope sync:", linksError)
-    return
+    throw new Error(`[ScopeDocuments] Failed to fetch linked workspaces for scope sync: ${linksError.message}`)
   }
 
   const workspaceIds = new Set<string>()
@@ -295,8 +300,18 @@ export async function syncScopeDocumentToAllWorkspaces(spaceId: string, spaceIte
     return
   }
 
+  const failedWorkspaceIds: string[] = []
   for (const workspaceId of workspaceIds) {
-    await upsertWorkspaceDocumentForScope(spaceId, workspaceId, spaceItem, adminClient)
+    const synced = await upsertWorkspaceDocumentForScope(spaceId, workspaceId, spaceItem, adminClient)
+    if (!synced) {
+      failedWorkspaceIds.push(workspaceId)
+    }
+  }
+
+  if (failedWorkspaceIds.length > 0) {
+    throw new Error(
+      `[ScopeDocuments] Failed to sync scope document to ${failedWorkspaceIds.length} workspace(s): ${failedWorkspaceIds.join(", ")}`,
+    )
   }
 }
 

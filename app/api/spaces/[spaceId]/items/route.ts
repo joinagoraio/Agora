@@ -46,13 +46,13 @@ export async function POST(
     const { spaceId } = await params
     const body = await req.json()
 
-    const { data, error } = await publishSpaceItem(spaceId, body)
+    const { data, error, warnings } = await publishSpaceItem(spaceId, body)
 
     if (error) {
       return NextResponse.json({ error }, { status: 400 })
     }
 
-    return NextResponse.json({ data }, { status: 201 })
+    return NextResponse.json({ data, warnings }, { status: 201 })
   } catch (error) {
     console.error("[v0] Space items API error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

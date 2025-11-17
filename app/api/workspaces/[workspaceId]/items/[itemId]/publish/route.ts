@@ -55,7 +55,7 @@ export async function POST(
       },
     }
 
-    const { data: publishedItem, error: publishError } = await publishSpaceItem(spaceId, publishPayload)
+    const { data: publishedItem, error: publishError, warnings } = await publishSpaceItem(spaceId, publishPayload)
 
     if (publishError || !publishedItem) {
       return NextResponse.json({ error: publishError }, { status: 400 })
@@ -68,7 +68,7 @@ export async function POST(
       .eq("id", workspaceItem.id)
       .eq("workspace_id", workspaceId)
 
-    return NextResponse.json({ data: publishedItem })
+    return NextResponse.json({ data: publishedItem, warnings })
   } catch (error) {
     console.error("[workspace-publish] Unexpected error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

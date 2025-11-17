@@ -40,6 +40,7 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
   const [classification, setClassification] = useState<"public" | "internal" | "confidential">("public")
   const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [syncWarning, setSyncWarning] = useState<string | null>(null)
 
   const handleUpload = async () => {
     if (!file) {
@@ -49,6 +50,7 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
 
     setIsUploading(true)
     setError(null)
+    setSyncWarning(null)
 
     const formData = new FormData()
     formData.append("file", file)
@@ -74,6 +76,16 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
     }
 
     onUploaded?.(payload.data)
+
+    if (payload.warnings && payload.warnings.length > 0) {
+      setSyncWarning(payload.warnings.join(" "))
+      setIsUploading(false)
+      setFile(null)
+      setTitle("")
+      setNotes("")
+      return
+    }
+
     setIsUploading(false)
     setIsOpen(false)
     setFile(null)
@@ -91,6 +103,7 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
       setNotes("")
       setClassification("public")
       setError(null)
+      setSyncWarning(null)
     }
   }
 
@@ -185,6 +198,11 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
           </div>
 
           {error && <p className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">{error}</p>}
+          {syncWarning && (
+            <p className="rounded-md bg-amber-100 p-2 text-sm text-amber-900">
+              {syncWarning}
+            </p>
+          )}
         </div>
 
         <DialogFooter className="gap-2">
