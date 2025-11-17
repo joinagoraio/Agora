@@ -23,7 +23,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { updateWorkspace, enhanceContextText } from "@/lib/actions/workspace"
-import { MapPin, FileText, Wand2, RotateCcw, Loader2 } from "lucide-react"
+import { MapPin, FileText, Wand2, RotateCcw, Loader2, BookOpen } from "lucide-react"
+import { AddOverheidDocumentsDialog } from "@/components/add-overheid-documents-dialog"
 
 interface WelcomeWorkspaceDialogProps {
   workspace: {
@@ -47,6 +48,7 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
   const [originalContext, setOriginalContext] = useState<string | null>(null)
   const [enhancementCompleted, setEnhancementCompleted] = useState(false)
   const [focusedField, setFocusedField] = useState<"context" | null>(null)
+  const [overheidDialogOpen, setOverheidDialogOpen] = useState(false)
 
   const handleClose = (open: boolean) => {
     if (!open) {
@@ -221,6 +223,41 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
               </p>
             </div>
 
+            <div className="space-y-2 mt-6">
+              <Label className="flex items-center gap-2">
+                <BookOpen className="h-4 w-4" />
+                Workspace Knowledge
+              </Label>
+              <div className="w-fit">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setOverheidDialogOpen(true)}
+                          disabled={!location.trim() || !context.trim()}
+                          className="w-fit justify-start text-xs"
+                        >
+                          <FileText className="mr-2 h-3 w-3" />
+                          Add Documents from Overheid.nl
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    {(!location.trim() || !context.trim()) && (
+                      <TooltipContent>
+                        <p>Please add both Jurisdiction and Workspace Scope to enable this feature</p>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Add relevant Dutch government publications and regulations to your workspace knowledge base. Documents will be filtered by your jurisdiction and workspace scope.
+              </p>
+            </div>
+
             {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
           </div>
 
@@ -233,6 +270,17 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
             </Button>
           </DialogFooter>
         </form>
+
+        <AddOverheidDocumentsDialog
+          workspaceId={workspace.id}
+          workspaceLocation={location || workspace.location}
+          workspaceContext={context || workspace.context}
+          open={overheidDialogOpen}
+          onOpenChange={setOverheidDialogOpen}
+          onSuccess={() => {
+            // Optionally refresh or show success message
+          }}
+        />
       </DialogContent>
     </Dialog>
   )

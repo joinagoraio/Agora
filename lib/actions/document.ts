@@ -4,13 +4,39 @@
 import "@/lib/utils/dommatrix-polyfill"
 
 import { randomUUID } from "crypto"
-import { generateText } from "ai"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
 // PDF extraction now handled by pdf2json directly
-import { getRelevantContext } from "@/lib/rag/search"
+import { getRelevantContext, getAllWorkspaceKnowledge } from "@/lib/rag/search"
 import OpenAI from "openai"
+import MarkdownIt from "markdown-it"
+import markdownItFootnote from "markdown-it-footnote"
+const markdownParser = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+}).use(markdownItFootnote)
+
+function markdownToHtml(markdown: string): string {
+  if (!markdown || markdown.trim().length === 0) {
+    return ""
+  }
+
+  try {
+    return markdownParser.render(markdown)
+  } catch (error) {
+    console.error("[WorkspaceDocument] Failed to convert markdown to HTML:", error)
+    // Fallback: wrap plain text in paragraph tags
+    const escaped = markdown
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;")
+    return `<p>${escaped}</p>`
+  }
+}
 
 // Helper function to strip markdown syntax for better AI processing
 function stripMarkdown(text: string): string {
@@ -1299,6 +1325,54 @@ async function ensureWorkspaceGeneratedSource(
   return newSource
 }
 
+export async function ensureOverheidNLSource(
+  workspaceId: string,
+): Promise<{ data?: { id: string }; error?: string }> {
+  const supabase = await createClient()
+  const adminClient = createAdminClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  const { data: existingSource, error: fetchError } = await adminClient
+    .from("sources")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("type", "overheid_nl")
+    .maybeSingle()
+
+  if (fetchError) {
+    return { error: fetchError.message }
+  }
+
+  if (existingSource) {
+    return { data: existingSource }
+  }
+
+  const { data: newSource, error: insertError } = await adminClient
+    .from("sources")
+    .insert({
+      workspace_id: workspaceId,
+      name: "Overheid.nl",
+      type: "overheid_nl",
+      config: {},
+      created_by: user.id,
+      status: "active",
+    })
+    .select("id")
+    .single()
+
+  if (insertError || !newSource) {
+    return { error: insertError?.message || "Failed to create Overheid.nl source" }
+  }
+
+  return { data: newSource }
+}
+
 export async function createWorkspaceDocument(
   workspaceId: string,
   {
@@ -1372,6 +1446,39 @@ export async function createWorkspaceDocument(
   if (docError || !document) {
     console.error("[WorkspaceDocument] Failed to create document:", docError)
     return { error: docError?.message || "Failed to create document" }
+  }
+
+  // If instructions are provided, automatically generate a draft
+  if (instructions && instructions.trim()) {
+    try {
+      console.log("[WorkspaceDocument] Auto-generating draft with instructions")
+      const draftResult = await generateWorkspaceDocumentDraft(workspaceId, document.id, {
+        instructions: instructions.trim(),
+        temperature: 0.4,
+      })
+
+      if (draftResult.error) {
+        console.error("[WorkspaceDocument] Failed to auto-generate draft:", draftResult.error)
+        // Don't fail document creation if draft generation fails, just log it
+        // The document is created and user can manually generate draft later
+      } else {
+        console.log("[WorkspaceDocument] Successfully auto-generated draft")
+        // Re-fetch the document to get the updated content
+        const { data: updatedDoc } = await adminClient
+          .from("documents")
+          .select("*, sources(type, name)")
+          .eq("id", document.id)
+          .single()
+        
+        if (updatedDoc) {
+          revalidatePath(`/workspaces/${workspaceId}`)
+          return { data: updatedDoc }
+        }
+      }
+    } catch (error) {
+      console.error("[WorkspaceDocument] Error during auto-draft generation:", error)
+      // Don't fail document creation if draft generation fails
+    }
   }
 
   revalidatePath(`/workspaces/${workspaceId}`)
@@ -1508,8 +1615,9 @@ export async function generateWorkspaceDocumentDraft(
     return { error: "Workspace not found" }
   }
 
-  const searchQuery = instructions || document.title || "workspace document"
-  const { context, sources } = await getRelevantContext(workspaceId, searchQuery, [documentId])
+  // Use all workspace knowledge for initial document generation
+  // This ensures the AI has access to all available workspace knowledge
+  const { context, sources } = await getAllWorkspaceKnowledge(workspaceId, [documentId])
 
   const systemPrompt = `You are AGORA, an expert municipal policy assistant. Write precise, well-structured documents that synthesize the provided context. Emphasize clarity, actionable insights, and relevance to policy stakeholders. Always use Markdown headings, bullet points, and tables when appropriate.`
 
@@ -1539,19 +1647,25 @@ ${context}
 
 Output a polished document in Markdown. Include citations inline when referring to specific evidence, using footnote-style references like [^1]. Provide a short executive summary at the top.`
 
+  if (!process.env.OPENAI_API_KEY) {
+    return { error: "OpenAI API key not configured" }
+  }
+
   let generatedText = ""
   try {
-    const result = await generateText({
-      model: "openai/gpt-4o-mini",
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       temperature,
-      maxTokens: 2200,
+      max_tokens: 2200,
     })
 
-    generatedText = result.text.trim()
+    const markdownDraft = response.choices[0]?.message?.content?.trim() || ""
+    generatedText = markdownToHtml(markdownDraft)
   } catch (error) {
     console.error("[WorkspaceDocument] Failed to generate draft:", error)
     return {

@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Switch } from "@/components/ui/switch"
-import { Loader2, Trash2 } from "lucide-react"
+import { Loader2, Trash2, MessageCircle } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -32,7 +32,9 @@ type EvidencePayload = {
     layer?: string
   }>
   saved_at?: string
-}
+  saved_from_chat?: boolean
+  conversation_id?: string
+  conversation_title?: string}
 
 type WorkspaceEvidenceItem = {
   id: string
@@ -248,6 +250,12 @@ function EvidenceCard({ item, workspaceId, currentUserId, initialComments, paren
           {item.classification && (
             <Badge variant="outline" className="flex-shrink-0">
               {classificationLabels[item.classification] ?? item.classification}
+            </Badge>
+          )}
+          {item.payload?.saved_from_chat && (
+            <Badge variant="secondary" className="flex-shrink-0">
+              <MessageCircle className="mr-1 h-3 w-3" />
+              {item.payload?.conversation_title ? `From: ${item.payload.conversation_title}` : "Saved from chat"}
             </Badge>
           )}
           {item.created_at && (

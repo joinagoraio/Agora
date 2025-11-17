@@ -96,6 +96,8 @@ export async function saveEvidenceToWorkspace(
       layer: "national" | "regional" | "municipal" | "local"
     }>
     confidence: "low" | "medium" | "high"
+    conversationId?: string
+    conversationTitle?: string
   },
 ) {
   const supabase = await createClient()
@@ -108,13 +110,22 @@ export async function saveEvidenceToWorkspace(
   }
 
   // Create workspace_item with evidence payload
-  const payload = {
+  const payload: Record<string, any> = {
     type: "evidence",
     question: evidenceData.question,
     answer: evidenceData.answer,
     citations: evidenceData.citations,
     confidence: evidenceData.confidence,
     saved_at: new Date().toISOString(),
+  }
+
+  // Add conversation information if provided
+  if (evidenceData.conversationId) {
+    payload.saved_from_chat = true
+    payload.conversation_id = evidenceData.conversationId
+    if (evidenceData.conversationTitle) {
+      payload.conversation_title = evidenceData.conversationTitle
+    }
   }
 
   const { data, error } = await supabase

@@ -2,6 +2,10 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import {
+  syncAllScopeDocumentsToWorkspace,
+  removeScopeDocumentsFromWorkspace,
+} from "@/lib/services/scope-documents"
 
 export async function attachParentSpace(workspaceId: string, spaceId: string) {
   const supabase = await createClient()
@@ -46,6 +50,12 @@ export async function attachParentSpace(workspaceId: string, spaceId: string) {
     return { error: error.message }
   }
 
+  try {
+    await syncAllScopeDocumentsToWorkspace(spaceId, workspaceId)
+  } catch (syncError) {
+    console.error("[WorkspaceSpaceLink] Failed to sync scope documents after attach:", syncError)
+  }
+
   revalidatePath(`/workspaces/${workspaceId}`)
   return { data }
 }
@@ -68,6 +78,12 @@ export async function detachParentSpace(workspaceId: string, spaceId: string) {
 
   if (error) {
     return { error: error.message }
+  }
+
+  try {
+    await removeScopeDocumentsFromWorkspace(spaceId, workspaceId)
+  } catch (cleanupError) {
+    console.error("[WorkspaceSpaceLink] Failed to remove scope documents after detach:", cleanupError)
   }
 
   revalidatePath(`/workspaces/${workspaceId}`)

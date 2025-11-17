@@ -56,15 +56,22 @@ export async function GET(
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
-    // Check if document is text/markdown
-    const documentType = (document.metadata as Record<string, any>)?.type || ""
+    // Check if document is text/markdown or originated from workspace text sources
+    const metadata = ((document.metadata as Record<string, any>) || {}) as Record<string, any>
+    const documentType = (metadata.type as string) || ""
+    const documentOrigin = typeof metadata.origin === "string" ? metadata.origin.toLowerCase() : ""
     const isTextDocument =
       documentType.includes("text") ||
       documentType.includes("markdown") ||
       document.title?.toLowerCase().endsWith(".md") ||
-      document.title?.toLowerCase().endsWith(".txt")
+      document.title?.toLowerCase().endsWith(".txt") ||
+      document.title?.toLowerCase().endsWith(".docx") ||
+      document.title?.toLowerCase().endsWith(".doc")
 
-    if (!isTextDocument) {
+    const isWorkspaceGeneratedText =
+      documentOrigin === "workspace_generated" || documentOrigin === "space_scope"
+
+    if (!isTextDocument && !isWorkspaceGeneratedText) {
       return NextResponse.json({ error: "This endpoint is only for text/markdown documents" }, { status: 400 })
     }
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useChat } from "ai/react"
+import { useChat } from "@ai-sdk/react"
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -251,6 +251,9 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     },
     initialMessages: hasLoadedInitial ? undefined : initialMessages,
   })
+
+  // useChat may briefly return undefined before hydration; always work with a string
+  const safeInput = typeof input === "string" ? input : input != null ? String(input) : ""
 
   // Define handleHighlight before useEffects that use it
   const handleHighlight = useCallback(async (message: any) => {
@@ -930,6 +933,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           answer,
           citations,
           confidence: evidenceConfidence,
+          conversationId: documentId ? conversationId : undefined, // Only include if in document viewer context
         }),
       })
 
@@ -1807,36 +1811,33 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                   </div>
                   {isAssistant && (
                     <div className="flex flex-wrap items-center justify-end gap-2 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {!documentId && (
-                        // Workspace mode: show Save as evidence button
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => handleOpenEvidenceDialog(message, index)}
-                            disabled={evidenceStatus === "saving" || isLoading}
-                          >
-                            {evidenceStatus === "saving" ? (
-                              <>
-                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                                Saving…
-                              </>
-                            ) : (
-                              <>
-                                <Plus className="mr-1 h-3 w-3" />
-                                Save as evidence
-                              </>
-                            )}
-                          </Button>
-                          {evidenceStatus === "success" && (
-                            <span className="text-xs text-emerald-600">Saved to workspace evidence</span>
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => handleOpenEvidenceDialog(message, index)}
+                          disabled={evidenceStatus === "saving" || isLoading}
+                        >
+                          {evidenceStatus === "saving" ? (
+                            <>
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              Saving…
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="mr-1 h-3 w-3" />
+                              Save as evidence
+                            </>
                           )}
-                          {evidenceStatus === "error" && evidenceStatusEntry?.error && (
-                            <span className="text-xs text-destructive">{evidenceStatusEntry.error}</span>
-                          )}
-                        </>
-                      )}
+                        </Button>
+                        {evidenceStatus === "success" && (
+                          <span className="text-xs text-emerald-600">Saved to workspace evidence</span>
+                        )}
+                        {evidenceStatus === "error" && evidenceStatusEntry?.error && (
+                          <span className="text-xs text-destructive">{evidenceStatusEntry.error}</span>
+                        )}
+                      </>
                     </div>
                   )}
                 </div>
@@ -1858,7 +1859,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
         <form onSubmit={handleSubmit} className="relative">
           <Textarea
             ref={inputRef}
-            value={input}
+            value={safeInput}
             onChange={handleInputChange}
             placeholder={inputPlaceholder}
             className={cn("min-h-[60px] flex-1 resize-none shadow", isLoading ? "pr-20" : "pr-10")}
@@ -1884,7 +1885,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
             type="submit"
             variant="ghost"
             size="icon"
-            disabled={isLoading || !input.trim()}
+            disabled={isLoading || !safeInput.trim()}
             className="absolute bottom-2 right-3 h-6 w-6 p-0"
           >
             {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
@@ -1907,12 +1908,12 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {documentId
-                        ? "The chat is context-aware to the document you're currently viewing. Space and Workspace Scope are always included automatically."
+                        ? "The chat is context-aware to the document you're currently viewing, plus any workspace evidence you keep included below. Space and Workspace Scope are always included automatically."
                         : "Select which items to include in this conversation (excluding items does not delete them):"}
                     </p>
                     {documentId ? (
                       // Simple view for document viewer - no tabs, just show the document
-                      <div className="space-y-3 mt-3">
+                      <div className="space-y-4 mt-3">
                         {(availableSourceDocuments.length > 0 || availableInheritedDocuments.length > 0) && (
                           <div>
                             <p className="mb-2 text-xs font-medium text-muted-foreground">Document:</p>
@@ -1933,6 +1934,80 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                             </div>
                           </div>
                         )}
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Workspace evidence available to this chat
+                          </p>
+                          {availableEvidence.length > 0 && (
+                            <div>
+                              <p className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground/90">
+                                Included ({availableEvidence.length}):
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {availableEvidence.map((item) => {
+                                  const question = item.payload?.question || "Saved evidence"
+                                  const truncatedQuestion =
+                                    question.length > 120 ? `${question.slice(0, 120)}…` : question
+                                  return (
+                                    <Tooltip key={item.id}>
+                                      <TooltipTrigger asChild>
+                                        <Badge
+                                          variant="secondary"
+                                          className="cursor-pointer hover:bg-secondary/80 pr-1"
+                                          onClick={() => handleRemoveEvidence(item.id)}
+                                        >
+                                          <FileText className="mr-1 h-3 w-3" />
+                                          <span className="max-w-[220px] truncate">{truncatedQuestion}</span>
+                                          <X className="ml-1 h-3 w-3" />
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs">
+                                        <p className="text-xs leading-relaxed">{question}</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          {excludedEvidence.length > 0 && (
+                            <div>
+                              <p className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground/70">
+                                Excluded ({excludedEvidence.length}):
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {excludedEvidence.map((item) => {
+                                  const question = item.payload?.question || "Saved evidence"
+                                  const truncatedQuestion =
+                                    question.length > 120 ? `${question.slice(0, 120)}…` : question
+                                  return (
+                                    <Tooltip key={item.id}>
+                                      <TooltipTrigger asChild>
+                                        <Badge
+                                          variant="outline"
+                                          className="cursor-pointer hover:bg-accent pr-1 opacity-70"
+                                          onClick={() => handleRestoreEvidence(item.id)}
+                                        >
+                                          <FileText className="mr-1 h-3 w-3" />
+                                          <span className="max-w-[220px] truncate line-through">{truncatedQuestion}</span>
+                                          <Plus className="ml-1 h-3 w-3" />
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs">
+                                        <p className="text-xs leading-relaxed">{question}</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          {availableEvidence.length === 0 && excludedEvidence.length === 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              No workspace evidence items yet. Save answers as evidence from the chat above and they’ll appear here.
+                            </p>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <Tabs defaultValue="sources" className="w-full">

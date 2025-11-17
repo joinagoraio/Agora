@@ -26,12 +26,14 @@ interface SearchResult {
 interface OverheidSearchProps {
   onDocumentsSelected?: (documents: SearchResult[]) => void
   showSelection?: boolean
+  initialLocation?: string
+  initialQuery?: string
 }
 
 // Overheid Search Component
-function OverheidSearchTab({ onDocumentsSelected, showSelection = true }: OverheidSearchProps) {
-  const [query, setQuery] = useState("")
-  const [location, setLocation] = useState("")
+function OverheidSearchTab({ onDocumentsSelected, showSelection = true, initialLocation, initialQuery }: OverheidSearchProps) {
+  const [query, setQuery] = useState(initialQuery || "")
+  const [location, setLocation] = useState(initialLocation || "")
   const [resultsLimit, setResultsLimit] = useState("10")
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<SearchResult[]>([])
@@ -1305,7 +1307,7 @@ function LiDOSparqlTab() {
 }
 
 // Main Unified Component with Tabs
-export function OverheidSearch({ onDocumentsSelected, showSelection = true }: OverheidSearchProps) {
+export function OverheidSearch({ onDocumentsSelected, showSelection = true, initialLocation, initialQuery }: OverheidSearchProps) {
   return (
     <Tabs defaultValue="overheid-search" className="w-full">
       <TabsList className="flex w-full flex-wrap gap-2 mb-6">
@@ -1317,7 +1319,7 @@ export function OverheidSearch({ onDocumentsSelected, showSelection = true }: Ov
       </TabsList>
 
       <TabsContent value="overheid-search">
-        <OverheidSearchTab onDocumentsSelected={onDocumentsSelected} showSelection={showSelection} />
+        <OverheidSearchTab onDocumentsSelected={onDocumentsSelected} showSelection={showSelection} initialLocation={initialLocation} initialQuery={initialQuery} />
       </TabsContent>
 
       <TabsContent value="ckan-metadata">

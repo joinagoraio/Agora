@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { generateWorkspaceDocumentDraft, updateWorkspaceDocument } from "@/lib/actions/document"
 import { Loader2, Save, Sparkles } from "lucide-react"
 import { RichTextEditor } from "@/components/rich-text-editor"
@@ -47,6 +48,9 @@ export function MyDocumentEditor({
   const [isGenerating, setIsGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [generationSources, setGenerationSources] = useState<Array<Record<string, any>> | null>(null)
+  const hasBaselineDraft = baseline.content.trim().length > 0
+  const shouldShowMissingDraftNotice =
+    !hasBaselineDraft && instructions.trim().length > 0 && content.trim().length === 0 && !isGenerating
 
   const isDirty = useMemo(() => {
     return (
@@ -226,6 +230,14 @@ export function MyDocumentEditor({
               uploaded documents.
             </p>
             {generateError && <div className="text-sm text-destructive">{generateError}</div>}
+            {shouldShowMissingDraftNotice && (
+              <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+                <AlertTitle>No AI draft yet</AlertTitle>
+                <AlertDescription>
+                  The workspace AI couldn&apos;t produce an initial draft automatically. Click <strong>Draft with AI</strong> to try again using your instructions, or start writing manually.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
 
           <div className="grid gap-2">

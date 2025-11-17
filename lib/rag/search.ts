@@ -681,3 +681,194 @@ export async function getRelevantContext(
 
   return { context, sources }
 }
+
+/**
+ * Aggregate ALL workspace knowledge (documents, notes, evidence) for AI generation.
+ * This is primarily used for workspace document drafting to give the model comprehensive context.
+ */
+export async function getAllWorkspaceKnowledge(
+  workspaceId: string,
+  excludedDocumentIds: string[] = [],
+): Promise<{ context: string; sources: any[] }> {
+  const MAX_DOCUMENTS = 25
+  const MAX_DOC_CHARS = 3500
+  const MAX_TOTAL_DOC_CHARS = 60000
+  const MAX_NOTES = 25
+  const MAX_NOTE_CHARS = 800
+  const MAX_EVIDENCE = 25
+  const MAX_EVIDENCE_CHARS = 1200
+  const MAX_CONTEXT_CHARS = 110000
+  const supabase = await createClient()
+
+  const { data: workspace } = await supabase
+    .from("workspaces")
+    .select("context, location")
+    .eq("id", workspaceId)
+    .single()
+
+  const contextParts: string[] = []
+
+  if (workspace?.context) {
+    contextParts.push(`Workspace Context: ${workspace.context}`)
+  }
+
+  if (workspace?.location) {
+    contextParts.push(`Location: ${workspace.location}`)
+  }
+
+  const excludedDocsSet = new Set(excludedDocumentIds)
+  const { data: allDocuments, error: docsError } = await supabase
+    .from("documents")
+    .select("id, title, content, url, external_url")
+    .eq("workspace_id", workspaceId)
+    .neq("status", "deleted")
+    .neq("status", "archived")
+    .order("created_at", { ascending: false })
+    .limit(MAX_DOCUMENTS)
+
+  if (docsError) {
+    console.error("[getAllWorkspaceKnowledge] Failed to load documents:", docsError)
+  }
+
+  const sources: any[] = []
+  let totalDocChars = 0
+  const documentSections: string[] = []
+
+  for (const doc of (allDocuments ?? [])) {
+    if (excludedDocsSet.has(doc.id)) {
+      continue
+    }
+
+    if (totalDocChars >= MAX_TOTAL_DOC_CHARS) {
+      console.log("[getAllWorkspaceKnowledge] Reached max doc char budget")
+      break
+    }
+
+    let content = doc.content || ""
+
+    if ((!content || content.length < MAX_DOC_CHARS / 2) && doc.id) {
+      try {
+        const { data: pages, error: pagesError } = await supabase
+          .from("document_pages")
+          .select("text_content, page_number")
+          .eq("document_id", doc.id)
+          .order("page_number", { ascending: true })
+          .limit(10)
+
+        if (!pagesError && pages && pages.length > 0) {
+          const pageContent = pages
+            .map((p) => p.text_content || "")
+            .filter(Boolean)
+            .join("\n\n")
+
+          if (pageContent.trim()) {
+            content = pageContent
+          }
+        }
+      } catch (error) {
+        console.error(`[getAllWorkspaceKnowledge] Error fetching pages for doc ${doc.id}:`, error)
+      }
+    }
+
+    if (!content) {
+      content = "[No content available]"
+    }
+
+    const remainingBudget = MAX_TOTAL_DOC_CHARS - totalDocChars
+    const docBudget = Math.min(MAX_DOC_CHARS, remainingBudget)
+    if (content.length > docBudget) {
+      content = `${content.substring(0, docBudget)}…`
+    }
+
+    totalDocChars += content.length
+
+    sources.push({
+      id: doc.id,
+      title: doc.title,
+      url: doc.url || doc.external_url,
+    })
+
+    documentSections.push(`Document: ${doc.title}\n${content}\n---`)
+  }
+
+  if (documentSections.length > 0) {
+    contextParts.push(documentSections.join("\n\n"))
+  } else {
+    contextParts.push("No documents found in the workspace.")
+  }
+
+  const { data: notesData, error: notesError } = await supabase
+    .from("workspace_notes")
+    .select("id, content, include_in_ai_context, author:profiles(id, full_name, email)")
+    .eq("workspace_id", workspaceId)
+    .eq("include_in_ai_context", true)
+    .order("updated_at", { ascending: false })
+    .limit(MAX_NOTES)
+
+  if (notesError) {
+    console.error("[getAllWorkspaceKnowledge] Failed to load workspace notes:", notesError)
+  }
+
+  const notes =
+    notesData?.map((note) => ({
+      id: note.id,
+      content: typeof note.content === "string" ? note.content : "",
+      authorName: note.author?.full_name || note.author?.email || "Workspace member",
+    })) ?? []
+
+  if (notes.length > 0) {
+    const noteSummaries = notes.map((note) => {
+      let preview = note.content.trim() || "[No content provided]"
+      if (preview.length > MAX_NOTE_CHARS) {
+        preview = `${preview.slice(0, MAX_NOTE_CHARS).trimEnd()}…`
+      }
+      return `Author: ${note.authorName}\n${preview}`
+    })
+    contextParts.push(`Workspace Notes:\n${noteSummaries.join("\n\n")}`)
+  }
+
+  const { data: evidenceItems, error: evidenceError } = await supabase
+    .from("workspace_items")
+    .select("id, payload, created_at, created_by:profiles(id, full_name, email)")
+    .eq("workspace_id", workspaceId)
+    .eq("inheritance", "local")
+    .eq("include_in_ai_context", true)
+    .order("created_at", { ascending: false })
+    .limit(MAX_EVIDENCE)
+
+  if (evidenceError) {
+    console.error("[getAllWorkspaceKnowledge] Failed to load evidence items:", evidenceError)
+  }
+
+  const evidenceSections = (evidenceItems ?? [])
+    .filter((item) => {
+      const payload = item.payload as Record<string, any> | null
+      return payload?.type === "evidence" && payload?.question && payload?.answer
+    })
+    .map((item) => {
+      const payload = item.payload as Record<string, any>
+      const authorName =
+        (item.created_by as any)?.full_name || (item.created_by as any)?.email || "Workspace member"
+      const question = typeof payload.question === "string" ? payload.question : ""
+      let answer = typeof payload.answer === "string" ? payload.answer : ""
+      if (answer.length > MAX_EVIDENCE_CHARS) {
+        answer = `${answer.slice(0, MAX_EVIDENCE_CHARS).trimEnd()}…`
+      }
+      return `Question: ${question}\nAnswer: ${answer}\nSaved by: ${authorName}`
+    })
+
+  if (evidenceSections.length > 0) {
+    contextParts.push(`Workspace Evidence:\n${evidenceSections.join("\n\n---\n\n")}`)
+  }
+
+  let context = contextParts.join("\n\n")
+
+  if (context.length > MAX_CONTEXT_CHARS) {
+    console.warn(
+      `[getAllWorkspaceKnowledge] Truncating context from ${context.length} to ${MAX_CONTEXT_CHARS} chars`,
+    )
+    context = `${context.slice(0, MAX_CONTEXT_CHARS).trimEnd()}…`
+  }
+
+  return { context, sources }
+}

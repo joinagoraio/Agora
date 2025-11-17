@@ -32,6 +32,7 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
     useState<"public" | "internal" | "confidential">("internal")
   const [instructions, setInstructions] = useState("")
   const [isCreating, setIsCreating] = useState(false)
+  const [isGeneratingDraft, setIsGeneratingDraft] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
@@ -52,19 +53,28 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
       return
     }
 
+    if (!instructions.trim()) {
+      setError("Please provide instructions for what the document is for. The AI will use all workspace knowledge to draft an initial version.")
+      return
+    }
+
     setIsCreating(true)
+    setIsGeneratingDraft(false)
     setError(null)
 
     try {
+      // First create the document
+      setIsGeneratingDraft(true)
       const result = await createWorkspaceDocument(workspaceId, {
         title,
-        instructions: instructions.trim() || undefined,
+        instructions: instructions.trim(),
         classification,
       })
 
       if (result.error || !result.data) {
         setError(result.error || "Failed to create document")
         setIsCreating(false)
+        setIsGeneratingDraft(false)
         return
       }
 
@@ -75,6 +85,7 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
       setError(err instanceof Error ? err.message : "Failed to create document")
     } finally {
       setIsCreating(false)
+      setIsGeneratingDraft(false)
     }
   }
 
@@ -92,7 +103,7 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
         <DialogHeader>
           <DialogTitle>Create workspace document</DialogTitle>
           <DialogDescription>
-            Draft a new document that you can edit collaboratively within this workspace.
+            Create a new document with AI assistance. Provide instructions and the AI will draft an initial version using all workspace knowledge.
           </DialogDescription>
         </DialogHeader>
 
@@ -128,18 +139,20 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="document-instructions">AI drafting instructions (optional)</Label>
+            <Label htmlFor="document-instructions">
+              Instructions for the document <span className="text-destructive">*</span>
+            </Label>
             <Textarea
               id="document-instructions"
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
-              placeholder="Provide goals, tone, audience, and any key points you want the AI to consider."
-              rows={5}
+              placeholder="Describe what this document is for, its purpose, audience, tone, and any key points to include. The AI will use all workspace knowledge (documents, notes, evidence) to draft an initial version."
+              rows={6}
               disabled={isCreating}
+              required
             />
             <p className="text-xs text-muted-foreground">
-              Instructions help the AI generate an initial draft using the workspace context and uploaded
-              documents. You can refine the draft at any time in the editor.
+              The AI will automatically generate a first draft based on your instructions and all available workspace knowledge. You can edit and refine the draft after creation.
             </p>
           </div>
 
@@ -154,10 +167,10 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
             {isCreating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating...
+                {isGeneratingDraft ? "Generating draft..." : "Creating..."}
               </>
             ) : (
-              "Create"
+              "Create & Generate Draft"
             )}
           </Button>
         </DialogFooter>

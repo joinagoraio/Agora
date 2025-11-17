@@ -102,22 +102,45 @@ export function DocumentViewerClient({
       // For now, we'll keep them so they persist when navigating back
     }
   }, [documentId, setActiveDocument, initialHighlights, getHighlightsForDocument, highlightContext])
+
+  const viewerMetadata = useMemo(() => {
+    const metadata = documentMetadata ? { ...documentMetadata } : {}
+    const existingType = typeof metadata.type === "string" ? metadata.type.toLowerCase() : ""
+    const origin = typeof metadata.origin === "string" ? metadata.origin.toLowerCase() : undefined
+
+    if (!existingType) {
+      if (!documentUrl) {
+        metadata.type = "text/plain"
+      } else if (origin === "workspace_generated") {
+        metadata.type = "text/markdown"
+      } else if (origin === "space_scope") {
+        metadata.type = "text/plain"
+      }
+    }
+
+    return metadata
+  }, [documentMetadata, documentUrl])
+
+  const isTextDocument = useMemo(() => {
+    const metadataType = typeof viewerMetadata?.type === "string" ? viewerMetadata.type.toLowerCase() : ""
+    return (
+      metadataType.includes("text") ||
+      metadataType.includes("markdown") ||
+      documentTitle?.toLowerCase().endsWith(".md") ||
+      documentTitle?.toLowerCase().endsWith(".txt") ||
+      documentTitle?.toLowerCase().endsWith(".docx") ||
+      documentTitle?.toLowerCase().endsWith(".doc")
+    )
+  }, [viewerMetadata, documentTitle])
+
+  const viewerUrl = documentUrl ?? `/api/documents/${documentId}/pdf`
+  const canRenderDocument = Boolean(documentUrl) || isTextDocument
   
   // Function to compute coordinates for highlights that need them (for PDFs)
   const computeHighlightCoordinates = useCallback((highlights: any[]): any[] => {
     if (!pages || pages.length === 0) {
       return highlights
     }
-    
-    const documentType = documentMetadata?.type || ""
-    const isTextDocument = 
-      documentType.includes("text") || 
-      documentType.includes("markdown") ||
-      documentType.includes("word") ||
-      documentTitle?.toLowerCase().endsWith(".md") ||
-      documentTitle?.toLowerCase().endsWith(".txt") ||
-      documentTitle?.toLowerCase().endsWith(".docx") ||
-      documentTitle?.toLowerCase().endsWith(".doc")
     
     if (isTextDocument) {
       // Text documents don't need coordinates
@@ -145,7 +168,7 @@ export function DocumentViewerClient({
       
       return highlight
     })
-  }, [pages, documentMetadata, documentTitle])
+  }, [pages, isTextDocument])
   
   // Get highlights from context (reactive - will update when highlightsMap changes)
   const contextHighlights = useMemo(() => {
@@ -423,16 +446,16 @@ export function DocumentViewerClient({
 
       {/* Multi-Format Document Viewer */}
       <div className="flex-1 overflow-hidden">
-        {documentUrl ? (
+        {canRenderDocument ? (
           <MultiFormatViewer
-            url={`/api/documents/${documentId}/pdf`}
+            url={viewerUrl}
             documentId={documentId}
             documentTitle={documentTitle}
             highlights={finalHighlights}
             initialPage={initialPage}
             className="h-full"
             hideControls={true}
-            documentMetadata={documentMetadata}
+            documentMetadata={viewerMetadata}
             viewportOffset={DOCUMENT_VIEWER_HEADER_HEIGHT}
             onControlsReady={setControls}
             autoHighlight={autoHighlight}
