@@ -83,11 +83,11 @@ export function DebugPanel({ request, response, error }: DebugPanelProps) {
                       </pre>
                     </div>
                   )}
-                  {request.body && (
+                  {request.body !== undefined && request.body !== null && (
                     <div className="pt-2">
                       <span className="text-muted-foreground">Body:</span>
                       <pre className="mt-1 p-2 bg-muted rounded text-xs overflow-x-auto">
-                        {JSON.stringify(request.body, null, 2)}
+                        {JSON.stringify(request.body as Record<string, unknown>, null, 2)}
                       </pre>
                     </div>
                   )}

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import OpenAI from "openai"
+import { env } from "@/lib/env"
 
 export async function GET(req: NextRequest) {
   try {
     // Check if API key is configured
-    if (!process.env.OPENAI_API_KEY) {
+    if (!env.OPENAI_API_KEY) {
       return NextResponse.json(
         {
           status: "error",
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
     }
 
     const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: env.OPENAI_API_KEY,
     })
 
     // Try a minimal API call to test the key and check for quota issues

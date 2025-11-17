@@ -1,7 +1,8 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
-import { randomBytes } from "crypto"
+import { randomBytes } from "node:crypto"
+import { env } from "@/lib/env"
 
 export async function inviteUserToSpace(
   spaceId: string,
@@ -40,7 +41,8 @@ export async function inviteUserToSpace(
   }
 
   // TODO: Send invitation email with token
-  const inviteLink = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
+  const appUrl = env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+  const inviteLink = `${appUrl}/invite/${token}`
 
   return { data, inviteLink }
 }

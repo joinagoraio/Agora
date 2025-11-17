@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
 
-type WorkspaceNote = {
+export type WorkspaceNote = {
   id: string
   workspace_id: string
   content: string
@@ -337,7 +337,7 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes }
               )
             }
 
-            const note = item
+            const note = item as WorkspaceNote
             const isOwner = note.created_by === currentUserId
             const authorName = note.author?.full_name || note.author?.email || "Member"
             const toggleLabel = note.include_in_ai_context ? "Remove from AI context" : "Add to AI context"

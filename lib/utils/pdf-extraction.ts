@@ -101,7 +101,7 @@ function buildCharacterOffsetMap(textItems: TextItemWithCoords[]): Record<number
 /**
  * Extract all pages from a PDF buffer with text and coordinates
  */
-export async function extractPdfPages(buffer: Buffer): Promise<PageData[]> {
+export async function extractPdfPages(buffer: Uint8Array | ArrayBuffer): Promise<PageData[]> {
   try {
     // pdfjs-dist requires Uint8Array, not Buffer
     const uint8Array = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)

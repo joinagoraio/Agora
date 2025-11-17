@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { google } from "googleapis"
 import { createClient } from "@/lib/supabase/server"
+import { env } from "@/lib/env"
 
 async function getValidAccessToken(
   providedToken?: string | null,
@@ -237,7 +238,7 @@ export async function GET(request: NextRequest) {
         error: error instanceof Error ? error.message : "Google Drive API request failed",
         code: error?.code || "UNKNOWN_ERROR",
         details:
-          process.env.NODE_ENV === "development" && error instanceof Error && error.stack ? error.stack : undefined,
+          env.NODE_ENV === "development" && error instanceof Error && error.stack ? error.stack : undefined,
       },
       { status: error?.code || 500 },
     )

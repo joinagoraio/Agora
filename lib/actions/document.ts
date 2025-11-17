@@ -3,15 +3,18 @@
 // Import polyfill FIRST before any PDF-related imports
 import "@/lib/utils/dommatrix-polyfill"
 
-import { randomUUID } from "crypto"
+import { randomUUID } from "node:crypto"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
 // PDF extraction now handled by pdf2json directly
 import { getRelevantContext, getAllWorkspaceKnowledge } from "@/lib/rag/search"
 import OpenAI from "openai"
+import { env } from "@/lib/env"
 import MarkdownIt from "markdown-it"
 import markdownItFootnote from "markdown-it-footnote"
+import { requireAuthAndPermission } from "@/lib/middleware/authorization"
+import { invalidateCacheByTag } from "@/lib/cache/api-cache"
 const markdownParser = new MarkdownIt({
   html: false,
   linkify: true,
@@ -71,14 +74,14 @@ function stripMarkdown(text: string): string {
 // Helper function to generate a concise AI summary of document content
 export async function generateDocumentSummary(content: string, title?: string, isMarkdown = false): Promise<string> {
   // Only use AI if OpenAI is configured and content is substantial
-  if (!process.env.OPENAI_API_KEY || !content || content.length < 100) {
+  if (!env.OPENAI_API_KEY || !content || content.length < 100) {
     // Fallback: return first 150 characters
     const fallback = content.substring(0, 150).trim() + (content.length > 150 ? "..." : "")
     return isMarkdown ? stripMarkdown(fallback) : fallback
   }
 
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
     
     // For markdown, strip syntax for better AI understanding
     let processedContent = isMarkdown ? stripMarkdown(content) : content
@@ -221,6 +224,13 @@ export async function deleteDocument(documentId: string, workspaceId: string): P
   const supabase = await createClient()
   const adminClient = createAdminClient()
 
+  // Authorization check before admin operation
+  try {
+    await requireAuthAndPermission("workspace:delete", { workspaceId })
+  } catch (authError) {
+    return { error: authError instanceof Error ? authError.message : "Unauthorized" }
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -266,12 +276,23 @@ export async function deleteDocument(documentId: string, workspaceId: string): P
   }
 
   revalidatePath(`/workspaces/${workspaceId}`)
+  
+  // Invalidate search cache for this workspace
+  await invalidateCacheByTag(`search:workspace:${workspaceId}`)
+  
   return {}
 }
 
 export async function archiveDocument(documentId: string, workspaceId: string, archive: boolean): Promise<{ error?: string }> {
   const supabase = await createClient()
   const adminClient = createAdminClient()
+
+  // Authorization check before admin operation
+  try {
+    await requireAuthAndPermission("workspace:update", { workspaceId })
+  } catch (authError) {
+    return { error: authError instanceof Error ? authError.message : "Unauthorized" }
+  }
 
   const {
     data: { user },
@@ -306,6 +327,10 @@ export async function archiveDocument(documentId: string, workspaceId: string, a
   }
 
   revalidatePath(`/workspaces/${workspaceId}`)
+  
+  // Invalidate search cache for this workspace
+  await invalidateCacheByTag(`search:workspace:${workspaceId}`)
+  
   return {}
 }
 
@@ -317,6 +342,13 @@ export async function uploadDocument(
 ): Promise<{ data?: any; error?: string }> {
   const supabase = await createClient()
   const adminClient = createAdminClient()
+
+  // Authorization check before admin operation
+  try {
+    await requireAuthAndPermission("workspace_item:create", { workspaceId })
+  } catch (authError) {
+    return { error: authError instanceof Error ? authError.message : "Unauthorized" }
+  }
 
   const {
     data: { user },
@@ -1108,8 +1140,8 @@ export async function addDocumentsFromSource(
         if (fileNameWithoutExt.length > 10 && !fileName.match(/^[A-Z0-9_-]+$/)) {
           try {
             const openai = (await import("openai")).default
-            if (process.env.OPENAI_API_KEY) {
-              const ai = new openai({ apiKey: process.env.OPENAI_API_KEY })
+            if (env.OPENAI_API_KEY) {
+              const ai = new openai({ apiKey: env.OPENAI_API_KEY })
               const response = await ai.chat.completions.create({
                 model: "gpt-4o-mini",
                 messages: [
@@ -1516,7 +1548,14 @@ export async function updateWorkspaceDocument(
     return { error: "Document not found" }
   }
 
-  if (document.sources?.type !== "workspace_generated") {
+  const sourceRelation = document.sources as
+    | { type?: string | null }
+    | { type?: string | null }[]
+    | null
+    | undefined
+  const sourceType = Array.isArray(sourceRelation) ? sourceRelation[0]?.type : sourceRelation?.type
+
+  if (sourceType !== "workspace_generated") {
     return { error: "Document is not editable" }
   }
 
@@ -1601,7 +1640,14 @@ export async function generateWorkspaceDocumentDraft(
     return { error: "Document not found" }
   }
 
-  if (document.sources?.type !== "workspace_generated") {
+  const draftSourceRelation = document.sources as
+    | { type?: string | null }
+    | { type?: string | null }[]
+    | null
+    | undefined
+  const draftSourceType = Array.isArray(draftSourceRelation) ? draftSourceRelation[0]?.type : draftSourceRelation?.type
+
+  if (draftSourceType !== "workspace_generated") {
     return { error: "Only workspace-authored documents can be generated" }
   }
 
@@ -1647,13 +1693,13 @@ ${context}
 
 Output a polished document in Markdown. Include citations inline when referring to specific evidence, using footnote-style references like [^1]. Provide a short executive summary at the top.`
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (!env.OPENAI_API_KEY) {
     return { error: "OpenAI API key not configured" }
   }
 
   let generatedText = ""
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [

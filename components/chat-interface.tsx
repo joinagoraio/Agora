@@ -1,6 +1,7 @@
 "use client"
 
-import { useChat } from "@ai-sdk/react"
+import { DefaultChatTransport } from "ai"
+import { useChat as useAiChat } from "@ai-sdk/react"
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -25,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Send, Loader2, ExternalLink, FileText, X, Plus, CircleStop, Highlighter } from "lucide-react"
-import ReactMarkdown from "react-markdown"
+import ReactMarkdown, { type Components } from "react-markdown"
 import Link from "next/link"
 import { buildDocumentUrlFromSource } from "@/lib/utils/document-linking"
 import { useHighlightContext, type Highlight } from "@/lib/contexts/highlight-context"
@@ -36,6 +37,48 @@ import type { WorkspaceNoteForContext } from "@/lib/actions/workspace-notes"
 import { getWorkspaceItems } from "@/lib/actions/workspace-item"
 import { getWorkspaceContextDetails } from "@/lib/actions/workspace"
 import { cn } from "@/lib/utils"
+
+type UseAiChatOptions = Parameters<typeof useAiChat>[0]
+
+function useChatWithInput(options: UseAiChatOptions) {
+  const chat = useAiChat(options) as ReturnType<typeof useAiChat>
+  const [input, setInput] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleInputChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(event.target.value)
+  }, [])
+
+  const handleSubmit = useCallback(
+    async (event?: React.FormEvent<HTMLFormElement>) => {
+      event?.preventDefault()
+      const trimmed = input.trim()
+      if (!trimmed) {
+        return
+      }
+
+      setIsSubmitting(true)
+      try {
+        await chat.sendMessage({ text: trimmed })
+        setInput("")
+      } finally {
+        setIsSubmitting(false)
+      }
+    },
+    [chat, input],
+  )
+
+  const isLoading = chat.status === "submitted" || chat.status === "streaming" || isSubmitting
+
+  return {
+    ...chat,
+    input,
+    setInput,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+  }
+}
 
 interface ChatInterfaceProps {
   workspaceId: string
@@ -58,6 +101,36 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   const [excludedDocumentIds, setExcludedDocumentIds] = useState<Set<string>>(new Set())
   const [excludedNoteIds, setExcludedNoteIds] = useState<Set<string>>(new Set())
   const [excludedEvidenceIds, setExcludedEvidenceIds] = useState<Set<string>>(new Set())
+  const readMessageContent = (message: unknown): string => {
+    const value = (message as { content?: unknown })?.content
+    return typeof value === "string" ? value : ""
+  }
+  const requestBodyRef = useRef({
+    workspaceId,
+    conversationId,
+    excludedDocumentIds: Array.from(excludedDocumentIds),
+    excludedNoteIds: Array.from(excludedNoteIds),
+    excludedEvidenceIds: Array.from(excludedEvidenceIds),
+  })
+
+  useEffect(() => {
+    requestBodyRef.current = {
+      workspaceId,
+      conversationId,
+      excludedDocumentIds: Array.from(excludedDocumentIds),
+      excludedNoteIds: Array.from(excludedNoteIds),
+      excludedEvidenceIds: Array.from(excludedEvidenceIds),
+    }
+  }, [workspaceId, conversationId, excludedDocumentIds, excludedNoteIds, excludedEvidenceIds])
+
+  const chatTransport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        body: () => requestBodyRef.current,
+      }),
+    [],
+  )
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(true)
   const [isLoadingNotes, setIsLoadingNotes] = useState(true)
   const [isLoadingEvidence, setIsLoadingEvidence] = useState(true)
@@ -88,9 +161,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   const loadContextItems = useCallback(async () => {
     setIsLoadingDocuments(true)
     setIsLoadingNotes(true)
-    setIsLoadingEvidence(true)
     setHasLoadedWorkspaceMetadata(false)
-    setIsLoadingEvidence(true)
     setIsLoadingEvidence(true)
 
     try {
@@ -165,8 +236,8 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       setEvidenceItems([])
     } finally {
       setIsLoadingDocuments(false)
-    setIsLoadingNotes(false)
-    setIsLoadingEvidence(false)
+      setIsLoadingNotes(false)
+      setIsLoadingEvidence(false)
     }
   }, [workspaceId, documentId])
 
@@ -240,16 +311,9 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     })
   }, [evidenceItems])
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages, stop, setInput } = useChat({
-    api: "/api/chat",
-    body: {
-      workspaceId,
-      conversationId,
-      excludedDocumentIds: Array.from(excludedDocumentIds),
-      excludedNoteIds: Array.from(excludedNoteIds),
-      excludedEvidenceIds: Array.from(excludedEvidenceIds),
-    },
-    initialMessages: hasLoadedInitial ? undefined : initialMessages,
+  const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages, stop, setInput } = useChatWithInput({
+    transport: chatTransport,
+    messages: hasLoadedInitial ? undefined : (initialMessages as any),
   })
 
   // useChat may briefly return undefined before hydration; always work with a string
@@ -283,11 +347,12 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
 
     // Always try to extract quoted phrases from the AI response to find additional highlights
     // This ensures we highlight all phrases the AI mentions, not just what's in the sources
-    if (message.content) {
+    const messageContent = readMessageContent(message)
+    if (messageContent) {
       console.log("[handleHighlight] Extracting citations from AI response to find highlights")
       
       // Parse structured citations and fallback quotes
-      const { structured, quotes, listItems } = parseAllCitations(message.content)
+      const { structured, quotes, listItems } = parseAllCitations(messageContent)
       
       console.log("[handleHighlight] Parsed citations:", {
         structured: structured.length,
@@ -302,7 +367,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           const { quote, documentId: citationDocId, textSpan, pageNumber } = citation.structured
           
           // Only process if it matches the current document
-          const targetDocId = citationDocId || documentId
+          const targetDocId: string | undefined = citationDocId || documentId
           if (targetDocId === documentId && textSpan) {
             structuredHighlights.push({
               id: `highlight-${documentId}-${pageNumber || 1}-${Date.now()}-${structuredHighlights.length}`,
@@ -819,7 +884,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     // Find the last user message and restore it to input
     const lastUserMessage = [...messages].reverse().find((msg: any) => msg.role === "user")
     if (lastUserMessage) {
-      setInput(lastUserMessage.content)
+      setInput(readMessageContent(lastUserMessage))
     }
     // Remove any incomplete assistant message
     setMessages((prev: any[]) => {
@@ -843,9 +908,10 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
 
   const findPreviousUserQuestion = (messageIndex: number) => {
     for (let i = messageIndex - 1; i >= 0; i--) {
-      const candidate = messages[i]
-      if (candidate?.role === "user" && typeof candidate.content === "string" && candidate.content.trim().length > 0) {
-        return candidate.content
+      const candidate = messages[i] as any
+      const candidateContent = readMessageContent(candidate)
+      if (candidate?.role === "user" && candidateContent.trim().length > 0) {
+        return candidateContent
       }
     }
     return ""
@@ -880,8 +946,8 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     setPendingEvidence({
       messageKey,
       question,
-      answer: typeof message?.content === "string" ? message.content : "",
-      sources: Array.isArray(message?.sources) ? message.sources : [],
+      answer: readMessageContent(message),
+      sources: Array.isArray((message as any)?.sources) ? (message as any).sources : [],
     })
   }
 
@@ -1001,7 +1067,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     
     messages.forEach((message: any, index: number) => {
       const sources = Array.isArray(message?.sources) ? message.sources : []
-      const content = typeof message?.content === 'string' ? message.content : ''
+      const content = readMessageContent(message)
       
       // Debug logging for last message
       if (index === messages.length - 1 && message.role === 'assistant') {
@@ -1097,7 +1163,13 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                                (line.length > 3 && line.length < 100 && /^[A-Z][^.!?]*$/.test(line) ? line : null)
           
           if (listItemMatch) {
-            const item = (listItemMatch[1] || listItemMatch).trim()
+            const rawItem =
+              typeof listItemMatch === "string"
+                ? listItemMatch
+                : typeof listItemMatch[1] === "string"
+                  ? listItemMatch[1]
+                  : listItemMatch[0]
+            const item = rawItem.trim()
             // Filter out common non-content words and very short items
             if (item.length >= 5 && item.length < 200 && 
                 !/^(and|or|each|these|they|it)$/i.test(item)) {
@@ -1175,7 +1247,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           </div>
         )}
 
-        {messages.map((message: any, index) => {
+        {messages.map((message: any, index: number) => {
           const isUser = message.role === "user"
           const isAssistant = message.role === "assistant"
           const isLastAssistant = isAssistant && index === messages.length - 1
@@ -1408,10 +1480,10 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                           
                           return <li {...props}>{children}</li>
                         },
-                        p: ({ children, ...props }) => {
+                        p: ({ children, ...props }: any) => {
                           // Debug: log the raw children to see what we're working with
                           if (index === messages.length - 1 && isAssistant) {
-                            const rawContent = typeof message.content === 'string' ? message.content : ''
+                            const rawContent = readMessageContent(message)
                             console.log("[ChatInterface] Processing message content:", {
                               messageIndex: index,
                               rawContentLength: rawContent.length,
@@ -1804,9 +1876,9 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                         },
                         // Handle text nodes that might contain standalone [doc]
                         // Note: ReactMarkdown doesn't expose text as a component, so we handle it in the p component
-                      }}
+                      } as Components}
                     >
-                      {message.content}
+                      {readMessageContent(message)}
                     </ReactMarkdown>
                   </div>
                   {isAssistant && (

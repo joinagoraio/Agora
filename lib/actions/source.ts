@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { env } from "@/lib/env"
 
 type SourceType =
   | "google_drive"
@@ -108,9 +109,9 @@ async function syncGoogleDriveSource(
 
     // List files from Google Drive root folder using the API route
     // Use relative URL for server-side fetch
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : "http://localhost:3000"
+    const baseUrl =
+      env.NEXT_PUBLIC_APP_URL ??
+      (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : "http://localhost:3000")
     
     const params = new URLSearchParams({
       action: "list",
@@ -167,8 +168,8 @@ async function syncGoogleDriveSource(
         try {
           // Create a prompt that asks AI to describe what the document might be about based on filename
           const openai = (await import("openai")).default
-          if (process.env.OPENAI_API_KEY) {
-            const ai = new openai({ apiKey: process.env.OPENAI_API_KEY })
+          if (env.OPENAI_API_KEY) {
+            const ai = new openai({ apiKey: env.OPENAI_API_KEY })
             const response = await ai.chat.completions.create({
               model: "gpt-4o-mini",
               messages: [

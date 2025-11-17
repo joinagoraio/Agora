@@ -41,6 +41,27 @@ export async function getWorkspaceNotesForContext(workspaceId: string) {
     return { data: [], error: error.message }
   }
 
-  return { data: (data as WorkspaceNoteForContext[]) ?? [] }
+  const normalizedNotes: WorkspaceNoteForContext[] =
+    data?.map((note: Record<string, any>) => {
+      const authorValue = Array.isArray(note.author) ? note.author[0] : note.author
+      return {
+        id: String(note.id),
+        workspace_id: String(note.workspace_id),
+        content: note.content ?? "",
+        include_in_ai_context: Boolean(note.include_in_ai_context),
+        created_at: note.created_at,
+        updated_at: note.updated_at,
+        created_by: String(note.created_by),
+        author: authorValue
+          ? {
+              id: String(authorValue.id),
+              full_name: authorValue.full_name ?? null,
+              email: authorValue.email ?? null,
+            }
+          : null,
+      }
+    }) ?? []
+
+  return { data: normalizedNotes }
 }
 

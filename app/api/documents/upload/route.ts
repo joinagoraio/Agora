@@ -3,6 +3,11 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
 import OpenAI from "openai"
+import { documentUploadSchema } from "@/lib/validations/document"
+import { checkRateLimit, uploadRateLimit } from "@/lib/rate-limit"
+import { requireAuthAndPermission } from "@/lib/middleware/authorization"
+import { invalidateCacheByTag } from "@/lib/cache/api-cache"
+import { env } from "@/lib/env"
 
 // Helper function to strip markdown syntax for better AI processing
 function stripMarkdown(text: string): string {
@@ -37,14 +42,14 @@ function stripMarkdown(text: string): string {
 // Helper function to generate a concise AI summary of document content
 async function generateDocumentSummary(content: string, title?: string, isMarkdown = false): Promise<string> {
   // Only use AI if OpenAI is configured and content is substantial
-  if (!process.env.OPENAI_API_KEY || !content || content.length < 100) {
+  if (!env.OPENAI_API_KEY || !content || content.length < 100) {
     // Fallback: return first 150 characters
     const fallback = content.substring(0, 150).trim() + (content.length > 150 ? "..." : "")
     return isMarkdown ? stripMarkdown(fallback) : fallback
   }
 
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
     
     // For markdown, strip syntax for better AI understanding
     let processedContent = isMarkdown ? stripMarkdown(content) : content
@@ -101,8 +106,14 @@ Examples:
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get("x-forwarded-for") ?? "anonymous"
+    const rateLimitResult = await checkRateLimit(uploadRateLimit, `upload:${ip}`)
+
+    if (!rateLimitResult.success) {
+      return NextResponse.json({ error: "Upload rate limit exceeded. Please wait and try again." }, { status: 429 })
+    }
+
     const supabase = await createClient()
-    const adminClient = createAdminClient()
 
     const {
       data: { user },
@@ -118,15 +129,61 @@ export async function POST(req: NextRequest) {
     const title = formData.get("title") as string | null
     const classification = (formData.get("classification") as "public" | "internal" | "confidential") || "internal"
 
-    if (!file || !workspaceId) {
-      return NextResponse.json({ error: "File and workspaceId are required" }, { status: 400 })
+    // Validate input with Zod
+    const validationResult = documentUploadSchema.safeParse({
+      workspaceId,
+      file,
+      classification,
+      title,
+    })
+
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { 
+          error: "Validation failed", 
+          details: validationResult.error.errors.map(e => ({
+            path: e.path.join("."),
+            message: e.message,
+          }))
+        },
+        { status: 400 }
+      )
     }
+
+    const validated = validationResult.data
+
+    // Authorization check before admin operation
+    try {
+      await requireAuthAndPermission("workspace_item:create", { workspaceId: validated.workspaceId })
+    } catch (authError) {
+      return NextResponse.json(
+        { error: authError instanceof Error ? authError.message : "Unauthorized" },
+        { status: 403 }
+      )
+    }
+
+    const { data: workspaceRecord, error: workspaceLookupError } = await supabase
+      .from("workspaces")
+      .select("id, space_id")
+      .eq("id", validated.workspaceId)
+      .maybeSingle()
+
+    if (workspaceLookupError) {
+      console.error("[Upload] Workspace lookup error:", workspaceLookupError)
+      return NextResponse.json({ error: "Unable to verify workspace access" }, { status: 500 })
+    }
+
+    if (!workspaceRecord) {
+      return NextResponse.json({ error: "Workspace not found" }, { status: 404 })
+    }
+
+    const adminClient = createAdminClient()
 
     // Create or get a "direct_upload" source for this workspace
     let { data: source } = await adminClient
       .from("sources")
       .select("id")
-      .eq("workspace_id", workspaceId)
+      .eq("workspace_id", validated.workspaceId)
       .eq("type", "direct_upload")
       .maybeSingle()
 
@@ -134,7 +191,7 @@ export async function POST(req: NextRequest) {
       const { data: newSource, error: sourceError } = await adminClient
         .from("sources")
         .insert({
-          workspace_id: workspaceId,
+          workspace_id: validated.workspaceId,
           name: "Direct Uploads",
           type: "direct_upload",
           config: {},
@@ -157,11 +214,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Upload file to Supabase Storage using admin client to bypass RLS
-    const fileExt = file.name.split(".").pop()
+    const fileExt = validated.file.name.split(".").pop()
     const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`
-    const filePath = `workspaces/${workspaceId}/${fileName}`
+    const filePath = `workspaces/${validated.workspaceId}/${fileName}`
 
-    const { error: uploadError } = await adminClient.storage.from("documents").upload(filePath, file, {
+    const { error: uploadError } = await adminClient.storage.from("documents").upload(filePath, validated.file, {
       cacheControl: "3600",
       upsert: false,
     })
@@ -183,19 +240,19 @@ export async function POST(req: NextRequest) {
     let isMarkdownFile = false
     
     // Check if file is markdown (by extension or MIME type)
-    if (file.name.toLowerCase().endsWith(".md") || 
-        file.name.toLowerCase().endsWith(".markdown") ||
-        file.type === "text/markdown") {
+    if (validated.file.name.toLowerCase().endsWith(".md") || 
+        validated.file.name.toLowerCase().endsWith(".markdown") ||
+        validated.file.type === "text/markdown") {
       isMarkdownFile = true
     }
     
-    if (file.type === "text/plain" || file.type === "text/markdown" || isMarkdownFile) {
-      content = await file.text()
-      console.log("[Upload API] Processing text/markdown file:", file.name, "Size:", file.size, "bytes", "Content length:", content.length)
-    } else if (file.type === "application/pdf") {
-      console.log("[Upload] Processing PDF file:", file.name, "Size:", file.size, "bytes")
+    if (validated.file.type === "text/plain" || validated.file.type === "text/markdown" || isMarkdownFile) {
+      content = await validated.file.text()
+      console.log("[Upload API] Processing text/markdown file:", validated.file.name, "Size:", validated.file.size, "bytes", "Content length:", content.length)
+    } else if (validated.file.type === "application/pdf") {
+      console.log("[Upload] Processing PDF file:", validated.file.name, "Size:", validated.file.size, "bytes")
       try {
-        const arrayBuffer = await file.arrayBuffer()
+        const arrayBuffer = await validated.file.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
 
         const PDFParser = (await import("pdf2json")).default
@@ -229,12 +286,12 @@ export async function POST(req: NextRequest) {
         content = `[Failed to extract PDF content: ${pdfError instanceof Error ? pdfError.message : "Unknown error"}]`
       }
     } else if (
-      file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      validated.file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ) {
-      console.log("[Upload API] Processing Word document (.docx):", file.name, "Size:", file.size, "bytes")
+      console.log("[Upload API] Processing Word document (.docx):", validated.file.name, "Size:", validated.file.size, "bytes")
       try {
         // Convert File to ArrayBuffer, then to Buffer for Word parsing
-        const arrayBuffer = await file.arrayBuffer()
+        const arrayBuffer = await validated.file.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
         console.log("[Upload API] Converted to Buffer, size:", buffer.length, "bytes")
         
@@ -258,19 +315,19 @@ export async function POST(req: NextRequest) {
         console.error("[Upload API] Word document parsing error:", error)
         content = `[Failed to extract Word document content: ${error instanceof Error ? error.message : "Unknown error"}]`
       }
-    } else if (file.type === "application/msword") {
+    } else if (validated.file.type === "application/msword") {
       // Older .doc format - mammoth doesn't support it
-      console.log("[Upload API] Processing Word document (.doc):", file.name, "Size:", file.size, "bytes")
+      console.log("[Upload API] Processing Word document (.doc):", validated.file.name, "Size:", validated.file.size, "bytes")
       content = "[Word document (.doc) format is not supported. Please convert to .docx format for content extraction.]"
     } else {
       content = "[Binary file - content extraction not available]"
     }
 
     // Get workspace to derive tenant_id
-    const { data: workspace } = await adminClient.from("workspaces").select("space_id").eq("id", workspaceId).single()
+    const workspace = workspaceRecord
 
     // Generate concise AI summary for the document card
-    const documentTitle = title || file.name
+    const documentTitle = validated.title || validated.file.name
     let documentSummary = ""
     
     // Check if content extraction failed or file is binary
@@ -286,8 +343,8 @@ export async function POST(req: NextRequest) {
       contentLength: content?.length || 0,
       contentPreview: content?.substring(0, 50) || "empty",
       isBinaryOrFailed,
-      fileName: file.name,
-      fileType: file.type,
+      fileName: validated.file.name,
+      fileType: validated.file.type,
       isMarkdownFile,
     })
     
@@ -296,7 +353,7 @@ export async function POST(req: NextRequest) {
       documentSummary = await generateDocumentSummary(content, documentTitle, isMarkdownFile)
     } else if (isBinaryOrFailed) {
       // Binary file or extraction failed - create a descriptive summary based on file type
-      const fileNameParts = file.name.split(".")
+      const fileNameParts = validated.file.name.split(".")
       const fileExt = fileNameParts.length > 1 ? fileNameParts.pop()?.toLowerCase() : ""
       
       const fileTypeMap: Record<string, string> = {
@@ -322,14 +379,14 @@ export async function POST(req: NextRequest) {
       
       // Also check MIME type as fallback
       let fileTypeDescription = fileTypeMap[fileExt || ""]
-      if (!fileTypeDescription && file.type) {
-        if (file.type.startsWith("image/")) {
-          fileTypeDescription = `Image file (${file.type.split("/")[1].toUpperCase()})`
-        } else if (file.type.startsWith("application/zip") || file.type.includes("archive")) {
+      if (!fileTypeDescription && validated.file.type) {
+        if (validated.file.type.startsWith("image/")) {
+          fileTypeDescription = `Image file (${validated.file.type.split("/")[1].toUpperCase()})`
+        } else if (validated.file.type.startsWith("application/zip") || validated.file.type.includes("archive")) {
           fileTypeDescription = "Archive file"
-        } else if (file.type.includes("spreadsheet") || file.type.includes("excel")) {
+        } else if (validated.file.type.includes("spreadsheet") || validated.file.type.includes("excel")) {
           fileTypeDescription = "Spreadsheet file"
-        } else if (file.type.includes("presentation") || file.type.includes("powerpoint")) {
+        } else if (validated.file.type.includes("presentation") || validated.file.type.includes("powerpoint")) {
           fileTypeDescription = "Presentation file"
         }
       }
@@ -341,9 +398,9 @@ export async function POST(req: NextRequest) {
       documentSummary = `${fileTypeDescription}. Content extraction not available for this file type.`
       
       console.log("[Upload API] Binary/unsupported file detected:", {
-        fileName: file.name,
+        fileName: validated.file.name,
         fileExt,
-        fileType: file.type,
+        fileType: validated.file.type,
         summary: documentSummary,
       })
     } else {
@@ -362,7 +419,7 @@ export async function POST(req: NextRequest) {
     
     // Ensure summary doesn't contain the binary file error message
     if (documentSummary.includes("[Binary file - content extraction not available]")) {
-      const fileExt = file.name.split(".").pop()?.toLowerCase() || "unknown"
+      const fileExt = validated.file.name.split(".").pop()?.toLowerCase() || "unknown"
       documentSummary = `File (${fileExt.toUpperCase()}). Content extraction not available for this file type.`
       console.warn("[Upload API] Summary contained binary error message, replaced with file type description")
     }
@@ -379,18 +436,18 @@ export async function POST(req: NextRequest) {
       .from("documents")
       .insert({
         source_id: source!.id,
-        workspace_id: workspaceId,
+        workspace_id: validated.workspaceId,
         tenant_id: workspace?.space_id || null,
         external_id: fileName,
         title: documentTitle,
         content: sanitizeContentForDatabase(documentSummary),
         url: publicUrl,
         status: "active",
-        classification: classification,
+        classification: validated.classification,
         metadata: {
-          filename: file.name,
-          size: file.size,
-          type: file.type,
+          filename: validated.file.name,
+          size: validated.file.size,
+          type: validated.file.type,
           uploaded_at: new Date().toISOString(),
         },
       })
@@ -403,7 +460,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Store PDF pages if we extracted them
-    if (file.type === "application/pdf" && content && !content.startsWith("[Failed")) {
+    if (validated.file.type === "application/pdf" && content && !content.startsWith("[Failed")) {
       try {
         const lines = content.split("\n").filter((line) => line.trim())
         const pages: any[] = []
@@ -445,11 +502,11 @@ export async function POST(req: NextRequest) {
         console.error("[Upload] Error storing PDF pages:", pageError)
       }
     } else if (
-      file.type === "text/plain" ||
-      file.type === "text/markdown" ||
-      file.name.toLowerCase().endsWith(".md") ||
-      file.name.toLowerCase().endsWith(".txt") ||
-      file.name.toLowerCase().endsWith(".markdown")
+      validated.file.type === "text/plain" ||
+      validated.file.type === "text/markdown" ||
+      validated.file.name.toLowerCase().endsWith(".md") ||
+      validated.file.name.toLowerCase().endsWith(".txt") ||
+      validated.file.name.toLowerCase().endsWith(".markdown")
     ) {
       if (content && content.trim() && !content.startsWith("[Failed") && !content.startsWith("[Binary")) {
         try {
@@ -471,8 +528,8 @@ export async function POST(req: NextRequest) {
         }
       }
     } else if (
-      file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-      file.name.toLowerCase().endsWith(".docx")
+      validated.file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      validated.file.name.toLowerCase().endsWith(".docx")
     ) {
       // Store Word document content as pages for RAG/search
       if (content && content.trim() && !content.startsWith("[Failed") && !content.startsWith("[Binary")) {
@@ -497,7 +554,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    revalidatePath(`/workspaces/${workspaceId}`)
+    revalidatePath(`/workspaces/${validated.workspaceId}`)
+    
+    // Invalidate search cache for this workspace
+    await invalidateCacheByTag(`search:workspace:${validated.workspaceId}`)
+    
     return NextResponse.json({ data: document })
   } catch (error) {
     console.error("[Upload API] Error:", error)

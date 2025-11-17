@@ -3,16 +3,23 @@
 import { createClient } from "@/lib/supabase/server"
 import { findTextSpan } from "@/lib/utils/pdf-extraction"
 import OpenAI from "openai"
+import { env } from "@/lib/env"
+import { deduplicateRequest, generateRequestKey } from "@/lib/utils/request-deduplication"
+import { withCache, workspaceCacheKey } from "@/lib/cache/api-cache"
+import { monitorPerformance } from "@/lib/utils/performance-monitor"
 
 // Helper function to rewrite/expand user query using AI for better search
 async function rewriteQueryForSearch(originalQuery: string): Promise<string> {
   // Only use AI if OpenAI is configured and query is substantial
-  if (!process.env.OPENAI_API_KEY || originalQuery.length < 10) {
+  if (!env.OPENAI_API_KEY || originalQuery.length < 10) {
     return originalQuery
   }
 
-  try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  // Deduplicate query rewriting requests (same query = same rewrite)
+  const rewriteKey = generateRequestKey("rewrite-query", { query: originalQuery })
+  
+  return deduplicateRequest(rewriteKey, async () => {
+    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
     
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini", // Use cheaper model for query rewriting
@@ -43,20 +50,21 @@ Examples:
       temperature: 0.3, // Lower temperature for more consistent results
     })
 
-    const rewritten = response.choices[0]?.message?.content?.trim()
-    if (rewritten && rewritten.length > 0) {
-      console.log("[searchDocuments] Query rewritten:", {
-        original: originalQuery,
-        rewritten,
-      })
-      return rewritten
+      const rewritten = response.choices[0]?.message?.content?.trim()
+      if (rewritten && rewritten.length > 0) {
+        console.log("[searchDocuments] Query rewritten:", {
+          original: originalQuery,
+          rewritten,
+        })
+        return rewritten
+      }
+    } catch (error) {
+      console.error("[searchDocuments] Error rewriting query:", error)
     }
-  } catch (error) {
-    console.error("[searchDocuments] Error rewriting query:", error)
-  }
 
-  // Fallback to original query if AI rewriting fails
-  return originalQuery
+    // Fallback to original query if AI rewriting fails
+    return originalQuery
+  })
 }
 
 export interface DocumentMatch {
@@ -73,7 +81,10 @@ export async function searchDocuments(
   excludedDocumentIds: string[] = [],
   includedDocumentIds?: string[],
 ) {
-  const supabase = await createClient()
+  return monitorPerformance(
+    "rag.search",
+    async () => {
+      const supabase = await createClient()
 
   const {
     data: { user },
@@ -143,8 +154,52 @@ export async function searchDocuments(
 
   filteredDocuments = filteredDocuments.slice(0, limit)
 
-  // For each document, try to find specific page matches
   const matches: DocumentMatch[] = []
+
+  const documentIds = filteredDocuments.map((doc) => doc.id).filter(Boolean)
+  const pagesByDocument: Record<string, any[]> = {}
+  const firstPagesByDocument: Record<string, any | undefined> = {}
+
+  if (documentIds.length > 0) {
+    const trimmedQuery = searchQuery.trim()
+
+    if (trimmedQuery.length > 0) {
+      const { data: matchingPages, error: matchingPagesError } = await supabase
+        .from("document_pages")
+        .select("*")
+        .in("document_id", documentIds)
+        .ilike("text_content", `%${trimmedQuery}%`)
+        .order("page_number", { ascending: true })
+
+      if (matchingPagesError) {
+        console.error("[searchDocuments] Failed to fetch matching document pages:", matchingPagesError)
+      } else if (matchingPages) {
+        for (const page of matchingPages) {
+          if (!page.document_id) continue
+          if (!pagesByDocument[page.document_id]) {
+            pagesByDocument[page.document_id] = []
+          }
+          pagesByDocument[page.document_id].push(page)
+        }
+      }
+    }
+
+    const { data: firstPages, error: firstPagesError } = await supabase
+      .from("document_pages")
+      .select("*")
+      .in("document_id", documentIds)
+      .eq("page_number", 1)
+
+    if (firstPagesError) {
+      console.error("[searchDocuments] Failed to fetch first pages for documents:", firstPagesError)
+    } else if (firstPages) {
+      for (const page of firstPages) {
+        if (page.document_id && !firstPagesByDocument[page.document_id]) {
+          firstPagesByDocument[page.document_id] = page
+        }
+      }
+    }
+  }
 
   for (const doc of filteredDocuments) {
     // If this document is in the included list, try to find page matches
@@ -152,26 +207,11 @@ export async function searchDocuments(
     const isIncluded = includedDocumentIds && includedDocumentIds.length > 0 && includedDocumentIds.includes(doc.id)
     
     if (isIncluded) {
-      // For included documents, try to find a page with text match first
-      const { data: matchingPages } = await supabase
-        .from("document_pages")
-        .select("*")
-        .eq("document_id", doc.id)
-        .ilike("text_content", `%${searchQuery}%`)
-        .limit(1)
-      
-      let page = matchingPages?.[0]
-      
-      // If no match found but document is included, get first page anyway
+      const matchedPages = pagesByDocument[doc.id] || []
+      let page = matchedPages[0]
+
       if (!page) {
-        const { data: firstPage } = await supabase
-          .from("document_pages")
-          .select("*")
-          .eq("document_id", doc.id)
-          .order("page_number", { ascending: true })
-          .limit(1)
-          .single()
-        page = firstPage || undefined
+        page = firstPagesByDocument[doc.id]
       }
       
       if (page) {
@@ -364,16 +404,10 @@ export async function searchDocuments(
         })
       }
     } else {
-      // For non-included documents, only include if there's a text match
-      const { data: pages } = await supabase
-        .from("document_pages")
-        .select("*")
-        .eq("document_id", doc.id)
-        .ilike("text_content", `%${searchQuery}%`)
-        .limit(1)
+      const matchedPages = pagesByDocument[doc.id] || []
 
-      if (pages && pages.length > 0) {
-        const page = pages[0]
+      if (matchedPages.length > 0) {
+        const page = matchedPages[0]
         const textSpan = findTextSpan(page.text_content || "", searchQuery)
 
         // Get preview text around the match
@@ -390,7 +424,12 @@ export async function searchDocuments(
           textSpan: textSpan || undefined,
           preview,
         })
-      } else if (doc.content && doc.content.trim() && !doc.content.startsWith("[Failed") && !doc.content.startsWith("[Binary")) {
+      } else if (
+        doc.content &&
+        doc.content.trim() &&
+        !doc.content.startsWith("[Failed") &&
+        !doc.content.startsWith("[Binary"))
+      {
         // No pages found, but we have document content - use it as a virtual page
         const textSpan = findTextSpan(doc.content, searchQuery)
         
@@ -416,7 +455,10 @@ export async function searchDocuments(
     }
   }
 
-  return { data: matches }
+      return { data: matches }
+    },
+    { warning: 2000, error: 10000 }, // Custom thresholds for RAG search
+  )
 }
 
 export async function getRelevantContext(
@@ -429,12 +471,20 @@ export async function getRelevantContext(
 ): Promise<{ context: string; sources: any[] }> {
   const supabase = await createClient()
 
-  // Get workspace context and location
-  const { data: workspace } = await supabase
-    .from("workspaces")
-    .select("context, location")
-    .eq("id", workspaceId)
-    .single()
+  // Cache key for workspace metadata (doesn't change often)
+  const workspaceCacheKeyStr = workspaceCacheKey("workspace-metadata", workspaceId)
+  const workspace = await withCache(
+    workspaceCacheKeyStr,
+    async () => {
+      const { data } = await supabase
+        .from("workspaces")
+        .select("context, location")
+        .eq("id", workspaceId)
+        .single()
+      return data
+    },
+    { ttl: 300, tags: [`workspace:${workspaceId}`] } // 5 minute cache
+  )
 
   // If specific documents are included, use a limit that matches the number of included documents
   // Otherwise, use the default limit of 3 for text-based search
@@ -466,15 +516,29 @@ export async function getRelevantContext(
     contextParts.push(`Location: ${workspace.location}`)
   }
 
-  const { data: notesData, error: notesError } = await supabase
-    .from("workspace_notes")
-    .select(
-      "id, content, include_in_ai_context, author:profiles(id, full_name, email)",
-    )
-    .eq("workspace_id", workspaceId)
-    .eq("include_in_ai_context", true)
-    .order("updated_at", { ascending: false })
-    .limit(20)
+  // Fetch notes and evidence in parallel (optimization)
+  const [notesResult, evidenceResult] = await Promise.all([
+    supabase
+      .from("workspace_notes")
+      .select(
+        "id, content, include_in_ai_context, author:profiles(id, full_name, email)",
+      )
+      .eq("workspace_id", workspaceId)
+      .eq("include_in_ai_context", true)
+      .order("updated_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("workspace_items")
+      .select("id, payload, created_at, created_by:profiles(id, full_name, email)")
+      .eq("workspace_id", workspaceId)
+      .eq("inheritance", "local")
+      .eq("include_in_ai_context", true)
+      .order("created_at", { ascending: false })
+      .limit(10),
+  ])
+
+  const { data: notesData, error: notesError } = notesResult
+  const { data: evidenceItems, error: evidenceError } = evidenceResult
 
   if (notesError) {
     console.error("[getRelevantContext] Failed to load workspace notes:", notesError)
@@ -484,11 +548,14 @@ export async function getRelevantContext(
   const relevantNotes =
     notesData
       ?.filter((note) => !excludedNotesSet.has(note.id))
-      .map((note) => ({
-        id: note.id,
-        content: typeof note.content === "string" ? note.content : "",
-        authorName: note.author?.full_name || note.author?.email || "Workspace member",
-      })) ?? []
+      .map((note) => {
+        const authorRecord = Array.isArray(note.author) ? note.author[0] : note.author
+        return {
+          id: note.id,
+          content: typeof note.content === "string" ? note.content : "",
+          authorName: authorRecord?.full_name || authorRecord?.email || "Workspace member",
+        }
+      }) ?? []
 
   if (relevantNotes.length > 0) {
     const noteSummaries = relevantNotes.map((note) => {
@@ -499,16 +566,6 @@ export async function getRelevantContext(
     })
     contextParts.push(`Workspace Notes:\n${noteSummaries.join("\n\n")}`)
   }
-
-  // Get evidence items (workspace_items with type="evidence" and include_in_ai_context=true)
-  const { data: evidenceItems, error: evidenceError } = await supabase
-    .from("workspace_items")
-    .select("id, payload, created_at, created_by:profiles(id, full_name, email)")
-    .eq("workspace_id", workspaceId)
-    .eq("inheritance", "local")
-    .eq("include_in_ai_context", true)
-    .order("created_at", { ascending: false })
-    .limit(10)
 
   if (evidenceError) {
     console.error("[getRelevantContext] Failed to load evidence items:", evidenceError)
@@ -525,7 +582,8 @@ export async function getRelevantContext(
     })
     .map((item) => {
       const payload = item.payload as Record<string, any>
-      const authorName = (item.created_by as any)?.full_name || (item.created_by as any)?.email || "Workspace member"
+      const createdByRecord = Array.isArray(item.created_by) ? item.created_by[0] : item.created_by
+      const authorName = createdByRecord?.full_name || createdByRecord?.email || "Workspace member"
       const question = typeof payload.question === "string" ? payload.question : ""
       const answer = typeof payload.answer === "string" ? payload.answer : ""
       const trimmedAnswer = answer.length > 800 ? `${answer.slice(0, 800).trimEnd()}...` : answer
@@ -537,6 +595,50 @@ export async function getRelevantContext(
   }
 
   const sources: any[] = []
+
+  // Batch fetch all pages for all documents in parallel (optimization)
+  const documentIds = documentMatches.map(m => m.document.id).filter(Boolean)
+  const pagesByDocId: Record<string, any[]> = {}
+  
+  if (documentIds.length > 0) {
+    // Determine which documents need page fetching
+    const needsPages = documentMatches.filter(match => {
+      const doc = match.document
+      const isIncluded = includedDocumentIds && includedDocumentIds.length > 0 && includedDocumentIds.includes(doc.id)
+      return (isIncluded || !doc.content) && doc.id
+    })
+    
+    if (needsPages.length > 0) {
+      const needsPageIds = needsPages.map(m => m.document.id).filter(Boolean)
+      const isIncludedSet = new Set(
+        (includedDocumentIds || []).filter(id => needsPageIds.includes(id))
+      )
+      
+      // Batch fetch all pages for all documents that need them
+      try {
+        const { data: allPages, error: pagesError } = await supabase
+          .from("document_pages")
+          .select("document_id, text_content, page_number")
+          .in("document_id", needsPageIds)
+          .order("page_number", { ascending: true })
+        
+        if (pagesError) {
+          console.error(`[getRelevantContext] Error batch fetching pages:`, pagesError)
+        } else if (allPages) {
+          // Group pages by document_id
+          for (const page of allPages) {
+            if (!page.document_id) continue
+            if (!pagesByDocId[page.document_id]) {
+              pagesByDocId[page.document_id] = []
+            }
+            pagesByDocId[page.document_id].push(page)
+          }
+        }
+      } catch (error) {
+        console.error(`[getRelevantContext] Error batch fetching pages:`, error)
+      }
+    }
+  }
 
   // Combine document content for context
   // For documents with no content but with pages, we'll aggregate page content
@@ -552,55 +654,44 @@ export async function getRelevantContext(
     let content = doc.content || ""
     const isIncluded = includedDocumentIds && includedDocumentIds.length > 0 && includedDocumentIds.includes(doc.id)
     
-    // Always try to get content from pages for included documents, or if content is empty
-    if ((isIncluded || !content) && doc.id) {
-      try {
-        const { data: pages, error: pagesError } = await supabase
-          .from("document_pages")
-          .select("text_content, page_number")
-          .eq("document_id", doc.id)
-          .order("page_number", { ascending: true })
-          .limit(isIncluded ? 1000 : 10) // Get all pages for included documents (up to 1000)
-        
-        if (pagesError) {
-          console.error(`[getRelevantContext] Error fetching pages for doc ${doc.id}:`, pagesError)
+    // Use pre-fetched pages if available
+    if ((isIncluded || !content) && doc.id && pagesByDocId[doc.id]) {
+      const pages = pagesByDocId[doc.id]
+      const limit = isIncluded ? 1000 : 10
+      const relevantPages = pages.slice(0, limit)
+      
+      if (isIncluded) {
+        console.log(`[getRelevantContext] Document ${doc.id} (${doc.title}): Found ${pages.length} pages`)
+        if (pages.length > 0) {
+          const totalChars = pages.reduce((sum, p) => sum + (p.text_content?.length || 0), 0)
+          console.log(`[getRelevantContext] Total characters from pages: ${totalChars}`)
         }
+      }
+      
+      if (relevantPages.length > 0) {
+        const pageContent = relevantPages
+          .map((p) => p.text_content || "")
+          .filter(Boolean)
+          .join("\n\n")
         
-        if (isIncluded) {
-          console.log(`[getRelevantContext] Document ${doc.id} (${doc.title}): Found ${pages?.length || 0} pages`)
-          if (pages && pages.length > 0) {
-            const totalChars = pages.reduce((sum, p) => sum + (p.text_content?.length || 0), 0)
-            console.log(`[getRelevantContext] Total characters from pages: ${totalChars}`)
-          }
-        }
-        
-        if (pages && pages.length > 0) {
-          const pageContent = pages
-            .map((p) => p.text_content || "")
-            .filter(Boolean)
-            .join("\n\n")
-          
-          if (pageContent.trim()) {
-            // For included documents, prioritize page content (it's more complete)
-            if (isIncluded) {
-              // For included documents, use all available content (up to 50000 chars to avoid token limits)
-              // This ensures the AI has access to the full document when viewing it
-              content = pageContent.length > 50000 ? pageContent.substring(0, 50000) : pageContent
-              console.log(`[getRelevantContext] Using ${content.length} chars from ${pages.length} pages for included doc ${doc.id} (total available: ${pageContent.length} chars)`)
-            } else if (!content) {
-              content = pageContent.substring(0, 2000)
-            } else if (pageContent.length > content.length) {
-              // Use page content if it's more complete
-              content = pageContent.substring(0, 2000)
-            }
-          } else if (isIncluded) {
-            console.warn(`[getRelevantContext] Pages exist but have no text_content for doc ${doc.id}`)
+        if (pageContent.trim()) {
+          // For included documents, prioritize page content (it's more complete)
+          if (isIncluded) {
+            // For included documents, use all available content (up to 50000 chars to avoid token limits)
+            // This ensures the AI has access to the full document when viewing it
+            content = pageContent.length > 50000 ? pageContent.substring(0, 50000) : pageContent
+            console.log(`[getRelevantContext] Using ${content.length} chars from ${relevantPages.length} pages for included doc ${doc.id} (total available: ${pageContent.length} chars)`)
+          } else if (!content) {
+            content = pageContent.substring(0, 2000)
+          } else if (pageContent.length > content.length) {
+            // Use page content if it's more complete
+            content = pageContent.substring(0, 2000)
           }
         } else if (isIncluded) {
-          console.warn(`[getRelevantContext] No pages found in document_pages for doc ${doc.id}`)
+          console.warn(`[getRelevantContext] Pages exist but have no text_content for doc ${doc.id}`)
         }
-      } catch (error) {
-        console.error(`[getRelevantContext] Error processing pages for doc ${doc.id}:`, error)
+      } else if (isIncluded) {
+        console.warn(`[getRelevantContext] No pages found in document_pages for doc ${doc.id}`)
       }
     }
     
@@ -797,24 +888,41 @@ export async function getAllWorkspaceKnowledge(
     contextParts.push("No documents found in the workspace.")
   }
 
-  const { data: notesData, error: notesError } = await supabase
-    .from("workspace_notes")
-    .select("id, content, include_in_ai_context, author:profiles(id, full_name, email)")
-    .eq("workspace_id", workspaceId)
-    .eq("include_in_ai_context", true)
-    .order("updated_at", { ascending: false })
-    .limit(MAX_NOTES)
+  // Fetch notes and evidence in parallel (optimization)
+  const [notesResult, evidenceResult] = await Promise.all([
+    supabase
+      .from("workspace_notes")
+      .select("id, content, include_in_ai_context, author:profiles(id, full_name, email)")
+      .eq("workspace_id", workspaceId)
+      .eq("include_in_ai_context", true)
+      .order("updated_at", { ascending: false })
+      .limit(MAX_NOTES),
+    supabase
+      .from("workspace_items")
+      .select("id, payload, created_at, created_by:profiles(id, full_name, email)")
+      .eq("workspace_id", workspaceId)
+      .eq("inheritance", "local")
+      .eq("include_in_ai_context", true)
+      .order("created_at", { ascending: false })
+      .limit(MAX_EVIDENCE),
+  ])
+
+  const { data: notesData, error: notesError } = notesResult
+  const { data: evidenceItems, error: evidenceError } = evidenceResult
 
   if (notesError) {
     console.error("[getAllWorkspaceKnowledge] Failed to load workspace notes:", notesError)
   }
 
   const notes =
-    notesData?.map((note) => ({
-      id: note.id,
-      content: typeof note.content === "string" ? note.content : "",
-      authorName: note.author?.full_name || note.author?.email || "Workspace member",
-    })) ?? []
+    notesData?.map((note) => {
+      const authorRecord = Array.isArray(note.author) ? note.author[0] : note.author
+      return {
+        id: note.id,
+        content: typeof note.content === "string" ? note.content : "",
+        authorName: authorRecord?.full_name || authorRecord?.email || "Workspace member",
+      }
+    }) ?? []
 
   if (notes.length > 0) {
     const noteSummaries = notes.map((note) => {
@@ -827,15 +935,6 @@ export async function getAllWorkspaceKnowledge(
     contextParts.push(`Workspace Notes:\n${noteSummaries.join("\n\n")}`)
   }
 
-  const { data: evidenceItems, error: evidenceError } = await supabase
-    .from("workspace_items")
-    .select("id, payload, created_at, created_by:profiles(id, full_name, email)")
-    .eq("workspace_id", workspaceId)
-    .eq("inheritance", "local")
-    .eq("include_in_ai_context", true)
-    .order("created_at", { ascending: false })
-    .limit(MAX_EVIDENCE)
-
   if (evidenceError) {
     console.error("[getAllWorkspaceKnowledge] Failed to load evidence items:", evidenceError)
   }
@@ -847,8 +946,8 @@ export async function getAllWorkspaceKnowledge(
     })
     .map((item) => {
       const payload = item.payload as Record<string, any>
-      const authorName =
-        (item.created_by as any)?.full_name || (item.created_by as any)?.email || "Workspace member"
+      const createdByRecord = Array.isArray(item.created_by) ? item.created_by[0] : item.created_by
+      const authorName = createdByRecord?.full_name || createdByRecord?.email || "Workspace member"
       const question = typeof payload.question === "string" ? payload.question : ""
       let answer = typeof payload.answer === "string" ? payload.answer : ""
       if (answer.length > MAX_EVIDENCE_CHARS) {

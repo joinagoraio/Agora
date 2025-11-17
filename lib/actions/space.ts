@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
 import OpenAI from "openai"
+import { env } from "@/lib/env"
+import { requireAuth } from "@/lib/middleware/authorization"
 
 export async function createSpace(
   name: string,
@@ -212,7 +214,7 @@ export async function enhanceScopeText(
     return { error: "Unauthorized" }
   }
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (!env.OPENAI_API_KEY) {
     return { error: "OpenAI API key not configured" }
   }
 
@@ -224,7 +226,7 @@ export async function enhanceScopeText(
   const isMissionStatement = field === "summary"
 
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
 
     // Build context for the prompt
     let contextParts: string[] = []

@@ -1,8 +1,9 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
-import { randomBytes } from "crypto"
+import { randomBytes } from "node:crypto"
 import { revalidatePath } from "next/cache"
+import { env } from "@/lib/env"
 
 export async function createWorkspaceShareLink(workspaceId: string, expiresInDays?: number) {
   const supabase = await createClient()
@@ -61,7 +62,7 @@ export async function createWorkspaceShareLink(workspaceId: string, expiresInDay
     return { error: error.message }
   }
 
-  const shareUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/workspaces/${workspaceId}/share/${token}`
+  const shareUrl = `${env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/workspaces/${workspaceId}/share/${token}`
 
   return { data: { token, expiresAt }, shareUrl }
 }
@@ -108,10 +109,30 @@ export async function getWorkspaceShareData(workspaceId: string, token: string) 
     .eq("workspace_id", workspaceId)
 
   const inheritedItems: any[] = []
-  if (parentSpaces && parentSpaces.length > 0) {
-    const spaceIds = parentSpaces
-      .filter((ps) => ps.spaces?.visibility === "public")
-      .map((ps) => ps.space_id)
+  type ParentSpaceRecord = {
+    space_id: string
+    id: string
+    name: string
+    space_type?: string | null
+    visibility?: string | null
+  }
+
+  const normalizedParentSpaces = (parentSpaces ?? []).reduce<ParentSpaceRecord[]>((acc, ps) => {
+    const spaceRecord = Array.isArray(ps.spaces) ? ps.spaces[0] : ps.spaces
+    if (spaceRecord) {
+      acc.push({
+        space_id: ps.space_id,
+        id: spaceRecord.id,
+        name: spaceRecord.name,
+        space_type: spaceRecord.space_type,
+        visibility: spaceRecord.visibility,
+      })
+    }
+    return acc
+  }, [])
+
+  if (normalizedParentSpaces.length > 0) {
+    const spaceIds = normalizedParentSpaces.filter((space) => space.visibility === "public").map((space) => space.space_id)
 
     if (spaceIds.length > 0) {
       const { data: items } = await supabase
@@ -131,7 +152,7 @@ export async function getWorkspaceShareData(workspaceId: string, token: string) 
       workspace,
       items: publicItems || [],
       inheritedItems,
-      parentSpaces: parentSpaces?.map((ps) => ps.spaces).filter(Boolean) || [],
+      parentSpaces: normalizedParentSpaces.map(({ space_id, ...space }) => space),
     },
   }
 }

@@ -105,7 +105,7 @@ export function RichTextEditor({ content, onChange, placeholder, className }: Ri
         const normalizedContent = content?.trim() || ""
         const normalizedCurrent = currentContent?.trim() || ""
         if (normalizedContent !== normalizedCurrent) {
-          editor.commands.setContent(normalizedContent || "<p></p>", false)
+          editor.commands.setContent(normalizedContent || "<p></p>", { emitUpdate: false })
         }
       }
     }

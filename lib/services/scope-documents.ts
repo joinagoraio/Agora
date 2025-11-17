@@ -1,6 +1,6 @@
 "use server"
 
-import { randomUUID } from "crypto"
+import { randomUUID } from "node:crypto"
 import { revalidatePath } from "next/cache"
 
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -18,6 +18,7 @@ export type SpaceDocumentItem = {
   id: string
   space_id?: string
   classification?: "public" | "internal" | "confidential" | null
+  visibility?: "public" | "internal" | "confidential" | null
   payload: SpaceDocumentPayload
 }
 
@@ -263,12 +264,17 @@ async function upsertWorkspaceDocumentForScope(
   return true
 }
 
-export async function syncScopeDocumentToAllWorkspaces(spaceId: string, spaceItem: SpaceDocumentItem) {
-  const adminClient = createAdminClient()
+export async function syncScopeDocumentToAllWorkspaces(
+  spaceId: string,
+  spaceItem: SpaceDocumentItem,
+  adminClient = createAdminClient(),
+  upsertFn: typeof upsertWorkspaceDocumentForScope = upsertWorkspaceDocumentForScope,
+) {
 
   const classification = spaceItem.classification ?? "internal"
+  const visibility = spaceItem.visibility ?? "internal"
 
-  if (classification !== "public") {
+  if (classification !== "public" && visibility !== "public") {
     await removeScopeDocumentFromAllWorkspaces(spaceId, spaceItem.id)
     return
   }
@@ -302,7 +308,7 @@ export async function syncScopeDocumentToAllWorkspaces(spaceId: string, spaceIte
 
   const failedWorkspaceIds: string[] = []
   for (const workspaceId of workspaceIds) {
-    const synced = await upsertWorkspaceDocumentForScope(spaceId, workspaceId, spaceItem, adminClient)
+    const synced = await upsertFn(spaceId, workspaceId, spaceItem, adminClient)
     if (!synced) {
       failedWorkspaceIds.push(workspaceId)
     }
@@ -315,12 +321,16 @@ export async function syncScopeDocumentToAllWorkspaces(spaceId: string, spaceIte
   }
 }
 
-export async function syncAllScopeDocumentsToWorkspace(spaceId: string, workspaceId: string) {
-  const adminClient = createAdminClient()
+export async function syncAllScopeDocumentsToWorkspace(
+  spaceId: string,
+  workspaceId: string,
+  adminClient = createAdminClient(),
+  upsertFn: typeof upsertWorkspaceDocumentForScope = upsertWorkspaceDocumentForScope,
+) {
 
   const { data: scopeItems, error } = await adminClient
     .from("space_items")
-    .select("id, classification, payload")
+    .select("id, classification, visibility, payload")
     .eq("space_id", spaceId)
     .eq("item_type", "document")
 
@@ -334,10 +344,12 @@ export async function syncAllScopeDocumentsToWorkspace(spaceId: string, workspac
   }
 
   for (const item of scopeItems) {
-    if ((item.classification ?? "internal") !== "public") {
+    const classification = item.classification ?? "internal"
+    const visibility = item.visibility ?? "internal"
+    if (classification !== "public" && visibility !== "public") {
       continue
     }
-    await upsertWorkspaceDocumentForScope(spaceId, workspaceId, item as SpaceDocumentItem, adminClient)
+    await upsertFn(spaceId, workspaceId, item as SpaceDocumentItem, adminClient)
   }
 }
 

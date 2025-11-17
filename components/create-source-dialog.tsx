@@ -32,10 +32,14 @@ interface CreateSourceDialogProps {
   trigger?: React.ReactNode
 }
 
-const SOURCE_TYPES = [
+const SOURCE_TYPE_DEFINITIONS = [
   { value: "google_drive", label: "Google Drive", description: "Sync documents from Google Drive" },
   { value: "overheid_nl", label: "Overheid.nl", description: "Search Dutch government publications and regulations" },
-].sort((a, b) => a.label.localeCompare(b.label)) as const
+] as const
+
+type SourceTypeDefinition = (typeof SOURCE_TYPE_DEFINITIONS)[number]
+
+const SOURCE_TYPES: SourceTypeDefinition[] = [...SOURCE_TYPE_DEFINITIONS].sort((a, b) => a.label.localeCompare(b.label))
 
 export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [], trigger }: CreateSourceDialogProps) {
   const [open, setOpen] = useState(false)

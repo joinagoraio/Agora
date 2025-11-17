@@ -34,10 +34,16 @@ export async function POST(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ workspaceId: string; token: string }> },
+  { params }: { params: Promise<{ workspaceId: string }> },
 ) {
   try {
-    const { workspaceId, token } = await params
+    const { workspaceId } = await params
+    const url = new URL(req.url)
+    const token = url.searchParams.get("token")
+
+    if (!token) {
+      return NextResponse.json({ error: "token is required" }, { status: 400 })
+    }
 
     const { error } = await revokeWorkspaceShareLink(workspaceId, token)
 

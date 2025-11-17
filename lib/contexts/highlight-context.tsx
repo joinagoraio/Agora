@@ -18,7 +18,7 @@ interface HighlightContextValue {
   highlights: Map<string, Highlight[]> // documentId -> highlights
   activeDocumentId: string | null
   autoHighlight: boolean
-  setHighlights: (documentId: string, highlights: Highlight[]) => void
+  setHighlights: (documentId: string, highlights: Highlight[], immediate?: boolean) => void
   addHighlight: (documentId: string, highlight: Highlight) => void
   clearHighlights: (documentId: string) => void
   setAutoHighlight: (enabled: boolean) => void

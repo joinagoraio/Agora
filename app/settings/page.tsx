@@ -22,7 +22,8 @@ export default async function SettingsPage() {
     .order("created_at", { ascending: true })
     .limit(1)
 
-  const space = members?.[0]?.spaces
+  const spacesRelation = members?.[0]?.spaces
+  const space = Array.isArray(spacesRelation) ? spacesRelation[0] : spacesRelation
 
   if (!space) {
     redirect("/dashboard")

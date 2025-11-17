@@ -107,9 +107,8 @@ export async function GET(
           
           // Convert blob to buffer
           const arrayBuffer = await data.arrayBuffer()
-          const buffer = Buffer.from(arrayBuffer)
           
-          return new NextResponse(buffer, {
+          return new NextResponse(arrayBuffer, {
             headers: {
               "Content-Type": contentType,
               "Content-Disposition": `inline; filename="${filename}"`,
@@ -134,12 +133,11 @@ export async function GET(
       }
 
       const arrayBuffer = await response.arrayBuffer()
-      const buffer = Buffer.from(arrayBuffer)
 
       // Use response content-type if available, otherwise use detected type
       const responseContentType = response.headers.get("content-type") || contentType
 
-      return new NextResponse(buffer, {
+      return new NextResponse(arrayBuffer, {
         headers: {
           "Content-Type": responseContentType,
           "Content-Disposition": `inline; filename="${filename}"`,

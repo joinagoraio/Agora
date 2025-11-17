@@ -58,10 +58,16 @@ export async function POST(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ workspaceId: string; spaceId: string }> },
+  { params }: { params: Promise<{ workspaceId: string }> },
 ) {
   try {
-    const { workspaceId, spaceId } = await params
+    const { workspaceId } = await params
+    const url = new URL(req.url)
+    const spaceId = url.searchParams.get("spaceId")
+
+    if (!spaceId) {
+      return NextResponse.json({ error: "spaceId is required" }, { status: 400 })
+    }
 
     const { error } = await detachParentSpace(workspaceId, spaceId)
 

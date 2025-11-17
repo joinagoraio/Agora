@@ -1,8 +1,20 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
+import { checkRateLimit, searchRateLimit } from "@/lib/rate-limit"
+import { searchQuerySchema } from "@/lib/validations/document"
+import { withCache, workspaceCacheKey } from "@/lib/cache/api-cache"
+import { parsePaginationParams, createPaginatedResponse, DEFAULT_PAGE_SIZE } from "@/lib/utils/pagination"
+import { ValidationError, RateLimitError, createErrorResponse, createSuccessResponse } from "@/lib/utils/api-error-handler"
+import { logger } from "@/lib/utils/logger"
 
 export async function GET(req: NextRequest) {
   try {
+    const ip = req.headers.get("x-forwarded-for") ?? "anonymous"
+    const rateLimitResult = await checkRateLimit(searchRateLimit, `workspace-search:${ip}`)
+    if (!rateLimitResult.success) {
+      return NextResponse.json({ error: "Search rate limit exceeded. Please wait and try again." }, { status: 429 })
+    }
+
     const searchParams = req.nextUrl.searchParams
     const workspaceId = searchParams.get("workspaceId")
     const query = searchParams.get("query")
@@ -12,9 +24,31 @@ export async function GET(req: NextRequest) {
     const classification = searchParams.get("classification")
     const layer = searchParams.get("layer")
 
-    if (!workspaceId || !query) {
-      return NextResponse.json({ error: "workspaceId and query are required" }, { status: 400 })
+    // Validate input with Zod
+    const validationResult = searchQuerySchema.safeParse({
+      workspaceId: workspaceId || "",
+      query: query || "",
+      domain: domain || undefined,
+      municipality: municipality || undefined,
+      year: year || undefined,
+      classification: (classification as "public" | "internal" | "confidential" | undefined) || undefined,
+      layer: layer || undefined,
+    })
+
+    if (!validationResult.success) {
+      return NextResponse.json(
+        {
+          error: "Validation failed",
+          details: validationResult.error.errors.map(e => ({
+            path: e.path.join("."),
+            message: e.message,
+          }))
+        },
+        { status: 400 }
+      )
     }
+
+    const validated = validationResult.data
 
     const supabase = await createClient()
     const {
@@ -29,21 +63,21 @@ export async function GET(req: NextRequest) {
     let searchQuery = supabase
       .from("documents")
       .select("*")
-      .eq("workspace_id", workspaceId)
+      .eq("workspace_id", validated.workspaceId)
       .eq("status", "active")
-      .or(`title.ilike.%${query}%,content.ilike.%${query}%`)
+      .or(`title.ilike.%${validated.query}%,content.ilike.%${validated.query}%`)
 
     // Apply filters
-    if (domain) {
-      searchQuery = searchQuery.eq("domain", domain)
+    if (validated.domain) {
+      searchQuery = searchQuery.eq("domain", validated.domain)
     }
 
-    if (municipality) {
-      searchQuery = searchQuery.eq("municipality", municipality)
+    if (validated.municipality) {
+      searchQuery = searchQuery.eq("municipality", validated.municipality)
     }
 
-    if (year) {
-      const yearInt = parseInt(year)
+    if (validated.year) {
+      const yearInt = parseInt(validated.year)
       if (!isNaN(yearInt)) {
         const startDate = `${yearInt}-01-01`
         const endDate = `${yearInt}-12-31`
@@ -51,45 +85,116 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (classification) {
-      searchQuery = searchQuery.eq("classification", classification)
+    if (validated.classification) {
+      searchQuery = searchQuery.eq("classification", validated.classification)
     }
 
     // Layer filter requires joining with workspace -> space
-    if (layer) {
+    if (validated.layer) {
       const { data: workspace } = await supabase
         .from("workspaces")
         .select("space_id, spaces(space_type)")
-        .eq("id", workspaceId)
+        .eq("id", validated.workspaceId)
         .single()
 
-      if (workspace?.spaces?.space_type === layer) {
-        // Filter by workspace's space_type
-        // Documents inherit layer from workspace space_type or document domain
-        // This is a simplified filter - in production you might want more sophisticated logic
+      const spacesRelation = workspace?.spaces as
+        | { space_type?: string | null }
+        | { space_type?: string | null }[]
+        | null
+        | undefined
+      const spaceType = Array.isArray(spacesRelation) ? spacesRelation[0]?.space_type : spacesRelation?.space_type
+
+      if (spaceType && spaceType !== validated.layer) {
+        return NextResponse.json({ results: [] })
       }
     }
 
-    const { data: results, error } = await searchQuery.limit(50)
+    // Parse pagination parameters
+    const { page, pageSize } = parsePaginationParams(req.nextUrl.searchParams)
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    // Get total count for pagination (only if page 1, to avoid extra query on subsequent pages)
+    let total: number | undefined
+    if (page === 1) {
+      const { count } = await searchQuery.select("*", { count: "exact", head: true })
+      total = count || undefined
     }
 
-    return NextResponse.json({ results: results || [] })
+    // Apply pagination
+    const offset = (page - 1) * pageSize
+    const paginatedQuery = searchQuery.range(offset, offset + pageSize - 1)
+
+    // Cache search results (5 minute TTL for search queries)
+    // Include pagination in cache key to cache different pages separately
+    const cacheKey = workspaceCacheKey("search", validated.workspaceId, {
+      query: validated.query,
+      domain: validated.domain,
+      municipality: validated.municipality,
+      year: validated.year,
+      classification: validated.classification,
+      layer: validated.layer,
+      page,
+      pageSize,
+    })
+
+    const results = await withCache(
+      cacheKey,
+      async () => {
+        const { data, error } = await paginatedQuery
+        if (error) {
+          throw new Error(error.message)
+        }
+        return data || []
+      },
+      { ttl: 300 } // 5 minutes
+    )
+
+    const paginatedResponse = createPaginatedResponse(results, page, pageSize, total)
+    return createSuccessResponse(paginatedResponse)
   } catch (error) {
-    console.error("[v0] Search API error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    logger.error("[Search API] Error in GET handler", error)
+    return createErrorResponse(error)
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const { workspaceId, query, filters } = await req.json()
-
-    if (!workspaceId || !query) {
-      return NextResponse.json({ error: "workspaceId and query are required" }, { status: 400 })
+    const ip = req.headers.get("x-forwarded-for") ?? "anonymous"
+    const rateLimitResult = await checkRateLimit(searchRateLimit, `workspace-search:${ip}`)
+    if (!rateLimitResult.success) {
+      throw new RateLimitError("Search rate limit exceeded. Please wait and try again.", rateLimitResult.reset)
     }
+
+    const body = await req.json()
+    const { workspaceId, query, filters, page, pageSize } = body
+
+    // Parse pagination parameters from body
+    const pagination = parsePaginationParams({
+      page: page?.toString(),
+      pageSize: pageSize?.toString(),
+    })
+    const { page: paginatedPage, pageSize: paginatedPageSize } = pagination
+
+    // Validate input with Zod
+    const validationResult = searchQuerySchema.safeParse({
+      workspaceId: workspaceId || "",
+      query: query || "",
+      domain: filters?.domain || undefined,
+      municipality: filters?.municipality || undefined,
+      year: filters?.year || undefined,
+      classification: filters?.classification || undefined,
+      layer: filters?.layer || undefined,
+    })
+
+    if (!validationResult.success) {
+      throw new ValidationError("Validation failed", {
+        errors: validationResult.error.errors.map(e => ({
+          path: e.path.join("."),
+          message: e.message,
+        }))
+      })
+    }
+
+    const validated = validationResult.data
 
     const supabase = await createClient()
     const {
@@ -104,28 +209,28 @@ export async function POST(req: Request) {
     const { data: workspace } = await supabase
       .from("workspaces")
       .select("space_id")
-      .eq("id", workspaceId)
+      .eq("id", validated.workspaceId)
       .single()
 
     // Build search query
     let searchQuery = supabase
       .from("documents")
       .select("*")
-      .eq("workspace_id", workspaceId)
+      .eq("workspace_id", validated.workspaceId)
       .eq("status", "active")
-      .or(`title.ilike.%${query}%,content.ilike.%${query}%`)
+      .or(`title.ilike.%${validated.query}%,content.ilike.%${validated.query}%`)
 
     // Apply filters
-    if (filters?.domain) {
-      searchQuery = searchQuery.eq("domain", filters.domain)
+    if (validated.domain) {
+      searchQuery = searchQuery.eq("domain", validated.domain)
     }
 
-    if (filters?.municipality) {
-      searchQuery = searchQuery.eq("municipality", filters.municipality)
+    if (validated.municipality) {
+      searchQuery = searchQuery.eq("municipality", validated.municipality)
     }
 
-    if (filters?.year) {
-      const yearInt = parseInt(filters.year)
+    if (validated.year) {
+      const yearInt = parseInt(validated.year)
       if (!isNaN(yearInt)) {
         const startDate = `${yearInt}-01-01`
         const endDate = `${yearInt}-12-31`
@@ -133,30 +238,67 @@ export async function POST(req: Request) {
       }
     }
 
-    if (filters?.classification) {
-      searchQuery = searchQuery.eq("classification", filters.classification)
+    if (validated.classification) {
+      searchQuery = searchQuery.eq("classification", validated.classification)
     }
 
-    const { data: results, error } = await searchQuery.limit(50)
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    // Get total count for pagination (only if page 1, to avoid extra query on subsequent pages)
+    let total: number | undefined
+    if (paginatedPage === 1) {
+      const { count } = await searchQuery.select("*", { count: "exact", head: true })
+      total = count || undefined
     }
 
-    // Save search query if workspaceId is provided
-    if (workspace?.space_id && filters) {
-      await supabase.from("search_queries").insert({
+    // Apply pagination
+    const offset = (paginatedPage - 1) * paginatedPageSize
+    const paginatedQuery = searchQuery.range(offset, offset + paginatedPageSize - 1)
+
+    // Cache search results (5 minute TTL for search queries)
+    // Include pagination in cache key to cache different pages separately
+    const cacheKey = workspaceCacheKey("search", validated.workspaceId, {
+      query: validated.query,
+      domain: validated.domain,
+      municipality: validated.municipality,
+      year: validated.year,
+      classification: validated.classification,
+      layer: validated.layer,
+      page: paginatedPage,
+      pageSize: paginatedPageSize,
+    })
+
+    const results = await withCache(
+      cacheKey,
+      async () => {
+        const { data, error } = await paginatedQuery
+        if (error) {
+          throw new Error(error.message)
+        }
+        return data || []
+      },
+      { ttl: 300 } // 5 minutes
+    )
+
+    // Save search query if workspaceId is provided (async, don't block response)
+    if (workspace?.space_id && (validated.domain || validated.municipality || validated.year || validated.classification || validated.layer)) {
+      supabase.from("search_queries").insert({
         tenant_id: workspace.space_id,
         user_id: user.id,
-        workspace_id: workspaceId,
-        query,
-        filters: filters || {},
-      })
+        workspace_id: validated.workspaceId,
+        query: validated.query,
+        filters: {
+          domain: validated.domain,
+          municipality: validated.municipality,
+          year: validated.year,
+          classification: validated.classification,
+          layer: validated.layer,
+        },
+      }).catch(err => console.error("[Search] Failed to save search query:", err))
     }
 
-    return NextResponse.json({ results: results || [] })
+    const paginatedResponse = createPaginatedResponse(results, paginatedPage, paginatedPageSize, total)
+    return createSuccessResponse(paginatedResponse)
   } catch (error) {
-    console.error("[v0] Search API error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    logger.error("[Search API] Error in POST handler", error)
+    return createErrorResponse(error)
   }
 }

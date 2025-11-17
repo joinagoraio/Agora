@@ -1,11 +1,15 @@
 import { createClient } from "@/lib/supabase/server"
 import { getRelevantContext } from "@/lib/rag/search"
+import { buildWorkspaceContext } from "@/lib/chat/context"
 import OpenAI from "openai"
+import { chatRateLimit, checkRateLimit } from "@/lib/rate-limit"
+import { chatMessageSchema } from "@/lib/validations/document"
+import { env } from "@/lib/env"
 
 let cachedOpenAIClient: OpenAI | null = null
 
 function getOpenAIClient() {
-  const apiKey = process.env.OPENAI_API_KEY
+  const apiKey = env.OPENAI_API_KEY
   if (!apiKey) {
     return null
   }
@@ -23,6 +27,16 @@ export const maxDuration = 60
 
 export async function POST(req: Request) {
   try {
+    const ip = req.headers.get("x-forwarded-for") ?? "anonymous"
+    const rateLimitResult = await checkRateLimit(chatRateLimit, `chat:${ip}`)
+
+    if (!rateLimitResult.success) {
+      return new Response(JSON.stringify({ error: "Too many chat requests. Please wait and try again." }), {
+        status: 429,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
     const openai = getOpenAIClient()
 
     // Validate API key before processing
@@ -40,7 +54,41 @@ export async function POST(req: Request) {
       )
     }
 
-    const { messages, workspaceId, conversationId, excludedDocumentIds = [], excludedNoteIds = [], excludedEvidenceIds = [] } = await req.json()
+    const body = await req.json()
+    const { messages, workspaceId, conversationId, excludedDocumentIds = [], excludedNoteIds = [], excludedEvidenceIds = [] } = body
+
+    // Get the last user message for validation
+    if (!messages || messages.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Messages array is required and cannot be empty" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      )
+    }
+    const lastMessage = messages[messages.length - 1]
+    const userQuery = lastMessage?.content || ""
+
+    // Validate input with Zod
+    const validationResult = chatMessageSchema.safeParse({
+      message: userQuery,
+      conversationId,
+      workspaceId,
+      excludedDocumentIds: excludedDocumentIds || [],
+      excludedNoteIds: excludedNoteIds || [],
+      excludedEvidenceIds: excludedEvidenceIds || [],
+    })
+
+    if (!validationResult.success) {
+      return new Response(
+        JSON.stringify({
+          error: "Validation failed",
+          details: validationResult.error.errors.map(e => ({
+            path: e.path.join("."),
+            message: e.message,
+          }))
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      )
+    }
 
     const supabase = await createClient()
     const {
@@ -114,9 +162,8 @@ export async function POST(req: Request) {
       }
     }
 
-    // Get the last user message
-    const lastMessage = messages[messages.length - 1]
-    const userQuery = lastMessage.content
+    // Get the last user message (already extracted above for validation)
+    // lastMessage is already defined above
 
     // Save user message to database
     if (lastMessage.role === "user") {
@@ -174,109 +221,11 @@ export async function POST(req: Request) {
     // Build system prompt with context
     const isDocumentPreview = shouldRestrictToDocument && contextId
     
-    let contextInstructions = ""
-    if (isDocumentPreview) {
-      contextInstructions = `You are currently in document preview mode, viewing a specific document. You can reference specific pages and sections of this document. When mentioning information from the document, you can indicate which page it's on if that information is available in the context.`
-    }
-
-    // Build workspace context section
-    let workspaceContextSection = ""
-    
-    // Workspace details (shown first to emphasize workspace-specific context)
-    if (workspace?.name) {
-      workspaceContextSection = `\n\nWorkspace name: ${workspace.name}`
-    }
-    
-    const scopeMetadata = ((workspace?.metadata as Record<string, any> | null) ?? {}).scope as
-      | Record<string, any>
-      | null
-      | undefined
-    const workspaceSummary = workspace?.description
-    const workspaceScopeDescription = scopeMetadata?.description as string | undefined
-    const workspaceScopeTimeframe = scopeMetadata?.timeframe as string | undefined
-
-    if (workspace?.context) {
-      workspaceContextSection += workspaceContextSection
-        ? `\n\nWorkspace context:\n${workspace.context}`
-        : `\n\nWorkspace context:\n${workspace.context}`
-    }
-    if (workspace?.location) {
-      workspaceContextSection += workspaceContextSection ? `\n\nWorkspace location: ${workspace.location}` : `\n\nWorkspace location: ${workspace.location}`
-    }
-    if (workspaceSummary) {
-      workspaceContextSection += workspaceContextSection
-        ? `\n\nWorkspace summary:\n${workspaceSummary}`
-        : `\n\nWorkspace summary:\n${workspaceSummary}`
-    }
-    if (workspaceScopeDescription) {
-      workspaceContextSection += workspaceContextSection
-        ? `\n\nWorkspace description:\n${workspaceScopeDescription}`
-        : `\n\nWorkspace description:\n${workspaceScopeDescription}`
-    }
-    if (workspaceScopeTimeframe) {
-      workspaceContextSection += workspaceContextSection
-        ? `\n\nWorkspace programme timeframe: ${workspaceScopeTimeframe}`
-        : `\n\nWorkspace programme timeframe: ${workspaceScopeTimeframe}`
-    }
-    
-    // Space details (parent space context)
-    if (space?.name) {
-      workspaceContextSection += workspaceContextSection
-        ? `\n\n---\n\nParent Space name: ${space.name}`
-        : `\n\nParent Space name: ${space.name}`
-    }
-    
-    // Space scope summary (from space.description)
-    if (space?.description) {
-      workspaceContextSection += workspaceContextSection
-        ? `\n\nSpace mission statement:\n${space.description}`
-        : `\n\nSpace mission statement:\n${space.description}`
-    }
-    
-    // Space scope details (from space.metadata.scope)
-    const spaceScopeMetadata = ((space?.metadata as Record<string, any> | null) ?? {}).scope as
-      | Record<string, any>
-      | null
-      | undefined
-    const spaceScopeDescription = spaceScopeMetadata?.description as string | undefined
-    const spaceScopeTimeframe = spaceScopeMetadata?.timeframe as string | undefined
-    
-    if (spaceScopeDescription) {
-      workspaceContextSection += workspaceContextSection
-        ? `\n\nSpace scope details:\n${spaceScopeDescription}`
-        : `\n\nSpace scope details:\n${spaceScopeDescription}`
-    }
-    if (spaceScopeTimeframe) {
-      workspaceContextSection += workspaceContextSection
-        ? `\n\nSpace programme timeframe: ${spaceScopeTimeframe}`
-        : `\n\nSpace programme timeframe: ${spaceScopeTimeframe}`
-    }
-    
-    // Space jurisdiction
-    if (space?.jurisdiction && typeof space.jurisdiction === "object") {
-      const jurisdictionValues = Object.values(space.jurisdiction as Record<string, any>)
-        .filter((value) => typeof value === "string" && value.trim().length > 0)
-        .map((value) => String(value).trim())
-      if (jurisdictionValues.length > 0) {
-        workspaceContextSection += workspaceContextSection
-          ? `\n\nSpace jurisdiction: ${jurisdictionValues.join(" • ")}`
-          : `\n\nSpace jurisdiction: ${jurisdictionValues.join(" • ")}`
-      }
-    }
-    
-    const hasWorkspaceContext = !!(
-      workspace?.name ||
-      workspace?.context ||
-      workspace?.location ||
-      workspaceSummary ||
-      workspaceScopeDescription ||
-      workspaceScopeTimeframe ||
-      space?.name ||
-      space?.description ||
-      spaceScopeDescription ||
-      spaceScopeTimeframe ||
-      (space?.jurisdiction && typeof space.jurisdiction === "object" && Object.values(space.jurisdiction as Record<string, any>).some((v) => typeof v === "string" && v.trim().length > 0))
-    )
+    const { contextInstructions, workspaceContextSection, hasWorkspaceContext } = buildWorkspaceContext({
+      workspace,
+      space,
+      includeDocumentPreviewNotice: shouldRestrictToDocument && contextId,
+    })
     
     const contextMentionInstruction = hasWorkspaceContext 
       ? "  2. The additional workspace context/properties and scope information (if provided)"
@@ -640,7 +589,7 @@ Citation formatting rules:
       JSON.stringify({ 
         error: "Internal Server Error",
         message: error instanceof Error ? error.message : "Unknown error",
-        details: process.env.NODE_ENV === "development" ? (error instanceof Error ? error.stack : String(error)) : undefined
+        details: env.NODE_ENV === "development" ? (error instanceof Error ? error.stack : String(error)) : undefined
       }),
       { 
         status: 500,

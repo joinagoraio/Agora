@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import OpenAI from "openai"
+import { env } from "@/lib/env"
 
 import { syncAllScopeDocumentsToWorkspace } from "@/lib/services/scope-documents"
 
@@ -181,7 +182,7 @@ export async function enhanceContextText(text: string): Promise<{ enhanced?: str
     return { error: "Unauthorized" }
   }
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (!env.OPENAI_API_KEY) {
     return { error: "OpenAI API key not configured" }
   }
 
@@ -190,7 +191,7 @@ export async function enhanceContextText(text: string): Promise<{ enhanced?: str
   }
 
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",

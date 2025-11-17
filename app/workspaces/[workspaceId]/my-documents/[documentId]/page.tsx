@@ -33,7 +33,14 @@ export default async function WorkspaceDocumentEditorPage({ params }: WorkspaceD
     .eq("workspace_id", workspaceId)
     .single()
 
-  if (documentError || !document || document.sources?.type !== "workspace_generated") {
+  const sourceRelation = document?.sources as
+    | { type?: string | null }
+    | { type?: string | null }[]
+    | null
+    | undefined
+  const sourceType = Array.isArray(sourceRelation) ? sourceRelation[0]?.type : sourceRelation?.type
+
+  if (documentError || !document || sourceType !== "workspace_generated") {
     redirect(`/workspaces/${workspaceId}`)
   }
 

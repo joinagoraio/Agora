@@ -142,7 +142,7 @@ export async function getInheritedItems(workspaceId: string) {
       "*, created_by:profiles(id, email, full_name), source_doc:documents(id, title, url), spaces!inner(id, name, space_type, visibility)",
     )
     .in("space_id", spaceIds)
-    .or("classification.eq.public,spaces.visibility.eq.public")
+    .or("visibility.eq.public,classification.eq.public")
     .order("created_at", { ascending: false })
 
   if (error) {

@@ -1,7 +1,8 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
-import { randomBytes } from "crypto"
+import { randomBytes } from "node:crypto"
+import { env } from "@/lib/env"
 
 export async function createSharedLink(conversationId: string, expiresInDays?: number) {
   const supabase = await createClient()
@@ -43,7 +44,8 @@ export async function createSharedLink(conversationId: string, expiresInDays?: n
     return { error: error.message }
   }
 
-  const shareUrl = `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/shared/${token}`
+  const appUrl = env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+  const shareUrl = `${appUrl}/shared/${token}`
 
   return { data, shareUrl }
 }

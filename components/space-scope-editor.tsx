@@ -18,6 +18,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
+const SPACE_TYPE_OPTIONS = ["national", "regional", "municipal", "party", "other"] as const
+type SpaceTypeValue = (typeof SPACE_TYPE_OPTIONS)[number]
+const VISIBILITY_OPTIONS = ["public", "internal", "confidential"] as const
+type VisibilityValue = (typeof VISIBILITY_OPTIONS)[number]
+
 type SpaceScope = {
   summary?: string | null
   description?: string | null
@@ -48,8 +53,17 @@ export function SpaceScopeEditor({
   const [summary, setSummary] = useState(initialScope.summary ?? "")
   const [description, setDescription] = useState(initialScope.description ?? "")
   const [timeframe, setTimeframe] = useState(initialScope.timeframe ?? "")
-  const [spaceTypeValue, setSpaceTypeValue] = useState(spaceType ?? "municipal")
-  const [visibilityValue, setVisibilityValue] = useState(visibility ?? "internal")
+  const isSpaceTypeValue = (value: string | null | undefined): value is SpaceTypeValue =>
+    !!value && SPACE_TYPE_OPTIONS.includes(value as SpaceTypeValue)
+  const isVisibilityValue = (value: string | null | undefined): value is VisibilityValue =>
+    !!value && VISIBILITY_OPTIONS.includes(value as VisibilityValue)
+
+  const [spaceTypeValue, setSpaceTypeValue] = useState<SpaceTypeValue>(
+    isSpaceTypeValue(spaceType) ? spaceType : "municipal",
+  )
+  const [visibilityValue, setVisibilityValue] = useState<VisibilityValue>(
+    isVisibilityValue(visibility) ? visibility : "internal",
+  )
   const [timeframeError, setTimeframeError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -231,7 +245,7 @@ export function SpaceScopeEditor({
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="space-scope">Scope</Label>
-          <Select value={spaceTypeValue} onValueChange={setSpaceTypeValue}>
+          <Select value={spaceTypeValue} onValueChange={(value) => setSpaceTypeValue(value as SpaceTypeValue)}>
             <SelectTrigger id="space-scope">
               <SelectValue placeholder="Select scope" />
             </SelectTrigger>
@@ -247,7 +261,7 @@ export function SpaceScopeEditor({
 
         <div className="space-y-2">
           <Label htmlFor="space-visibility">Visibility</Label>
-          <Select value={visibilityValue} onValueChange={setVisibilityValue}>
+          <Select value={visibilityValue} onValueChange={(value) => setVisibilityValue(value as VisibilityValue)}>
             <SelectTrigger id="space-visibility">
               <SelectValue placeholder="Select visibility" />
             </SelectTrigger>

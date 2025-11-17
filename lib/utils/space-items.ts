@@ -19,12 +19,14 @@ export function resolveSpaceItemClassification(
 export function shouldSyncSpaceDocument(
   itemType: SpaceItemType,
   classification?: SpaceItemClassification | null,
+  visibility?: SpaceItemClassification | null,
 ): boolean {
   if (itemType !== "document") {
     return false
   }
 
   const normalizedClassification = classification ?? "public"
-  return normalizedClassification === "public"
+  const normalizedVisibility = visibility ?? "internal"
+  return normalizedClassification === "public" || normalizedVisibility === "public"
 }
 

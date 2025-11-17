@@ -1,5 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import OpenAI from "openai"
+import { checkRateLimit, searchRateLimit } from "@/lib/rate-limit"
+import { deduplicateRequest, generateRequestKey } from "@/lib/utils/request-deduplication"
+import { env } from "@/lib/env"
 
 interface SearchResult {
   title: string
@@ -17,7 +20,7 @@ async function generateSearchQueries(
   context: string,
   location?: string,
 ): Promise<{ queries: string[]; error?: string }> {
-  if (!process.env.OPENAI_API_KEY) {
+  if (!env.OPENAI_API_KEY) {
     // Fallback: extract key terms from context
     const words = context
       .split(/\s+/)
@@ -27,7 +30,7 @@ async function generateSearchQueries(
   }
 
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -57,20 +60,21 @@ Examples:
       temperature: 0.7,
     })
 
-    const content = response.choices[0]?.message?.content
-    if (!content) {
-      throw new Error("No response from AI")
+      const content = response.choices[0]?.message?.content
+      if (!content) {
+        throw new Error("No response from AI")
+      }
+
+      const parsed = JSON.parse(content)
+      const queries = parsed.queries || parsed.query || [context.substring(0, 100)]
+
+      return { queries: Array.isArray(queries) ? queries : [queries] }
+    } catch (error) {
+      console.error("[IntelligentSearch] Error generating queries:", error)
+      // Fallback to simple query
+      return { queries: [context.substring(0, 100)] }
     }
-
-    const parsed = JSON.parse(content)
-    const queries = parsed.queries || parsed.query || [context.substring(0, 100)]
-
-    return { queries: Array.isArray(queries) ? queries : [queries] }
-  } catch (error) {
-    console.error("[IntelligentSearch] Error generating queries:", error)
-    // Fallback to simple query
-    return { queries: [context.substring(0, 100)] }
-  }
+  })
 }
 
 // Search multiple endpoints
@@ -81,7 +85,7 @@ async function searchAllEndpoints(
 ): Promise<SearchResult[]> {
   const allResults: SearchResult[] = []
   const maxResultsPerQuery = 20
-  const apiBase = baseUrl || process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+  const apiBase = baseUrl || env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
 
   // Search overheid-search endpoint
   for (const query of queries) {
@@ -180,26 +184,34 @@ async function rankResultsByRelevance(
   context: string,
   location?: string,
 ): Promise<SearchResult[]> {
-  if (!process.env.OPENAI_API_KEY || results.length === 0) {
+  if (!env.OPENAI_API_KEY || results.length === 0) {
     return results
   }
 
-  // Remove duplicates based on identifier
-  const uniqueResults = Array.from(
-    new Map(results.map((r) => [r.identifier || r.title, r])).values(),
-  )
+  // Deduplicate ranking requests (same results + context = same ranking)
+  const rankingKey = generateRequestKey("rank-results", {
+    context,
+    location,
+    resultIds: results.map(r => r.identifier || r.title).sort().join(","),
+  })
 
-  if (uniqueResults.length === 0) {
-    return []
-  }
+  return deduplicateRequest(rankingKey, async () => {
+    // Remove duplicates based on identifier
+    const uniqueResults = Array.from(
+      new Map(results.map((r) => [r.identifier || r.title, r])).values(),
+    )
 
-  // Limit to top 50 for ranking (to avoid token limits)
-  const resultsToRank = uniqueResults.slice(0, 50)
+    if (uniqueResults.length === 0) {
+      return []
+    }
 
-  try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    // Limit to top 50 for ranking (to avoid token limits)
+    const resultsToRank = uniqueResults.slice(0, 50)
 
-    const response = await openai.chat.completions.create({
+    try {
+      const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
+
+      const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
@@ -228,39 +240,46 @@ ${resultsToRank.map((r, i) => `${i + 1}. ${r.title} (${r.identifier || "no-id"})
       temperature: 0.3,
     })
 
-    const content = response.choices[0]?.message?.content
-    if (!content) {
+      const content = response.choices[0]?.message?.content
+      if (!content) {
+        return uniqueResults
+      }
+
+      const scores = JSON.parse(content)
+
+      // Add scores to results
+      const scoredResults = resultsToRank.map((result) => {
+        const key = result.identifier || result.title
+        const score = scores[key] || scores[result.title] || 0.5
+        return {
+          ...result,
+          relevanceScore: typeof score === "number" ? score : 0.5,
+        }
+      })
+
+      // Sort by relevance score (highest first)
+      scoredResults.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0))
+
+      // Add remaining results (not ranked) at the end
+      const remainingResults = uniqueResults.slice(50)
+      return [...scoredResults, ...remainingResults]
+    } catch (error) {
+      console.error("[IntelligentSearch] Error ranking results:", error)
       return uniqueResults
     }
-
-    const scores = JSON.parse(content)
-
-    // Add scores to results
-    const scoredResults = resultsToRank.map((result) => {
-      const key = result.identifier || result.title
-      const score = scores[key] || scores[result.title] || 0.5
-      return {
-        ...result,
-        relevanceScore: typeof score === "number" ? score : 0.5,
-      }
-    })
-
-    // Sort by relevance score (highest first)
-    scoredResults.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0))
-
-    // Add remaining results (not ranked) at the end
-    const remainingResults = uniqueResults.slice(50)
-    return [...scoredResults, ...remainingResults]
-  } catch (error) {
-    console.error("[IntelligentSearch] Error ranking results:", error)
-    return uniqueResults
-  }
+  })
 }
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
 
   try {
+    const ip = request.headers.get("x-forwarded-for") ?? "anonymous"
+    const rateLimitResult = await checkRateLimit(searchRateLimit, `overheid-search:${ip}`)
+    if (!rateLimitResult.success) {
+      return NextResponse.json({ error: "Search rate limit exceeded. Please wait and try again." }, { status: 429 })
+    }
+
     const body = await request.json()
     const { context, location, customQueries } = body
 

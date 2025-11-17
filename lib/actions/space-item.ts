@@ -90,7 +90,7 @@ export async function publishSpaceItem(
 
   const warnings: string[] = []
 
-  if (data && shouldSyncSpaceDocument(itemData.item_type, resolvedClassification)) {
+  if (data && shouldSyncSpaceDocument(itemData.item_type, resolvedClassification, data.visibility)) {
     try {
       await syncScopeDocumentToAllWorkspaces(spaceId, data as SpaceDocumentItem)
     } catch (syncError) {
@@ -257,6 +257,7 @@ export async function updateSpaceItem(
       id: data.id,
       space_id: data.space_id,
       classification: data.classification,
+      visibility: data.visibility,
       payload: data.payload,
     }
 

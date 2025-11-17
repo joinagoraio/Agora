@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import DOMPurify from "dompurify"
 import { PDFViewer, Highlight, type ViewerControls, type ViewerFitMode } from "@/components/pdf-viewer"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +12,13 @@ import { findTextSpan } from "@/lib/utils/pdf-extraction"
 import type { Highlight as ContextHighlight } from "@/lib/contexts/highlight-context"
 
 export type DocumentType = "pdf" | "word" | "html" | "text" | "unknown"
+
+const WORD_HTML_SANITIZE_OPTIONS = {
+  ALLOWED_TAGS: ["p", "span", "div", "strong", "em", "u", "br", "h1", "h2", "h3"] as string[],
+  ALLOWED_ATTR: ["class", "style"] as string[],
+} as const
+
+const WORD_HIGHLIGHT_CLASS = "word-highlight"
 
 interface MultiFormatViewerProps {
   url: string
@@ -621,9 +629,12 @@ export function MultiFormatViewer({
   // Extract plain text from HTML for Word documents (for highlighting)
   const wordPlainText = useMemo(() => {
     if (documentType !== "word" || !wordContent) return null
+    if (typeof document === "undefined") {
+      return null
+    }
     // Create a temporary DOM element to extract text
     const tempDiv = document.createElement("div")
-    tempDiv.innerHTML = wordContent
+    tempDiv.innerHTML = DOMPurify.sanitize(wordContent, WORD_HTML_SANITIZE_OPTIONS)
     return tempDiv.textContent || tempDiv.innerText || ""
   }, [documentType, wordContent])
 
@@ -797,21 +808,27 @@ export function MultiFormatViewer({
 
   // Function to render Word document with highlighting
   const highlightedWordContent = useMemo(() => {
-    if (!wordContent || !wordHighlight || !wordHighlight.textSpan || !wordPlainText) {
-      return wordContent
+    if (!wordContent) {
+      return null
+    }
+
+    const sanitizedWordContent = DOMPurify.sanitize(wordContent, WORD_HTML_SANITIZE_OPTIONS)
+
+    if (!wordHighlight || !wordHighlight.textSpan || !wordPlainText) {
+      return sanitizedWordContent
     }
 
     const { start, end } = wordHighlight.textSpan
 
     // Get the text to highlight from plain text
     if (start < 0 || end > wordPlainText.length || end <= start) {
-      return wordContent
+      return sanitizedWordContent
     }
 
     const textToHighlight = wordPlainText.substring(start, end).trim()
     
     if (textToHighlight.length === 0 || textToHighlight.length > 2000) {
-      return wordContent
+      return sanitizedWordContent
     }
 
     // Strategy: Find the text in HTML by searching for it
@@ -819,16 +836,16 @@ export function MultiFormatViewer({
     const normalizedText = textToHighlight.replace(/\s+/g, ' ').trim()
     
     if (normalizedText.length < 10) {
-      return wordContent
+      return sanitizedWordContent
     }
 
     // Create a temporary DOM to extract text and find positions
     if (typeof document === 'undefined') {
-      return wordContent
+      return sanitizedWordContent
     }
 
     const tempDiv = document.createElement("div")
-    tempDiv.innerHTML = wordContent
+    tempDiv.innerHTML = sanitizedWordContent
     
     // Extract all text nodes and track character positions
     const textNodes: { node: Text; start: number; end: number }[] = []
@@ -871,10 +888,9 @@ export function MultiFormatViewer({
         
         // Create highlight span
         const highlightSpan = document.createElement("span")
-        highlightSpan.className = "bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5"
+        highlightSpan.className = `bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5 ${WORD_HIGHLIGHT_CLASS}`
         highlightSpan.style.scrollMarginTop = "100px"
         highlightSpan.textContent = highlighted
-        highlightSpan.setAttribute("data-highlight-ref", "true")
         
         // Replace the text node
         const parent = textNode.parentNode
@@ -922,9 +938,8 @@ export function MultiFormatViewer({
         
         // Create a wrapper span for the entire highlight
         const highlightSpan = document.createElement("span")
-        highlightSpan.className = "bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5"
+        highlightSpan.className = `bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5 ${WORD_HIGHLIGHT_CLASS}`
         highlightSpan.style.scrollMarginTop = "100px"
-        highlightSpan.setAttribute("data-highlight-ref", "true")
         
         // Process each node
         for (let i = 0; i < nodesToWrap.length; i++) {
@@ -1005,7 +1020,7 @@ export function MultiFormatViewer({
           }
         }
         
-        return tempDiv.innerHTML
+        return DOMPurify.sanitize(tempDiv.innerHTML, WORD_HTML_SANITIZE_OPTIONS)
       }
       
       // If multiple nodes or nodes not found, fall through to string-based search
@@ -1021,9 +1036,9 @@ export function MultiFormatViewer({
       let htmlIndex = 0
       
       // Count characters in HTML (ignoring tags) to find start position
-      while (htmlIndex < wordContent.length && htmlCharCount < searchIndex) {
-        if (wordContent[htmlIndex] === '<') {
-          while (htmlIndex < wordContent.length && wordContent[htmlIndex] !== '>') {
+      while (htmlIndex < sanitizedWordContent.length && htmlCharCount < searchIndex) {
+        if (sanitizedWordContent[htmlIndex] === '<') {
+          while (htmlIndex < sanitizedWordContent.length && sanitizedWordContent[htmlIndex] !== '>') {
             htmlIndex++
           }
           htmlIndex++
@@ -1036,9 +1051,9 @@ export function MultiFormatViewer({
       // Find end position
       let endHtmlIndex = htmlIndex
       let endHtmlCharCount = htmlCharCount
-      while (endHtmlIndex < wordContent.length && endHtmlCharCount < searchIndex + normalizedText.length) {
-        if (wordContent[endHtmlIndex] === '<') {
-          while (endHtmlIndex < wordContent.length && wordContent[endHtmlIndex] !== '>') {
+      while (endHtmlIndex < sanitizedWordContent.length && endHtmlCharCount < searchIndex + normalizedText.length) {
+        if (sanitizedWordContent[endHtmlIndex] === '<') {
+          while (endHtmlIndex < sanitizedWordContent.length && sanitizedWordContent[endHtmlIndex] !== '>') {
             endHtmlIndex++
           }
           endHtmlIndex++
@@ -1049,15 +1064,23 @@ export function MultiFormatViewer({
       }
       
       // Insert highlight span
-      const before = wordContent.substring(0, htmlIndex)
-      const highlighted = wordContent.substring(htmlIndex, endHtmlIndex)
-      const after = wordContent.substring(endHtmlIndex)
+      const before = sanitizedWordContent.substring(0, htmlIndex)
+      const highlighted = sanitizedWordContent.substring(htmlIndex, endHtmlIndex)
+      const after = sanitizedWordContent.substring(endHtmlIndex)
       
-      return `${before}<span class="bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5" style="scroll-margin-top: 100px;" data-highlight-ref="true">${highlighted}</span>${after}`
+      return `${before}<span class="bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5 ${WORD_HIGHLIGHT_CLASS}" style="scroll-margin-top: 100px;">${highlighted}</span>${after}`
     }
     
-    return wordContent
+    return sanitizedWordContent
   }, [wordContent, wordHighlight, wordPlainText])
+
+  const safeWordContentForRender = useMemo(() => {
+    if (!highlightedWordContent) {
+      return ""
+    }
+
+    return DOMPurify.sanitize(highlightedWordContent, WORD_HTML_SANITIZE_OPTIONS)
+  }, [highlightedWordContent])
 
   // Scroll to highlight when Word content loads (after DOM update)
   useEffect(() => {
@@ -1067,7 +1090,7 @@ export function MultiFormatViewer({
         // Search in the inner content area for the highlight element
         // The Word content is rendered inside innerContentRef, but we need to search in the rendered DOM
         const wordContentDiv = containerRef.current?.querySelector('.word-document-content')
-        const highlightElement = wordContentDiv?.querySelector('[data-highlight-ref="true"]') as HTMLElement
+        const highlightElement = wordContentDiv?.querySelector(`.${WORD_HIGHLIGHT_CLASS}`) as HTMLElement
         
         if (highlightElement && containerRef.current) {
           highlightRef.current = highlightElement as HTMLSpanElement
@@ -1094,7 +1117,7 @@ export function MultiFormatViewer({
       }, 400)
       return () => clearTimeout(timer)
     }
-  }, [documentType, wordHighlight, highlightedWordContent])
+  }, [documentType, wordHighlight, safeWordContentForRender])
 
   if (loading) {
     return (
@@ -1230,7 +1253,7 @@ export function MultiFormatViewer({
                 }}
               >
                 <div
-                  dangerouslySetInnerHTML={{ __html: highlightedWordContent || "" }}
+                  dangerouslySetInnerHTML={{ __html: safeWordContentForRender }}
                   className="word-document-content"
                   style={{
                     fontFamily: "system-ui, -apple-system, sans-serif",

@@ -21,8 +21,12 @@ describe("shouldSyncSpaceDocument", () => {
     expect(shouldSyncSpaceDocument("document", "public")).toBe(true)
   })
 
-  it("returns false for non-public documents", () => {
-    expect(shouldSyncSpaceDocument("document", "internal")).toBe(false)
+  it("returns true when visibility is public even if classification is internal", () => {
+    expect(shouldSyncSpaceDocument("document", "internal", "public")).toBe(true)
+  })
+
+  it("returns false when both classification and visibility are non-public", () => {
+    expect(shouldSyncSpaceDocument("document", "internal", "confidential")).toBe(false)
   })
 
   it("returns false for non-document items", () => {

@@ -123,7 +123,13 @@ export function extractListItems(content: string): string[] {
                            (line.length > 3 && line.length < 100 && /^[A-Z][^.!?]*$/.test(line) ? line : null)
       
       if (listItemMatch) {
-        const item = (listItemMatch[1] || listItemMatch).trim()
+        const rawItem =
+          typeof listItemMatch === "string"
+            ? listItemMatch
+            : typeof listItemMatch[1] === "string"
+              ? listItemMatch[1]
+              : listItemMatch[0]
+        const item = rawItem?.trim() ?? ""
         // Filter out common non-content words and very short items
         if (item.length >= 5 && item.length < 200 && 
             !/^(and|or|each|these|they|it)$/i.test(item)) {
