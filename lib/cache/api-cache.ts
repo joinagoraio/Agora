@@ -1,5 +1,3 @@
-"use server"
-
 import { Redis } from "@upstash/redis"
 import { env } from "@/lib/env"
 import { cache as nextCache } from "react"

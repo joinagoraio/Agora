@@ -76,7 +76,7 @@ Examples:
       // Fallback to simple query
       return { queries: [context.substring(0, 100)] }
     }
-  })
+  }
 }
 
 // Search multiple endpoints

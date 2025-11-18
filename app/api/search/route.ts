@@ -4,7 +4,8 @@ import { applyRateLimitHeaders, checkRateLimit, searchRateLimit } from "@/lib/ra
 import { searchQuerySchema } from "@/lib/validations/document"
 import { withCache, workspaceCacheKey } from "@/lib/cache/api-cache"
 import { parsePaginationParams, createPaginatedResponse, DEFAULT_PAGE_SIZE } from "@/lib/utils/pagination"
-import { ValidationError, RateLimitError, createErrorResponse, createSuccessResponse } from "@/lib/utils/api-error-handler"
+import { createErrorResponse, createSuccessResponse } from "@/lib/utils/api-error-handler"
+import { ValidationError, RateLimitError } from "@/lib/utils/errors"
 import { logger } from "@/lib/utils/logger"
 import { getClientIdentifier } from "@/lib/utils/request"
 
