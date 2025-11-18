@@ -1,8 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
 import OpenAI from "openai"
-import { checkRateLimit, searchRateLimit } from "@/lib/rate-limit"
+import { applyRateLimitHeaders, checkRateLimit, searchRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { deduplicateRequest, generateRequestKey } from "@/lib/utils/request-deduplication"
 import { env } from "@/lib/env"
+import { getClientIdentifier } from "@/lib/utils/request"
 
 interface SearchResult {
   title: string
@@ -272,19 +274,34 @@ ${resultsToRank.map((r, i) => `${i + 1}. ${r.title} (${r.identifier || "no-id"})
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
+  let rateLimitResult: RateLimitStatus | undefined
 
   try {
-    const ip = request.headers.get("x-forwarded-for") ?? "anonymous"
-    const rateLimitResult = await checkRateLimit(searchRateLimit, `overheid-search:${ip}`)
-    if (!rateLimitResult.success) {
-      return NextResponse.json({ error: "Search rate limit exceeded. Please wait and try again." }, { status: 429 })
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    const identifier = user?.id ?? getClientIdentifier(request.headers)
+    const rateLimitKey = user ? `overheid-search:user:${user.id}` : `overheid-search:ip:${identifier}`
+    const currentRateLimit = await checkRateLimit(searchRateLimit, rateLimitKey)
+    rateLimitResult = currentRateLimit
+    const respondWithRateLimit = (response: NextResponse) =>
+      applyRateLimitHeaders(response, rateLimitResult)
+
+    if (!currentRateLimit.success) {
+      return respondWithRateLimit(
+        NextResponse.json(
+          { error: "Search rate limit exceeded. Please wait and try again." },
+          { status: 429 },
+        ),
+      )
     }
 
     const body = await request.json()
     const { context, location, customQueries } = body
 
     if (!context || context.trim().length === 0) {
-      return NextResponse.json({ error: "Context is required" }, { status: 400 })
+      return respondWithRateLimit(NextResponse.json({ error: "Context is required" }, { status: 400 }))
     }
 
     // Get base URL from request
@@ -298,7 +315,7 @@ export async function POST(request: NextRequest) {
     } else {
       const { queries: generatedQueries, error: queryError } = await generateSearchQueries(context, location)
       if (queryError) {
-        return NextResponse.json({ error: queryError }, { status: 500 })
+        return respondWithRateLimit(NextResponse.json({ error: queryError }, { status: 500 }))
       }
       queries = generatedQueries
     }
@@ -311,23 +328,28 @@ export async function POST(request: NextRequest) {
 
     const totalDuration = Date.now() - startTime
 
-    return NextResponse.json({
-      results: rankedResults,
-      metadata: {
-        duration: totalDuration,
-        resultCount: rankedResults.length,
-        queriesGenerated: queries.length,
-        queries,
-      },
-    })
+    return respondWithRateLimit(
+      NextResponse.json({
+        results: rankedResults,
+        metadata: {
+          duration: totalDuration,
+          resultCount: rankedResults.length,
+          queriesGenerated: queries.length,
+          queries,
+        },
+      }),
+    )
   } catch (error) {
     const totalDuration = Date.now() - startTime
     console.error("[IntelligentSearch] Error:", error)
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Search failed",
-      },
-      { status: 500 },
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        {
+          error: error instanceof Error ? error.message : "Search failed",
+        },
+        { status: 500 },
+      ),
+      rateLimitResult,
     )
   }
 }

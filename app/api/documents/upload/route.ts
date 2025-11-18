@@ -4,11 +4,12 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
 import OpenAI from "openai"
 import { documentUploadSchema } from "@/lib/validations/document"
-import { checkRateLimit, uploadRateLimit } from "@/lib/rate-limit"
+import { applyRateLimitHeaders, checkRateLimit, uploadRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { requireAuthAndPermission } from "@/lib/middleware/authorization"
 import { invalidateCacheByTag } from "@/lib/cache/api-cache"
 import { env } from "@/lib/env"
-import { getSafeErrorMessage } from "@/lib/utils/errors"
+import { getClientIdentifier } from "@/lib/utils/request"
+import { createSafeErrorResponse } from "@/lib/utils/api-error-handler"
 
 // Helper function to strip markdown syntax for better AI processing
 function stripMarkdown(text: string): string {
@@ -106,22 +107,31 @@ Examples:
 }
 
 export async function POST(req: NextRequest) {
+  let rateLimitResult: RateLimitStatus | undefined
   try {
-    const ip = req.headers.get("x-forwarded-for") ?? "anonymous"
-    const rateLimitResult = await checkRateLimit(uploadRateLimit, `upload:${ip}`)
-
-    if (!rateLimitResult.success) {
-      return NextResponse.json({ error: "Upload rate limit exceeded. Please wait and try again." }, { status: 429 })
-    }
-
     const supabase = await createClient()
-
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
+    const identifier = user?.id ?? getClientIdentifier(req.headers)
+    const rateLimitKey = user ? `upload:user:${user.id}` : `upload:ip:${identifier}`
+    const currentRateLimit = await checkRateLimit(uploadRateLimit, rateLimitKey)
+    rateLimitResult = currentRateLimit
+    const respondWithRateLimit = (response: NextResponse) =>
+      applyRateLimitHeaders(response, rateLimitResult)
+
+    if (!currentRateLimit.success) {
+      return respondWithRateLimit(
+        NextResponse.json(
+          { error: "Upload rate limit exceeded. Please wait and try again." },
+          { status: 429 },
+        ),
+      )
+    }
+
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return respondWithRateLimit(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
     }
 
     const formData = await req.formData()
@@ -139,7 +149,7 @@ export async function POST(req: NextRequest) {
     })
 
     if (!validationResult.success) {
-      return NextResponse.json(
+      return respondWithRateLimit(
         { 
           error: "Validation failed", 
           details: validationResult.error.errors.map(e => ({
@@ -147,7 +157,7 @@ export async function POST(req: NextRequest) {
             message: e.message,
           }))
         },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
@@ -157,7 +167,7 @@ export async function POST(req: NextRequest) {
     try {
       await requireAuthAndPermission("workspace_item:create", { workspaceId: validated.workspaceId })
     } catch (authError) {
-      return NextResponse.json(
+      return respondWithRateLimit(
         { error: authError instanceof Error ? authError.message : "Unauthorized" },
         { status: 403 }
       )
@@ -171,11 +181,13 @@ export async function POST(req: NextRequest) {
 
     if (workspaceLookupError) {
       console.error("[Upload] Workspace lookup error:", workspaceLookupError)
-      return NextResponse.json({ error: "Unable to verify workspace access" }, { status: 500 })
+      return respondWithRateLimit(
+        NextResponse.json({ error: "Unable to verify workspace access" }, { status: 500 }),
+      )
     }
 
     if (!workspaceRecord) {
-      return NextResponse.json({ error: "Workspace not found" }, { status: 404 })
+      return respondWithRateLimit(NextResponse.json({ error: "Workspace not found" }, { status: 404 }))
     }
 
     const adminClient = createAdminClient()
@@ -208,6 +220,7 @@ export async function POST(req: NextRequest) {
           sourceError,
           "Failed to create upload source. Please verify workspace configuration.",
           500,
+          rateLimitResult,
         )
       }
       source = newSource
@@ -225,7 +238,7 @@ export async function POST(req: NextRequest) {
 
     if (uploadError) {
       console.error("[Upload] Storage upload error:", uploadError)
-      return respondWithSafeError(uploadError, "Upload failed. Please try again.", 500)
+      return respondWithSafeError(uploadError, "Upload failed. Please try again.", 500, rateLimitResult)
     }
 
     // Get public URL using admin client
@@ -458,7 +471,7 @@ export async function POST(req: NextRequest) {
     if (docError) {
       await adminClient.storage.from("documents").remove([filePath])
       console.error("[Upload] Document creation error:", docError)
-      return respondWithSafeError(docError, "Failed to create document record.", 500)
+      return respondWithSafeError(docError, "Failed to create document record.", 500, rateLimitResult)
     }
 
     // Store PDF pages if we extracted them
@@ -561,16 +574,19 @@ export async function POST(req: NextRequest) {
     // Invalidate search cache for this workspace
     await invalidateCacheByTag(`search:workspace:${validated.workspaceId}`)
     
-    return NextResponse.json({ data: document })
+    return respondWithRateLimit(NextResponse.json({ data: document }))
   } catch (error) {
     console.error("[Upload API] Error:", error)
-    return respondWithSafeError(error, "An error occurred during upload.", 500)
+    return respondWithSafeError(error, "An error occurred during upload.", 500, rateLimitResult)
   }
 }
 
-function respondWithSafeError(error: unknown, fallbackMessage: string, status: number) {
-  const safe = getSafeErrorMessage(error)
-  const message =
-    safe.message && safe.message !== "An unexpected error occurred" ? safe.message : fallbackMessage
-  return NextResponse.json({ error: message }, { status })
+function respondWithSafeError(
+  error: unknown,
+  fallbackMessage: string,
+  status: number,
+  rateLimitStatus?: RateLimitStatus,
+) {
+  const response = createSafeErrorResponse(error, fallbackMessage, status)
+  return rateLimitStatus ? applyRateLimitHeaders(response, rateLimitStatus) : response
 }

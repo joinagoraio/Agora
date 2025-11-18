@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server"
-import { formatErrorResponse, toAppError, isAppError } from "@/lib/utils/errors"
+import { formatErrorResponse, toAppError, isAppError, getSafeErrorMessage } from "@/lib/utils/errors"
 import { logger } from "@/lib/utils/logger"
 import { metrics } from "@/lib/utils/metrics"
 import { captureException } from "@/lib/utils/error-tracking"
@@ -123,5 +123,20 @@ export function createSuccessResponse<T = any>(
   statusCode: number = 200,
 ): NextResponse<T> {
   return NextResponse.json(data, { status: statusCode })
+}
+
+/**
+ * Create a safe error response that hides sensitive details
+ */
+export function createSafeErrorResponse(
+  error: unknown,
+  fallbackMessage: string,
+  statusCode: number = 500,
+): NextResponse {
+  const safe = getSafeErrorMessage(error)
+  const message =
+    safe.message && safe.message !== "An unexpected error occurred" ? safe.message : fallbackMessage
+
+  return NextResponse.json({ error: message }, { status: statusCode })
 }
 

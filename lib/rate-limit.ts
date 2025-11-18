@@ -50,3 +50,35 @@ export async function checkRateLimit(
   }
 }
 
+export function applyRateLimitHeaders<T extends Response>(
+  response: T,
+  status?: RateLimitStatus,
+): T {
+  if (!status) {
+    return response
+  }
+
+  if (typeof status.limit === "number") {
+    response.headers.set("RateLimit-Limit", status.limit.toString())
+  }
+
+  if (typeof status.remaining === "number") {
+    response.headers.set("RateLimit-Remaining", Math.max(status.remaining, 0).toString())
+  }
+
+  if (typeof status.reset === "number") {
+    const resetTimestamp = status.reset < 10_000_000_000 ? status.reset * 1000 : status.reset
+    response.headers.set("RateLimit-Reset", resetTimestamp.toString())
+
+    if (!status.success) {
+      const retryAfterSeconds =
+        resetTimestamp > Date.now()
+          ? Math.max(0, Math.ceil((resetTimestamp - Date.now()) / 1000))
+          : 0
+      response.headers.set("Retry-After", retryAfterSeconds.toString())
+    }
+  }
+
+  return response
+}
+

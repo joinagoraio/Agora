@@ -2,9 +2,10 @@ import { createClient } from "@/lib/supabase/server"
 import { getRelevantContext } from "@/lib/rag/search"
 import { buildWorkspaceContext } from "@/lib/chat/context"
 import OpenAI from "openai"
-import { chatRateLimit, checkRateLimit } from "@/lib/rate-limit"
+import { applyRateLimitHeaders, chatRateLimit, checkRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { chatMessageSchema } from "@/lib/validations/document"
 import { env } from "@/lib/env"
+import { getClientIdentifier } from "@/lib/utils/request"
 
 let cachedOpenAIClient: OpenAI | null = null
 
@@ -26,15 +27,26 @@ function getOpenAIClient() {
 export const maxDuration = 60
 
 export async function POST(req: Request) {
-  try {
-    const ip = req.headers.get("x-forwarded-for") ?? "anonymous"
-    const rateLimitResult = await checkRateLimit(chatRateLimit, `chat:${ip}`)
+  let rateLimitResult: RateLimitStatus | undefined
+  const withRateLimit = (response: Response) => applyRateLimitHeaders(response, rateLimitResult)
 
-    if (!rateLimitResult.success) {
-      return new Response(JSON.stringify({ error: "Too many chat requests. Please wait and try again." }), {
-        status: 429,
-        headers: { "Content-Type": "application/json" },
-      })
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    const identifier = user?.id ?? getClientIdentifier(req.headers)
+    const rateLimitKey = user ? `chat:user:${user.id}` : `chat:ip:${identifier}`
+    const currentRateLimit = await checkRateLimit(chatRateLimit, rateLimitKey)
+    rateLimitResult = currentRateLimit
+
+    if (!currentRateLimit.success) {
+      return withRateLimit(
+        new Response(JSON.stringify({ error: "Too many chat requests. Please wait and try again." }), {
+          status: 429,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
     }
 
     const openai = getOpenAIClient()
@@ -42,7 +54,8 @@ export async function POST(req: Request) {
     // Validate API key before processing
     if (!openai) {
       console.error("[Chat API] OPENAI_API_KEY is missing")
-      return new Response(
+      return withRateLimit(
+        new Response(
         JSON.stringify({ 
           error: "OpenAI API key not configured",
           message: "Please set OPENAI_API_KEY in your environment variables"
@@ -50,7 +63,8 @@ export async function POST(req: Request) {
         { 
           status: 500,
           headers: { "Content-Type": "application/json" }
-        }
+          },
+        ),
       )
     }
 
@@ -59,9 +73,11 @@ export async function POST(req: Request) {
 
     // Get the last user message for validation
     if (!messages || messages.length === 0) {
-      return new Response(
+      return withRateLimit(
+        new Response(
         JSON.stringify({ error: "Messages array is required and cannot be empty" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        ),
       )
     }
     const lastMessage = messages[messages.length - 1]
@@ -78,7 +94,8 @@ export async function POST(req: Request) {
     })
 
     if (!validationResult.success) {
-      return new Response(
+      return withRateLimit(
+        new Response(
         JSON.stringify({
           error: "Validation failed",
           details: validationResult.error.errors.map(e => ({
@@ -86,17 +103,13 @@ export async function POST(req: Request) {
             message: e.message,
           }))
         }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        ),
       )
     }
 
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
     if (!user) {
-      return new Response("Unauthorized", { status: 401 })
+      return withRateLimit(new Response("Unauthorized", { status: 401 }))
     }
 
     const { data: conversation, error: conversationError } = await supabase
@@ -109,15 +122,17 @@ export async function POST(req: Request) {
       // Check if error is due to missing columns (migration not run)
       if (conversationError.message?.includes("column") && conversationError.message?.includes("does not exist")) {
         console.error("[Chat API] Database migration not applied. Please run scripts/023_add_conversation_context.sql")
-        return new Response(
+        return withRateLimit(
+          new Response(
           JSON.stringify({ 
             error: "Database migration required. Please run scripts/023_add_conversation_context.sql in your Supabase SQL Editor." 
           }),
-          { status: 500, headers: { "Content-Type": "application/json" } }
+            { status: 500, headers: { "Content-Type": "application/json" } },
+          ),
         )
       }
       console.error("[Chat API] Conversation fetch error:", conversationError)
-      return new Response("Conversation not found", { status: 404 })
+      return withRateLimit(new Response("Conversation not found", { status: 404 }))
     }
 
     if (
@@ -125,7 +140,7 @@ export async function POST(req: Request) {
       conversation.workspace_id !== workspaceId ||
       conversation.user_id !== user.id
     ) {
-      return new Response("Conversation not found", { status: 404 })
+      return withRateLimit(new Response("Conversation not found", { status: 404 }))
     }
 
     // Handle legacy conversations without context_type (shouldn't happen after migration, but be safe)
@@ -503,13 +518,13 @@ Citation formatting rules:
       },
     })
 
-    return new Response(readableStream, {
+    return withRateLimit(new Response(readableStream, {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
       },
-    })
+    }))
   } catch (error) {
     console.error("[Chat API] Error details:", error)
     
@@ -539,29 +554,33 @@ Citation formatting rules:
         errorCode === "insufficient_quota" ||
         errorCode === "billing_not_active"
       ) {
-        return new Response(
-          JSON.stringify({ 
-            error: "OpenAI API quota exceeded",
-            message: "Your OpenAI account has insufficient credits or quota. Please add credits to your OpenAI account to continue using the chat feature."
-          }),
-          { 
-            status: 402,
-            headers: { "Content-Type": "application/json" }
-          }
+        return withRateLimit(
+          new Response(
+            JSON.stringify({ 
+              error: "OpenAI API quota exceeded",
+              message: "Your OpenAI account has insufficient credits or quota. Please add credits to your OpenAI account to continue using the chat feature."
+            }),
+            { 
+              status: 402,
+              headers: { "Content-Type": "application/json" }
+            }
+          )
         )
       }
       
       // Check for rate limit (different from quota)
       if (status === 429 || errorMessage.toLowerCase().includes("rate limit")) {
-        return new Response(
-          JSON.stringify({ 
-            error: "OpenAI API rate limit exceeded",
-            message: "Too many requests. Please wait a moment and try again."
-          }),
-          { 
-            status: 429,
-            headers: { "Content-Type": "application/json" }
-          }
+        return withRateLimit(
+          new Response(
+            JSON.stringify({ 
+              error: "OpenAI API rate limit exceeded",
+              message: "Too many requests. Please wait a moment and try again."
+            }),
+            { 
+              status: 429,
+              headers: { "Content-Type": "application/json" }
+            }
+          )
         )
       }
       
@@ -572,15 +591,17 @@ Citation formatting rules:
         errorMessage.toLowerCase().includes("authentication") ||
         errorMessage.toLowerCase().includes("invalid")
       ) {
-        return new Response(
-          JSON.stringify({ 
-            error: "OpenAI API authentication failed",
-            message: "Please check your OPENAI_API_KEY environment variable"
-          }),
-          { 
-            status: 401,
-            headers: { "Content-Type": "application/json" }
-          }
+        return withRateLimit(
+          new Response(
+            JSON.stringify({ 
+              error: "OpenAI API authentication failed",
+              message: "Please check your OPENAI_API_KEY environment variable"
+            }),
+            { 
+              status: 401,
+              headers: { "Content-Type": "application/json" }
+            }
+          )
         )
       }
     }
@@ -597,58 +618,66 @@ Citation formatting rules:
         errorMessage.includes("payment") ||
         errorMessage.includes("credit")
       ) {
-        return new Response(
-          JSON.stringify({ 
-            error: "OpenAI API quota exceeded",
-            message: "Your OpenAI account has insufficient credits or quota. Please add credits to your OpenAI account to continue using the chat feature."
-          }),
-          { 
-            status: 402,
-            headers: { "Content-Type": "application/json" }
-          }
+        return withRateLimit(
+          new Response(
+            JSON.stringify({ 
+              error: "OpenAI API quota exceeded",
+              message: "Your OpenAI account has insufficient credits or quota. Please add credits to your OpenAI account to continue using the chat feature."
+            }),
+            { 
+              status: 402,
+              headers: { "Content-Type": "application/json" }
+            }
+          )
         )
       }
       
       // Check for rate limit
       if (errorMessage.includes("rate limit") || errorMessage.includes("429")) {
-        return new Response(
-          JSON.stringify({ 
-            error: "OpenAI API rate limit exceeded",
-            message: "Too many requests. Please wait a moment and try again."
-          }),
-          { 
-            status: 429,
-            headers: { "Content-Type": "application/json" }
-          }
+        return withRateLimit(
+          new Response(
+            JSON.stringify({ 
+              error: "OpenAI API rate limit exceeded",
+              message: "Too many requests. Please wait a moment and try again."
+            }),
+            { 
+              status: 429,
+              headers: { "Content-Type": "application/json" }
+            }
+          )
         )
       }
       
       // Check for authentication
       if (errorMessage.includes("api key") || errorMessage.includes("authentication") || errorMessage.includes("401")) {
-        return new Response(
-          JSON.stringify({ 
-            error: "OpenAI API authentication failed",
-            message: "Please check your OPENAI_API_KEY environment variable"
-          }),
-          { 
-            status: 401,
-            headers: { "Content-Type": "application/json" }
-          }
+        return withRateLimit(
+          new Response(
+            JSON.stringify({ 
+              error: "OpenAI API authentication failed",
+              message: "Please check your OPENAI_API_KEY environment variable"
+            }),
+            { 
+              status: 401,
+              headers: { "Content-Type": "application/json" }
+            }
+          )
         )
       }
     }
     
     // Generic error response
-    return new Response(
-      JSON.stringify({ 
-        error: "Internal Server Error",
-        message: error instanceof Error ? error.message : "Unknown error",
-        details: env.NODE_ENV === "development" ? (error instanceof Error ? error.stack : String(error)) : undefined
-      }),
-      { 
-        status: 500,
-        headers: { "Content-Type": "application/json" }
-      }
+    return withRateLimit(
+      new Response(
+        JSON.stringify({ 
+          error: "Internal Server Error",
+          message: error instanceof Error ? error.message : "Unknown error",
+          details: env.NODE_ENV === "development" ? (error instanceof Error ? error.stack : String(error)) : undefined
+        }),
+        { 
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        }
+      )
     )
   }
 }

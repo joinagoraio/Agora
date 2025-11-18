@@ -1,11 +1,12 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
-import { RateLimitStatus, checkRateLimit, searchRateLimit } from "@/lib/rate-limit"
+import { applyRateLimitHeaders, checkRateLimit, searchRateLimit } from "@/lib/rate-limit"
 import { searchQuerySchema } from "@/lib/validations/document"
 import { withCache, workspaceCacheKey } from "@/lib/cache/api-cache"
 import { parsePaginationParams, createPaginatedResponse, DEFAULT_PAGE_SIZE } from "@/lib/utils/pagination"
 import { ValidationError, RateLimitError, createErrorResponse, createSuccessResponse } from "@/lib/utils/api-error-handler"
 import { logger } from "@/lib/utils/logger"
+import { getClientIdentifier } from "@/lib/utils/request"
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,10 +14,11 @@ export async function GET(req: NextRequest) {
     const {
       data: { user },
     } = await supabase.auth.getUser()
-    const identifier = user?.id ?? getClientIdentifier(req)
+    const identifier = user?.id ?? getClientIdentifier(req.headers)
     const rateLimitKey = user ? `workspace-search:user:${user.id}` : `workspace-search:ip:${identifier}`
     const rateLimitResult = await checkRateLimit(searchRateLimit, rateLimitKey)
-    const respondWithRateLimit = (response: NextResponse) => attachRateLimitHeaders(response, rateLimitResult)
+    const respondWithRateLimit = (response: NextResponse) =>
+      applyRateLimitHeaders(response, rateLimitResult)
 
     if (!rateLimitResult.success) {
       return respondWithRateLimit(
@@ -46,14 +48,16 @@ export async function GET(req: NextRequest) {
 
     if (!validationResult.success) {
       return respondWithRateLimit(
-        {
-          error: "Validation failed",
-          details: validationResult.error.errors.map(e => ({
-            path: e.path.join("."),
-            message: e.message,
-          }))
-        },
-        { status: 400 },
+        NextResponse.json(
+          {
+            error: "Validation failed",
+            details: validationResult.error.errors.map(e => ({
+              path: e.path.join("."),
+              message: e.message,
+            }))
+          },
+          { status: 400 },
+        ),
       )
     }
 
@@ -166,10 +170,11 @@ export async function POST(req: Request) {
     const {
       data: { user },
     } = await supabase.auth.getUser()
-    const identifier = user?.id ?? getClientIdentifier(req)
+    const identifier = user?.id ?? getClientIdentifier(req.headers)
     const rateLimitKey = user ? `workspace-search:user:${user.id}` : `workspace-search:ip:${identifier}`
     const rateLimitResult = await checkRateLimit(searchRateLimit, rateLimitKey)
-    const respondWithRateLimit = (response: NextResponse) => attachRateLimitHeaders(response, rateLimitResult)
+    const respondWithRateLimit = (response: NextResponse) =>
+      applyRateLimitHeaders(response, rateLimitResult)
 
     if (!rateLimitResult.success) {
       const rateLimitError = new RateLimitError(
@@ -313,48 +318,3 @@ export async function POST(req: Request) {
   }
 }
 
-function getClientIdentifier(req: Pick<Request, "headers">): string {
-  const forwarded = req.headers.get("x-forwarded-for")
-  if (forwarded) {
-    const ip = forwarded.split(",")[0]?.trim()
-    if (ip) {
-      return ip
-    }
-  }
-
-  return (
-    req.headers.get("cf-connecting-ip") ||
-    req.headers.get("x-real-ip") ||
-    req.headers.get("fly-client-ip") ||
-    "anonymous"
-  )
-}
-
-function attachRateLimitHeaders(response: NextResponse, status?: RateLimitStatus) {
-  if (!status) {
-    return response
-  }
-
-  if (typeof status.limit === "number") {
-    response.headers.set("RateLimit-Limit", status.limit.toString())
-  }
-
-  if (typeof status.remaining === "number") {
-    response.headers.set("RateLimit-Remaining", Math.max(status.remaining, 0).toString())
-  }
-
-  if (typeof status.reset === "number") {
-    const resetTimestamp =
-      status.reset < 10_000_000_000 ? status.reset * 1000 : status.reset
-    response.headers.set("RateLimit-Reset", resetTimestamp.toString())
-    if (!status.success) {
-      const retryAfterSeconds =
-        resetTimestamp > Date.now()
-          ? Math.max(0, Math.ceil((resetTimestamp - Date.now()) / 1000))
-          : 0
-      response.headers.set("Retry-After", retryAfterSeconds.toString())
-    }
-  }
-
-  return response
-}
