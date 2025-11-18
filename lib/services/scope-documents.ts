@@ -293,8 +293,11 @@ export async function syncScopeDocumentToAllWorkspaces(
   }
 
   const workspaceIds = new Set<string>()
-  workspaces?.forEach((workspace) => workspaceIds.add(workspace.id))
-  linkedWorkspaces?.forEach((link) => workspaceIds.add(link.workspace_id))
+  type WorkspaceRow = { id: string }
+  type WorkspaceLinkRow = { workspace_id: string }
+
+  ;(workspaces ?? []).forEach((workspace: WorkspaceRow) => workspaceIds.add(workspace.id))
+  ;(linkedWorkspaces ?? []).forEach((link: WorkspaceLinkRow) => workspaceIds.add(link.workspace_id))
 
   console.log("[ScopeDocuments] Syncing scope document to workspaces", {
     spaceId,
@@ -326,8 +329,7 @@ export async function syncAllScopeDocumentsToWorkspace(
   workspaceId: string,
   adminClient = createAdminClient(),
   upsertFn: typeof upsertWorkspaceDocumentForScope = upsertWorkspaceDocumentForScope,
-) {
-
+): Promise<{ syncedCount: number }> {
   const { data: scopeItems, error } = await adminClient
     .from("space_items")
     .select("id, classification, visibility, payload")
@@ -335,22 +337,36 @@ export async function syncAllScopeDocumentsToWorkspace(
     .eq("item_type", "document")
 
   if (error) {
-    console.error("[ScopeDocuments] Failed to fetch scope documents for workspace:", error)
-    return
+    throw new Error(`[ScopeDocuments] Failed to fetch scope documents for workspace: ${error.message}`)
   }
 
   if (!scopeItems || scopeItems.length === 0) {
-    return
+    return { syncedCount: 0 }
   }
 
+  let syncedCount = 0
+  const failedItemIds: string[] = []
   for (const item of scopeItems) {
     const classification = item.classification ?? "internal"
     const visibility = item.visibility ?? "internal"
     if (classification !== "public" && visibility !== "public") {
       continue
     }
-    await upsertFn(spaceId, workspaceId, item as SpaceDocumentItem, adminClient)
+    const synced = await upsertFn(spaceId, workspaceId, item as SpaceDocumentItem, adminClient)
+    if (!synced) {
+      failedItemIds.push(item.id)
+    } else {
+      syncedCount += 1
+    }
   }
+
+  if (failedItemIds.length > 0) {
+    throw new Error(
+      `[ScopeDocuments] Failed to sync ${failedItemIds.length} scope document(s) for workspace ${workspaceId}: ${failedItemIds.join(", ")}`,
+    )
+  }
+
+  return { syncedCount }
 }
 
 export async function removeScopeDocumentFromAllWorkspaces(spaceId: string, spaceItemId: string) {
@@ -370,8 +386,9 @@ export async function removeScopeDocumentFromAllWorkspaces(spaceId: string, spac
     return
   }
 
-  const documentIds = documents.map((doc) => doc.id)
-  const workspaceIds = Array.from(new Set(documents.map((doc) => doc.workspace_id)))
+  type DocumentLookupRow = { id: string; workspace_id?: string | null }
+  const documentIds = documents.map((doc: DocumentLookupRow) => doc.id)
+  const workspaceIds = Array.from(new Set(documents.map((doc: DocumentLookupRow) => doc.workspace_id).filter(Boolean))) as string[]
 
   const { error: deleteError } = await adminClient
     .from("documents")
@@ -399,7 +416,8 @@ export async function removeScopeDocumentsFromWorkspace(spaceId: string, workspa
   if (documentsError) {
     console.error("[ScopeDocuments] Failed to find inherited documents for workspace removal:", documentsError)
   } else if (documents && documents.length > 0) {
-    const docIds = documents.map((doc) => doc.id)
+    type InheritedDocumentRow = { id: string }
+    const docIds = documents.map((doc: InheritedDocumentRow) => doc.id)
     const { error: deleteError } = await adminClient
       .from("documents")
       .update({ status: "deleted", updated_at: new Date().toISOString() })
@@ -418,7 +436,8 @@ export async function removeScopeDocumentsFromWorkspace(spaceId: string, workspa
   if (spaceItemsError) {
     console.error("[ScopeDocuments] Failed to fetch space items for workspace cleanup:", spaceItemsError)
   } else if (spaceItems && spaceItems.length > 0) {
-    const spaceItemIds = spaceItems.map((item) => item.id)
+    type SpaceItemIdRow = { id: string }
+    const spaceItemIds = spaceItems.map((item: SpaceItemIdRow) => item.id)
     const { error: workspaceItemsError } = await adminClient
       .from("workspace_items")
       .delete()

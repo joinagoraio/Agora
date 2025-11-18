@@ -94,11 +94,20 @@ export async function searchDocuments(
   }
 
   // Get workspace to check for location
-  const { data: workspace } = await supabase
+  const { data: workspace, error: workspaceError } = await supabase
     .from("workspaces")
     .select("location, context")
     .eq("id", workspaceId)
-    .single()
+    .maybeSingle()
+
+  if (workspaceError) {
+    console.error("[searchDocuments] Failed to load workspace metadata:", workspaceError)
+    return { data: [], error: workspaceError.message }
+  }
+
+  if (!workspace) {
+    return { data: [], error: "Workspace not found" }
+  }
 
   // Rewrite query using AI for better search results (optional, adds latency but improves quality)
   // For now, we'll use AI rewriting only for document preview mode (includedDocumentIds) 
@@ -110,7 +119,7 @@ export async function searchDocuments(
   }
   
   // If workspace has a location and it's not already in the query, add it
-  if (workspace?.location && !searchQuery.toLowerCase().includes(workspace.location.toLowerCase())) {
+  if (workspace.location && !searchQuery.toLowerCase().includes(workspace.location.toLowerCase())) {
     searchQuery = `${searchQuery} ${workspace.location}`
   }
 
@@ -476,12 +485,18 @@ export async function getRelevantContext(
   const workspace = await withCache(
     workspaceCacheKeyStr,
     async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("workspaces")
         .select("context, location")
         .eq("id", workspaceId)
-        .single()
-      return data
+        .maybeSingle()
+
+      if (error) {
+        console.error("[getRelevantContext] Failed to load workspace metadata:", error)
+        return null
+      }
+
+      return data ?? null
     },
     { ttl: 300, tags: [`workspace:${workspaceId}`] } // 5 minute cache
   )
@@ -791,11 +806,15 @@ export async function getAllWorkspaceKnowledge(
   const MAX_CONTEXT_CHARS = 110000
   const supabase = await createClient()
 
-  const { data: workspace } = await supabase
+  const { data: workspace, error: workspaceError } = await supabase
     .from("workspaces")
     .select("context, location")
     .eq("id", workspaceId)
-    .single()
+    .maybeSingle()
+
+  if (workspaceError) {
+    console.error("[getAllWorkspaceKnowledge] Failed to load workspace metadata:", workspaceError)
+  }
 
   const contextParts: string[] = []
 

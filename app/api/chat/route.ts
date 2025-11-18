@@ -174,6 +174,26 @@ export async function POST(req: Request) {
       })
     }
 
+    // Pre-create assistant message placeholder to ensure persistence even if streaming fails
+    let assistantMessageId: string | null = null
+    const { data: placeholderMessage, error: placeholderError } = await supabase
+      .from("messages")
+      .insert({
+        conversation_id: conversationId,
+        role: "assistant",
+        content: "",
+        sources: [],
+        thinking_duration: null,
+      })
+      .select("id")
+      .single()
+
+    if (placeholderError) {
+      console.error("[Chat API] Failed to create assistant message placeholder:", placeholderError)
+    } else if (placeholderMessage?.id) {
+      assistantMessageId = placeholderMessage.id
+    }
+
     // Get workspace to fetch additional context
     const { data: workspace } = await supabase
       .from("workspaces")
@@ -226,6 +246,14 @@ export async function POST(req: Request) {
       space,
       includeDocumentPreviewNotice: shouldRestrictToDocument && contextId,
     })
+    const formattedContextInstructions =
+      typeof contextInstructions === "string" && contextInstructions.trim().length > 0
+        ? `${contextInstructions.trim()}\n\n`
+        : ""
+    const formattedWorkspaceContextSection =
+      typeof workspaceContextSection === "string" && workspaceContextSection.trim().length > 0
+        ? `${workspaceContextSection.trim()}\n\n`
+        : ""
     
     const contextMentionInstruction = hasWorkspaceContext 
       ? "  2. The additional workspace context/properties and scope information (if provided)"
@@ -233,7 +261,7 @@ export async function POST(req: Request) {
     
     const systemPrompt = `You are AGORA, an intelligent policy assistant. You help users find and understand information from their organization's documents.
 
-${contextInstructions}${workspaceContextSection}
+${formattedContextInstructions}${formattedWorkspaceContextSection}
 
 Context from relevant documents:
 ${context}
@@ -357,13 +385,24 @@ Citation formatting rules:
 
           // Save assistant message to database after streaming completes
           try {
-            await supabase.from("messages").insert({
-              conversation_id: conversationId,
-              role: "assistant",
-              content: fullResponse,
-              sources: sources,
-              thinking_duration: thinkingDuration,
-            })
+            if (assistantMessageId) {
+              await supabase
+                .from("messages")
+                .update({
+                  content: fullResponse,
+                  sources: sources,
+                  thinking_duration: thinkingDuration,
+                })
+                .eq("id", assistantMessageId)
+            } else {
+              await supabase.from("messages").insert({
+                conversation_id: conversationId,
+                role: "assistant",
+                content: fullResponse,
+                sources: sources,
+                thinking_duration: thinkingDuration,
+              })
+            }
 
             // Generate conversation title if it's still "New Conversation"
             if (conversation.title === "New Conversation") {
@@ -435,13 +474,28 @@ Citation formatting rules:
         } catch (streamError) {
           console.error("[Chat API] Stream error:", streamError)
           
+          const errorMessage = streamError instanceof Error ? streamError.message : String(streamError)
+
           // Try to send error message to client before closing
           try {
-            const errorMessage = streamError instanceof Error ? streamError.message : String(streamError)
             const errorData = `0:"[Error: ${errorMessage}]"\n`
             controller.enqueue(encoder.encode(errorData))
-          } catch (e) {
-            console.error("[Chat API] Failed to send error message:", e)
+          } catch (sendError) {
+            console.error("[Chat API] Failed to send error message:", sendError)
+          }
+
+          if (assistantMessageId) {
+            try {
+              await supabase
+                .from("messages")
+                .update({
+                  content: `[Error: ${errorMessage}]`,
+                  sources: [],
+                })
+                .eq("id", assistantMessageId)
+            } catch (placeholderUpdateError) {
+              console.error("[Chat API] Failed to update assistant placeholder after error:", placeholderUpdateError)
+            }
           }
           
           controller.error(streamError)

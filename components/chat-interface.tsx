@@ -162,7 +162,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     setIsLoadingDocuments(true)
     setIsLoadingNotes(true)
     setHasLoadedWorkspaceMetadata(false)
-    setIsLoadingEvidence(true)
+    setIsLoadingEvidence((prev) => (prev ? prev : true))
 
     try {
       const documentsPromise = (async () => {
@@ -218,7 +218,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
         console.error("[ChatInterface] Failed to fetch workspace notes:", notesResult.error)
         setContextNotes([])
       } else {
-      setContextNotes(notesResult.data)
+        setContextNotes(notesResult.data)
       }
 
       setEvidenceItems(evidenceData)

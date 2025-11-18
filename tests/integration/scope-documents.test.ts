@@ -75,11 +75,21 @@ describe("scope document synchronization", () => {
 
     const upsertFn = vi.fn().mockResolvedValue(true)
 
-    await syncAllScopeDocumentsToWorkspace("space-1", "workspace-1", undefined, upsertFn)
+    const result = await syncAllScopeDocumentsToWorkspace("space-1", "workspace-1", undefined, upsertFn)
 
     expect(upsertFn).toHaveBeenCalledTimes(2)
     expect(upsertFn).toHaveBeenNthCalledWith(1, "space-1", "workspace-1", spaceItemsData[0], expect.any(Object))
     expect(upsertFn).toHaveBeenNthCalledWith(2, "space-1", "workspace-1", spaceItemsData[1], expect.any(Object))
+    expect(result.syncedCount).toBe(2)
+  })
+
+  it("syncAllScopeDocumentsToWorkspace surfaces upsert failures", async () => {
+    spaceItemsData = [{ id: "doc-public", classification: "public", visibility: "internal", payload: {} }] as SpaceDocumentItem[]
+    const upsertFn = vi.fn().mockResolvedValue(false)
+
+    await expect(syncAllScopeDocumentsToWorkspace("space-1", "workspace-1", undefined, upsertFn)).rejects.toThrow(
+      /Failed to sync 1 scope document/,
+    )
   })
 
   it("syncScopeDocumentToAllWorkspaces aggregates owned and linked workspaces", async () => {

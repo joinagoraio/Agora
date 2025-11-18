@@ -161,10 +161,14 @@ export async function updateSpaceScope(
     .from("spaces")
     .select("description, metadata")
     .eq("id", spaceId)
-    .single()
+    .maybeSingle()
 
   if (fetchError) {
     return { error: fetchError.message }
+  }
+
+  if (!existingSpace) {
+    return { error: "Space not found" }
   }
 
   const currentMetadata = (existingSpace?.metadata as Record<string, any> | null) ?? {}
@@ -311,10 +315,14 @@ export async function updateSpaceSetupState(
     .from("spaces")
     .select("metadata")
     .eq("id", spaceId)
-    .single()
+    .maybeSingle()
 
   if (fetchError) {
     return { error: fetchError.message }
+  }
+
+  if (!existingSpace) {
+    return { error: "Space not found" }
   }
 
   const currentMetadata = (existingSpace?.metadata as Record<string, any> | null) ?? {}

@@ -18,7 +18,12 @@ const WORD_HTML_SANITIZE_OPTIONS = {
   ALLOWED_ATTR: ["class", "style"] as string[],
 } as const
 
+const GENERIC_HTML_SANITIZE_OPTIONS = {
+  ALLOWED_ATTR: ["class", "style", "href", "target", "rel", "download"],
+} as const
+
 const WORD_HIGHLIGHT_CLASS = "word-highlight"
+const TEXT_HIGHLIGHT_CLASS = "workspace-text-highlight"
 
 interface MultiFormatViewerProps {
   url: string
@@ -674,7 +679,7 @@ export function MultiFormatViewer({
     // Wait for the highlight to be rendered in the DOM
     const timer = setTimeout(() => {
       // Try to find the highlight element in the rendered content
-      const highlightElement = containerRef.current?.querySelector('span[class*="bg-yellow"]') as HTMLElement
+      const highlightElement = containerRef.current?.querySelector(`.${TEXT_HIGHLIGHT_CLASS}`) as HTMLElement
       
       console.log("[MultiFormatViewer] Looking for highlight element:", { 
         found: !!highlightElement, 
@@ -779,7 +784,7 @@ export function MultiFormatViewer({
           // Update highlightRef to point to this specific highlight
           // We'll need to find it in the DOM after render
           setTimeout(() => {
-            const highlightElements = containerRef.current?.querySelectorAll('span[class*="bg-yellow"]')
+            const highlightElements = containerRef.current?.querySelectorAll(`.${TEXT_HIGHLIGHT_CLASS}`)
             if (highlightElements && highlightElements[highlightIndex]) {
               highlightRef.current = highlightElements[highlightIndex] as HTMLSpanElement
               scrollToTextHighlight()
@@ -1082,6 +1087,13 @@ export function MultiFormatViewer({
     return DOMPurify.sanitize(highlightedWordContent, WORD_HTML_SANITIZE_OPTIONS)
   }, [highlightedWordContent])
 
+  const sanitizedHtmlContent = useMemo(() => {
+    if (!htmlContent) {
+      return ""
+    }
+    return DOMPurify.sanitize(htmlContent, GENERIC_HTML_SANITIZE_OPTIONS)
+  }, [htmlContent])
+
   // Scroll to highlight when Word content loads (after DOM update)
   useEffect(() => {
     if (documentType === "word" && wordHighlight && containerRef.current) {
@@ -1291,7 +1303,7 @@ export function MultiFormatViewer({
         )}
         <div className="flex-1 overflow-auto bg-white">
           <iframe
-            srcDoc={htmlContent || ""}
+            srcDoc={sanitizedHtmlContent}
             className="w-full h-full border-0"
             title={documentTitle}
             sandbox="allow-same-origin allow-scripts"
@@ -1339,7 +1351,8 @@ export function MultiFormatViewer({
                           ? "bg-yellow-200/40 dark:bg-yellow-400/20 rounded px-0.5 border border-yellow-400/50 border-dashed"
                           : "bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5",
                         "animate-in fade-in duration-300 transition-colors hover:bg-yellow-400/60 dark:hover:bg-yellow-500/40",
-                        "cursor-pointer"
+                        "cursor-pointer",
+                        TEXT_HIGHLIGHT_CLASS,
                       )}
                       style={{
                         scrollMarginTop: "100px",

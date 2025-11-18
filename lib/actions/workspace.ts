@@ -6,6 +6,7 @@ import OpenAI from "openai"
 import { env } from "@/lib/env"
 
 import { syncAllScopeDocumentsToWorkspace } from "@/lib/services/scope-documents"
+import { withCache, workspaceCacheKey } from "@/lib/cache/api-cache"
 
 export async function createWorkspace(spaceId: string, name: string, description?: string) {
   const supabase = await createClient()
@@ -39,15 +40,19 @@ export async function createWorkspace(spaceId: string, name: string, description
     return { error: error.message }
   }
 
+  let scopeSyncWarning: string | undefined
   try {
     await syncAllScopeDocumentsToWorkspace(spaceId, data.id)
   } catch (syncError) {
     console.error("[Workspace] Failed to sync scope documents:", syncError)
+    const message =
+      syncError instanceof Error ? syncError.message : "An unknown error occurred while syncing scope documents."
+    scopeSyncWarning = `Workspace created, but inherited documents could not be synced automatically: ${message}`
   }
 
   revalidatePath(`/spaces/${spaceId}`)
   revalidatePath(`/workspaces/${data.id}`)
-  return { data }
+  return scopeSyncWarning ? { data, warning: scopeSyncWarning } : { data }
 }
 
 export async function updateWorkspace(
@@ -159,17 +164,35 @@ export async function getWorkspaceContextDetails(workspaceId: string) {
     return { data: null, error: "Unauthorized" }
   }
 
-  const { data, error } = await supabase
-    .from("workspaces")
-    .select("context, location")
-    .eq("id", workspaceId)
-    .single()
+  try {
+    const cacheKey = workspaceCacheKey("context-details", workspaceId)
+    const data = await withCache(
+      cacheKey,
+      async () => {
+        const { data, error } = await supabase
+          .from("workspaces")
+          .select("context, location")
+          .eq("id", workspaceId)
+          .maybeSingle()
 
-  if (error) {
-    return { data: null, error: error.message }
+        if (error) {
+          throw new Error(error.message)
+        }
+
+        return data ?? null
+      },
+      { ttl: 300, tags: [`workspace:${workspaceId}`] },
+    )
+
+    if (!data) {
+      return { data: null, error: "Workspace not found" }
+    }
+
+    return { data }
+  } catch (cacheError) {
+    const message = cacheError instanceof Error ? cacheError.message : "Failed to load workspace context"
+    return { data: null, error: message }
   }
-
-  return { data }
 }
 
 export async function enhanceContextText(text: string): Promise<{ enhanced?: string; error?: string }> {

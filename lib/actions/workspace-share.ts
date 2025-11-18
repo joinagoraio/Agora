@@ -16,11 +16,15 @@ export async function createWorkspaceShareLink(workspaceId: string, expiresInDay
   }
 
   // Verify user has permission to share workspace
-  const { data: workspace } = await supabase
+  const { data: workspace, error: workspaceError } = await supabase
     .from("workspaces")
     .select("id, space_id, spaces(id, name)")
     .eq("id", workspaceId)
-    .single()
+    .maybeSingle()
+
+  if (workspaceError) {
+    return { error: workspaceError.message }
+  }
 
   if (!workspace) {
     return { error: "Workspace not found" }
@@ -32,11 +36,15 @@ export async function createWorkspaceShareLink(workspaceId: string, expiresInDay
 
   // Store share link in workspace metadata or create a new table
   // For now, we'll use a simple approach: store in workspace metadata
-  const { data: existingShare } = await supabase
+  const { data: existingShare, error: shareMetadataError } = await supabase
     .from("workspaces")
     .select("metadata")
     .eq("id", workspaceId)
-    .single()
+    .maybeSingle()
+
+  if (shareMetadataError) {
+    return { error: shareMetadataError.message }
+  }
 
   const metadata = existingShare?.metadata || {}
   const shareLinks = metadata.shareLinks || []
@@ -75,9 +83,13 @@ export async function getWorkspaceShareData(workspaceId: string, token: string) 
     .from("workspaces")
     .select("*, spaces(id, name, space_type)")
     .eq("id", workspaceId)
-    .single()
+    .maybeSingle()
 
-  if (error || !workspace) {
+  if (error) {
+    return { data: null, error: error.message }
+  }
+
+  if (!workspace) {
     return { data: null, error: "Workspace not found" }
   }
 
@@ -167,11 +179,15 @@ export async function revokeWorkspaceShareLink(workspaceId: string, token: strin
     return { error: "Unauthorized" }
   }
 
-  const { data: workspace } = await supabase
+  const { data: workspace, error: workspaceLookupError } = await supabase
     .from("workspaces")
     .select("metadata")
     .eq("id", workspaceId)
-    .single()
+    .maybeSingle()
+
+  if (workspaceLookupError) {
+    return { error: workspaceLookupError.message }
+  }
 
   if (!workspace) {
     return { error: "Workspace not found" }
