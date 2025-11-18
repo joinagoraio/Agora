@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
+import { logger } from "@/lib/utils/logger"
 // PDF extraction now handled by pdf2json directly
 import { getRelevantContext, getAllWorkspaceKnowledge } from "@/lib/rag/search"
 import OpenAI from "openai"
@@ -29,7 +30,7 @@ function markdownToHtml(markdown: string): string {
   try {
     return markdownParser.render(markdown)
   } catch (error) {
-    console.error("[WorkspaceDocument] Failed to convert markdown to HTML:", error)
+    logger.error("[WorkspaceDocument] Failed to convert markdown to HTML:", error)
     // Fallback: wrap plain text in paragraph tags
     const escaped = markdown
       .replace(/&/g, "&amp;")
@@ -89,7 +90,11 @@ export async function generateDocumentSummary(content: string, title?: string, i
     // Take a sample of the content (first 2000 chars for efficiency)
     const contentSample = processedContent.substring(0, 2000)
     
-    console.log("[Upload] Generating summary for", isMarkdown ? "markdown" : "document", "- content length:", content.length, "processed length:", processedContent.length)
+    logger.info("[Upload] Generating summary", {
+      documentType: isMarkdown ? "markdown" : "document",
+      contentLength: content.length,
+      processedLength: processedContent.length,
+    })
     
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini", // Use cheaper model for summarization
@@ -124,11 +129,11 @@ Examples:
 
     const summary = response.choices[0]?.message?.content?.trim()
     if (summary && summary.length > 0 && summary.length <= 200) {
-      console.log("[Upload] Generated AI summary:", summary.substring(0, 100))
+      logger.debug("[Upload] Generated AI summary", { preview: summary.substring(0, 100) })
       return summary
     }
   } catch (error) {
-    console.error("[Upload] Error generating summary:", error)
+    logger.error("[Upload] Error generating summary:", error)
   }
 
   // Fallback: return first 150 characters (strip markdown if needed)
@@ -270,7 +275,7 @@ export async function deleteDocument(documentId: string, workspaceId: string): P
         await adminClient.storage.from("documents").remove([filePath])
       }
     } catch (storageError) {
-      console.error("[Delete] Failed to remove file from storage:", storageError)
+      logger.error("[Delete] Failed to remove file from storage:", storageError)
       // Don't fail the delete operation if storage cleanup fails
     }
   }
@@ -380,7 +385,7 @@ export async function uploadDocument(
       .single()
 
     if (sourceError || !newSource) {
-      console.error("[Upload] Source creation error:", sourceError)
+      logger.error("[Upload] Source creation error:", sourceError)
       return { 
         error: `Failed to create upload source: ${sourceError?.message || "Unknown error"}. Make sure you've run the database migration to add 'direct_upload' source type.` 
       }
@@ -422,15 +427,15 @@ export async function uploadDocument(
   if (file.type === "text/plain" || file.type === "text/markdown" || isMarkdownFile) {
     content = await file.text()
   } else if (file.type === "application/pdf") {
-    console.log("[Upload] Processing PDF file:", file.name, "Size:", file.size, "bytes")
+    logger.info("[Upload] Processing PDF file", { name: file.name, size: file.size })
     try {
       // Convert File to ArrayBuffer for PDF parsing
       const arrayBuffer = await file.arrayBuffer()
       const buffer = Buffer.from(arrayBuffer)
-      console.log("[Upload] Converted to buffer, size:", buffer.length, "bytes")
+      logger.debug("[Upload] Converted PDF to buffer", { size: buffer.length })
       
       // Use pdf2json - a pure Node.js library with no worker dependencies
-      console.log("[Upload] Extracting PDF content with pdf2json...")
+      logger.debug("[Upload] Extracting PDF content with pdf2json...")
       const PDFParser = (await import("pdf2json")).default
       
       // pdf2json is event-based, so we need to wrap it in a promise
@@ -472,7 +477,7 @@ export async function uploadDocument(
         return match // Keep valid 4-digit sequences
       })
       
-      console.log(`[Upload] pdf2json extracted ${content.length} characters from PDF (sanitized)`)
+      logger.debug("[Upload] pdf2json extraction complete", { contentLength: content.length })
       
       // Extract page data for document_pages table
       // pdf2json doesn't provide page-by-page text easily, so we'll create a single page entry
@@ -496,9 +501,12 @@ export async function uploadDocument(
           }]
         }
         
-        console.log(`[Upload] Extracted ${pdfPages.length} pages from PDF`)
+        logger.debug("[Upload] Extracted pages from PDF", { pages: pdfPages.length })
       } catch (pageError) {
-        console.warn("[Upload] Could not extract page data (non-critical):", pageError instanceof Error ? pageError.message : String(pageError))
+        logger.warn(
+          "[Upload] Could not extract page data (non-critical)",
+          pageError instanceof Error ? { message: pageError.message } : { message: String(pageError) },
+        )
         // Create a single page entry as fallback
         pdfPages = [{
           page_number: 1,
@@ -509,7 +517,7 @@ export async function uploadDocument(
       
       // If no text was extracted, it's likely a scanned/image-based PDF - use OCR
       if (!content.trim()) {
-        console.log("[Upload] No text found in PDF, attempting OCR...")
+        logger.info("[Upload] No text found in PDF, attempting OCR...")
         
         try {
           const { createWorker } = await import("tesseract.js")
@@ -524,29 +532,29 @@ export async function uploadDocument(
           if (!content.trim()) {
             content = "[PDF appears to be image-based but OCR did not extract any text. The document may be too low quality or contain only images.]"
           } else {
-            console.log(`[Upload] OCR extracted ${content.length} characters from scanned PDF`)
+            logger.debug("[Upload] OCR extracted content from scanned PDF", { contentLength: content.length })
           }
         } catch (ocrError) {
-          console.error("[Upload] OCR error:", ocrError)
+          logger.error("[Upload] OCR error:", ocrError)
           content = `[Failed to perform OCR on PDF: ${ocrError instanceof Error ? ocrError.message : "Unknown error"}]`
         }
       }
     } catch (error) {
-      console.error("[Upload] PDF parsing error:", error)
-      console.error("[Upload] Error details:", error instanceof Error ? error.stack : String(error))
+      logger.error("[Upload] PDF parsing error:", error)
+      logger.error("[Upload] Error details:", error instanceof Error ? error.stack : String(error))
       content = `[Failed to extract PDF content: ${error instanceof Error ? error.message : "Unknown error"}]`
     }
   } else if (
     file.type ===
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   ) {
-    console.log("[Upload] Processing Word document (.docx):", file.name, "Size:", file.size, "bytes")
+    logger.info("[Upload] Processing Word document (.docx)", { name: file.name, size: file.size })
     try {
       // Convert File to ArrayBuffer, then to Buffer for Word parsing
       // In server-side Node.js context, mammoth expects { buffer: Buffer }
       const arrayBuffer = await file.arrayBuffer()
       const buffer = Buffer.from(arrayBuffer)
-      console.log("[Upload] Converted to Buffer, size:", buffer.length, "bytes")
+      logger.debug("[Upload] Converted Word document to buffer", { size: buffer.length })
       
       // Use mammoth to extract text content from Word document
       const mammoth = await import("mammoth")
@@ -555,22 +563,22 @@ export async function uploadDocument(
       content = result.value || ""
       
       if (result.messages.length > 0) {
-        console.warn("[Upload] Word document conversion warnings:", result.messages)
+        logger.warn("[Upload] Word document conversion warnings:", { warnings: result.messages })
       }
       
       if (!content.trim()) {
-        console.warn("[Upload] Word document appears to be empty or contains no extractable text")
+        logger.warn("[Upload] Word document appears empty or lacks extractable text")
         content = "[Word document appears to be empty or contains only images/formatting that could not be extracted as text]"
       } else {
-        console.log(`[Upload] Successfully extracted ${content.length} characters from Word document`)
+        logger.debug("[Upload] Extracted characters from Word document", { contentLength: content.length })
       }
     } catch (error) {
-      console.error("[Upload] Word document parsing error:", error)
+      logger.error("[Upload] Word document parsing error:", error)
       content = `[Failed to extract Word document content: ${error instanceof Error ? error.message : "Unknown error"}]`
     }
   } else if (file.type === "application/msword") {
     // Older .doc format - mammoth doesn't support it, but we can try to provide a helpful message
-    console.log("[Upload] Processing Word document (.doc):", file.name, "Size:", file.size, "bytes")
+    logger.info("[Upload] Processing Word document (.doc)", { name: file.name, size: file.size })
     content = "[Word document (.doc) format is not supported. Please convert to .docx format for content extraction.]"
   } else {
     content = await file.text().catch(() => "[Binary file - content extraction not available]")
@@ -596,7 +604,7 @@ export async function uploadDocument(
     content === binaryFileMessage ||
     content.trim() === binaryFileMessage.trim()
   
-  console.log("[Upload] Content check:", {
+  logger.debug("[Upload] Content check", {
     contentLength: content?.length || 0,
     contentPreview: content?.substring(0, 50) || "empty",
     isBinaryOrFailed,
@@ -653,7 +661,7 @@ export async function uploadDocument(
     
     documentSummary = `${fileTypeDescription}. Content extraction not available for this file type.`
     
-    console.log("[Upload] Binary/unsupported file detected:", {
+    logger.warn("[Upload] Binary/unsupported file detected", {
       fileName: file.name,
       fileExt,
       fileType: file.type,
@@ -670,17 +678,17 @@ export async function uploadDocument(
   // Ensure we have a summary (fallback if somehow none was generated)
   if (!documentSummary || documentSummary.trim().length === 0) {
     documentSummary = "Document uploaded. Content preview not available."
-    console.warn("[Upload] No summary generated, using fallback")
+    logger.warn("[Upload] No summary generated, using fallback")
   }
   
   // Ensure summary doesn't contain the binary file error message
   if (documentSummary.includes("[Binary file - content extraction not available]")) {
     const fileExt = file.name.split(".").pop()?.toLowerCase() || "unknown"
     documentSummary = `File (${fileExt.toUpperCase()}). Content extraction not available for this file type.`
-    console.warn("[Upload] Summary contained binary error message, replaced with file type description")
+    logger.warn("[Upload] Summary contained binary error message, replaced with file type description")
   }
   
-  console.log("[Upload] Final document summary:", documentSummary.substring(0, 100))
+  logger.info("[Upload] Final document summary", { preview: documentSummary.substring(0, 100) })
 
   // Create document record
   // Store AI summary in content field for card display
@@ -718,7 +726,10 @@ export async function uploadDocument(
     if (pdfPages && pdfPages.length > 0) {
       // Store pages with coordinate data
       try {
-        console.log(`[Upload] Preparing to store ${pdfPages.length} pages for document ${document.id}`)
+        logger.debug("[Upload] Preparing to store PDF pages", {
+          pages: pdfPages.length,
+          documentId: document.id,
+        })
         const pageInserts = pdfPages.map((page) => ({
           document_id: document.id,
           page_number: page.pageNumber,
@@ -727,26 +738,32 @@ export async function uploadDocument(
           character_offsets: page.characterOffsets,
         }))
 
-        console.log(`[Upload] Inserting ${pageInserts.length} page records...`)
+        logger.debug("[Upload] Inserting page records", { count: pageInserts.length, documentId: document.id })
         const { error: pagesError } = await adminClient
           .from("document_pages")
           .insert(pageInserts)
 
         if (pagesError) {
-          console.error("[Upload] Failed to store document pages:", pagesError)
-          console.error("[Upload] Pages error details:", pagesError.message, pagesError.details)
+          logger.error("[Upload] Failed to store document pages:", pagesError)
+          logger.error("[Upload] Pages error details:", {
+            message: pagesError.message,
+            details: pagesError.details,
+          })
         } else {
-          console.log(`[Upload] Successfully stored ${pageInserts.length} pages for document ${document.id}`)
+          logger.debug("[Upload] Stored document pages", { count: pageInserts.length, documentId: document.id })
         }
       } catch (pagesError) {
-        console.error("[Upload] Error storing document pages:", pagesError)
-        console.error("[Upload] Pages error stack:", pagesError instanceof Error ? pagesError.stack : String(pagesError))
+        logger.error("[Upload] Error storing document pages:", pagesError)
+        logger.error(
+          "[Upload] Pages error stack:",
+          pagesError instanceof Error ? pagesError.stack : String(pagesError),
+        )
       }
     } else if (content && content.trim() && !content.startsWith("[Failed")) {
       // We have content but no pages - create a single page record from the content
       // This ensures the content is available for chat context
       try {
-        console.log(`[Upload] Creating page record from extracted content (${content.length} chars)`)
+        logger.debug("[Upload] Creating page record from extracted content", { contentLength: content.length })
         const { error: pageError } = await adminClient
           .from("document_pages")
           .insert({
@@ -758,15 +775,18 @@ export async function uploadDocument(
           })
 
         if (pageError) {
-          console.error("[Upload] Failed to store content as page:", pageError)
+          logger.error("[Upload] Failed to store content as page:", pageError)
         } else {
-          console.log(`[Upload] Successfully stored content as page 1 for document ${document.id}`)
+          logger.debug("[Upload] Stored extracted content as page", { documentId: document.id })
         }
       } catch (pageError) {
-        console.error("[Upload] Error storing content as page:", pageError)
+        logger.error("[Upload] Error storing content as page:", pageError)
       }
     } else {
-      console.warn(`[Upload] PDF file but no pages extracted and no content. pdfPages: ${pdfPages ? pdfPages.length : 'null'}, content length: ${content?.length || 0}`)
+      logger.warn("[Upload] PDF lacked pages/content post-processing", {
+        pages: pdfPages ? pdfPages.length : null,
+        contentLength: content?.length || 0,
+      })
     }
   } else if (
     // Store text/markdown files as pages for highlighting support
@@ -780,7 +800,7 @@ export async function uploadDocument(
     // This enables text span highlighting in the document viewer
     if (content && content.trim() && !content.startsWith("[Failed") && !content.startsWith("[Binary")) {
       try {
-        console.log(`[Upload] Creating page record for text/markdown file (${content.length} chars)`)
+      logger.debug("[Upload] Creating page record for text/markdown file", { contentLength: content.length })
         const { error: pageError } = await adminClient
           .from("document_pages")
           .insert({
@@ -792,12 +812,12 @@ export async function uploadDocument(
           })
 
         if (pageError) {
-          console.error("[Upload] Failed to store text/markdown content as page:", pageError)
+          logger.error("[Upload] Failed to store text/markdown content as page:", pageError)
         } else {
-          console.log(`[Upload] Successfully stored text/markdown content as page 1 for document ${document.id}`)
+          logger.debug("[Upload] Stored text/markdown content as page", { documentId: document.id })
         }
       } catch (pageError) {
-        console.error("[Upload] Error storing text/markdown content as page:", pageError)
+        logger.error("[Upload] Error storing text/markdown content as page:", pageError)
       }
     }
   }
@@ -861,7 +881,7 @@ export async function addDocumentsFromSource(
         // Fetch the document from the URL
         const response = await fetch(doc.url)
         if (!response.ok) {
-          console.error(`[AddFromSource] Failed to fetch ${doc.url}: ${response.statusText}`)
+          logger.error(`[AddFromSource] Failed to fetch ${doc.url}: ${response.statusText}`)
           // Continue with metadata only if fetch fails
         } else {
           const contentType = response.headers.get("content-type") || ""
@@ -895,7 +915,7 @@ export async function addDocumentsFromSource(
             })
 
           if (uploadError) {
-            console.error(`[AddFromSource] Failed to upload ${doc.url}:`, uploadError)
+            logger.error(`[AddFromSource] Failed to upload ${doc.url}:`, uploadError)
             // Continue with metadata only if upload fails
           } else {
             // Get public URL
@@ -927,7 +947,7 @@ export async function addDocumentsFromSource(
                   content = htmlText
                 }
               } catch (e) {
-                console.error(`[AddFromSource] Failed to extract text from ${doc.url}:`, e)
+                logger.error(`[AddFromSource] Failed to extract text from ${doc.url}:`, e)
               }
             } else if (contentType.includes("pdf")) {
               try {
@@ -952,7 +972,7 @@ export async function addDocumentsFromSource(
                 const pdfData = await pdfParse(buffer)
                 content = pdfData.text || cleanedDescription || doc.title || ""
               } catch (e) {
-                console.error(`[AddFromSource] Failed to parse PDF from ${doc.url}:`, e)
+                logger.error(`[AddFromSource] Failed to parse PDF from ${doc.url}:`, e)
                 content = cleanedDescription || doc.title || ""
               }
             } else if (
@@ -976,7 +996,7 @@ export async function addDocumentsFromSource(
                   content = result.value || cleanedDescription || doc.title || ""
                   
                   if (result.messages.length > 0) {
-                    console.warn(`[AddFromSource] Word document conversion warnings for ${doc.url}:`, result.messages)
+                    logger.warn(`[AddFromSource] Word document conversion warnings for ${doc.url}:`, result.messages)
                   }
                   
                   if (!content.trim()) {
@@ -984,18 +1004,18 @@ export async function addDocumentsFromSource(
                   }
                 } else {
                   // Older .doc format - not supported
-                  console.warn(`[AddFromSource] Word document (.doc) format not supported for ${doc.url}`)
+                  logger.warn(`[AddFromSource] Word document (.doc) format not supported for ${doc.url}`)
                   content = cleanedDescription || doc.title || "[Word document (.doc) format is not supported. Please convert to .docx format for content extraction.]"
                 }
               } catch (e) {
-                console.error(`[AddFromSource] Failed to parse Word document from ${doc.url}:`, e)
+                logger.error(`[AddFromSource] Failed to parse Word document from ${doc.url}:`, e)
                 content = cleanedDescription || doc.title || ""
               }
             }
           }
         }
       } catch (fetchError) {
-        console.error(`[AddFromSource] Error fetching ${doc.url}:`, fetchError)
+        logger.error(`[AddFromSource] Error fetching ${doc.url}:`, fetchError)
         // Continue with metadata only if fetch fails
       }
     }
@@ -1039,7 +1059,7 @@ export async function addDocumentsFromSource(
     
     let documentSummary = ""
     
-    console.log("[AddFromSource] Content check:", {
+    logger.debug("[AddFromSource] Content check:", {
       contentLength: content?.length || 0,
       contentPreview: content?.substring(0, 50) || "empty",
       isBinaryOrFailed,
@@ -1103,7 +1123,7 @@ export async function addDocumentsFromSource(
       
       documentSummary = `${fileTypeDescription}. Content extraction not available for this file type.`
       
-      console.log("[AddFromSource] Binary/unsupported file detected:", {
+      logger.warn("[AddFromSource] Binary/unsupported file detected:", {
         fileName,
         fileExt,
         docType: doc.type,
@@ -1171,7 +1191,9 @@ Examples:
               const summary = response.choices[0]?.message?.content?.trim()
               if (summary && summary.length > 0 && summary.length <= 200) {
                 documentSummary = summary
-                console.log("[AddFromSource] Generated AI summary from Google Drive filename:", summary.substring(0, 100))
+                logger.debug("[AddFromSource] Generated AI summary from Google Drive filename:", {
+                  preview: summary.substring(0, 100),
+                })
               } else {
                 documentSummary = `${fileTypeDescription} from Google Drive: ${fileNameWithoutExt}`
               }
@@ -1179,7 +1201,7 @@ Examples:
               documentSummary = `${fileTypeDescription} from Google Drive: ${fileNameWithoutExt}`
             }
           } catch (error) {
-            console.error("[AddFromSource] Error generating summary from filename:", error)
+            logger.error("[AddFromSource] Error generating summary from filename:", error)
             documentSummary = `${fileTypeDescription} from Google Drive: ${fileNameWithoutExt}`
           }
         } else {
@@ -1201,17 +1223,17 @@ Examples:
     // Ensure we have a summary (fallback if somehow none was generated)
     if (!documentSummary || documentSummary.trim().length === 0) {
       documentSummary = "Document from external source. Content preview not available."
-      console.warn("[AddFromSource] No summary generated, using fallback")
+      logger.warn("[AddFromSource] No summary generated, using fallback")
     }
     
     // Ensure summary doesn't contain the binary file error message
     if (documentSummary.includes("[Binary file - content extraction not available]")) {
       const fileExt = fileName.split(".").pop()?.toLowerCase() || "unknown"
       documentSummary = `File (${fileExt.toUpperCase()}). Content extraction not available for this file type.`
-      console.warn("[AddFromSource] Summary contained binary error message, replaced with file type description")
+      logger.warn("[AddFromSource] Summary contained binary error message, replaced with file type description")
     }
     
-    console.log("[AddFromSource] Final document summary:", documentSummary.substring(0, 100))
+    logger.info("[AddFromSource] Final document summary:", { preview: documentSummary.substring(0, 100) })
 
     // Create or update document record using adminClient to bypass RLS
     // Store AI summary in content field for card display
@@ -1262,7 +1284,10 @@ Examples:
             const isText = doc.type?.includes("text") || fileName.toLowerCase().endsWith(".txt") || fileName.toLowerCase().endsWith(".md")
             
             if (isPDF || isWord || isText) {
-              console.log(`[AddFromSource] Creating page record for document ${document.id} (${content.length} chars)`)
+              logger.debug("[AddFromSource] Creating page record for document", {
+                documentId: document.id,
+                contentLength: content.length,
+              })
               const { error: pageError } = await adminClient
                 .from("document_pages")
                 .insert({
@@ -1274,14 +1299,14 @@ Examples:
                 })
 
               if (pageError) {
-                console.error("[AddFromSource] Failed to store content as page:", pageError)
+                logger.error("[AddFromSource] Failed to store content as page:", pageError)
               } else {
-                console.log(`[AddFromSource] Successfully stored content as page 1 for document ${document.id}`)
+                logger.debug("[AddFromSource] Stored content as single page", { documentId: document.id })
               }
             }
           }
         } catch (pageError) {
-          console.error("[AddFromSource] Error storing content as page:", pageError)
+          logger.error("[AddFromSource] Error storing content as page:", pageError)
         }
       }
       
@@ -1289,14 +1314,14 @@ Examples:
       addedDocuments.push(document)
     } else if (insertError) {
       const errorMsg = `Failed to insert document "${doc.title}": ${insertError.message}`
-      console.error(`[AddFromSource] ${errorMsg}`, insertError)
+      logger.error(`[AddFromSource] ${errorMsg}`, insertError)
       errors.push(errorMsg)
       // Clean up uploaded file if document creation fails
       if (filePath) {
         try {
           await adminClient.storage.from("documents").remove([filePath])
         } catch (cleanupError) {
-          console.error(`[AddFromSource] Failed to cleanup file ${filePath}:`, cleanupError)
+          logger.error(`[AddFromSource] Failed to cleanup file ${filePath}:`, cleanupError)
         }
       }
     }
@@ -1444,7 +1469,7 @@ export async function createWorkspaceDocument(
   try {
     source = await ensureWorkspaceGeneratedSource(workspaceId, adminClient, user.id)
   } catch (error) {
-    console.error("[WorkspaceDocument] Failed to ensure source:", error)
+    logger.error("[WorkspaceDocument] Failed to ensure source:", error)
     return {
       error: error instanceof Error ? error.message : "Failed to prepare workspace document source",
     }
@@ -1476,25 +1501,25 @@ export async function createWorkspaceDocument(
     .single()
 
   if (docError || !document) {
-    console.error("[WorkspaceDocument] Failed to create document:", docError)
+    logger.error("[WorkspaceDocument] Failed to create document:", docError)
     return { error: docError?.message || "Failed to create document" }
   }
 
   // If instructions are provided, automatically generate a draft
   if (instructions && instructions.trim()) {
     try {
-      console.log("[WorkspaceDocument] Auto-generating draft with instructions")
+      logger.info("[WorkspaceDocument] Auto-generating draft with instructions")
       const draftResult = await generateWorkspaceDocumentDraft(workspaceId, document.id, {
         instructions: instructions.trim(),
         temperature: 0.4,
       })
 
       if (draftResult.error) {
-        console.error("[WorkspaceDocument] Failed to auto-generate draft:", draftResult.error)
+        logger.error("[WorkspaceDocument] Failed to auto-generate draft:", draftResult.error)
         // Don't fail document creation if draft generation fails, just log it
         // The document is created and user can manually generate draft later
       } else {
-        console.log("[WorkspaceDocument] Successfully auto-generated draft")
+        logger.info("[WorkspaceDocument] Successfully auto-generated draft")
         // Re-fetch the document to get the updated content
         const { data: updatedDoc } = await adminClient
           .from("documents")
@@ -1508,7 +1533,7 @@ export async function createWorkspaceDocument(
         }
       }
     } catch (error) {
-      console.error("[WorkspaceDocument] Error during auto-draft generation:", error)
+      logger.error("[WorkspaceDocument] Error during auto-draft generation:", error)
       // Don't fail document creation if draft generation fails
     }
   }
@@ -1594,7 +1619,7 @@ export async function updateWorkspaceDocument(
     .single()
 
   if (updateError || !updatedDocument) {
-    console.error("[WorkspaceDocument] Failed to update document:", updateError)
+    logger.error("[WorkspaceDocument] Failed to update document:", updateError)
     return { error: updateError?.message || "Failed to update document" }
   }
 
@@ -1713,7 +1738,7 @@ Output a polished document in Markdown. Include citations inline when referring 
     const markdownDraft = response.choices[0]?.message?.content?.trim() || ""
     generatedText = markdownToHtml(markdownDraft)
   } catch (error) {
-    console.error("[WorkspaceDocument] Failed to generate draft:", error)
+    logger.error("[WorkspaceDocument] Failed to generate draft:", error)
     return {
       error: error instanceof Error ? error.message : "Failed to generate document draft",
     }
@@ -1745,7 +1770,7 @@ Output a polished document in Markdown. Include citations inline when referring 
     .single()
 
   if (updateError || !updatedDocument) {
-    console.error("[WorkspaceDocument] Failed to persist generated draft:", updateError)
+    logger.error("[WorkspaceDocument] Failed to persist generated draft:", updateError)
     return { error: updateError?.message || "Failed to save generated draft" }
   }
 

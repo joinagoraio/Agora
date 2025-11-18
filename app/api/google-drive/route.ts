@@ -2,19 +2,19 @@ import { type NextRequest, NextResponse } from "next/server"
 import { google } from "googleapis"
 import { createClient } from "@/lib/supabase/server"
 import { env } from "@/lib/env"
+import { applyRateLimitHeaders, checkRateLimit, driveRateLimit, RateLimitStatus } from "@/lib/rate-limit"
+import { getClientIdentifier } from "@/lib/utils/request"
+import { logger } from "@/lib/utils/logger"
 
 async function getValidAccessToken(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  user: any,
   providedToken?: string | null,
   refreshToken?: string | null,
 ): Promise<string | null> {
   if (providedToken) {
     return providedToken
   }
-
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
 
   if (!user) {
     return null
@@ -44,7 +44,7 @@ async function refreshAccessToken(refreshToken: string, supabase: any): Promise<
     } = await supabase.auth.refreshSession()
 
     if (refreshError) {
-      console.error("Failed to refresh Supabase session:", refreshError)
+      logger.error("Failed to refresh Supabase session:", refreshError)
       return null
     }
 
@@ -60,16 +60,36 @@ async function refreshAccessToken(refreshToken: string, supabase: any): Promise<
       return session.provider_token
     }
 
-    console.warn("No provider_token in refreshed session, user needs to re-authenticate")
+    logger.warn("No provider_token in refreshed session, user needs to re-authenticate")
     return null
   } catch (error) {
-    console.error("Error refreshing token:", error)
+    logger.error("Error refreshing token:", error)
     return null
   }
 }
 
 export async function GET(request: NextRequest) {
+  let rateLimitStatus: RateLimitStatus | undefined
   try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    const identifier = user?.id ?? getClientIdentifier(request.headers)
+    rateLimitStatus = await checkRateLimit(
+      driveRateLimit,
+      user ? `google-drive:user:${user.id}` : `google-drive:ip:${identifier}`,
+    )
+    const respondWithRateLimit = (response: NextResponse) =>
+      applyRateLimitHeaders(response, rateLimitStatus)
+
+    if (!rateLimitStatus.success) {
+      return respondWithRateLimit(
+        NextResponse.json({ error: "Google Drive rate limit exceeded. Please wait and try again." }, { status: 429 }),
+      )
+    }
+
     const searchParams = request.nextUrl.searchParams
     const action = searchParams.get("action")
     const providedToken = searchParams.get("accessToken")
@@ -79,16 +99,21 @@ export async function GET(request: NextRequest) {
     const fileId = searchParams.get("fileId")
     const pageToken = searchParams.get("pageToken")
 
-    let accessToken = await getValidAccessToken(providedToken, providedRefreshToken || undefined)
+    let accessToken = await getValidAccessToken(
+      supabase,
+      user,
+      providedToken,
+      providedRefreshToken || undefined,
+    )
 
     if (!accessToken) {
-      return NextResponse.json({ error: "Access token is required. Please authenticate with Google." }, { status: 401 })
+      return respondWithRateLimit(
+        NextResponse.json(
+          { error: "Access token is required. Please authenticate with Google." },
+          { status: 401 },
+        ),
+      )
     }
-
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
 
     const refreshToken = providedRefreshToken || user?.user_metadata?.google_refresh_token
 
@@ -109,7 +134,7 @@ export async function GET(request: NextRequest) {
           error?.message?.includes("Request had invalid authentication credentials")
 
         if (isAuthError && refreshToken && user) {
-          console.log("Access token expired, attempting refresh...")
+          logger.info("Access token expired, attempting refresh...")
           const newAccessToken = await refreshAccessToken(refreshToken, supabase)
 
           if (newAccessToken && newAccessToken !== accessToken) {
@@ -119,7 +144,7 @@ export async function GET(request: NextRequest) {
             try {
               return await requestFn()
             } catch (retryError: any) {
-              console.error("Retry after refresh also failed:", retryError)
+              logger.error("Retry after refresh also failed:", retryError)
               throw new Error(
                 "AUTH_REQUIRED: Please reconnect your Google account. The access token has expired and could not be refreshed.",
               )
@@ -145,13 +170,17 @@ export async function GET(request: NextRequest) {
         }),
       )
 
-      return NextResponse.json({
-        files: response.data.files || [],
-        nextPageToken: response.data.nextPageToken,
-      })
+      return respondWithRateLimit(
+        NextResponse.json({
+          files: response.data.files || [],
+          nextPageToken: response.data.nextPageToken,
+        }),
+      )
     } else if (action === "search") {
       if (!query) {
-        return NextResponse.json({ error: "Query parameter is required for search" }, { status: 400 })
+        return respondWithRateLimit(
+          NextResponse.json({ error: "Query parameter is required for search" }, { status: 400 }),
+        )
       }
 
       const searchQuery = `name contains '${query.replace(/'/g, "\\'")}' and trashed=false`
@@ -165,13 +194,17 @@ export async function GET(request: NextRequest) {
         }),
       )
 
-      return NextResponse.json({
-        files: response.data.files || [],
-        nextPageToken: response.data.nextPageToken,
-      })
+      return respondWithRateLimit(
+        NextResponse.json({
+          files: response.data.files || [],
+          nextPageToken: response.data.nextPageToken,
+        }),
+      )
     } else if (action === "download") {
       if (!fileId) {
-        return NextResponse.json({ error: "File ID is required for download" }, { status: 400 })
+        return respondWithRateLimit(
+          NextResponse.json({ error: "File ID is required for download" }, { status: 400 }),
+        )
       }
 
       const fileMetadata = await makeDriveRequest(() =>
@@ -191,15 +224,19 @@ export async function GET(request: NextRequest) {
         ),
       )
 
-      return NextResponse.json({
-        file: fileMetadata.data,
-        content: Buffer.from(fileResponse.data as ArrayBuffer).toString("base64"),
-      })
+      return respondWithRateLimit(
+        NextResponse.json({
+          file: fileMetadata.data,
+          content: Buffer.from(fileResponse.data as ArrayBuffer).toString("base64"),
+        }),
+      )
     } else {
-      return NextResponse.json({ error: "Invalid action. Use 'list', 'search', or 'download'" }, { status: 400 })
+      return respondWithRateLimit(
+        NextResponse.json({ error: "Invalid action. Use 'list', 'search', or 'download'" }, { status: 400 }),
+      )
     }
   } catch (error: any) {
-    console.error("Google Drive API error:", error)
+    logger.error("Google Drive API error:", error)
 
     const isAuthError =
       error?.code === 401 ||
@@ -214,33 +251,42 @@ export async function GET(request: NextRequest) {
         ? error.message
         : "Authentication failed. Please reconnect your Google account. The access token may have expired."
 
-      return NextResponse.json(
-        {
-          error: errorMessage,
-          code: "AUTH_ERROR",
-        },
-        { status: 401 },
+      return applyRateLimitHeaders(
+        NextResponse.json(
+          {
+            error: errorMessage,
+            code: "AUTH_ERROR",
+          },
+          { status: 401 },
+        ),
+        rateLimitStatus,
       )
     }
 
     if (error?.code === 403) {
-      return NextResponse.json(
-        {
-          error: "Permission denied. Please ensure you have granted the necessary permissions to access Google Drive.",
-          code: "PERMISSION_ERROR",
-        },
-        { status: 403 },
+      return applyRateLimitHeaders(
+        NextResponse.json(
+          {
+            error: "Permission denied. Please ensure you have granted the necessary permissions to access Google Drive.",
+            code: "PERMISSION_ERROR",
+          },
+          { status: 403 },
+        ),
+        rateLimitStatus,
       )
     }
 
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Google Drive API request failed",
-        code: error?.code || "UNKNOWN_ERROR",
-        details:
-          env.NODE_ENV === "development" && error instanceof Error && error.stack ? error.stack : undefined,
-      },
-      { status: error?.code || 500 },
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        {
+          error: error instanceof Error ? error.message : "Google Drive API request failed",
+          code: error?.code || "UNKNOWN_ERROR",
+          details:
+            env.NODE_ENV === "development" && error instanceof Error && error.stack ? error.stack : undefined,
+        },
+        { status: error?.code || 500 },
+      ),
+      rateLimitStatus,
     )
   }
 }

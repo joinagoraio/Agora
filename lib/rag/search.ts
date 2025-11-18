@@ -19,14 +19,15 @@ async function rewriteQueryForSearch(originalQuery: string): Promise<string> {
   const rewriteKey = generateRequestKey("rewrite-query", { query: originalQuery })
   
   return deduplicateRequest(rewriteKey, async () => {
-    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
-    
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Use cheaper model for query rewriting
-      messages: [
-        {
-          role: "system",
-          content: `You are a query rewriting assistant. Your job is to rewrite user questions into better search queries that will find relevant information in documents.
+    try {
+      const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
+      
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini", // Use cheaper model for query rewriting
+        messages: [
+          {
+            role: "system",
+            content: `You are a query rewriting assistant. Your job is to rewrite user questions into better search queries that will find relevant information in documents.
 
 Rules:
 - Extract key concepts, entities, and important terms from the question
@@ -40,15 +41,15 @@ Examples:
 - "which is the most critical issue?" → "critical issue"
 - "what are the security vulnerabilities?" → "security vulnerabilities"
 - "how do I configure the system?" → "configure system configuration`
-        },
-        {
-          role: "user",
-          content: originalQuery
-        }
-      ],
-      max_tokens: 50,
-      temperature: 0.3, // Lower temperature for more consistent results
-    })
+          },
+          {
+            role: "user",
+            content: originalQuery
+          }
+        ],
+        max_tokens: 50,
+        temperature: 0.3, // Lower temperature for more consistent results
+      })
 
       const rewritten = response.choices[0]?.message?.content?.trim()
       if (rewritten && rewritten.length > 0) {

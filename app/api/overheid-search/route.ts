@@ -1,5 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { cleanOverheidDescription } from "@/lib/utils"
+import { createClient } from "@/lib/supabase/server"
+import { applyRateLimitHeaders, checkRateLimit, searchRateLimit, RateLimitStatus } from "@/lib/rate-limit"
+import { getClientIdentifier } from "@/lib/utils/request"
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now()
@@ -8,11 +11,33 @@ export async function GET(request: NextRequest) {
   const location = searchParams.get("location")
   const maxRecords = searchParams.get("maxRecords") || "100"
 
-  if (!query) {
-    return NextResponse.json({ error: "Query parameter is required" }, { status: 400 })
-  }
+  let rateLimitStatus: RateLimitStatus | undefined
 
   try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    const identifier = user?.id ?? getClientIdentifier(request.headers)
+    rateLimitStatus = await checkRateLimit(
+      searchRateLimit,
+      user ? `overheid-search:user:${user.id}` : `overheid-search:ip:${identifier}`,
+    )
+
+    const respondWithRateLimit = (response: NextResponse) =>
+      applyRateLimitHeaders(response, rateLimitStatus)
+
+    if (!rateLimitStatus.success) {
+      return respondWithRateLimit(
+        NextResponse.json({ error: "Search rate limit exceeded. Please wait and try again." }, { status: 429 }),
+      )
+    }
+
+    if (!query) {
+      return respondWithRateLimit(NextResponse.json({ error: "Query parameter is required" }, { status: 400 }))
+    }
+
     let sruQuery = query
     if (location) {
       sruQuery = `${query} AND ${location}`
@@ -42,24 +67,30 @@ export async function GET(request: NextRequest) {
 
     const totalDuration = Date.now() - startTime
 
-    return NextResponse.json({
-      results,
-      metadata: {
-        duration: totalDuration,
-        resultCount: results.length,
-        totalRecords,
-        endpoint: sruEndpoint,
-        query: sruQuery,
-      },
-    })
+    return respondWithRateLimit(
+      NextResponse.json({
+        results,
+        metadata: {
+          duration: totalDuration,
+          resultCount: results.length,
+          totalRecords,
+          endpoint: sruEndpoint,
+          query: sruQuery,
+        },
+      }),
+    )
   } catch (error) {
     const totalDuration = Date.now() - startTime
     console.error("Overheid search error:", error)
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Search failed",
-      },
-      { status: 500 },
+
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        {
+          error: error instanceof Error ? error.message : "Search failed",
+        },
+        { status: 500 },
+      ),
+      rateLimitStatus,
     )
   }
 }

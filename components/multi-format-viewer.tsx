@@ -10,6 +10,9 @@ import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, ExternalLink, Dow
 import { cn } from "@/lib/utils"
 import { findTextSpan } from "@/lib/utils/pdf-extraction"
 import type { Highlight as ContextHighlight } from "@/lib/contexts/highlight-context"
+import { WordViewer } from "@/components/multi-format-viewer/word-viewer"
+import { HtmlViewer } from "@/components/multi-format-viewer/html-viewer"
+import { clientLogger } from "@/lib/utils/client-logger"
 
 export type DocumentType = "pdf" | "word" | "html" | "text" | "unknown"
 
@@ -230,10 +233,10 @@ export function MultiFormatViewer({
             const result = await mammoth.convertToHtml({ arrayBuffer })
             setWordContent(result.value)
             if (result.messages.length > 0) {
-              console.warn("Word conversion warnings:", result.messages)
+              clientLogger.warn("Word conversion warnings:", result.messages)
             }
           } catch (err) {
-            console.error("Error converting Word document:", err)
+            clientLogger.error("Error converting Word document:", err)
             throw new Error("Failed to convert Word document. The file may be corrupted or in an unsupported format.")
           }
         } else if (detectedType === "html") {
@@ -250,7 +253,7 @@ export function MultiFormatViewer({
 
         setLoading(false)
       } catch (err) {
-        console.error("Error loading document:", err)
+        clientLogger.error("Error loading document:", err)
         setError(err instanceof Error ? err.message : "Failed to load document")
         setLoading(false)
       }
@@ -566,7 +569,7 @@ export function MultiFormatViewer({
             }
             
             if (fallbackResult.confidence !== 'exact') {
-              console.warn(`[MultiFormatViewer] Highlight ${i} used ${fallbackResult.confidence} match`, {
+        clientLogger.warn(`[MultiFormatViewer] Highlight ${i} used ${fallbackResult.confidence} match`, {
                 original: { start: originalStart, end: originalEnd },
                 found: { start: fallbackResult.start, end: fallbackResult.end },
               })
@@ -577,7 +580,7 @@ export function MultiFormatViewer({
       
       // If we still don't have a valid textSpan, skip this highlight
       if (!finalTextSpan) {
-        console.warn("[MultiFormatViewer] Could not find valid textSpan for highlight", i, {
+        clientLogger.warn("[MultiFormatViewer] Could not find valid textSpan for highlight", i, {
           originalStart,
           originalEnd,
           textContentLength: textContent.length,
@@ -606,7 +609,7 @@ export function MultiFormatViewer({
         })
         lastIndex = end
       } else {
-        console.warn("[MultiFormatViewer] Highlight text invalid after fallback for highlight", i, {
+        clientLogger.warn("[MultiFormatViewer] Highlight text invalid after fallback for highlight", i, {
           length: highlightedText.length,
           trimmed: highlightedText.trim().length,
           confidence,
@@ -646,34 +649,36 @@ export function MultiFormatViewer({
   // Debug logging
   useEffect(() => {
     if (documentType === "text") {
-      console.log("[MultiFormatViewer] Text document detected")
-      console.log("[MultiFormatViewer] Highlights:", highlights)
-      console.log("[MultiFormatViewer] Text highlight:", textHighlight)
-      console.log("[MultiFormatViewer] Text content length:", textContent?.length || 0)
+      clientLogger.debug("[MultiFormatViewer] Text document detected", {
+        highlights,
+        textHighlight,
+        textContentLength: textContent?.length || 0,
+      })
     }
     if (documentType === "word") {
-      console.log("[MultiFormatViewer] Word document detected")
-      console.log("[MultiFormatViewer] Highlights:", highlights)
-      console.log("[MultiFormatViewer] Word highlight:", wordHighlight)
-      console.log("[MultiFormatViewer] Word plain text length:", wordPlainText?.length || 0)
+      clientLogger.debug("[MultiFormatViewer] Word document detected", {
+        highlights,
+        wordHighlight,
+        wordPlainTextLength: wordPlainText?.length || 0,
+      })
     }
   }, [documentType, highlights, textHighlight, textContent, wordHighlight, wordPlainText])
 
   // Helper function to scroll to highlight
   const scrollToTextHighlight = useCallback(() => {
     if (documentType !== "text" || !textHighlight || !textContent || !containerRef.current) {
-      console.log("[MultiFormatViewer] Scroll skipped:", { 
-        documentType, 
-        hasTextHighlight: !!textHighlight, 
-        hasTextContent: !!textContent, 
-        hasContainer: !!containerRef.current 
+      clientLogger.debug("[MultiFormatViewer] Scroll skipped", {
+        documentType,
+        hasTextHighlight: !!textHighlight,
+        hasTextContent: !!textContent,
+        hasContainer: !!containerRef.current,
       })
       return
     }
     
-    console.log("[MultiFormatViewer] Attempting to scroll to highlight:", { 
-      textHighlight, 
-      textContentLength: textContent.length 
+    clientLogger.debug("[MultiFormatViewer] Attempting to scroll to highlight", {
+      textHighlight,
+      textContentLength: textContent.length,
     })
     
     // Wait for the highlight to be rendered in the DOM
@@ -681,10 +686,10 @@ export function MultiFormatViewer({
       // Try to find the highlight element in the rendered content
       const highlightElement = containerRef.current?.querySelector(`.${TEXT_HIGHLIGHT_CLASS}`) as HTMLElement
       
-      console.log("[MultiFormatViewer] Looking for highlight element:", { 
-        found: !!highlightElement, 
+      clientLogger.debug("[MultiFormatViewer] Looking for highlight element", {
+        found: !!highlightElement,
         hasRef: !!highlightRef.current,
-        containerExists: !!containerRef.current
+        containerExists: !!containerRef.current,
       })
       
       if (highlightElement) {
@@ -702,7 +707,11 @@ export function MultiFormatViewer({
           const containerHeight = scrollContainer.clientHeight
           const scrollPosition = elementTopRelative - (containerHeight * 0.10) // 10% from top instead of center
           
-          console.log("[MultiFormatViewer] Scrolling to position:", { scrollPosition, elementTopRelative, containerHeight })
+          clientLogger.debug("[MultiFormatViewer] Scrolling to position", {
+            scrollPosition,
+            elementTopRelative,
+            containerHeight,
+          })
           
           scrollContainer.scrollTo({
             top: Math.max(0, scrollPosition),
@@ -711,7 +720,7 @@ export function MultiFormatViewer({
         }
       } else if (highlightRef.current) {
         // Fallback: use the ref if available, but calculate 10% position manually
-        console.log("[MultiFormatViewer] Using ref fallback for scrolling")
+        clientLogger.debug("[MultiFormatViewer] Using ref fallback for scrolling")
         const scrollContainer = containerRef.current
         if (scrollContainer && highlightRef.current) {
           const elementRect = highlightRef.current.getBoundingClientRect()
@@ -731,7 +740,7 @@ export function MultiFormatViewer({
           })
         }
       } else {
-        console.warn("[MultiFormatViewer] Could not find highlight element to scroll to")
+        clientLogger.warn("[MultiFormatViewer] Could not find highlight element to scroll to")
       }
     }, 300) // Increased delay to ensure DOM is updated
     
@@ -753,7 +762,7 @@ export function MultiFormatViewer({
   useEffect(() => {
     if (documentType === "text" && autoHighlight && !prevAutoHighlightRef.current && textHighlights.length > 0) {
       // autoHighlight just changed from false to true
-      console.log("[MultiFormatViewer] AutoHighlight turned on, scrolling to first highlight of", textHighlights.length, "highlights")
+      clientLogger.debug("[MultiFormatViewer] AutoHighlight turned on", { highlightCount: textHighlights.length })
       setTimeout(() => {
         scrollToTextHighlight()
       }, 200)
@@ -769,7 +778,10 @@ export function MultiFormatViewer({
       const { highlight, pageNumber } = event.detail || {}
       if (!highlight || pageNumber !== 1) return // Text documents are always page 1
 
-      console.log("[MultiFormatViewer] ScrollToHighlight event received for text document:", { highlight, pageNumber })
+      clientLogger.debug("[MultiFormatViewer] ScrollToHighlight event received for text document", {
+        highlight,
+        pageNumber,
+      })
       
       // If a specific highlight is provided, scroll to that one
       // Otherwise, scroll to the first highlight
@@ -1225,91 +1237,34 @@ export function MultiFormatViewer({
   }
 
   if (documentType === "word") {
-
     return (
-      <div className={`flex flex-col ${className}`}>
-        {!hideControls && (
-          <div className="flex items-center justify-between gap-4 border-b bg-card p-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Word Document</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={zoomOut} disabled={scale <= 0.5}>
-                <ZoomOut className="h-4 w-4" />
-              </Button>
-              <span className="text-sm text-muted-foreground">{Math.round(scale * 100)}%</span>
-              <Button variant="outline" size="sm" onClick={zoomIn} disabled={scale >= 3.0}>
-                <ZoomIn className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-white" ref={containerRef}>
-          <div className="w-full min-h-full flex items-start justify-center" style={{ padding: '2rem' }}>
-            <div
-              ref={contentRef}
-              style={{
-                // Fixed width container - width changes only in fit mode
-                maxWidth: fitMode ? "100%" : "896px",
-                width: fitMode ? "100%" : "896px",
-                overflow: "hidden", // Prevent horizontal overflow
-              }}
-            >
-              <div
-                ref={innerContentRef}
-                style={{
-                  transform: `scale(${scale}) rotate(${rotation}deg)`,
-                  transformOrigin: "top left",
-                  // Scale width inversely so scaled content fits within container
-                  width: `${100 / scale}%`,
-                }}
-              >
-                <div
-                  dangerouslySetInnerHTML={{ __html: safeWordContentForRender }}
-                  className="word-document-content"
-                  style={{
-                    fontFamily: "system-ui, -apple-system, sans-serif",
-                    lineHeight: "1.6",
-                    color: "#1f2937",
-                    width: "100%",
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <WordViewer
+        className={className}
+        hideControls={hideControls}
+        scale={scale}
+        zoomIn={zoomIn}
+        zoomOut={zoomOut}
+        fitMode={fitMode}
+        rotation={rotation}
+        containerRef={containerRef}
+        contentRef={contentRef}
+        innerContentRef={innerContentRef}
+        safeWordContent={safeWordContentForRender}
+      />
     )
   }
 
   if (documentType === "html") {
     return (
-      <div className={`flex flex-col ${className}`}>
-        {!hideControls && (
-          <div className="flex items-center justify-between gap-4 border-b bg-card p-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">HTML Document</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={zoomOut} disabled={scale <= 0.5}>
-                <ZoomOut className="h-4 w-4" />
-              </Button>
-              <span className="text-sm text-muted-foreground">{Math.round(scale * 100)}%</span>
-              <Button variant="outline" size="sm" onClick={zoomIn} disabled={scale >= 3.0}>
-                <ZoomIn className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-        <div className="flex-1 overflow-auto bg-white">
-          <iframe
-            srcDoc={sanitizedHtmlContent}
-            className="w-full h-full border-0"
-            title={documentTitle}
-            sandbox="allow-same-origin allow-scripts"
-          />
-        </div>
-      </div>
+      <HtmlViewer
+        className={className}
+        hideControls={hideControls}
+        scale={scale}
+        zoomIn={zoomIn}
+        zoomOut={zoomOut}
+        sanitizedHtmlContent={sanitizedHtmlContent}
+        documentTitle={documentTitle}
+      />
     )
   }
 
@@ -1317,7 +1272,7 @@ export function MultiFormatViewer({
     // Render text with multiple highlights
     const renderTextWithHighlights = () => {
       if (!textContent) {
-        console.log("[MultiFormatViewer] No text content available")
+        clientLogger.debug("[MultiFormatViewer] No text content available")
         return null
       }
       
@@ -1326,7 +1281,9 @@ export function MultiFormatViewer({
         return textContent
       }
       
-      console.log("[MultiFormatViewer] Rendering with", processedHighlights.length, "highlights")
+      clientLogger.debug("[MultiFormatViewer] Rendering text with highlights", {
+        highlightCount: processedHighlights.length,
+      })
       
       // Render segments with highlights
       return (

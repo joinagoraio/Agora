@@ -37,6 +37,8 @@ import type { WorkspaceNoteForContext } from "@/lib/actions/workspace-notes"
 import { getWorkspaceItems } from "@/lib/actions/workspace-item"
 import { getWorkspaceContextDetails } from "@/lib/actions/workspace"
 import { cn } from "@/lib/utils"
+import { EvidenceList } from "@/components/chat/evidence-list"
+import { clientLogger } from "@/lib/utils/client-logger"
 
 type UseAiChatOptions = Parameters<typeof useAiChat>[0]
 
@@ -169,7 +171,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
         const result = await getWorkspaceDocuments(workspaceId)
 
         if (result.error) {
-          console.error("[ChatInterface] Failed to fetch documents:", result.error)
+          clientLogger.error("[ChatInterface] Failed to fetch documents:", result.error)
         }
 
         if (documentId) {
@@ -187,7 +189,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       const evidencePromise = (async () => {
         const result = await getWorkspaceItems(workspaceId, { inheritance: "local" })
         if (result.error) {
-          console.error("[ChatInterface] Failed to fetch evidence items:", result.error)
+          clientLogger.error("[ChatInterface] Failed to fetch evidence items:", result.error)
           return []
         }
         // Filter for evidence items with include_in_ai_context=true
@@ -199,7 +201,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       const workspaceContextPromise = (async () => {
         const result = await getWorkspaceContextDetails(workspaceId)
         if (result.error) {
-          console.error("[ChatInterface] Failed to fetch workspace context:", result.error)
+          clientLogger.error("[ChatInterface] Failed to fetch workspace context:", result.error)
           return { context: null, location: null }
         }
         return result.data ?? { context: null, location: null }
@@ -215,7 +217,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       setDocuments(documentsData)
 
       if (notesResult.error) {
-        console.error("[ChatInterface] Failed to fetch workspace notes:", notesResult.error)
+        clientLogger.error("[ChatInterface] Failed to fetch workspace notes:", notesResult.error)
         setContextNotes([])
       } else {
         setContextNotes(notesResult.data)
@@ -228,7 +230,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       setWorkspaceLocation(typeof workspaceContextData.location === "string" ? workspaceContextData.location : null)
       setHasLoadedWorkspaceMetadata(true)
     } catch (error) {
-      console.error("[ChatInterface] Failed to load AI context items:", error)
+      clientLogger.error("[ChatInterface] Failed to load AI context items:", error)
       setDocuments([])
       setContextNotes([])
       setWorkspaceContextText(null)
@@ -259,7 +261,9 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     const refreshIfMatchingWorkspace = (event: CustomEvent<{ workspaceId?: string }>) => {
       const eventWorkspaceId = event.detail?.workspaceId
       if (!eventWorkspaceId || eventWorkspaceId === workspaceId) {
-        console.log(`[ChatInterface] Context event received (${event.type}), refreshing AI context items`)
+        clientLogger.debug(
+          `[ChatInterface] Context event received (${event.type}), refreshing AI context items`,
+        )
         loadContextItems()
       }
     }
@@ -322,12 +326,12 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   // Define handleHighlight before useEffects that use it
   const handleHighlight = useCallback(async (message: any) => {
     if (!documentId) {
-      console.warn("[handleHighlight] No documentId provided")
+      clientLogger.warn("[handleHighlight] No documentId provided")
       return
     }
 
     const sources = Array.isArray(message?.sources) ? message.sources : []
-    console.log("[handleHighlight] Looking for relevant sources:", {
+    clientLogger.debug("[handleHighlight] Looking for relevant sources:", {
       documentId,
       sourcesCount: sources.length,
       sources: sources.map((s: any) => ({
@@ -349,12 +353,12 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     // This ensures we highlight all phrases the AI mentions, not just what's in the sources
     const messageContent = readMessageContent(message)
     if (messageContent) {
-      console.log("[handleHighlight] Extracting citations from AI response to find highlights")
+      clientLogger.debug("[handleHighlight] Extracting citations from AI response to find highlights")
       
       // Parse structured citations and fallback quotes
       const { structured, quotes, listItems } = parseAllCitations(messageContent)
       
-      console.log("[handleHighlight] Parsed citations:", {
+      clientLogger.debug("[handleHighlight] Parsed citations:", {
         structured: structured.length,
         quotes: quotes.length,
         listItems: listItems.length,
@@ -384,7 +388,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       
       // If we have structured citations, use them directly (most accurate)
       if (structuredHighlights.length > 0) {
-        console.log("[handleHighlight] Using structured citations:", structuredHighlights.length)
+        clientLogger.debug("[handleHighlight] Using structured citations:", structuredHighlights.length)
         
         // Combine with source-based highlights
         const sourceHighlights = relevantSources.map((source: any, index: number) => {
@@ -429,7 +433,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       }
       
       // Fallback: Use regex-based extraction if no structured citations
-      console.log("[handleHighlight] No structured citations found, using fallback extraction")
+      clientLogger.debug("[handleHighlight] No structured citations found, using fallback extraction")
       
       // Combine all phrases and clean them up
       // Prioritize quoted phrases as they're most likely to be exact matches
@@ -450,11 +454,11 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
         })
         .slice(0, 15) // Limit to 15 phrases
       
-      console.log("[handleHighlight] All extracted phrases (fallback):", allPhrases)
+      clientLogger.debug("[handleHighlight] All extracted phrases (fallback):", allPhrases)
       
       if (allPhrases.length > 0) {
         // Show loading state (optional - could add a toast notification here)
-        console.log("[handleHighlight] Searching for phrases in document...")
+        clientLogger.debug("[handleHighlight] Searching for phrases in document...")
         try {
           // Search for phrases in the document
           const response = await fetch(`/api/documents/${documentId}/search-phrases`, {
@@ -466,7 +470,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           if (response.ok) {
             const result = await response.json()
             const foundHighlights = result.highlights || []
-            console.log("[handleHighlight] Found highlights from phrase search:", foundHighlights)
+            clientLogger.debug("[handleHighlight] Found highlights from phrase search:", foundHighlights)
             
             if (foundHighlights && foundHighlights.length > 0) {
               // Combine highlights from sources and phrase search
@@ -526,14 +530,14 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
             }
           }
         } catch (error) {
-          console.error("[handleHighlight] Error searching for phrases:", error)
+          clientLogger.error("[handleHighlight] Error searching for phrases:", error)
         }
       }
     }
 
     // Fallback: if we have sources with textSpan but no phrase matches, use those
     if (relevantSources.length > 0) {
-      console.log("[handleHighlight] Found relevant sources:", relevantSources.length, relevantSources)
+      clientLogger.debug("[handleHighlight] Found relevant sources:", relevantSources.length, relevantSources)
       
       // Convert sources to Highlight format
       const contextHighlights: Highlight[] = relevantSources.map((source: any, index: number) => {
@@ -553,7 +557,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
         }
       })
       
-      console.log("[handleHighlight] Built highlights array:", contextHighlights)
+      clientLogger.debug("[handleHighlight] Built highlights array:", contextHighlights)
       
       // Set highlights in context (use immediate for source-based highlights)
       setHighlights(documentId!, contextHighlights, true)
@@ -571,7 +575,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
         router.push(url.pathname + url.search)
       }
     } else {
-      console.warn("[handleHighlight] No relevant source found with highlight info")
+      clientLogger.warn("[handleHighlight] No relevant source found with highlight info")
     }
   }, [documentId, workspaceId, searchParams, router, setHighlights, setActiveDocument])
 
@@ -626,7 +630,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
               }
             }
           } catch (error) {
-            console.error("Failed to fetch message sources:", error)
+            clientLogger.error("Failed to fetch message sources:", error)
           }
         }, 500) // Wait 500ms for DB write to complete
 
@@ -660,7 +664,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   const prevInitialMessagesLengthRef = useRef<number>(initialMessages.length)
 
   useEffect(() => {
-    console.log("[ChatInterface] Messages effect:", {
+    clientLogger.debug("[ChatInterface] Messages effect:", {
       hasLoadedInitial,
       initialMessagesCount: initialMessages.length,
       conversationId,
@@ -675,7 +679,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
 
     if (!hasLoadedInitial) {
       // Initial load - load messages from initialMessages
-      console.log("[ChatInterface] Loading initial messages:", initialMessages.length)
+      clientLogger.debug("[ChatInterface] Loading initial messages:", initialMessages.length)
       if (initialMessages.length > 0) {
         setMessages(initialMessages)
       } else {
@@ -687,7 +691,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     } else if (conversationChanged && conversationId) {
       // Conversation changed - sync with initialMessages
       // This happens when switching between conversations
-      console.log("[ChatInterface] Conversation changed, syncing messages")
+      clientLogger.debug("[ChatInterface] Conversation changed, syncing messages")
       setIsSwitchingConversation(true)
       if (initialMessages.length > 0) {
         setMessages(initialMessages)
@@ -707,7 +711,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       // initialMessages updated for current conversation (e.g., after loadMessages completes)
       // Only sync if we're not currently loading to avoid overwriting streaming messages
       // and conversation hasn't changed (to avoid double-syncing)
-      console.log("[ChatInterface] initialMessages updated, syncing messages")
+      clientLogger.debug("[ChatInterface] initialMessages updated, syncing messages")
       if (initialMessages.length > 0) {
         setMessages(initialMessages)
         setIsSwitchingConversation(false)
@@ -1071,7 +1075,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       
       // Debug logging for last message
       if (index === messages.length - 1 && message.role === 'assistant') {
-        console.log("[ChatInterface] Pre-computing badges for message:", {
+        clientLogger.debug("[ChatInterface] Pre-computing badges for message:", {
           index,
           contentLength: content.length,
           contentPreview: content.substring(0, 300),
@@ -1284,7 +1288,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
               // Get documentId from source if not provided in props
               const targetDocumentId = documentId || sourceInfo.source?.id
               if (!targetDocumentId) {
-                console.warn("[handleBadgeClick] No documentId available")
+                clientLogger.warn("[handleBadgeClick] No documentId available")
                 return
               }
               // If we have a source with pageNumber and textSpan, use them directly
@@ -1348,7 +1352,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                       coordinates: highlight.coordinates,
                     }
                     
-                    console.log("[handleBadgeClick] Setting highlight in context:", contextHighlight)
+                    clientLogger.debug("[handleBadgeClick] Setting highlight in context:", contextHighlight)
                     
                     // Set single highlight in context (for icon click, only show this one)
                     // Use immediate update for user clicks (better UX)
@@ -1367,7 +1371,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                       router.push(url.pathname + url.search)
                     }
                   } else {
-                    console.warn("[handleBadgeClick] No highlights found for phrase:", quotedText)
+                    clientLogger.warn("[handleBadgeClick] No highlights found for phrase:", quotedText)
                     // If no highlights found, still navigate to the document if we have a source
                     const source = sourceInfo.source
                     if (source && source.pageNumber) {
@@ -1380,13 +1384,13 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                     }
                   }
                 } else {
-                  console.error("[handleBadgeClick] Search request failed:", response.status)
+                  clientLogger.error("[handleBadgeClick] Search request failed:", response.status)
                 }
               } catch (error) {
-                console.error("[handleBadgeClick] Error highlighting phrase:", error)
+                clientLogger.error("[handleBadgeClick] Error highlighting phrase:", error)
               }
             } else {
-              console.warn("[handleBadgeClick] Cannot handle badge click:", {
+              clientLogger.warn("[handleBadgeClick] Cannot handle badge click:", {
                 type: sourceInfo.type,
                 hasSource: !!sourceInfo.source,
                 hasDocumentId: !!documentId,
@@ -1465,7 +1469,10 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     e.preventDefault()
-                                    console.log("[ChatInterface] List item highlight icon clicked:", { itemText: itemText.substring(0, 50), sourceInfo })
+                                    clientLogger.debug("[ChatInterface] List item highlight icon clicked:", {
+                                      itemText: itemText.substring(0, 50),
+                                      sourceInfo,
+                                    })
                                     handleBadgeClick(itemText, sourceInfo)
                                   }}
                                   className="inline-flex items-center justify-center w-4 h-4 mt-0.5 rounded hover:bg-secondary/80 transition-colors cursor-pointer flex-shrink-0"
@@ -1484,7 +1491,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                           // Debug: log the raw children to see what we're working with
                           if (index === messages.length - 1 && isAssistant) {
                             const rawContent = readMessageContent(message)
-                            console.log("[ChatInterface] Processing message content:", {
+                            clientLogger.debug("[ChatInterface] Processing message content:", {
                               messageIndex: index,
                               rawContentLength: rawContent.length,
                               rawContentPreview: rawContent.substring(0, 500),
@@ -1538,7 +1545,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                                 ? { type: cachedBadgeInfo.type, source: cachedBadgeInfo.source }
                                 : findSourceForQuote(quotedText, hasDocCitation)
                               
-                              console.log("[ChatInterface] Found quote match:", { 
+                              clientLogger.debug("[ChatInterface] Found quote match:", {
                                 quotedText: quotedText.substring(0, 50), 
                                 hasDocCitation, 
                                 badgeType,
@@ -1556,7 +1563,10 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                                     onClick={(e) => {
                                       e.stopPropagation()
                                       e.preventDefault()
-                                        console.log("[ChatInterface] Highlight icon clicked:", { quotedText: quotedText.substring(0, 50), sourceInfo })
+                                        clientLogger.debug("[ChatInterface] Highlight icon clicked:", {
+                                          quotedText: quotedText.substring(0, 50),
+                                          sourceInfo,
+                                        })
                                         handleBadgeClick(quotedText, sourceInfo)
                                     }}
                                       className="inline-flex items-center justify-center w-4 h-4 rounded hover:bg-secondary/80 transition-colors cursor-pointer"
@@ -1661,7 +1671,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                             
                             // Debug: log processing results
                             if (index === messages.length - 1 && isAssistant) {
-                              console.log("[ChatInterface] processTextNode result:", {
+                              clientLogger.debug("[ChatInterface] processTextNode result:", {
                                 matchCount,
                                 partsCount: parts.length,
                                 hasBadges: parts.some(p => React.isValidElement(p) && p.type === 'span'),
@@ -2010,75 +2020,15 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                           <p className="text-xs font-medium text-muted-foreground">
                             Workspace evidence available to this chat
                           </p>
-                          {availableEvidence.length > 0 && (
-                            <div>
-                              <p className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground/90">
-                                Included ({availableEvidence.length}):
-                              </p>
-                              <div className="flex flex-wrap gap-2">
-                                {availableEvidence.map((item) => {
-                                  const question = item.payload?.question || "Saved evidence"
-                                  const truncatedQuestion =
-                                    question.length > 120 ? `${question.slice(0, 120)}…` : question
-                                  return (
-                                    <Tooltip key={item.id}>
-                                      <TooltipTrigger asChild>
-                                        <Badge
-                                          variant="secondary"
-                                          className="cursor-pointer hover:bg-secondary/80 pr-1"
-                                          onClick={() => handleRemoveEvidence(item.id)}
-                                        >
-                                          <FileText className="mr-1 h-3 w-3" />
-                                          <span className="max-w-[220px] truncate">{truncatedQuestion}</span>
-                                          <X className="ml-1 h-3 w-3" />
-                                        </Badge>
-                                      </TooltipTrigger>
-                                      <TooltipContent className="max-w-xs">
-                                        <p className="text-xs leading-relaxed">{question}</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )}
-                          {excludedEvidence.length > 0 && (
-                            <div>
-                              <p className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground/70">
-                                Excluded ({excludedEvidence.length}):
-                              </p>
-                              <div className="flex flex-wrap gap-2">
-                                {excludedEvidence.map((item) => {
-                                  const question = item.payload?.question || "Saved evidence"
-                                  const truncatedQuestion =
-                                    question.length > 120 ? `${question.slice(0, 120)}…` : question
-                                  return (
-                                    <Tooltip key={item.id}>
-                                      <TooltipTrigger asChild>
-                                        <Badge
-                                          variant="outline"
-                                          className="cursor-pointer hover:bg-accent pr-1 opacity-70"
-                                          onClick={() => handleRestoreEvidence(item.id)}
-                                        >
-                                          <FileText className="mr-1 h-3 w-3" />
-                                          <span className="max-w-[220px] truncate line-through">{truncatedQuestion}</span>
-                                          <Plus className="ml-1 h-3 w-3" />
-                                        </Badge>
-                                      </TooltipTrigger>
-                                      <TooltipContent className="max-w-xs">
-                                        <p className="text-xs leading-relaxed">{question}</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )}
-                          {availableEvidence.length === 0 && excludedEvidence.length === 0 && (
-                            <p className="text-xs text-muted-foreground">
-                              No workspace evidence items yet. Save answers as evidence from the chat above and they’ll appear here.
-                            </p>
-                          )}
+                          <EvidenceList
+                            available={availableEvidence}
+                            excluded={excludedEvidence}
+                            onRemove={handleRemoveEvidence}
+                            onRestore={handleRestoreEvidence}
+                            includedLabelClassName="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground/90"
+                            excludedLabelClassName="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground/70"
+                            emptyMessage="No workspace evidence items yet. Save answers as evidence from the chat above and they’ll appear here."
+                          />
                         </div>
                       </div>
                     ) : (
@@ -2219,71 +2169,15 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                       </TabsContent>
 
                       <TabsContent value="evidence" className="space-y-3 mt-3">
-                        {availableEvidence.length > 0 && (
-                          <div>
-                            <p className="mb-2 text-xs font-medium text-muted-foreground">
-                              Included ({availableEvidence.length}):
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              {availableEvidence.map((item) => {
-                                const question = item.payload?.question || "Saved evidence"
-                                const truncatedQuestion = question.length > 100 ? `${question.slice(0, 100)}...` : question
-                                return (
-                                  <Tooltip key={item.id}>
-                                    <TooltipTrigger asChild>
-                                      <Badge
-                                        variant="secondary"
-                                        className="cursor-pointer hover:bg-secondary/80 pr-1"
-                                        onClick={() => handleRemoveEvidence(item.id)}
-                                      >
-                                        <FileText className="mr-1 h-3 w-3" />
-                                        <span className="max-w-[200px] truncate">{truncatedQuestion}</span>
-                                        <X className="ml-1 h-3 w-3" />
-                                      </Badge>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>{question}</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        )}
-                        {excludedEvidence.length > 0 && (
-                          <div>
-                            <p className="mb-2 text-xs font-medium text-muted-foreground">
-                              Excluded ({excludedEvidence.length}):
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              {excludedEvidence.map((item) => {
-                                const question = item.payload?.question || "Saved evidence"
-                                const truncatedQuestion = question.length > 100 ? `${question.slice(0, 100)}...` : question
-                                return (
-                                  <Tooltip key={item.id}>
-                                    <TooltipTrigger asChild>
-                                      <Badge
-                                        variant="outline"
-                                        className="cursor-pointer hover:bg-accent pr-1 opacity-60"
-                                        onClick={() => handleRestoreEvidence(item.id)}
-                                      >
-                                        <FileText className="mr-1 h-3 w-3" />
-                                        <span className="max-w-[200px] truncate line-through">{truncatedQuestion}</span>
-                                        <Plus className="ml-1 h-3 w-3" />
-                                      </Badge>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>{question}</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        )}
-                        {availableEvidence.length === 0 && excludedEvidence.length === 0 && (
-                          <p className="text-xs text-muted-foreground">No evidence items</p>
-                        )}
+                        <EvidenceList
+                          available={availableEvidence}
+                          excluded={excludedEvidence}
+                          onRemove={handleRemoveEvidence}
+                          onRestore={handleRestoreEvidence}
+                          includedLabelClassName="mb-2 text-xs font-medium text-muted-foreground"
+                          excludedLabelClassName="mb-2 text-xs font-medium text-muted-foreground"
+                          emptyMessage="No evidence items"
+                        />
                       </TabsContent>
 
                       <TabsContent value="notes" className="space-y-3 mt-3">

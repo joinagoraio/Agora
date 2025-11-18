@@ -10,6 +10,7 @@ import { invalidateCacheByTag } from "@/lib/cache/api-cache"
 import { env } from "@/lib/env"
 import { getClientIdentifier } from "@/lib/utils/request"
 import { createSafeErrorResponse } from "@/lib/utils/api-error-handler"
+import { logger } from "@/lib/utils/logger"
 
 // Helper function to strip markdown syntax for better AI processing
 function stripMarkdown(text: string): string {
@@ -59,7 +60,11 @@ async function generateDocumentSummary(content: string, title?: string, isMarkdo
     // Take a sample of the content (first 2000 chars for efficiency)
     const contentSample = processedContent.substring(0, 2000)
     
-    console.log("[Upload API] Generating summary for", isMarkdown ? "markdown" : "document", "- content length:", content.length, "processed length:", processedContent.length)
+    logger.info("[Upload API] Generating summary", {
+      documentType: isMarkdown ? "markdown" : "document",
+      contentLength: content.length,
+      processedLength: processedContent.length,
+    })
     
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini", // Use cheaper model for summarization
@@ -94,11 +99,11 @@ Examples:
 
     const summary = response.choices[0]?.message?.content?.trim()
     if (summary && summary.length > 0 && summary.length <= 200) {
-      console.log("[Upload API] Generated AI summary:", summary.substring(0, 100))
+      logger.debug("[Upload API] Generated AI summary", { preview: summary.substring(0, 100) })
       return summary
     }
   } catch (error) {
-    console.error("[Upload API] Error generating summary:", error)
+    logger.error("[Upload API] Error generating summary:", error)
   }
 
   // Fallback: return first 150 characters (strip markdown if needed)
@@ -180,7 +185,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (workspaceLookupError) {
-      console.error("[Upload] Workspace lookup error:", workspaceLookupError)
+      logger.error("[Upload] Workspace lookup error:", workspaceLookupError)
       return respondWithRateLimit(
         NextResponse.json({ error: "Unable to verify workspace access" }, { status: 500 }),
       )
@@ -215,7 +220,7 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (sourceError || !newSource) {
-        console.error("[Upload] Source creation error:", sourceError)
+        logger.error("[Upload] Source creation error:", sourceError)
         return respondWithSafeError(
           sourceError,
           "Failed to create upload source. Please verify workspace configuration.",
@@ -237,7 +242,7 @@ export async function POST(req: NextRequest) {
     })
 
     if (uploadError) {
-      console.error("[Upload] Storage upload error:", uploadError)
+      logger.error("[Upload] Storage upload error:", uploadError)
       return respondWithSafeError(uploadError, "Upload failed. Please try again.", 500, rateLimitResult)
     }
 
@@ -262,9 +267,13 @@ export async function POST(req: NextRequest) {
     
     if (validated.file.type === "text/plain" || validated.file.type === "text/markdown" || isMarkdownFile) {
       content = await validated.file.text()
-      console.log("[Upload API] Processing text/markdown file:", validated.file.name, "Size:", validated.file.size, "bytes", "Content length:", content.length)
+      logger.info("[Upload API] Processing text/markdown file", {
+        name: validated.file.name,
+        size: validated.file.size,
+        contentLength: content.length,
+      })
     } else if (validated.file.type === "application/pdf") {
-      console.log("[Upload] Processing PDF file:", validated.file.name, "Size:", validated.file.size, "bytes")
+      logger.info("[Upload API] Processing PDF file", { name: validated.file.name, size: validated.file.size })
       try {
         const arrayBuffer = await validated.file.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
@@ -294,20 +303,23 @@ export async function POST(req: NextRequest) {
         content = content.replace(/\\u(?![\da-fA-F]{4})/g, "u")
         content = content.replace(/\\(?![nrtbf\\'"xu0-7])/g, "")
 
-        console.log(`[Upload API] Extracted ${content.length} characters from PDF`)
+        logger.debug("[Upload API] Extracted characters from PDF", { contentLength: content.length })
       } catch (pdfError) {
-        console.error("[Upload API] PDF parsing error:", pdfError)
+        logger.error("[Upload API] PDF parsing error:", pdfError)
         content = `[Failed to extract PDF content: ${pdfError instanceof Error ? pdfError.message : "Unknown error"}]`
       }
     } else if (
       validated.file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ) {
-      console.log("[Upload API] Processing Word document (.docx):", validated.file.name, "Size:", validated.file.size, "bytes")
+      logger.info("[Upload API] Processing Word document (.docx)", {
+        name: validated.file.name,
+        size: validated.file.size,
+      })
       try {
         // Convert File to ArrayBuffer, then to Buffer for Word parsing
         const arrayBuffer = await validated.file.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
-        console.log("[Upload API] Converted to Buffer, size:", buffer.length, "bytes")
+        logger.debug("[Upload API] Converted Word document to Buffer", { size: buffer.length })
         
         // Use mammoth to extract text content from Word document
         const mammoth = await import("mammoth")
@@ -316,22 +328,25 @@ export async function POST(req: NextRequest) {
         content = result.value || ""
         
         if (result.messages.length > 0) {
-          console.warn("[Upload API] Word document conversion warnings:", result.messages)
+          logger.warn("[Upload API] Word document conversion warnings:", result.messages)
         }
         
         if (!content.trim()) {
-          console.warn("[Upload API] Word document appears to be empty or contains no extractable text")
+          logger.warn("[Upload API] Word document appears empty or lacks extractable text")
           content = "[Word document appears to be empty or contains only images/formatting that could not be extracted as text]"
         } else {
-          console.log(`[Upload API] Successfully extracted ${content.length} characters from Word document`)
+          logger.debug("[Upload API] Extracted characters from Word document", { contentLength: content.length })
         }
       } catch (error) {
-        console.error("[Upload API] Word document parsing error:", error)
+        logger.error("[Upload API] Word document parsing error:", error)
         content = `[Failed to extract Word document content: ${error instanceof Error ? error.message : "Unknown error"}]`
       }
     } else if (validated.file.type === "application/msword") {
       // Older .doc format - mammoth doesn't support it
-      console.log("[Upload API] Processing Word document (.doc):", validated.file.name, "Size:", validated.file.size, "bytes")
+      logger.info("[Upload API] Processing Word document (.doc)", {
+        name: validated.file.name,
+        size: validated.file.size,
+      })
       content = "[Word document (.doc) format is not supported. Please convert to .docx format for content extraction.]"
     } else {
       content = "[Binary file - content extraction not available]"
@@ -353,7 +368,7 @@ export async function POST(req: NextRequest) {
       content === binaryFileMessage ||
       content.trim() === binaryFileMessage.trim()
     
-    console.log("[Upload API] Content check:", {
+    logger.debug("[Upload API] Content check", {
       contentLength: content?.length || 0,
       contentPreview: content?.substring(0, 50) || "empty",
       isBinaryOrFailed,
@@ -411,7 +426,7 @@ export async function POST(req: NextRequest) {
       
       documentSummary = `${fileTypeDescription}. Content extraction not available for this file type.`
       
-      console.log("[Upload API] Binary/unsupported file detected:", {
+      logger.warn("[Upload API] Binary/unsupported file detected", {
         fileName: validated.file.name,
         fileExt,
         fileType: validated.file.type,
@@ -428,17 +443,17 @@ export async function POST(req: NextRequest) {
     // Ensure we have a summary (fallback if somehow none was generated)
     if (!documentSummary || documentSummary.trim().length === 0) {
       documentSummary = "Document uploaded. Content preview not available."
-      console.warn("[Upload API] No summary generated, using fallback")
+      logger.warn("[Upload API] No summary generated, using fallback")
     }
     
     // Ensure summary doesn't contain the binary file error message
     if (documentSummary.includes("[Binary file - content extraction not available]")) {
       const fileExt = validated.file.name.split(".").pop()?.toLowerCase() || "unknown"
       documentSummary = `File (${fileExt.toUpperCase()}). Content extraction not available for this file type.`
-      console.warn("[Upload API] Summary contained binary error message, replaced with file type description")
+      logger.warn("[Upload API] Summary contained binary error message, replaced with file type description")
     }
     
-    console.log("[Upload API] Final document summary:", documentSummary.substring(0, 100))
+    logger.info("[Upload API] Final document summary", { preview: documentSummary.substring(0, 100) })
 
     // Sanitize content for database
     const sanitizeContentForDatabase = (text: string): string => {
@@ -470,7 +485,7 @@ export async function POST(req: NextRequest) {
 
     if (docError) {
       await adminClient.storage.from("documents").remove([filePath])
-      console.error("[Upload] Document creation error:", docError)
+      logger.error("[Upload] Document creation error:", docError)
       return respondWithSafeError(docError, "Failed to create document record.", 500, rateLimitResult)
     }
 
@@ -509,12 +524,12 @@ export async function POST(req: NextRequest) {
 
         if (pages.length > 0) {
           const { error: pageError } = await adminClient.from("document_pages").insert(pages)
-          if (pageError) {
-            console.error("[Upload] Failed to store PDF pages:", pageError)
+        if (pageError) {
+          logger.error("[Upload] Failed to store PDF pages:", pageError)
           }
         }
       } catch (pageError) {
-        console.error("[Upload] Error storing PDF pages:", pageError)
+        logger.error("[Upload] Error storing PDF pages:", pageError)
       }
     } else if (
       validated.file.type === "text/plain" ||
@@ -533,13 +548,13 @@ export async function POST(req: NextRequest) {
             character_offsets: {},
           })
 
-          if (pageError) {
-            console.error("[Upload API] Failed to store text/markdown content as page:", pageError)
+        if (pageError) {
+          logger.error("[Upload API] Failed to store text/markdown content as page:", pageError)
           } else {
-            console.log(`[Upload API] Successfully stored text/markdown content as page 1 for document ${document.id}`)
+          logger.debug("[Upload API] Stored text/markdown content as page 1", { documentId: document.id })
           }
         } catch (pageError) {
-          console.error("[Upload API] Error storing text/markdown content as page:", pageError)
+        logger.error("[Upload API] Error storing text/markdown content as page:", pageError)
         }
       }
     } else if (
@@ -549,7 +564,7 @@ export async function POST(req: NextRequest) {
       // Store Word document content as pages for RAG/search
       if (content && content.trim() && !content.startsWith("[Failed") && !content.startsWith("[Binary")) {
         try {
-          console.log(`[Upload API] Creating page record for Word document (${content.length} chars)`)
+          logger.debug("[Upload API] Creating page record for Word document", { contentLength: content.length })
           const { error: pageError } = await adminClient.from("document_pages").insert({
             document_id: document.id,
             page_number: 1,
@@ -558,13 +573,13 @@ export async function POST(req: NextRequest) {
             character_offsets: {},
           })
 
-          if (pageError) {
-            console.error("[Upload API] Failed to store Word document content as page:", pageError)
+        if (pageError) {
+          logger.error("[Upload API] Failed to store Word document content as page:", pageError)
           } else {
-            console.log(`[Upload API] Successfully stored Word document content as page 1 for document ${document.id}`)
+          logger.debug("[Upload API] Stored Word document content as page 1", { documentId: document.id })
           }
         } catch (pageError) {
-          console.error("[Upload API] Error storing Word document content as page:", pageError)
+        logger.error("[Upload API] Error storing Word document content as page:", pageError)
         }
       }
     }
@@ -576,7 +591,7 @@ export async function POST(req: NextRequest) {
     
     return respondWithRateLimit(NextResponse.json({ data: document }))
   } catch (error) {
-    console.error("[Upload API] Error:", error)
+    logger.error("[Upload API] Error:", error)
     return respondWithSafeError(error, "An error occurred during upload.", 500, rateLimitResult)
   }
 }
