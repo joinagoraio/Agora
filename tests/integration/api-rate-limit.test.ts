@@ -28,22 +28,36 @@ describe("Rate Limiting", () => {
 
     it("returns success when rate limit is not exceeded", async () => {
       const mockLimiter = {
-        limit: vi.fn().mockResolvedValue({ success: true, reset: Date.now() + 60000 }),
+        limit: vi.fn().mockResolvedValue({
+          success: true,
+          limit: 20,
+          remaining: 19,
+          reset: Date.now() + 60000,
+        }),
       }
 
       const result = await checkRateLimit(mockLimiter as any, "test-key")
       expect(result.success).toBe(true)
       expect(result.reset).toBeDefined()
+      expect(result.limit).toBe(20)
+      expect(result.remaining).toBe(19)
     })
 
     it("returns failure when rate limit is exceeded", async () => {
       const mockLimiter = {
-        limit: vi.fn().mockResolvedValue({ success: false, reset: Date.now() + 60000 }),
+        limit: vi.fn().mockResolvedValue({
+          success: false,
+          limit: 20,
+          remaining: 0,
+          reset: Date.now() + 60000,
+        }),
       }
 
       const result = await checkRateLimit(mockLimiter as any, "test-key")
       expect(result.success).toBe(false)
       expect(result.reset).toBeDefined()
+      expect(result.limit).toBe(20)
+      expect(result.remaining).toBe(0)
     })
   })
 })

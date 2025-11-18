@@ -26,15 +26,27 @@ export const chatRateLimit = createLimiter([10, "1 m"])
 export const uploadRateLimit = createLimiter([5, "1 m"])
 export const searchRateLimit = createLimiter([20, "1 m"])
 
+export type RateLimitStatus = {
+  success: boolean
+  limit?: number
+  remaining?: number
+  reset?: number
+}
+
 export async function checkRateLimit(
   limiter: Ratelimit | null,
   key: string,
-): Promise<{ success: boolean; reset?: number }> {
+): Promise<RateLimitStatus> {
   if (!limiter) {
     return { success: true }
   }
 
   const result = await limiter.limit(key)
-  return { success: result.success, reset: result.reset }
+  return {
+    success: result.success,
+    limit: result.limit,
+    remaining: result.remaining,
+    reset: result.reset,
+  }
 }
 

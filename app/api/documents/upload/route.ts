@@ -8,6 +8,7 @@ import { checkRateLimit, uploadRateLimit } from "@/lib/rate-limit"
 import { requireAuthAndPermission } from "@/lib/middleware/authorization"
 import { invalidateCacheByTag } from "@/lib/cache/api-cache"
 import { env } from "@/lib/env"
+import { getSafeErrorMessage } from "@/lib/utils/errors"
 
 // Helper function to strip markdown syntax for better AI processing
 function stripMarkdown(text: string): string {
@@ -203,11 +204,10 @@ export async function POST(req: NextRequest) {
 
       if (sourceError || !newSource) {
         console.error("[Upload] Source creation error:", sourceError)
-        return NextResponse.json(
-          {
-            error: `Failed to create upload source: ${sourceError?.message || "Unknown error"}. Make sure you've run the database migration to add 'direct_upload' source type.`,
-          },
-          { status: 500 }
+        return respondWithSafeError(
+          sourceError,
+          "Failed to create upload source. Please verify workspace configuration.",
+          500,
         )
       }
       source = newSource
@@ -224,7 +224,8 @@ export async function POST(req: NextRequest) {
     })
 
     if (uploadError) {
-      return NextResponse.json({ error: `Upload failed: ${uploadError.message}` }, { status: 500 })
+      console.error("[Upload] Storage upload error:", uploadError)
+      return respondWithSafeError(uploadError, "Upload failed. Please try again.", 500)
     }
 
     // Get public URL using admin client
@@ -456,7 +457,8 @@ export async function POST(req: NextRequest) {
 
     if (docError) {
       await adminClient.storage.from("documents").remove([filePath])
-      return NextResponse.json({ error: `Failed to create document: ${docError.message}` }, { status: 500 })
+      console.error("[Upload] Document creation error:", docError)
+      return respondWithSafeError(docError, "Failed to create document record.", 500)
     }
 
     // Store PDF pages if we extracted them
@@ -562,9 +564,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ data: document })
   } catch (error) {
     console.error("[Upload API] Error:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "An error occurred during upload" },
-      { status: 500 }
-    )
+    return respondWithSafeError(error, "An error occurred during upload.", 500)
   }
+}
+
+function respondWithSafeError(error: unknown, fallbackMessage: string, status: number) {
+  const safe = getSafeErrorMessage(error)
+  const message =
+    safe.message && safe.message !== "An unexpected error occurred" ? safe.message : fallbackMessage
+  return NextResponse.json({ error: message }, { status })
 }

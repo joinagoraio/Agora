@@ -26,13 +26,30 @@ export function getSecurityHeaders(): SecurityHeaders {
  * Get Content Security Policy
  */
 function getCSP(): string {
+  const isDev = process.env.NODE_ENV !== "production"
+
+  const scriptSources = ["'self'"]
+  if (isDev) {
+    scriptSources.push("'unsafe-eval'", "'unsafe-inline'", "https://vercel.live")
+  }
+
+  const connectSources = [
+    "'self'",
+    "https://*.supabase.co",
+    "https://*.openai.com",
+    "https://*.upstash.io",
+  ]
+  if (isDev) {
+    connectSources.push("https://vercel.live")
+  }
+
   const directives = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://vercel.live", // unsafe-eval needed for Next.js
+    `script-src ${scriptSources.join(" ")}`,
     "style-src 'self' 'unsafe-inline'", // unsafe-inline needed for Tailwind
     "img-src 'self' data: https: blob:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co https://*.openai.com https://*.upstash.io https://vercel.live",
+    `connect-src ${connectSources.join(" ")}`,
     "frame-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
