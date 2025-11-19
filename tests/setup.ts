@@ -1,6 +1,9 @@
-import { afterEach } from "vitest"
+import { afterEach, vi } from "vitest"
 import { cleanup } from "@testing-library/react"
 import "@testing-library/jest-dom/vitest"
+
+// Mock server-only module for tests (it throws in client components, but tests run in Node.js)
+vi.mock("server-only", () => ({}))
 
 const requiredEnvDefaults: Record<string, string> = {
   NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321",

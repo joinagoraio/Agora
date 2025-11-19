@@ -11,6 +11,7 @@ import { env } from "@/lib/env"
 import { getClientIdentifier } from "@/lib/utils/request"
 import { createSafeErrorResponse } from "@/lib/utils/api-error-handler"
 import { logger } from "@/lib/utils/logger"
+import { validateFileMagicNumber } from "@/lib/utils/file-validation"
 
 // Helper function to strip markdown syntax for better AI processing
 function stripMarkdown(text: string): string {
@@ -167,6 +168,17 @@ export async function POST(req: NextRequest) {
     }
 
     const validated = validationResult.data
+
+    // Validate file magic number to prevent MIME type spoofing
+    const isValidFileType = await validateFileMagicNumber(validated.file, validated.file.type)
+    if (!isValidFileType) {
+      return respondWithRateLimit(
+        NextResponse.json(
+          { error: "File type validation failed. File content does not match declared type." },
+          { status: 400 },
+        ),
+      )
+    }
 
     // Authorization check before admin operation
     try {

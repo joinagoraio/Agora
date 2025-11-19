@@ -1386,6 +1386,14 @@ export async function ensureOverheidNLSource(
   workspaceId: string,
 ): Promise<{ data?: { id: string }; error?: string }> {
   const supabase = await createClient()
+  
+  // Authorization check before admin operation
+  try {
+    await requireAuthAndPermission("workspace:read", { workspaceId })
+  } catch (authError) {
+    return { error: authError instanceof Error ? authError.message : "Unauthorized" }
+  }
+
   const adminClient = createAdminClient()
 
   const {
@@ -1445,6 +1453,14 @@ export async function createWorkspaceDocument(
   },
 ) {
   const supabase = await createClient()
+  
+  // Authorization check before admin operation
+  try {
+    await requireAuthAndPermission("workspace_item:create", { workspaceId })
+  } catch (authError) {
+    return { error: authError instanceof Error ? authError.message : "Unauthorized" }
+  }
+
   const adminClient = createAdminClient()
 
   const {
