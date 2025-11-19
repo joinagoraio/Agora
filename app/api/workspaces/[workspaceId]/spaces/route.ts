@@ -1,13 +1,16 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import { attachParentSpace, detachParentSpace, getWorkspaceParentSpaces } from "@/lib/actions/workspace-space-link"
+import { assertUUIDParam } from "@/lib/utils/param-validation"
+import { ValidationError } from "@/lib/utils/errors"
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ workspaceId: string }> },
 ) {
   try {
-    const { workspaceId } = await params
+    const rawParams = await params
+    const workspaceId = assertUUIDParam(rawParams.workspaceId, "workspaceId")
 
     const supabase = await createClient()
     const {
@@ -26,6 +29,9 @@ export async function GET(
 
     return NextResponse.json({ data })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
     console.error("[v0] Workspace spaces API error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
@@ -36,8 +42,10 @@ export async function POST(
   { params }: { params: Promise<{ workspaceId: string }> },
 ) {
   try {
-    const { workspaceId } = await params
-    const { spaceId } = await req.json()
+    const rawParams = await params
+    const workspaceId = assertUUIDParam(rawParams.workspaceId, "workspaceId")
+    const { spaceId: rawSpaceId } = await req.json()
+    const spaceId = assertUUIDParam(rawSpaceId, "spaceId")
 
     if (!spaceId) {
       return NextResponse.json({ error: "spaceId is required" }, { status: 400 })
@@ -51,6 +59,9 @@ export async function POST(
 
     return NextResponse.json({ data }, { status: 201 })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
     console.error("[v0] Workspace spaces API error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
@@ -61,7 +72,8 @@ export async function DELETE(
   { params }: { params: Promise<{ workspaceId: string }> },
 ) {
   try {
-    const { workspaceId } = await params
+    const rawParams = await params
+    const workspaceId = assertUUIDParam(rawParams.workspaceId, "workspaceId")
     const url = new URL(req.url)
     const spaceId = url.searchParams.get("spaceId")
 
@@ -69,7 +81,9 @@ export async function DELETE(
       return NextResponse.json({ error: "spaceId is required" }, { status: 400 })
     }
 
-    const { error } = await detachParentSpace(workspaceId, spaceId)
+    const sanitizedSpaceId = assertUUIDParam(spaceId, "spaceId")
+
+    const { error } = await detachParentSpace(workspaceId, sanitizedSpaceId)
 
     if (error) {
       return NextResponse.json({ error }, { status: 400 })
@@ -77,6 +91,9 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
     console.error("[v0] Workspace spaces API error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }

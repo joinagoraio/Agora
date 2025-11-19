@@ -1,12 +1,17 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
+import { assertUUIDParam } from "@/lib/utils/param-validation"
+import { ValidationError } from "@/lib/utils/errors"
 
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ workspaceId: string; itemId: string; commentId: string }> },
 ) {
   try {
-    const { workspaceId, itemId, commentId } = await params
+    const rawParams = await params
+    const workspaceId = assertUUIDParam(rawParams.workspaceId, "workspaceId")
+    const itemId = assertUUIDParam(rawParams.itemId, "itemId")
+    const commentId = assertUUIDParam(rawParams.commentId, "commentId")
     const supabase = await createClient()
 
     const {
@@ -32,6 +37,9 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
     console.error("[workspace-comments] Unexpected DELETE error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }

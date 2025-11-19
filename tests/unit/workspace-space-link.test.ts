@@ -3,9 +3,16 @@ import type { Mock } from "vitest"
 
 import { getInheritedItems } from "../../lib/actions/workspace-space-link"
 import { createClient } from "../../lib/supabase/server"
+import { requireAuthAndPermission } from "@/lib/middleware/authorization"
+
+const WORKSPACE_ID = "00000000-0000-0000-0000-000000000001"
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
+}))
+
+vi.mock("@/lib/middleware/authorization", () => ({
+  requireAuthAndPermission: vi.fn(),
 }))
 
 type WorkspaceSpaceLinkRecord = { space_id: string }
@@ -18,6 +25,7 @@ describe("getInheritedItems", () => {
   let spaceItemsData: SpaceItemRecord[]
   let workspaceLinksQuery: any
   let spaceItemsQuery: any
+  let requireAuthMock: Mock
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -64,14 +72,18 @@ describe("getInheritedItems", () => {
     }
 
     mockedCreateClient.mockResolvedValue(supabaseMock)
+    requireAuthMock = requireAuthAndPermission as unknown as Mock
+    requireAuthMock.mockReset()
+    requireAuthMock.mockResolvedValue(undefined)
   })
 
   it("returns unauthorized when user is missing", async () => {
     supabaseMock.auth.getUser.mockResolvedValue({
       data: { user: null },
     })
+    requireAuthMock.mockRejectedValueOnce(new Error("Unauthorized"))
 
-    const result = await getInheritedItems("workspace-1")
+    const result = await getInheritedItems(WORKSPACE_ID)
 
     expect(result.error).toBe("Unauthorized")
     expect(result.data).toEqual([])
@@ -79,22 +91,22 @@ describe("getInheritedItems", () => {
   })
 
   it("returns empty data when workspace has no parent spaces", async () => {
-    workspaceLinksData = []
+    workspaceLinksData.splice(0, workspaceLinksData.length)
 
-    const result = await getInheritedItems("workspace-1")
+    const result = await getInheritedItems(WORKSPACE_ID)
 
     expect(result.data).toEqual([])
     expect(spaceItemsQuery.select).not.toHaveBeenCalled()
   })
 
   it("fetches inherited items filtering by visibility or classification", async () => {
-    workspaceLinksData = [{ space_id: "space-1" }, { space_id: "space-2" }]
-    spaceItemsData = [
+    workspaceLinksData.push({ space_id: "space-1" }, { space_id: "space-2" })
+    spaceItemsData.push(
       { id: "item-public", visibility: "public", classification: "internal" },
       { id: "item-classified", visibility: "internal", classification: "public" },
-    ]
+    )
 
-    const result = await getInheritedItems("workspace-1")
+    const result = await getInheritedItems(WORKSPACE_ID)
 
     expect(spaceItemsQuery.in).toHaveBeenCalledWith("space_id", ["space-1", "space-2"])
     expect(spaceItemsQuery.or).toHaveBeenCalledWith("visibility.eq.public,classification.eq.public")

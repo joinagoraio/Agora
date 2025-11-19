@@ -1,13 +1,16 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import { getWorkspaceItems, createWorkspaceItem } from "@/lib/actions/workspace-item"
+import { assertUUIDParam } from "@/lib/utils/param-validation"
+import { ValidationError } from "@/lib/utils/errors"
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ workspaceId: string }> },
 ) {
   try {
-    const { workspaceId } = await params
+    const rawParams = await params
+    const workspaceId = assertUUIDParam(rawParams.workspaceId, "workspaceId")
     const searchParams = req.nextUrl.searchParams
     const inheritance = searchParams.get("inheritance") as "reference" | "local" | null
     const classification = searchParams.get("classification") as "public" | "internal" | "confidential" | null
@@ -33,6 +36,9 @@ export async function GET(
 
     return NextResponse.json({ data })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
     console.error("[v0] Workspace items API error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
@@ -43,7 +49,8 @@ export async function POST(
   { params }: { params: Promise<{ workspaceId: string }> },
 ) {
   try {
-    const { workspaceId } = await params
+    const rawParams = await params
+    const workspaceId = assertUUIDParam(rawParams.workspaceId, "workspaceId")
     const body = await req.json()
 
     const { data, error } = await createWorkspaceItem(workspaceId, body)
@@ -54,6 +61,9 @@ export async function POST(
 
     return NextResponse.json({ data }, { status: 201 })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
     console.error("[v0] Workspace items API error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }

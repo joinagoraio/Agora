@@ -5,13 +5,16 @@ import { Buffer } from "node:buffer"
 import { publishSpaceItem } from "@/lib/actions/space-item"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { assertUUIDParam } from "@/lib/utils/param-validation"
+import { ValidationError } from "@/lib/utils/errors"
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ spaceId: string }> },
 ) {
   try {
-    const { spaceId } = await params
+    const rawParams = await params
+    const spaceId = assertUUIDParam(rawParams.spaceId, "spaceId")
     const supabase = await createClient()
     const adminClient = createAdminClient()
 
@@ -112,6 +115,9 @@ export async function POST(
 
     return NextResponse.json({ data, warnings }, { status: 201 })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
     console.error("[SpaceUpload] Unexpected error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }

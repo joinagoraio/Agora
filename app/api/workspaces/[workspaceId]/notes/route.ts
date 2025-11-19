@@ -1,12 +1,15 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
+import { assertUUIDParam } from "@/lib/utils/param-validation"
+import { ValidationError } from "@/lib/utils/errors"
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ workspaceId: string }> },
 ) {
   try {
-    const { workspaceId } = await params
+    const rawParams = await params
+    const workspaceId = assertUUIDParam(rawParams.workspaceId, "workspaceId")
     const supabase = await createClient()
 
     const {
@@ -32,6 +35,9 @@ export async function GET(
 
     return NextResponse.json({ data: data ?? [] })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
     console.error("[workspace-notes] Unexpected GET error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
@@ -42,7 +48,8 @@ export async function POST(
   { params }: { params: Promise<{ workspaceId: string }> },
 ) {
   try {
-    const { workspaceId } = await params
+    const rawParams = await params
+    const workspaceId = assertUUIDParam(rawParams.workspaceId, "workspaceId")
     const body = await req.json()
     const content = typeof body?.content === "string" ? body.content.trim() : ""
     const includeInAiContextRaw = body?.includeInAiContext ?? body?.include_in_ai_context
@@ -82,6 +89,9 @@ export async function POST(
 
     return NextResponse.json({ data }, { status: 201 })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
     console.error("[workspace-notes] Unexpected POST error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }

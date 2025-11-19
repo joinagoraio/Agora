@@ -13,6 +13,9 @@ import { createSafeErrorResponse } from "@/lib/utils/api-error-handler"
 import { logger } from "@/lib/utils/logger"
 import { validateFileMagicNumber } from "@/lib/utils/file-validation"
 
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
+const MAX_FILE_SIZE_MB = MAX_FILE_SIZE_BYTES / (1024 * 1024)
+
 // Helper function to strip markdown syntax for better AI processing
 function stripMarkdown(text: string): string {
   if (!text) return text
@@ -141,10 +144,25 @@ export async function POST(req: NextRequest) {
     }
 
     const formData = await req.formData()
-    const file = formData.get("file") as File
+    const file = formData.get("file") as File | null
     const workspaceId = formData.get("workspaceId") as string
     const title = formData.get("title") as string | null
     const classification = (formData.get("classification") as "public" | "internal" | "confidential") || "internal"
+
+    if (!file) {
+      const response = NextResponse.json({ error: "File is required" }, { status: 400 })
+      response.headers.set("X-File-Size-Limit", MAX_FILE_SIZE_BYTES.toString())
+      return respondWithRateLimit(response)
+    }
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      const response = NextResponse.json(
+        { error: `File exceeds maximum size of ${MAX_FILE_SIZE_MB}MB.` },
+        { status: 400 },
+      )
+      response.headers.set("X-File-Size-Limit", MAX_FILE_SIZE_BYTES.toString())
+      return respondWithRateLimit(response)
+    }
 
     // Validate input with Zod
     const validationResult = documentUploadSchema.safeParse({

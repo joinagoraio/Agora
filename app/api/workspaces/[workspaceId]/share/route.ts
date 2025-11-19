@@ -1,13 +1,16 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import { createWorkspaceShareLink, revokeWorkspaceShareLink } from "@/lib/actions/workspace-share"
+import { assertUUIDParam } from "@/lib/utils/param-validation"
+import { ValidationError } from "@/lib/utils/errors"
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ workspaceId: string }> },
 ) {
   try {
-    const { workspaceId } = await params
+    const rawParams = await params
+    const workspaceId = assertUUIDParam(rawParams.workspaceId, "workspaceId")
     const { expiresInDays } = await req.json()
 
     const supabase = await createClient()
@@ -27,6 +30,9 @@ export async function POST(
 
     return NextResponse.json({ data, shareUrl }, { status: 201 })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
     console.error("[v0] Workspace share API error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
@@ -37,7 +43,8 @@ export async function DELETE(
   { params }: { params: Promise<{ workspaceId: string }> },
 ) {
   try {
-    const { workspaceId } = await params
+    const rawParams = await params
+    const workspaceId = assertUUIDParam(rawParams.workspaceId, "workspaceId")
     const url = new URL(req.url)
     const token = url.searchParams.get("token")
 
@@ -53,6 +60,9 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
     console.error("[v0] Workspace share API error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }

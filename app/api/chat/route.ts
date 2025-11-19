@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { getRelevantContext } from "@/lib/rag/search"
 import { buildWorkspaceContext } from "@/lib/chat/context"
+import { analyzePromptInjection } from "@/lib/chat/prompt-guard"
 import OpenAI from "openai"
 import { applyRateLimitHeaders, chatRateLimit, checkRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { chatMessageSchema } from "@/lib/validations/document"
@@ -251,6 +252,26 @@ export async function POST(req: Request) {
       if (context.length < 100) {
         console.warn(`[Chat API] Context is very short, document may not have content`)
       }
+    }
+
+    const promptGuard = analyzePromptInjection(userQuery, context)
+    if (promptGuard.flagged) {
+      console.warn("[Chat API] Prompt injection detected", {
+        severity: promptGuard.severity,
+        reasons: promptGuard.reasons,
+        conversationId,
+        workspaceId,
+      })
+      return withRateLimit(
+        new Response(
+          JSON.stringify({
+            error: "Prompt rejected due to security policy",
+            reasons: promptGuard.reasons,
+            severity: promptGuard.severity,
+          }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        ),
+      )
     }
 
     // Build system prompt with context

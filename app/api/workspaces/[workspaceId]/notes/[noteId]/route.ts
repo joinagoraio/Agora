@@ -1,12 +1,16 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
+import { assertUUIDParam } from "@/lib/utils/param-validation"
+import { ValidationError } from "@/lib/utils/errors"
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ workspaceId: string; noteId: string }> },
 ) {
   try {
-    const { workspaceId, noteId } = await params
+    const rawParams = await params
+    const workspaceId = assertUUIDParam(rawParams.workspaceId, "workspaceId")
+    const noteId = assertUUIDParam(rawParams.noteId, "noteId")
     const body = await req.json()
     const hasContent = typeof body?.content === "string"
     const content = hasContent ? body.content.trim() : undefined
@@ -64,6 +68,9 @@ export async function PUT(
 
     return NextResponse.json({ data })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
     console.error("[workspace-notes] Unexpected PUT error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
@@ -74,7 +81,9 @@ export async function DELETE(
   { params }: { params: Promise<{ workspaceId: string; noteId: string }> },
 ) {
   try {
-    const { workspaceId, noteId } = await params
+    const rawParams = await params
+    const workspaceId = assertUUIDParam(rawParams.workspaceId, "workspaceId")
+    const noteId = assertUUIDParam(rawParams.noteId, "noteId")
     const supabase = await createClient()
 
     const {
@@ -99,6 +108,9 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
     console.error("[workspace-notes] Unexpected DELETE error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }

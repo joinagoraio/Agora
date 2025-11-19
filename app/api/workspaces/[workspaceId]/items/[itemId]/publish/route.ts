@@ -1,15 +1,20 @@
 import { publishSpaceItem } from "@/lib/actions/space-item"
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
+import { assertUUIDParam } from "@/lib/utils/param-validation"
+import { ValidationError } from "@/lib/utils/errors"
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ workspaceId: string; itemId: string }> },
 ) {
   try {
-    const { workspaceId, itemId } = await params
+    const rawParams = await params
+    const workspaceId = assertUUIDParam(rawParams.workspaceId, "workspaceId")
+    const itemId = assertUUIDParam(rawParams.itemId, "itemId")
     const body = await req.json()
-    const spaceId = typeof body?.spaceId === "string" ? body.spaceId : ""
+    const spaceIdInput = typeof body?.spaceId === "string" ? body.spaceId : ""
+    const spaceId = assertUUIDParam(spaceIdInput, "spaceId")
     const classification = body?.classification as "public" | "internal" | "confidential" | undefined
 
     if (!spaceId) {
@@ -70,6 +75,9 @@ export async function POST(
 
     return NextResponse.json({ data: publishedItem, warnings })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+    }
     console.error("[workspace-publish] Unexpected error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }

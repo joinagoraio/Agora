@@ -91,6 +91,9 @@ Upload a document to a workspace.
 - `classification` (enum: "public" | "internal" | "confidential") - Optional, default: "internal"
 - `title` (string) - Optional
 
+**Response Headers:**
+- `X-File-Size-Limit` - Maximum allowed upload size in bytes (currently 52428800)
+
 **Response:**
 ```json
 {
@@ -107,7 +110,7 @@ Upload a document to a workspace.
 
 **Status Codes:**
 - `200` - Success
-- `400` - Validation error
+- `400` - Validation error (includes file-size violation messaging)
 - `401` - Unauthorized
 - `403` - Insufficient permissions
 - `429` - Rate limit exceeded

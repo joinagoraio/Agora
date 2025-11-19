@@ -72,6 +72,16 @@ All responses include security headers:
 
 ---
 
+## Database Security & RLS
+
+- **Row-Level Security everywhere** – all customer-facing tables enforce RLS policies defined in `scripts/complete_migration.sql`
+- **Policy evolution tracked** – historical fixes (`scripts/005_final_rls_fix.sql`, `scripts/006_final_recursion_fix.sql`, `scripts/027_optimize_query_indexes.sql`, `scripts/028_add_visibility_to_space_items.sql`, `scripts/029_update_space_items_visibility_defaults.sql`, `scripts/999_complete_rls_fix.sql`) are versioned for auditability
+- **Workspace & space isolation** – policies restrict reads/writes to the caller’s memberships; privileged operations run through the service-role client only after explicit authorization checks in code
+- **Consolidation plan** – the next schema release will snapshot all RLS definitions into a single verified migration and document the review in `docs/MIGRATIONS.md` so future audits can diff the entire policy surface quickly
+- **Review cadence** – RLS coverage is re-validated whenever a new table ships and at least once per quarter; the review checklist lives in `docs/MIGRATIONS.md`
+
+---
+
 ## Rate Limiting
 
 All API endpoints have rate limits:
