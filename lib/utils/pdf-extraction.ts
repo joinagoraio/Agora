@@ -15,15 +15,15 @@ if (typeof Promise.withResolvers === 'undefined') {
 }
 
 import * as pdfjs from "pdfjs-dist"
-import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url"
 import type { TextItem } from "pdfjs-dist/types/src/display/api"
 
-// Configure PDF.js worker
+// Configure PDF.js worker (Next.js 16/Turbopack compatible)
 if (typeof window === "undefined") {
   // Server-side: disable worker to avoid bundler issues
   pdfjs.GlobalWorkerOptions.workerSrc = ""
 } else {
-  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerSrc
+  // Client-side: use CDN worker
+  pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
 }
 
 export interface TextItemWithCoords {

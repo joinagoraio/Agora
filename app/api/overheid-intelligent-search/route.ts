@@ -62,15 +62,15 @@ Examples:
       temperature: 0.7,
     })
 
-      const content = response.choices[0]?.message?.content
-      if (!content) {
-        throw new Error("No response from AI")
-      }
+    const content = response.choices[0]?.message?.content
+    if (!content) {
+      throw new Error("No response from AI")
+    }
 
-      const parsed = JSON.parse(content)
-      const queries = parsed.queries || parsed.query || [context.substring(0, 100)]
+    const parsed = JSON.parse(content)
+    const queries = parsed.queries || parsed.query || [context.substring(0, 100)]
 
-      return { queries: Array.isArray(queries) ? queries : [queries] }
+    return { queries: Array.isArray(queries) ? queries : [queries] }
     } catch (error) {
       console.error("[IntelligentSearch] Error generating queries:", error)
       // Fallback to simple query
