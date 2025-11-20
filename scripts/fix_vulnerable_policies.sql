@@ -21,6 +21,10 @@ SELECT '1. Fixing documents table policies...' as step;
 DROP POLICY IF EXISTS "System can insert documents" ON public.documents;
 DROP POLICY IF EXISTS "System can update documents" ON public.documents;
 
+-- Drop existing secure policies (for idempotency)
+DROP POLICY IF EXISTS "Workspace members can insert documents" ON public.documents;
+DROP POLICY IF EXISTS "Workspace admins can update documents" ON public.documents;
+
 -- Create secure policies
 CREATE POLICY "Workspace members can insert documents"
   ON public.documents FOR INSERT
@@ -97,6 +101,9 @@ SELECT '2. Fixing document_embeddings table policies...' as step;
 DROP POLICY IF EXISTS "System can insert embeddings" ON public.document_embeddings;
 DROP POLICY IF EXISTS "System can delete embeddings" ON public.document_embeddings;
 
+-- Drop existing secure policies (for idempotency)
+DROP POLICY IF EXISTS "Workspace admins can manage embeddings" ON public.document_embeddings;
+
 CREATE POLICY "Workspace admins can manage embeddings"
   ON public.document_embeddings FOR ALL
   USING (
@@ -151,6 +158,9 @@ SELECT '3. Fixing messages table policies...' as step;
 
 DROP POLICY IF EXISTS "System can insert messages" ON public.messages;
 
+-- Drop existing secure policies (for idempotency)
+DROP POLICY IF EXISTS "Workspace members can insert messages" ON public.messages;
+
 CREATE POLICY "Workspace members can insert messages"
   ON public.messages FOR INSERT
   WITH CHECK (
@@ -182,6 +192,9 @@ SELECT '4. Fixing profiles table policies...' as step;
 
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
 
+-- Drop existing secure policies (for idempotency)
+DROP POLICY IF EXISTS "Users can view connected profiles" ON public.profiles;
+
 CREATE POLICY "Users can view connected profiles"
   ON public.profiles FOR SELECT
   USING (
@@ -205,6 +218,10 @@ SELECT '5. Fixing workspace_invitations table policies...' as step;
 -- Drop overly permissive policies
 DROP POLICY IF EXISTS "Workspace invitees can view by token" ON public.workspace_invitations;
 DROP POLICY IF EXISTS "Workspace invitees can update their invitations" ON public.workspace_invitations;
+
+-- Drop existing secure policies (for idempotency)
+DROP POLICY IF EXISTS "Workspace admins can view invitations" ON public.workspace_invitations;
+DROP POLICY IF EXISTS "Workspace invitees can view their invitation" ON public.workspace_invitations;
 
 -- Create secure policies
 CREATE POLICY "Workspace admins can view invitations"
@@ -250,6 +267,10 @@ SELECT '6. Fixing storage bucket policies...' as step;
 
 -- Drop public access policy
 DROP POLICY IF EXISTS "Public can read documents" ON storage.objects;
+
+-- Drop existing secure policies (for idempotency)
+DROP POLICY IF EXISTS "Workspace members can read documents" ON storage.objects;
+DROP POLICY IF EXISTS "Workspace members can upload documents" ON storage.objects;
 
 -- Create secure workspace-scoped policy
 CREATE POLICY "Workspace members can read documents"
