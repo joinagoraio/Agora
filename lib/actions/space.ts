@@ -418,28 +418,32 @@ export async function getUserSpaces() {
   }
 
   const adminClient = createAdminClient()
-  const { data: spaces, error } = await adminClient
-    .from("spaces")
-    .select("*, space_members(role, user_id)")
+
+  // Query space_members first to get only user's spaces, then join to spaces table
+  const { data: memberships, error } = await adminClient
+    .from("space_members")
+    .select(`
+      role,
+      space:spaces(*)
+    `)
+    .eq("user_id", user.id)
 
   if (error) {
     console.error("[v0] Error fetching spaces:", error.message)
     return { data: [], error: error.message }
   }
 
-  if (!spaces || spaces.length === 0) {
+  if (!memberships || memberships.length === 0) {
     return { data: [] }
   }
 
-  const result = spaces.map((space) => {
-    const memberRole = space.space_members?.find((sm: any) => sm.user_id === user.id)?.role ?? "viewer"
-    const { space_members, ...rest } = space
-
-    return {
-      ...rest,
-      role: memberRole,
-    }
-  })
+  // Map memberships to spaces with user's role
+  const result = memberships
+    .filter((m) => m.space) // Filter out any null spaces
+    .map((m) => ({
+      ...m.space,
+      role: m.role,
+    }))
 
   return { data: result }
 }
