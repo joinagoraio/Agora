@@ -12,6 +12,13 @@ import { requireAuthAndPermission } from "@/lib/middleware/authorization"
 export async function createWorkspace(spaceId: string, name: string, description?: string) {
   const supabase = await createClient()
 
+  // Verify user has permission to create workspaces in this space
+  try {
+    await requireAuthAndPermission("workspace:create", { spaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser()
