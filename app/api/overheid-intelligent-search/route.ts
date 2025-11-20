@@ -71,11 +71,10 @@ Examples:
     const queries = parsed.queries || parsed.query || [context.substring(0, 100)]
 
     return { queries: Array.isArray(queries) ? queries : [queries] }
-    } catch (error) {
-      console.error("[IntelligentSearch] Error generating queries:", error)
-      // Fallback to simple query
-      return { queries: [context.substring(0, 100)] }
-    }
+  } catch (error) {
+    console.error("[IntelligentSearch] Error generating queries:", error)
+    // Fallback to simple query
+    return { queries: [context.substring(0, 100)] }
   }
 }
 
