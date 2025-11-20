@@ -9,9 +9,26 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { generateWorkspaceDocumentDraft, updateWorkspaceDocument } from "@/lib/actions/document"
-import { Loader2, Save, Sparkles } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { deleteDocument, generateWorkspaceDocumentDraft, updateWorkspaceDocument } from "@/lib/actions/document"
+import { Loader2, MoreVertical, Save, Sparkles, Trash2 } from "lucide-react"
 import { RichTextEditor } from "@/components/rich-text-editor"
+import { toast } from "sonner"
 
 interface MyDocumentEditorProps {
   workspaceId: string
@@ -48,6 +65,10 @@ export function MyDocumentEditor({
   const [isGenerating, setIsGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [generationSources, setGenerationSources] = useState<Array<Record<string, any>> | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
   const hasBaselineDraft = baseline.content.trim().length > 0
   const shouldShowMissingDraftNotice =
     !hasBaselineDraft && instructions.trim().length > 0 && content.trim().length === 0 && !isGenerating
@@ -63,7 +84,9 @@ export function MyDocumentEditor({
   const handleSave = async () => {
     if (isSaving || !isDirty) return
     if (!title.trim()) {
-      setError("Title cannot be empty")
+      const message = "Title cannot be empty"
+      setError(message)
+      toast.error("Missing title", { description: message })
       setSaveState("error")
       return
     }
@@ -80,6 +103,7 @@ export function MyDocumentEditor({
 
     if (result.error) {
       setError(result.error)
+      toast.error("Failed to save document", { description: result.error })
       setSaveState("error")
       setIsSaving(false)
       return
@@ -94,6 +118,9 @@ export function MyDocumentEditor({
     const savedAt = new Date()
     setLastSavedAt(savedAt)
     setIsSaving(false)
+    toast.success("Document saved", {
+      description: "Your changes are stored.",
+    })
     router.refresh()
   }
 
@@ -101,7 +128,9 @@ export function MyDocumentEditor({
     if (isGenerating) return
 
     if (!instructions.trim()) {
-      setGenerateError("Add drafting instructions before generating a document")
+      const message = "Add drafting instructions before generating a document"
+      setGenerateError(message)
+      toast.error("Instructions required", { description: message })
       return
     }
 
@@ -115,7 +144,9 @@ export function MyDocumentEditor({
     })
 
     if (result.error || !result.data) {
-      setGenerateError(result.error || "Failed to generate a draft")
+      const description = result.error || "Failed to generate a draft"
+      setGenerateError(description)
+      toast.error("Draft generation failed", { description })
       setIsGenerating(false)
       return
     }
@@ -133,6 +164,9 @@ export function MyDocumentEditor({
     setLastSavedAt(savedAt)
     setIsSaving(false)
     setIsGenerating(false)
+    toast.success("Draft updated", {
+      description: "AI generated a fresh version.",
+    })
     router.refresh()
   }
 
@@ -145,6 +179,29 @@ export function MyDocumentEditor({
     setSaveState("idle")
     setGenerateError(null)
     setGenerationSources(null)
+  }
+
+  const handleDelete = async () => {
+    if (isDeleting) return
+    setIsDeleting(true)
+    setDeleteError(null)
+
+    const result = await deleteDocument(documentId, workspaceId)
+
+    if (result.error) {
+      setDeleteError(result.error)
+      toast.error("Failed to delete document", { description: result.error })
+      setIsDeleting(false)
+      return
+    }
+
+    setIsDeleting(false)
+    setIsDeleteDialogOpen(false)
+    toast.success("Document deleted", {
+      description: `${title || "Document"} was removed.`,
+    })
+    router.push(`/workspaces/${workspaceId}`)
+    router.refresh()
   }
 
   const classificationLabel = classification
@@ -180,6 +237,22 @@ export function MyDocumentEditor({
               </>
             )}
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                className="group data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive"
+                onClick={() => setIsDeleteDialogOpen(true)}
+              >
+                <Trash2 className="mr-2 h-4 w-4 group-data-[highlighted]:text-destructive" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -280,6 +353,65 @@ export function MyDocumentEditor({
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(open) => {
+          setIsDeleteDialogOpen(open)
+          if (!open) {
+            setDeleteError(null)
+            setIsDeleting(false)
+            setIsConfirmingDelete(false)
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete document</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the document from the workspace. You can re-create it later, but the current content will be
+              lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{deleteError}</div>}
+          {isConfirmingDelete && (
+            <p className="text-sm font-medium text-destructive">This action cannot be undone.</p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={isDeleting}
+              onClick={() => {
+                setIsConfirmingDelete(false)
+              }}
+            >
+              Cancel
+            </AlertDialogCancel>
+            {isConfirmingDelete ? (
+              <AlertDialogAction
+                className="bg-destructive text-white hover:bg-destructive/90"
+                onClick={(event) => {
+                  event.preventDefault()
+                  handleDelete()
+                }}
+                disabled={isDeleting}
+              >
+                {isDeleting ? "Deleting..." : "Confirm delete"}
+              </AlertDialogAction>
+            ) : (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={(event) => {
+                  event.preventDefault()
+                  setIsConfirmingDelete(true)
+                }}
+              >
+                Delete
+              </Button>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

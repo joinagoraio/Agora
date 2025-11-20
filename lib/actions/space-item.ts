@@ -101,7 +101,7 @@ export async function publishSpaceItem(
     }
   }
 
-  revalidatePath(`/spaces/${spaceId}/items`)
+  revalidatePath(`/spaces/${spaceId}`)
   if (warnings.length > 0) {
     return { data, warnings }
   }
@@ -129,17 +129,30 @@ export async function unpublishSpaceItem(itemId: string) {
     return { error: "Item not found" }
   }
 
+  // Check if user has permission to delete (owner or admin)
+  const { data: membership } = await supabase
+    .from("space_members")
+    .select("role")
+    .eq("space_id", item.space_id)
+    .eq("user_id", user.id)
+    .single()
+
+  if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
+    return { error: "You don't have permission to delete items in this space" }
+  }
+
   const { error } = await supabase.from("space_items").delete().eq("id", itemId)
 
   if (error) {
-    return { error: error.message }
+    console.error("[unpublishSpaceItem] Delete error:", error)
+    return { error: error.message || "Failed to delete item" }
   }
 
   if (item.item_type === "document") {
     await removeScopeDocumentFromAllWorkspaces(item.space_id, itemId)
   }
 
-  revalidatePath(`/spaces/${item.space_id}/items`)
+  revalidatePath(`/spaces/${item.space_id}`)
   return { success: true }
 }
 
@@ -275,7 +288,7 @@ export async function updateSpaceItem(
     }
   }
 
-  revalidatePath(`/spaces/${data.space_id}/items`)
+  revalidatePath(`/spaces/${data.space_id}`)
   if (warnings.length > 0) {
     return { data, warnings }
   }

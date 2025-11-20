@@ -11,6 +11,7 @@ const nextConfig = {
     if (isDev) {
       scriptSources.push("'unsafe-eval'", "'unsafe-inline'", "https://vercel.live")
     }
+    scriptSources.push("https://va.vercel-scripts.com")
     
     const connectSources = [
       "'self'",

@@ -4,8 +4,6 @@
  * Supports log aggregation services (e.g., Datadog, Logtail, etc.)
  */
 
-import { env } from "@/lib/env"
-
 type LogLevel = "debug" | "info" | "warn" | "error"
 
 interface LogContext {
@@ -26,9 +24,11 @@ interface LogEntry {
   environment: string
 }
 
+const NODE_ENV = (process.env.NODE_ENV ?? "development") as "development" | "test" | "production"
+
 class Logger {
-  private isDevelopment = env.NODE_ENV === "development"
-  private isTest = env.NODE_ENV === "test"
+  private isDevelopment = NODE_ENV === "development"
+  private isTest = NODE_ENV === "test"
   private serviceName = "agora"
 
   private shouldLog(level: LogLevel): boolean {
@@ -49,7 +49,7 @@ class Logger {
       message,
       timestamp: new Date().toISOString(),
       service: this.serviceName,
-      environment: env.NODE_ENV,
+      environment: NODE_ENV,
     }
 
     if (context) {
@@ -85,7 +85,7 @@ class Logger {
     
     // Example: If LOG_AGGREGATION_URL is set, send logs there
     // This is a placeholder for future integration
-    if (process.env.LOG_AGGREGATION_URL && env.NODE_ENV === "production") {
+    if (process.env.LOG_AGGREGATION_URL && NODE_ENV === "production") {
       // In a real implementation, you would:
       // 1. Batch logs and send periodically
       // 2. Use a proper log aggregation client

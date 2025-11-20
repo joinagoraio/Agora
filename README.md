@@ -1,30 +1,38 @@
-# AGORA MVP build
+# Agora
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+Agora is a collaborative research workbench for teams who need to collect evidence, annotate documents, and share findings with stakeholders.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/joinagoraio/v0-agora-mvp-build)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/iBQFl3bD7VE)
+## Features
 
-## Overview
+- Workspace and space management with granular access
+- Rich document viewer with annotations and highlights
+- Evidence capture and sharing flows
+- Connector framework for ingesting external sources
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+## Getting Started
+
+```bash
+pnpm install
+pnpm dev
+```
+
+The app runs on the default Next.js development port unless otherwise configured. Set the required environment variables (Supabase, Redis, OpenAI, etc.) by copying `.env.example` to `.env.local` and filling in your secrets.
+
+## Testing
+
+Run the Vitest suite via:
+
+```bash
+npm test -- --run
+```
 
 ## Deployment
 
-Your project is live at:
+Deploy to Vercel with the usual Next.js workflow (`vercel` CLI or Git-integrated deployments). Ensure build-time environment variables match the ones used locally.
 
-**[https://vercel.com/joinagoraio/v0-agora-mvp-build](https://vercel.com/joinagoraio/v0-agora-mvp-build)**
+## Contributing
 
-## Build your app
-
-Continue building your app on:
-
-**[https://v0.app/chat/iBQFl3bD7VE](https://v0.app/chat/iBQFl3bD7VE)**
-
-## How It Works
-
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+1. Create a feature branch
+2. Make changes and add tests when possible
+3. Run linting and tests locally
+4. Open a PR describing behaviour and verification steps

@@ -30,6 +30,10 @@ const WorkspaceNotesPanel = dynamic(
   () => import("@/components/workspace-notes-panel").then((mod) => ({ default: mod.WorkspaceNotesPanel })),
   { ssr: false },
 )
+const WorkspaceNotesCount = dynamic(
+  () => import("@/components/workspace-notes-count").then((mod) => ({ default: mod.WorkspaceNotesCount })),
+  { ssr: false },
+)
 
 export {
   DocumentsList,
@@ -39,4 +43,5 @@ export {
   WorkspaceEvidenceBoard,
   WorkspaceInheritedItems,
   WorkspaceNotesPanel,
+  WorkspaceNotesCount,
 }

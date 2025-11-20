@@ -3,9 +3,10 @@ import { createClient } from "@/lib/supabase/server"
 import { getUserSpaces } from "@/lib/actions/space"
 import { CreateSpaceDialog } from "@/components/create-space-dialog"
 import { UserMenu } from "@/components/user-menu"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { Layers2 } from "lucide-react"
+import { WelcomeUserDialog } from "@/components/welcome-user-dialog"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -18,9 +19,16 @@ export default async function DashboardPage() {
   }
 
   const { data: spaces } = await getUserSpaces()
+  const hasSpaces = Boolean(spaces && spaces.length > 0)
+  const displayName =
+    (user.user_metadata as Record<string, any> | null | undefined)?.full_name ??
+    (user.user_metadata as Record<string, any> | null | undefined)?.name ??
+    user.email?.split("@")[0] ??
+    null
 
   return (
     <div className="flex min-h-screen flex-col">
+      <WelcomeUserDialog userId={user.id} userName={displayName} hasSpaces={hasSpaces} />
       <header className="bg-card">
         <div className="flex h-16 items-center justify-between px-4">
           <div></div>

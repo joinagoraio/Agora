@@ -21,6 +21,7 @@ import { OverheidSearch } from "@/components/overheid-search"
 import { GoogleDriveSearch } from "@/components/google-drive-search"
 import { formatSourceType } from "@/lib/utils"
 import { getGoogleTokens } from "@/lib/actions/auth"
+import { toast } from "sonner"
 
 interface AddFromSourceDialogProps {
   workspaceId: string
@@ -108,11 +109,19 @@ export function AddFromSourceDialog({
 
       if (result.error) {
         setError(result.error)
+        toast.error("Failed to add documents", { description: result.error })
       } else if (result.addedCount === 0 && documents.length > 0) {
         // No documents were added even though documents were selected
-        setError("Failed to add documents. Please check the console for details or try again.")
+        const message = "Failed to add documents. Please check the console for details or try again."
+        setError(message)
+        toast.error("No documents added", { description: message })
       } else {
         setSuccess(`Successfully added ${result.addedCount || 0} document(s)`)
+        toast.success("Documents added", {
+          description: `${result.addedCount || documents.length} file(s) imported${
+            selectedSource ? ` from ${selectedSource.name}` : ""
+          }.`,
+        })
         router.refresh()
         onSuccess?.()
         
@@ -127,7 +136,9 @@ export function AddFromSourceDialog({
         }, 2000)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add documents")
+      const description = err instanceof Error ? err.message : "Failed to add documents"
+      setError(description)
+      toast.error("Failed to add documents", { description })
     } finally {
       setAdding(false)
     }

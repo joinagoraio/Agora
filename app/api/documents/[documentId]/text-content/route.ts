@@ -1,10 +1,107 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 
+async function userHasWorkspaceAccess(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  workspaceId: string,
+  spaceId: string,
+  userId: string,
+) {
+  const { data: workspaceMember } = await supabase
+    .from("workspace_members")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (workspaceMember) {
+    return true
+  }
+
+  const { data: spaceMembership } = await supabase
+    .from("space_members")
+    .select("role")
+    .eq("space_id", spaceId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  return Boolean(spaceMembership && ["owner", "admin"].includes(spaceMembership.role))
+}
+
+async function fetchDocumentTextFromSource(
+  document: { url: string | null; metadata: Record<string, any> | null; title: string | null },
+  supabase: Awaited<ReturnType<typeof createClient>>
+) {
+  const url = document.url
+  if (!url) {
+    return null
+  }
+
+  const metadataType = typeof document.metadata?.type === "string" ? document.metadata.type.toLowerCase() : ""
+  const looksLikeText =
+    metadataType.includes("text") ||
+    metadataType.includes("markdown") ||
+    document.title?.toLowerCase().endsWith(".md") ||
+    document.title?.toLowerCase().endsWith(".txt")
+
+  if (!looksLikeText) {
+    return null
+  }
+
+  try {
+    const isSupabaseStorage = url.includes("supabase.co/storage") || url.includes("supabase.in/storage")
+    if (isSupabaseStorage) {
+      const urlMatch = url.match(/\/storage\/v1\/object\/public\/documents\/(.+)$/)
+      if (urlMatch) {
+        const filePath = urlMatch[1]
+        const { data, error } = await supabase.storage.from("documents").download(filePath)
+        if (error || !data) {
+          console.error("[text-content] Storage download error:", error)
+          return null
+        }
+        return await data.text()
+      }
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Accept: "text/plain, text/markdown, */*",
+      },
+    })
+
+    if (!response.ok) {
+      console.error("[text-content] Fallback fetch failed:", response.status, response.statusText)
+      return null
+    }
+
+    const contentType = response.headers.get("content-type")?.toLowerCase() || ""
+    if (
+      !contentType.includes("text") &&
+      !contentType.includes("markdown") &&
+      !document.title?.toLowerCase().endsWith(".md") &&
+      !document.title?.toLowerCase().endsWith(".txt")
+    ) {
+      console.warn("[text-content] Fallback fetch returned non-text content type:", contentType)
+      return null
+    }
+
+    return await response.text()
+  } catch (error) {
+    console.error("[text-content] Error fetching fallback document content:", error)
+    return null
+  }
+}
+
 /**
  * API endpoint to fetch text content from document_pages for text/markdown documents
  * This ensures the viewer uses the same content source as RAG/search for consistency
  */
+type DocumentPage = {
+  text_content: string | null
+  page_number: number | null
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ documentId: string }> }
@@ -25,7 +122,7 @@ export async function GET(
     // Fetch document to verify access
     const { data: document, error: docError } = await supabase
       .from("documents")
-      .select("id, workspace_id, metadata, title")
+      .select("id, workspace_id, metadata, title, url")
       .eq("id", documentId)
       .single()
 
@@ -44,15 +141,8 @@ export async function GET(
       return NextResponse.json({ error: "Workspace not found" }, { status: 404 })
     }
 
-    // Check if user is a member of the space
-    const { data: membership } = await supabase
-      .from("space_members")
-      .select("id")
-      .eq("space_id", workspace.space_id)
-      .eq("user_id", user.id)
-      .single()
-
-    if (!membership) {
+    const canAccess = await userHasWorkspaceAccess(supabase, workspace.id, workspace.space_id, user.id)
+    if (!canAccess) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
@@ -88,16 +178,34 @@ export async function GET(
     }
 
     if (!pages || pages.length === 0) {
+      const fallbackContent = await fetchDocumentTextFromSource(document, supabase)
+      if (fallbackContent && fallbackContent.trim().length > 0) {
+        return new NextResponse(fallbackContent, {
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "no-cache",
+          },
+        })
+      }
       return NextResponse.json({ error: "No content found in document pages" }, { status: 404 })
     }
 
     // Combine all pages into a single text content
     const textContent = pages
-      .map((p) => p.text_content || "")
+      .map((p: DocumentPage) => p.text_content || "")
       .filter(Boolean)
       .join("\n\n")
 
     if (!textContent || textContent.trim().length === 0) {
+      const fallbackContent = await fetchDocumentTextFromSource(document, supabase)
+      if (fallbackContent && fallbackContent.trim().length > 0) {
+        return new NextResponse(fallbackContent, {
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "no-cache",
+          },
+        })
+      }
       return NextResponse.json({ error: "Document has no text content" }, { status: 404 })
     }
 

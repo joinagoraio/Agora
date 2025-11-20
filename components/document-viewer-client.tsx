@@ -133,8 +133,55 @@ export function DocumentViewerClient({
     )
   }, [viewerMetadata, documentTitle])
 
-  const viewerUrl = documentUrl ?? `/api/documents/${documentId}/pdf`
-  const canRenderDocument = Boolean(documentUrl) || isTextDocument
+  const viewerUrl = useMemo(() => {
+    // Text/markdown documents are rendered via text endpoint regardless of source URL
+    if (isTextDocument) {
+      return `/api/documents/${documentId}/text-content`
+    }
+
+    // Always fall back to our proxy route if we don't have a source URL
+    if (!documentUrl) {
+      return `/api/documents/${documentId}/pdf`
+    }
+
+    // Already pointing to our API - no changes needed
+    if (documentUrl.startsWith("/api/")) {
+      return documentUrl
+    }
+
+    // During SSR we can't inspect window. Return original URL for now and
+    // let the client-side render recompute immediately after hydration.
+    if (typeof window === "undefined") {
+      return documentUrl
+    }
+
+    try {
+      const parsedUrl = new URL(documentUrl, window.location.origin)
+      const sameOrigin = parsedUrl.origin === window.location.origin
+      const allowedHostSuffixes = [
+        ".supabase.co",
+        ".supabase.in",
+        ".vercel.live",
+      ]
+      const isAllowedHost = allowedHostSuffixes.some((suffix) =>
+        parsedUrl.hostname.endsWith(suffix)
+      )
+
+      if (sameOrigin || isAllowedHost) {
+        return documentUrl
+      }
+    } catch (error) {
+      console.warn("[DocumentViewerClient] Failed to parse document URL, using proxy route instead", {
+        documentId,
+        documentUrl,
+        error,
+      })
+    }
+
+    return `/api/documents/${documentId}/pdf`
+  }, [documentUrl, documentId, isTextDocument])
+
+  const canRenderDocument = Boolean(viewerUrl)
   
   // Function to compute coordinates for highlights that need them (for PDFs)
   const computeHighlightCoordinates = useCallback((highlights: any[]): any[] => {

@@ -390,36 +390,26 @@ export async function getUserSpaces() {
   }
 
   const adminClient = createAdminClient()
+  const { data: spaces, error } = await adminClient
+    .from("spaces")
+    .select("*, space_members(role, user_id)")
 
-  const { data: members, error: membersError } = await adminClient
-    .from("space_members")
-    .select("space_id, role")
-    .eq("user_id", user.id)
-
-  if (membersError) {
-    console.error("[v0] Error fetching space members:", membersError.message)
-    return { data: [], error: membersError.message }
+  if (error) {
+    console.error("[v0] Error fetching spaces:", error.message)
+    return { data: [], error: error.message }
   }
 
-  if (!members || members.length === 0) {
+  if (!spaces || spaces.length === 0) {
     return { data: [] }
   }
 
-  // Now get the space details using regular client (RLS works fine for spaces table)
-  const spaceIds = members.map((m) => m.space_id)
-  const { data: spaces, error: spacesError } = await supabase.from("spaces").select("*").in("id", spaceIds)
-
-  if (spacesError) {
-    console.error("[v0] Error fetching spaces:", spacesError.message)
-    return { data: [], error: spacesError.message }
-  }
-
-  // Combine the data
   const result = spaces.map((space) => {
-    const member = members.find((m) => m.space_id === space.id)
+    const memberRole = space.space_members?.find((sm: any) => sm.user_id === user.id)?.role ?? "viewer"
+    const { space_members, ...rest } = space
+
     return {
-      ...space,
-      role: member?.role || "viewer",
+      ...rest,
+      role: memberRole,
     }
   })
 

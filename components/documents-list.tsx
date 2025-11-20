@@ -22,7 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { FileText, ExternalLink, Calendar, Search, MoreVertical, Archive, Trash2, ArchiveRestore, Plus, Upload, Download, Plug } from "lucide-react"
+import { FileText, ExternalLink, Search, MoreVertical, Archive, Trash2, ArchiveRestore, Plus, Upload, Download, Plug } from "lucide-react"
 import { deleteDocument, archiveDocument } from "@/lib/actions/document"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -32,6 +32,8 @@ import { AddFromSourceDialog } from "@/components/add-from-source-dialog"
 import { CreateSourceDialog } from "@/components/create-source-dialog"
 import { ManageSourcesDialog } from "@/components/manage-sources-dialog"
 import { FileIcon, defaultStyles } from "react-file-icon"
+import { getDocumentFileExtension } from "@/lib/utils/document-files"
+import { toast } from "sonner"
 
 interface DocumentsListProps {
   workspaceId: string
@@ -44,60 +46,9 @@ interface DocumentsListProps {
   }>
 }
 
-// Helper function to get file extension from document
-function getFileExtension(doc: any): string {
-  // Check metadata first
-  const metadata = doc.metadata || {}
-  if (metadata.type) {
-    const type = String(metadata.type).toLowerCase()
-    if (type.includes("pdf")) return "pdf"
-    if (type.includes("word") || type.includes("msword") || type.includes("wordprocessingml")) return "docx"
-    if (type.includes("html")) return "html"
-    if (type.includes("text") || type.includes("plain")) return "txt"
-    if (type.includes("markdown")) return "md"
-    if (type.includes("spreadsheet") || type.includes("excel") || type.includes("sheet")) return "xlsx"
-    if (type.includes("presentation") || type.includes("powerpoint") || type.includes("slides")) return "pptx"
-    if (type.includes("image")) {
-      // Try to determine image type from metadata or default to png
-      if (type.includes("jpeg") || type.includes("jpg")) return "jpg"
-      if (type.includes("png")) return "png"
-      if (type.includes("gif")) return "gif"
-      if (type.includes("svg")) return "svg"
-      return "png"
-    }
-  }
-
-  if (metadata.contentType) {
-    const ct = String(metadata.contentType).toLowerCase()
-    if (ct.includes("application/pdf")) return "pdf"
-    if (ct.includes("application/msword")) return "doc"
-    if (ct.includes("wordprocessingml")) return "docx"
-    if (ct.includes("text/html")) return "html"
-    if (ct.includes("text/plain")) return "txt"
-    if (ct.includes("text/markdown")) return "md"
-    if (ct.includes("spreadsheet") || ct.includes("excel") || ct.includes("sheet")) return "xlsx"
-    if (ct.includes("presentation") || ct.includes("powerpoint") || ct.includes("slides")) return "pptx"
-    if (ct.includes("image/jpeg")) return "jpg"
-    if (ct.includes("image/png")) return "png"
-    if (ct.includes("image/gif")) return "gif"
-    if (ct.includes("image/svg")) return "svg"
-  }
-
-  // Check file extension from URL or title
-  const filename = doc.url?.split("/").pop() || doc.title || ""
-  const ext = filename.split(".").pop()?.toLowerCase() || ""
-  
-  // Return the extension if it's valid, otherwise default to a generic file type
-  if (ext && ["pdf", "doc", "docx", "html", "htm", "txt", "md", "markdown", "xls", "xlsx", "ppt", "pptx", "jpg", "jpeg", "png", "gif", "svg"].includes(ext)) {
-    return ext === "htm" ? "html" : ext === "jpeg" ? "jpg" : ext
-  }
-  
-  return "file" // Default fallback
-}
-
 export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: DocumentsListProps) {
   const [searchQuery, setSearchQuery] = useState("")
-  const [deletingDocId, setDeletingDocId] = useState<string | null>(null)
+  const [documentToDelete, setDocumentToDelete] = useState<any | null>(null)
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
   const [archivingDocId, setArchivingDocId] = useState<string | null>(null)
   const router = useRouter()
@@ -122,23 +73,32 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
   // Filter out workspace_generated sources since they're for internal workspace documents, not external sources
   const availableSources = (sources || []).filter((source) => source.type !== "direct_upload" && source.type !== "workspace_generated")
 
-  const handleDelete = async (documentId: string) => {
+  const handleDelete = async () => {
+    if (!documentToDelete) {
+      return
+    }
     if (!needsConfirmation) {
       setNeedsConfirmation(true)
       return
     }
-    
+
+    const documentId = documentToDelete.id
+    const documentTitle = documentToDelete.title || documentToDelete.metadata?.title || "Document"
+
     const result = await deleteDocument(documentId, workspaceId)
     if (result.error) {
-      alert(`Failed to delete document: ${result.error}`)
+      toast.error(`Failed to delete ${documentTitle}`, { description: result.error })
     } else {
       emitWorkspaceContextUpdate({
         type: "document",
         action: "deleted",
         documentId,
       })
+      toast.success("Document deleted", {
+        description: `${documentTitle} was removed from this workspace.`,
+      })
       // Close dialog and refresh after animation completes
-      setDeletingDocId(null)
+      setDocumentToDelete(null)
       setNeedsConfirmation(false)
       setTimeout(() => {
         router.refresh()
@@ -149,7 +109,7 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
   const handleDeleteDialogClose = (open: boolean) => {
     if (!open) {
       // Set state immediately to close dialog, cleanup happens after animation
-      setDeletingDocId(null)
+      setDocumentToDelete(null)
       setNeedsConfirmation(false)
       // Force cleanup after a brief delay to ensure portal unmounts
       setTimeout(() => {
@@ -162,7 +122,9 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
   const handleArchive = async (documentId: string, archive: boolean) => {
     const result = await archiveDocument(documentId, workspaceId, archive)
     if (result.error) {
-      alert(`Failed to ${archive ? "archive" : "unarchive"} document: ${result.error}`)
+      toast.error(`Failed to ${archive ? "archive" : "unarchive"} document`, {
+        description: result.error,
+      })
     } else {
       setArchivingDocId(null)
       emitWorkspaceContextUpdate({
@@ -170,6 +132,7 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
         action: archive ? "archived" : "unarchived",
         documentId,
       })
+      toast.success(`Document ${archive ? "archived" : "restored"}`)
       router.refresh()
     }
   }
@@ -383,7 +346,7 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
         <div className="space-y-4">
           <div className="grid gap-4">
             {displayDocuments.map((doc: any) => {
-                  const fileExtension = getFileExtension(doc)
+                  const fileExtension = getDocumentFileExtension(doc)
                   return (
                   <Card key={doc.id} className="shadow hover:shadow-md transition-shadow">
               <CardHeader>
@@ -400,13 +363,15 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
                     </div>
                     <div className="flex-1 min-w-0">
                       <CardTitle className="text-base truncate">{doc.title}</CardTitle>
-                      <div className="flex items-center gap-2 mt-1">
-                        {doc.status === "archived" && (
-                          <span className="text-xs text-muted-foreground">Archived</span>
+                      <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
+                        {doc.status === "archived" && <span>Archived</span>}
+                        <span>{formatSourceType(doc.sources?.type)}</span>
+                        {doc.created_at && (
+                          <>
+                            <span className="text-muted-foreground/60">·</span>
+                            <span>{new Date(doc.created_at).toLocaleDateString()}</span>
+                          </>
                         )}
-                        <span className="text-xs text-muted-foreground">
-                          {formatSourceType(doc.sources?.type)}
-                        </span>
                       </div>
                     </div>
                   </div>
@@ -459,7 +424,7 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
                         )}
                         <DropdownMenuItem
                           onClick={() => {
-                            setDeletingDocId(doc.id)
+                            setDocumentToDelete(doc)
                             setNeedsConfirmation(false)
                           }}
                           className="hover:!bg-destructive/10 hover:!text-destructive focus:!bg-destructive/10 focus:!text-destructive [&:hover_svg]:!text-destructive [&:focus_svg]:!text-destructive [&:hover_span]:!text-destructive [&:focus_span]:!text-destructive"
@@ -480,12 +445,6 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
                   </p>
                 )}
                 <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                  {doc.created_at && (
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      <span>Uploaded {new Date(doc.created_at).toLocaleDateString()}</span>
-                    </div>
-                  )}
                   {doc.metadata?.size && (
                     <span>{(doc.metadata.size / 1024).toFixed(1)} KB</span>
                   )}
@@ -509,7 +468,7 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
       )}
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deletingDocId !== null} onOpenChange={handleDeleteDialogClose}>
+      <AlertDialog open={documentToDelete !== null} onOpenChange={handleDeleteDialogClose}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Document</AlertDialogTitle>
@@ -526,14 +485,14 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             {needsConfirmation ? (
               <AlertDialogAction
-                onClick={() => deletingDocId && handleDelete(deletingDocId)}
+                onClick={handleDelete}
                 className="bg-destructive text-white hover:bg-destructive/90"
               >
                 Confirm?
               </AlertDialogAction>
             ) : (
               <Button
-                onClick={() => deletingDocId && handleDelete(deletingDocId)}
+                onClick={handleDelete}
                 className="bg-destructive text-white hover:bg-destructive/90"
               >
                 Delete

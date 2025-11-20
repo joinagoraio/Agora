@@ -50,6 +50,12 @@ create trigger set_updated_at before update on public.space_members
 create trigger set_updated_at before update on public.invitations
   for each row execute function public.handle_updated_at();
 
+create trigger set_updated_at before update on public.workspace_members
+  for each row execute function public.handle_updated_at();
+
+create trigger set_updated_at before update on public.workspace_invitations
+  for each row execute function public.handle_updated_at();
+
 create trigger set_updated_at before update on public.workspaces
   for each row execute function public.handle_updated_at();
 

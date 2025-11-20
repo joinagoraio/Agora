@@ -134,6 +134,33 @@ export function MultiFormatViewer({
           documentTitle?.toLowerCase().endsWith(".md") ||
           documentTitle?.toLowerCase().endsWith(".txt")
 
+        let shouldFallbackToOriginalSource = false
+        const isInternalPdfEndpoint = (() => {
+          if (url.startsWith("/api/documents/") && url.includes("/pdf")) {
+            return true
+          }
+          if (typeof window === "undefined") {
+            return false
+          }
+          try {
+            const parsedUrl = new URL(url, window.location.origin)
+            const sameOrigin = parsedUrl.origin === window.location.origin
+            return (
+              sameOrigin &&
+              parsedUrl.pathname.startsWith("/api/documents/") &&
+              parsedUrl.pathname.includes("/pdf")
+            )
+          } catch {
+            return false
+          }
+        })()
+
+        if (!isTextOrMarkdown && isInternalPdfEndpoint) {
+          setDocumentType("pdf")
+          setLoading(false)
+          return
+        }
+
         if (isTextOrMarkdown) {
           // Use the text-content API endpoint which fetches from document_pages
           const textContentResponse = await fetch(`/api/documents/${documentId}/text-content`, {
@@ -144,21 +171,35 @@ export function MultiFormatViewer({
             cache: "no-store",
           })
 
-          if (!textContentResponse.ok) {
-            if (textContentResponse.status === 401) {
-              if (retryCount === 0) {
-                await new Promise(resolve => setTimeout(resolve, 500))
-                return loadDocument(1)
-              }
-              throw new Error("Authentication required. Please refresh the page and try again.")
+          if (textContentResponse.ok) {
+            const textContent = await textContentResponse.text()
+            setDocumentType("text")
+            setTextContent(textContent)
+            setLoading(false)
+            return
+          }
+
+          if (textContentResponse.status === 401) {
+            if (retryCount === 0) {
+              await new Promise(resolve => setTimeout(resolve, 500))
+              return loadDocument(1)
             }
-            if (textContentResponse.status === 403) {
-              throw new Error("You don't have permission to access this document.")
-            }
-            if (textContentResponse.status === 404) {
-              throw new Error("Document content not found. The document may need to be re-uploaded.")
-            }
-            
+            throw new Error("Authentication required. Please refresh the page and try again.")
+          }
+
+          if (textContentResponse.status === 403) {
+            throw new Error("You don't have permission to access this document.")
+          }
+
+          const fallbackStatuses = [400, 404, 422]
+          if (fallbackStatuses.includes(textContentResponse.status)) {
+            clientLogger.warn("[MultiFormatViewer] Text-content endpoint unavailable, falling back to original source", {
+              status: textContentResponse.status,
+              statusText: textContentResponse.statusText,
+              documentId,
+            })
+            shouldFallbackToOriginalSource = true
+          } else {
             let errorMessage = `Failed to fetch document content: ${textContentResponse.status} ${textContentResponse.statusText}`
             try {
               const errorData = await textContentResponse.json()
@@ -170,88 +211,118 @@ export function MultiFormatViewer({
             }
             throw new Error(errorMessage)
           }
+        }
 
-          const textContent = await textContentResponse.text()
-          setDocumentType("text")
-          setTextContent(textContent)
+        // If the text endpoint failed with a soft error, fall back to original source
+        if (!isTextOrMarkdown || shouldFallbackToOriginalSource) {
+          if (shouldFallbackToOriginalSource && isInternalPdfEndpoint) {
+            clientLogger.warn("[MultiFormatViewer] Using internal PDF viewer fallback", {
+              documentId,
+              url,
+            })
+            setDocumentType("pdf")
+            setLoading(false)
+            return
+          }
+
+          const metadataContentType =
+            typeof documentMetadata?.type === "string" ? documentMetadata.type : undefined
+          const fallbackDetectedType = detectDocumentType(url, metadataContentType, documentMetadata)
+
+          let response: Response
+          try {
+          // For other document types, fetch from the original URL
+          // Fetch document to detect type
+          // For API routes, ensure cookies are included for authentication
+            response = await fetch(url, {
+              credentials: "include",
+              headers: {
+                Accept: "*/*",
+              },
+              cache: "no-store", // Ensure fresh request
+            })
+          } catch (fetchError) {
+            if (fallbackDetectedType === "pdf") {
+              clientLogger.warn("[MultiFormatViewer] Fetch failed but metadata indicates PDF, falling back to PDF viewer", {
+                documentId,
+                url,
+                error: fetchError instanceof Error ? fetchError.message : fetchError,
+              })
+              setDocumentType("pdf")
+              setLoading(false)
+              return
+            }
+            throw fetchError
+          }
+
+          if (!response.ok) {
+            // Handle authentication errors specifically
+            if (response.status === 401) {
+              // If first attempt and 401, try refreshing the page once
+              if (retryCount === 0) {
+                // Wait a bit and retry (session might be refreshing)
+                await new Promise(resolve => setTimeout(resolve, 500))
+                return loadDocument(1)
+              }
+              throw new Error("Authentication required. Please refresh the page and try again.")
+            }
+            if (response.status === 403) {
+              throw new Error("You don't have permission to access this document.")
+            }
+            if (response.status === 404) {
+              throw new Error("Document not found.")
+            }
+            
+            // Try to get error message from response
+            let errorMessage = `Failed to fetch document: ${response.status} ${response.statusText}`
+            try {
+              const errorData = await response.json()
+              if (errorData.error) {
+                errorMessage = errorData.error
+              }
+            } catch {
+              // If response isn't JSON, use default message
+            }
+            throw new Error(errorMessage)
+          }
+
+          const contentType = response.headers.get("content-type")
+          const detectedType = detectDocumentType(url, contentType, documentMetadata)
+
+          setDocumentType(detectedType)
+
+          // Load content based on type
+          if (detectedType === "word") {
+            try {
+              const mammoth = await import("mammoth")
+              const arrayBuffer = await response.arrayBuffer()
+              const result = await mammoth.convertToHtml({ arrayBuffer })
+              setWordContent(result.value)
+              if (result.messages.length > 0) {
+                clientLogger.warn("Word conversion warnings:", result.messages)
+              }
+            } catch (err) {
+              clientLogger.error("Error converting Word document:", err)
+              throw new Error("Failed to convert Word document. The file may be corrupted or in an unsupported format.")
+            }
+          } else if (detectedType === "html") {
+            const text = await response.text()
+            setHtmlContent(text)
+          } else if (detectedType === "text") {
+            const text = await response.text()
+            setTextContent(text)
+          } else if (detectedType === "pdf") {
+            // PDF will be handled by PDFViewer component
+          } else {
+            throw new Error(`Unsupported document type: ${detectedType}`)
+          }
+
           setLoading(false)
           return
         }
 
-        // For other document types, fetch from the original URL
-        // Fetch document to detect type
-        // For API routes, ensure cookies are included for authentication
-        const response = await fetch(url, {
-          credentials: "include",
-          headers: {
-            Accept: "*/*",
-          },
-          cache: "no-store", // Ensure fresh request
-        })
-
-        if (!response.ok) {
-          // Handle authentication errors specifically
-          if (response.status === 401) {
-            // If first attempt and 401, try refreshing the page once
-            if (retryCount === 0) {
-              // Wait a bit and retry (session might be refreshing)
-              await new Promise(resolve => setTimeout(resolve, 500))
-              return loadDocument(1)
-            }
-            throw new Error("Authentication required. Please refresh the page and try again.")
-          }
-          if (response.status === 403) {
-            throw new Error("You don't have permission to access this document.")
-          }
-          if (response.status === 404) {
-            throw new Error("Document not found.")
-          }
-          
-          // Try to get error message from response
-          let errorMessage = `Failed to fetch document: ${response.status} ${response.statusText}`
-          try {
-            const errorData = await response.json()
-            if (errorData.error) {
-              errorMessage = errorData.error
-            }
-          } catch {
-            // If response isn't JSON, use default message
-          }
-          throw new Error(errorMessage)
-        }
-
-        const contentType = response.headers.get("content-type")
-        const detectedType = detectDocumentType(url, contentType, documentMetadata)
-
-        setDocumentType(detectedType)
-
-        // Load content based on type
-        if (detectedType === "word") {
-          try {
-            const mammoth = await import("mammoth")
-            const arrayBuffer = await response.arrayBuffer()
-            const result = await mammoth.convertToHtml({ arrayBuffer })
-            setWordContent(result.value)
-            if (result.messages.length > 0) {
-              clientLogger.warn("Word conversion warnings:", result.messages)
-            }
-          } catch (err) {
-            clientLogger.error("Error converting Word document:", err)
-            throw new Error("Failed to convert Word document. The file may be corrupted or in an unsupported format.")
-          }
-        } else if (detectedType === "html") {
-          const text = await response.text()
-          setHtmlContent(text)
-        } else if (detectedType === "text") {
-          const text = await response.text()
-          setTextContent(text)
-        } else if (detectedType === "pdf") {
-          // PDF will be handled by PDFViewer component
-        } else {
-          throw new Error(`Unsupported document type: ${detectedType}`)
-        }
-
-        setLoading(false)
+        // Should not reach here, but guard against it
+        throw new Error("Unsupported text document fallback path")
       } catch (err) {
         clientLogger.error("Error loading document:", err)
         setError(err instanceof Error ? err.message : "Failed to load document")

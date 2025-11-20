@@ -11,6 +11,7 @@ import {
   WorkspaceEvidenceBoard,
   WorkspaceInheritedItems,
   WorkspaceNotesPanel,
+  WorkspaceNotesCount,
 } from "@/components/workspace-page-client"
 import type { WorkspaceNote } from "@/components/workspace-notes-panel"
 import { WorkspaceChatWrapper } from "@/components/workspace-chat-wrapper"
@@ -161,12 +162,23 @@ export default async function WorkspacePage({
   const localWorkspaceItems = workspaceItemsResult.data ?? []
   const inheritedItems = inheritedItemsResult.data ?? []
 
+  const isPlaceholderSummary = (text?: string | null) => {
+    if (!text) return false
+    return text.trimStart().toLowerCase().startsWith("see original file:")
+  }
+
   const inheritedDocumentsNormalized = inheritedDocuments.map((doc: any) => {
     const metadata = (doc.metadata ?? {}) as Record<string, any>
     const originSpaceId = typeof metadata.sourceSpaceId === "string" ? metadata.sourceSpaceId : undefined
     const originSpace = originSpaceId ? parentSpaceById.get(originSpaceId) : undefined
     const summaryFromMetadata = typeof metadata.summary === "string" ? metadata.summary : undefined
     const summaryFromContent = typeof doc.content === "string" ? doc.content.slice(0, 280) : undefined
+    const summary =
+      !isPlaceholderSummary(summaryFromMetadata ?? undefined) && summaryFromMetadata
+        ? summaryFromMetadata
+        : !isPlaceholderSummary(summaryFromContent ?? undefined)
+          ? summaryFromContent
+          : undefined
 
     return {
       id: doc.id,
@@ -175,7 +187,7 @@ export default async function WorkspacePage({
       created_at: doc.created_at,
       payload: {
         title: doc.title || (metadata.sourceFileUrl as string | undefined) || "Inherited document",
-        summary: summaryFromMetadata ?? summaryFromContent ?? undefined,
+        summary,
         file_url: (metadata.sourceFileUrl as string | undefined) ?? (typeof doc.url === "string" ? doc.url : undefined),
       },
       spaces: originSpace
@@ -350,7 +362,14 @@ export default async function WorkspacePage({
                     <TabsTrigger value="sources">Sources <span className="font-normal">({uploadedDocuments.length})</span></TabsTrigger>
                     <TabsTrigger value="inherited">Inherited <span className="font-normal">({combinedInheritedItems.length})</span></TabsTrigger>
                     <TabsTrigger value="evidence">Evidence <span className="font-normal">({localWorkspaceItems.length})</span></TabsTrigger>
-                    <TabsTrigger value="notes">Notes <span className="font-normal">({workspaceNotes.length})</span></TabsTrigger>
+                    <TabsTrigger value="notes">
+                      Notes{" "}
+                      <WorkspaceNotesCount
+                        workspaceId={workspaceId}
+                        initialCount={workspaceNotes.length}
+                        className="font-normal"
+                      />
+                    </TabsTrigger>
                   </TabsList>
 
                 <TabsContent value="sources" className="space-y-5">

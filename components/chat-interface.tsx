@@ -1,6 +1,6 @@
 "use client"
 
-import { DefaultChatTransport } from "ai"
+import { TextStreamChatTransport } from "ai"
 import { useChat as useAiChat } from "@ai-sdk/react"
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -39,6 +39,7 @@ import { getWorkspaceContextDetails } from "@/lib/actions/workspace"
 import { cn } from "@/lib/utils"
 import { EvidenceList } from "@/components/chat/evidence-list"
 import { clientLogger } from "@/lib/utils/client-logger"
+import { fetchCsrfToken } from "@/lib/utils/csrf"
 
 type UseAiChatOptions = Parameters<typeof useAiChat>[0]
 
@@ -103,10 +104,92 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   const [excludedDocumentIds, setExcludedDocumentIds] = useState<Set<string>>(new Set())
   const [excludedNoteIds, setExcludedNoteIds] = useState<Set<string>>(new Set())
   const [excludedEvidenceIds, setExcludedEvidenceIds] = useState<Set<string>>(new Set())
-  const readMessageContent = (message: unknown): string => {
-    const value = (message as { content?: unknown })?.content
-    return typeof value === "string" ? value : ""
-  }
+  const readMessageContent = useCallback((message: unknown): string => {
+    if (!message || typeof message !== "object") {
+      return ""
+    }
+
+    const extractFromArray = (parts: unknown): string => {
+      if (!Array.isArray(parts)) {
+        return ""
+      }
+
+      return parts
+        .map((part) => {
+          if (typeof part === "string") {
+            return part
+          }
+
+          if (part && typeof part === "object") {
+            const typedPart = part as { text?: unknown; content?: unknown }
+            if (typeof typedPart.text === "string") {
+              return typedPart.text
+            }
+            if (typeof typedPart.content === "string") {
+              return typedPart.content
+            }
+          }
+
+          return ""
+        })
+        .join("")
+    }
+
+    const { content, parts } = message as { content?: unknown; parts?: unknown }
+
+    if (typeof content === "string") {
+      return content
+    }
+
+    const contentText = extractFromArray(content)
+    if (contentText) {
+      return contentText
+    }
+
+    return extractFromArray(parts)
+  }, [])
+
+  const normalizeMessage = useCallback(
+    (message: any) => {
+      if (!message || typeof message !== "object") {
+        return message
+      }
+
+      if (Array.isArray(message.parts) && message.parts.length > 0) {
+        return message
+      }
+
+      const content = readMessageContent(message)
+      const ensureId =
+        typeof message.id === "string" && message.id.trim().length > 0
+          ? message.id
+          : `msg-${Math.random().toString(36).slice(2)}`
+
+      const textParts =
+        typeof content === "string" && content.length > 0
+          ? [
+              {
+                type: "text",
+                text: content,
+                state: "done" as const,
+              },
+            ]
+          : []
+
+      return {
+        ...message,
+        id: ensureId,
+        content,
+        parts: textParts,
+      }
+    },
+    [readMessageContent],
+  )
+
+  const normalizedInitialMessages = useMemo(
+    () => initialMessages.map((message) => normalizeMessage(message)),
+    [initialMessages, normalizeMessage],
+  )
   const requestBodyRef = useRef({
     workspaceId,
     conversationId,
@@ -127,9 +210,17 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
 
   const chatTransport = useMemo(
     () =>
-      new DefaultChatTransport({
+      new TextStreamChatTransport({
         api: "/api/chat",
         body: () => requestBodyRef.current,
+        headers: async () => {
+          const csrfToken = await fetchCsrfToken()
+          if (!csrfToken) {
+            clientLogger.error("[ChatInterface] Missing CSRF token for chat request")
+            return {}
+          }
+          return { "x-csrf-token": csrfToken }
+        },
       }),
     [],
   )
@@ -317,7 +408,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages, stop, setInput } = useChatWithInput({
     transport: chatTransport,
-    messages: hasLoadedInitial ? undefined : (initialMessages as any),
+    messages: hasLoadedInitial ? undefined : (normalizedInitialMessages as any),
   })
 
   // useChat may briefly return undefined before hydration; always work with a string
@@ -661,7 +752,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
 
   // Track previous conversationId to detect changes
   const prevConversationIdForMessagesRef = useRef<string | undefined>(conversationId)
-  const prevInitialMessagesLengthRef = useRef<number>(initialMessages.length)
+  const prevInitialMessagesLengthRef = useRef<number>(normalizedInitialMessages.length)
 
   useEffect(() => {
     clientLogger.debug("[ChatInterface] Messages effect:", {
@@ -673,28 +764,28 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     })
 
     const conversationChanged = prevConversationIdForMessagesRef.current !== conversationId
-    const initialMessagesChanged = prevInitialMessagesLengthRef.current !== initialMessages.length
+    const initialMessagesChanged = prevInitialMessagesLengthRef.current !== normalizedInitialMessages.length
 
     let timeoutId: ReturnType<typeof setTimeout> | null = null
 
     if (!hasLoadedInitial) {
       // Initial load - load messages from initialMessages
-      clientLogger.debug("[ChatInterface] Loading initial messages:", initialMessages.length)
-      if (initialMessages.length > 0) {
-        setMessages(initialMessages)
+      clientLogger.debug("[ChatInterface] Loading initial messages:", normalizedInitialMessages.length)
+      if (normalizedInitialMessages.length > 0) {
+        setMessages(normalizedInitialMessages)
       } else {
         setMessages([])
       }
       setHasLoadedInitial(true)
       prevConversationIdForMessagesRef.current = conversationId
-      prevInitialMessagesLengthRef.current = initialMessages.length
+      prevInitialMessagesLengthRef.current = normalizedInitialMessages.length
     } else if (conversationChanged && conversationId) {
       // Conversation changed - sync with initialMessages
       // This happens when switching between conversations
       clientLogger.debug("[ChatInterface] Conversation changed, syncing messages")
       setIsSwitchingConversation(true)
-      if (initialMessages.length > 0) {
-        setMessages(initialMessages)
+      if (normalizedInitialMessages.length > 0) {
+        setMessages(normalizedInitialMessages)
         setIsSwitchingConversation(false)
       } else {
         // If no messages yet, keep old messages visible briefly to avoid placeholder flash
@@ -706,19 +797,19 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
         }, 500)
       }
       prevConversationIdForMessagesRef.current = conversationId
-      prevInitialMessagesLengthRef.current = initialMessages.length
+      prevInitialMessagesLengthRef.current = normalizedInitialMessages.length
     } else if (initialMessagesChanged && !isLoading && conversationId && !conversationChanged) {
       // initialMessages updated for current conversation (e.g., after loadMessages completes)
       // Only sync if we're not currently loading to avoid overwriting streaming messages
       // and conversation hasn't changed (to avoid double-syncing)
       clientLogger.debug("[ChatInterface] initialMessages updated, syncing messages")
-      if (initialMessages.length > 0) {
-        setMessages(initialMessages)
+      if (normalizedInitialMessages.length > 0) {
+        setMessages(normalizedInitialMessages)
         setIsSwitchingConversation(false)
       } else {
         setMessages([])
       }
-      prevInitialMessagesLengthRef.current = initialMessages.length
+      prevInitialMessagesLengthRef.current = normalizedInitialMessages.length
     }
 
     // Cleanup function
@@ -729,7 +820,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     }
     // Don't sync messages on every render - let useChat hook manage messages during streaming
     // Only sync when conversation changes, on initial load, or when initialMessages updates
-  }, [initialMessages, hasLoadedInitial, setMessages, conversationId, isLoading])
+  }, [normalizedInitialMessages, hasLoadedInitial, setMessages, conversationId, isLoading])
 
   // Focus input field when a new conversation is started
   useEffect(() => {
@@ -994,9 +1085,17 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     updateEvidenceStatus(messageKey, "saving")
 
     try {
+      const csrfToken = await fetchCsrfToken()
+      if (!csrfToken) {
+        throw new Error("Unable to fetch CSRF token")
+      }
+
       const response = await fetch("/api/evidence/save", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
         body: JSON.stringify({
           workspaceId,
           question,
@@ -1255,6 +1354,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           const isUser = message.role === "user"
           const isAssistant = message.role === "assistant"
           const isLastAssistant = isAssistant && index === messages.length - 1
+          const shouldShowThinkingTooltip = isAssistant && (!isLastAssistant || !isLoading)
           const messageKey = getMessageKey(message, index)
           const evidenceStatusEntry = evidenceStatusByMessage[messageKey]
           const evidenceStatus = evidenceStatusEntry?.status ?? "idle"
@@ -1402,7 +1502,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           return (
             <div key={index} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
               <div className="space-y-2 group">
-                {isAssistant && (
+                {shouldShowThinkingTooltip && (
                   <span className="text-xs italic text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
                     {(() => {
                       // First check if message has thinking_duration from database (past messages)

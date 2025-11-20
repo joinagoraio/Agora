@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { randomBytes } from "node:crypto"
 import { env } from "@/lib/env"
+import { sendSpaceInvitationEmail } from "@/lib/services/email"
 
 export async function inviteUserToSpace(
   spaceId: string,
@@ -40,9 +41,20 @@ export async function inviteUserToSpace(
     return { error: error.message }
   }
 
-  // TODO: Send invitation email with token
   const appUrl = env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
   const inviteLink = `${appUrl}/invite/${token}`
+  const spaceName = await getSpaceName(supabase, spaceId)
+
+  const emailResult = await sendSpaceInvitationEmail({
+    to: email,
+    inviteLink,
+    spaceName,
+    invitedByEmail: user.email,
+  })
+
+  if (emailResult?.error) {
+    console.error("Space invitation email failed to send", emailResult.error)
+  }
 
   return { data, inviteLink }
 }
@@ -99,4 +111,108 @@ export async function acceptInvitation(token: string) {
   await supabase.from("invitations").update({ status: "accepted" }).eq("id", invitation.id)
 
   return { success: true, spaceId: invitation.space_id }
+}
+
+export async function revokeInvitation(invitationId: string) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  const { data: invitation, error: fetchError } = await supabase.from("invitations").select("*").eq("id", invitationId).single()
+
+  if (fetchError || !invitation) {
+    return { error: "Invitation not found" }
+  }
+
+  const hasStatusColumn = Object.prototype.hasOwnProperty.call(invitation, "status")
+
+  if (hasStatusColumn) {
+    if (invitation.status !== "pending") {
+      return { error: "Only pending invitations can be revoked" }
+    }
+
+    const { error } = await supabase.from("invitations").update({ status: "declined" }).eq("id", invitationId)
+
+    if (error) {
+      return { error: error.message }
+    }
+  } else {
+    const { error } = await supabase.from("invitations").delete().eq("id", invitationId)
+    if (error) {
+      return { error: error.message }
+    }
+  }
+
+  return { success: true }
+}
+
+export async function resendInvitation(invitationId: string) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  const { data: invitation, error: fetchError } = await supabase
+    .from("invitations")
+    .select("*")
+    .eq("id", invitationId)
+    .single()
+
+  if (fetchError || !invitation) {
+    return { error: "Invitation not found" }
+  }
+
+  if ("status" in invitation && invitation.status !== "pending") {
+    return { error: "Only pending invitations can be resent" }
+  }
+
+  const token = randomBytes(32).toString("hex")
+  const expiresAt = new Date()
+  expiresAt.setDate(expiresAt.getDate() + 7)
+
+  const updatePayload: Record<string, any> = {
+    token,
+    expires_at: expiresAt.toISOString(),
+  }
+
+  if ("status" in invitation) {
+    updatePayload.status = "pending"
+  }
+
+  const { error } = await supabase.from("invitations").update(updatePayload).eq("id", invitationId)
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  const appUrl = env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+  const inviteLink = `${appUrl}/invite/${token}`
+  const spaceName = await getSpaceName(supabase, invitation.space_id)
+
+  const emailResult = await sendSpaceInvitationEmail({
+    to: invitation.email,
+    inviteLink,
+    spaceName,
+    invitedByEmail: user.email,
+  })
+
+  if (emailResult?.error) {
+    console.error("Space invitation email failed to resend", emailResult.error)
+  }
+
+  return { inviteLink }
+}
+
+async function getSpaceName(supabase: Awaited<ReturnType<typeof createClient>>, spaceId: string) {
+  const { data } = await supabase.from("spaces").select("name").eq("id", spaceId).single()
+  return data?.name ?? "your space"
 }

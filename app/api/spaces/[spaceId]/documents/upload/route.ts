@@ -8,6 +8,8 @@ import { createClient } from "@/lib/supabase/server"
 import { assertUUIDParam } from "@/lib/utils/param-validation"
 import { ValidationError } from "@/lib/utils/errors"
 
+export const runtime = "nodejs"
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ spaceId: string }> },

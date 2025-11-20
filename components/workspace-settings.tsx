@@ -8,10 +8,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { inviteUserToSpace } from "@/lib/actions/invitation"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { inviteUserToWorkspace, resendWorkspaceInvitation, revokeWorkspaceInvitation } from "@/lib/actions/workspace-invitation"
 import { deleteWorkspace } from "@/lib/actions/workspace"
 import { useRouter } from "next/navigation"
-import { Trash2, Send } from "lucide-react"
+import { Trash2, Send, MoreVertical } from "lucide-react"
+import { toast } from "sonner"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +25,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 interface WorkspaceSettingsProps {
   workspace: {
@@ -39,9 +48,23 @@ export function WorkspaceSettings({ workspace, space, members, invitations }: Wo
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<"member" | "admin" | "viewer">("member")
   const [isInviting, setIsInviting] = useState(false)
-  const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [inviteLinkInfo, setInviteLinkInfo] = useState<{ link: string; email: string } | null>(null)
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
+  const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false)
+  const [invitationAction, setInvitationAction] = useState<{ id: string; type: "resend" | "revoke" } | null>(null)
   const router = useRouter()
+
+  const formatStatusLabel = (status?: string | null) => {
+    const normalized = status?.trim()
+    if (!normalized) return "Pending"
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1)
+  }
+
+  const formatStatusLabel = (status?: string | null) => {
+    const normalized = status?.trim()
+    if (!normalized) return "Pending"
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1)
+  }
 
   const handleDeleteWorkspace = async () => {
     if (!needsConfirmation) {
@@ -49,7 +72,16 @@ export function WorkspaceSettings({ workspace, space, members, invitations }: Wo
       return
     }
     
-    await deleteWorkspace(workspace.id)
+    setIsDeletingWorkspace(true)
+    const result = await deleteWorkspace(workspace.id)
+    setIsDeletingWorkspace(false)
+
+    if (result?.error) {
+      toast.error("Failed to delete workspace", { description: result.error })
+      return
+    }
+
+    toast.success("Workspace deleted", { description: `${workspace.name} has been removed.` })
     router.push(`/spaces/${workspace.space_id}`)
   }
 
@@ -59,13 +91,52 @@ export function WorkspaceSettings({ workspace, space, members, invitations }: Wo
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
+    const email = inviteEmail.trim()
+
+    if (!email) {
+      toast.error("Email required", { description: "Please enter who you want to invite." })
+      return
+    }
+
     setIsInviting(true)
-    const result = await inviteUserToSpace(space.id, inviteEmail, inviteRole)
-    if (result.inviteLink) {
-      setInviteLink(result.inviteLink)
+    const result = await inviteUserToWorkspace(workspace.id, email, inviteRole)
+    setIsInviting(false)
+
+    if (result.error) {
+      toast.error("Invitation failed", { description: result.error })
+      return
+    }
+
+    if ("inviteLink" in result && result.inviteLink) {
+      setInviteLinkInfo({ link: result.inviteLink, email })
     }
     setInviteEmail("")
-    setIsInviting(false)
+    toast.success("Invitation sent", { description: `Sent to ${email}.` })
+    router.refresh()
+  }
+
+  const handleInvitationAction = async (invitation: { id: string; email: string }, type: "resend" | "revoke") => {
+    setInvitationAction({ id: invitation.id, type })
+    const result =
+      type === "resend" ? await resendWorkspaceInvitation(invitation.id) : await revokeWorkspaceInvitation(invitation.id)
+
+    if (type === "resend" && result && "inviteLink" in result && result.inviteLink) {
+      setInviteLinkInfo({ link: result.inviteLink, email: invitation.email })
+    }
+
+    setInvitationAction(null)
+
+    if (result?.error) {
+      toast.error(`Failed to ${type === "resend" ? "resend" : "revoke"} invitation`, {
+        description: result.error,
+      })
+      return
+    }
+
+    toast.success(
+      type === "resend" ? "Invitation resent" : "Invitation revoked",
+      { description: `${invitation.email}` },
+    )
     router.refresh()
   }
 
@@ -80,8 +151,8 @@ export function WorkspaceSettings({ workspace, space, members, invitations }: Wo
       <TabsContent value="members">
         <Card className="shadow">
           <CardHeader>
-            <CardTitle>Space Members</CardTitle>
-            <CardDescription>Manage who has access to this space</CardDescription>
+            <CardTitle>Workspace Members</CardTitle>
+            <CardDescription>Manage who has access to this workspace</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -113,8 +184,8 @@ export function WorkspaceSettings({ workspace, space, members, invitations }: Wo
       <TabsContent value="invitations">
         <Card className="shadow">
           <CardHeader>
-            <CardTitle>Invite Members</CardTitle>
-            <CardDescription>Send invitations to join this space</CardDescription>
+            <CardTitle>Invite Workspace Members</CardTitle>
+            <CardDescription>Send invitations to join this workspace</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <form onSubmit={handleInvite} className="space-y-4">
@@ -127,15 +198,16 @@ export function WorkspaceSettings({ workspace, space, members, invitations }: Wo
                   required
                   className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
-                <select
-                  value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value as any)}
-                  className="rounded-md border px-3 py-2"
-                >
-                  <option value="viewer">Viewer</option>
-                  <option value="member">Member</option>
-                  <option value="admin">Admin</option>
-                </select>
+                <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as "member" | "admin" | "viewer")}>
+                  <SelectTrigger className="min-w-28">
+                    <SelectValue placeholder="Role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="viewer">Viewer</SelectItem>
+                    <SelectItem value="member">Member</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Button type="submit" disabled={isInviting}>
                   <Send className="mr-2 h-4 w-4" />
                   Invite
@@ -143,10 +215,13 @@ export function WorkspaceSettings({ workspace, space, members, invitations }: Wo
               </div>
             </form>
 
-            {inviteLink && (
+            {inviteLinkInfo && (
               <div className="rounded-md bg-muted p-4">
-                <p className="mb-2 text-sm font-medium">Invitation Link:</p>
-                <code className="block break-all text-xs">{inviteLink}</code>
+                <p className="mb-1 text-sm font-medium">Latest Invitation Link</p>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Sent to <span className="font-semibold">{inviteLinkInfo.email}</span>
+                </p>
+                <code className="block break-all text-xs">{inviteLinkInfo.link}</code>
               </div>
             )}
 
@@ -160,6 +235,9 @@ export function WorkspaceSettings({ workspace, space, members, invitations }: Wo
                       <TableHead>Role</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Expires</TableHead>
+                      <TableHead className="text-right">
+                        <span className="sr-only">Actions</span>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -170,9 +248,34 @@ export function WorkspaceSettings({ workspace, space, members, invitations }: Wo
                           <Badge variant="secondary">{invite.role}</Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge>{invite.status}</Badge>
+                          <Badge variant="secondary">{formatStatusLabel(invite.status)}</Badge>
                         </TableCell>
                         <TableCell className="text-sm">{new Date(invite.expires_at).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Invitation actions">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => handleInvitationAction(invite, "resend")}
+                                disabled={invitationAction?.id === invite.id && invitationAction?.type === "resend"}
+                              >
+                                Resend invitation
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleInvitationAction(invite, "revoke")}
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10 focus:text-destructive"
+                                disabled={invitationAction?.id === invite.id && invitationAction?.type === "revoke"}
+                              >
+                                Revoke invitation
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -198,7 +301,7 @@ export function WorkspaceSettings({ workspace, space, members, invitations }: Wo
                 </div>
                 <AlertDialog onOpenChange={handleDeleteDialogClose}>
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive">
+                    <Button variant="destructive" disabled={isDeletingWorkspace}>
                       <Trash2 className="mr-2 h-4 w-4" />
                       Delete Workspace
                     </Button>
@@ -216,13 +319,23 @@ export function WorkspaceSettings({ workspace, space, members, invitations }: Wo
                       </p>
                     )}
                     <AlertDialogFooter>
-                      <AlertDialogCancel onClick={() => setNeedsConfirmation(false)}>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel onClick={() => setNeedsConfirmation(false)} disabled={isDeletingWorkspace}>
+                        Cancel
+                      </AlertDialogCancel>
                       {needsConfirmation ? (
-                        <AlertDialogAction onClick={handleDeleteWorkspace} className="bg-destructive text-white hover:bg-destructive/90">
-                          Confirm?
+                        <AlertDialogAction
+                          onClick={handleDeleteWorkspace}
+                          className="bg-destructive text-white hover:bg-destructive/90"
+                          disabled={isDeletingWorkspace}
+                        >
+                          {isDeletingWorkspace ? "Deleting..." : "Confirm?"}
                         </AlertDialogAction>
                       ) : (
-                        <Button onClick={() => setNeedsConfirmation(true)} className="bg-destructive text-white hover:bg-destructive/90">
+                        <Button
+                          onClick={() => setNeedsConfirmation(true)}
+                          className="bg-destructive text-white hover:bg-destructive/90"
+                          disabled={isDeletingWorkspace}
+                        >
                           Delete Workspace
                         </Button>
                       )}

@@ -1,5 +1,5 @@
 {
-  "name": "my-v0-project",
+  "name": "agora",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -87,6 +87,7 @@
     "react-pdf": "10.2.0",
     "react-resizable-panels": "2.1.7",
     "recharts": "2.15.4",
+    "resend": "^6.5.2",
     "server-only": "0.0.1",
     "sonner": "1.7.4",
     "tailwind-merge": "2.5.5",

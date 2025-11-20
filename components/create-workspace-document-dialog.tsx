@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { createWorkspaceDocument } from "@/lib/actions/document"
 import { Loader2, Plus } from "lucide-react"
+import { toast } from "sonner"
 
 interface CreateWorkspaceDocumentDialogProps {
   workspaceId: string
@@ -48,41 +49,54 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
   }
 
   const handleCreate = async () => {
-    if (!title.trim()) {
-      setError("Please provide a title")
-      return
-    }
+    const trimmedTitle = title.trim()
+    const trimmedInstructions = instructions.trim()
+    const hasInstructions = trimmedInstructions.length > 0
 
-    if (!instructions.trim()) {
-      setError("Please provide instructions for what the document is for. The AI will use all workspace knowledge to draft an initial version.")
+    if (!trimmedTitle) {
+      const message = "Please provide a title"
+      setError(message)
+      toast.error("Title required", { description: message })
       return
     }
 
     setIsCreating(true)
-    setIsGeneratingDraft(false)
+    setIsGeneratingDraft(hasInstructions)
     setError(null)
 
     try {
       // First create the document
-      setIsGeneratingDraft(true)
       const result = await createWorkspaceDocument(workspaceId, {
-        title,
-        instructions: instructions.trim(),
+        title: trimmedTitle,
+        ...(hasInstructions ? { instructions: trimmedInstructions } : {}),
         classification,
       })
 
       if (result.error || !result.data) {
         setError(result.error || "Failed to create document")
+        toast.error("Could not create document", {
+          description: result.error || "Something went wrong",
+        })
         setIsCreating(false)
         setIsGeneratingDraft(false)
         return
       }
 
+      const createdTitle = result.data?.title || trimmedTitle
       setOpen(false)
+      toast.success("Document created", {
+        description: hasInstructions
+          ? `${createdTitle} is being drafted.`
+          : `${createdTitle} is ready for editing.`,
+      })
       router.push(`/workspaces/${workspaceId}/my-documents/${result.data.id}`)
     } catch (err) {
       console.error("[CreateWorkspaceDocumentDialog] Failed to create document:", err)
-      setError(err instanceof Error ? err.message : "Failed to create document")
+      const description = err instanceof Error ? err.message : "Failed to create document"
+      setError(description)
+      toast.error("Could not create document", {
+        description,
+      })
     } finally {
       setIsCreating(false)
       setIsGeneratingDraft(false)
@@ -103,7 +117,7 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
         <DialogHeader>
           <DialogTitle>Create workspace document</DialogTitle>
           <DialogDescription>
-            Create a new document with AI assistance. Provide instructions and the AI will draft an initial version using all workspace knowledge.
+            Create a new document. Provide optional AI drafting instructions to generate a first version automatically, or leave blank to start from scratch.
           </DialogDescription>
         </DialogHeader>
 
@@ -139,20 +153,17 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="document-instructions">
-              Instructions for the document <span className="text-destructive">*</span>
-            </Label>
+            <Label htmlFor="document-instructions">Instructions for the document (optional)</Label>
             <Textarea
               id="document-instructions"
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
-              placeholder="Describe what this document is for, its purpose, audience, tone, and any key points to include. The AI will use all workspace knowledge (documents, notes, evidence) to draft an initial version."
+              placeholder="Describe what this document is for, its purpose, audience, tone, and any key points to include. Leave blank to draft manually."
               rows={6}
               disabled={isCreating}
-              required
             />
             <p className="text-xs text-muted-foreground">
-              The AI will automatically generate a first draft based on your instructions and all available workspace knowledge. You can edit and refine the draft after creation.
+              When instructions are provided, the AI will automatically generate a first draft using all available workspace knowledge. You can always edit or draft manually.
             </p>
           </div>
 
@@ -170,7 +181,9 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
                 {isGeneratingDraft ? "Generating draft..." : "Creating..."}
               </>
             ) : (
-              "Create & Generate Draft"
+              instructions.trim()
+                ? "Create & Generate Draft"
+                : "Create"
             )}
           </Button>
         </DialogFooter>

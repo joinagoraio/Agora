@@ -52,6 +52,32 @@ create table if not exists public.invitations (
   updated_at timestamp with time zone default now()
 );
 
+-- Workspace members (workspace-scoped access)
+create table if not exists public.workspace_members (
+  id uuid primary key default uuid_generate_v4(),
+  workspace_id uuid references public.workspaces(id) on delete cascade not null,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  role text not null check (role in ('admin', 'member', 'viewer')),
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now(),
+  unique(workspace_id, user_id)
+);
+
+-- Workspace invitations
+create table if not exists public.workspace_invitations (
+  id uuid primary key default uuid_generate_v4(),
+  workspace_id uuid references public.workspaces(id) on delete cascade not null,
+  email text not null,
+  role text not null check (role in ('admin', 'member', 'viewer')),
+  status invitation_status not null default 'pending',
+  token text unique not null,
+  invited_by uuid references public.profiles(id) on delete set null,
+  expires_at timestamp with time zone not null,
+  accepted_at timestamp with time zone,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+
 -- Workspaces (sub-spaces within a space)
 create table if not exists public.workspaces (
   id uuid primary key default uuid_generate_v4(),
@@ -139,6 +165,8 @@ create table if not exists public.shared_links (
 -- Create indexes for performance
 create index idx_space_members_space_id on public.space_members(space_id);
 create index idx_space_members_user_id on public.space_members(user_id);
+create index idx_workspace_members_workspace_id on public.workspace_members(workspace_id);
+create index idx_workspace_members_user_id on public.workspace_members(user_id);
 create index idx_workspaces_space_id on public.workspaces(space_id);
 create index idx_connectors_workspace_id on public.connectors(workspace_id);
 create index idx_documents_connector_id on public.documents(connector_id);
@@ -148,4 +176,7 @@ create index idx_conversations_workspace_id on public.conversations(workspace_id
 create index idx_conversations_user_id on public.conversations(user_id);
 create index idx_messages_conversation_id on public.messages(conversation_id);
 create index idx_invitations_token on public.invitations(token);
+create index idx_workspace_invitations_workspace_id on public.workspace_invitations(workspace_id);
+create index idx_workspace_invitations_email on public.workspace_invitations(email);
+create index idx_workspace_invitations_token on public.workspace_invitations(token);
 create index idx_shared_links_token on public.shared_links(token);

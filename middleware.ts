@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createCsrfProtect } from "@edge-csrf/nextjs"
+import { createCsrfProtect, CsrfError } from "@edge-csrf/nextjs"
 
 import { updateSession } from "@/lib/supabase/middleware"
 import { env } from "@/lib/env"
@@ -11,6 +11,7 @@ const csrfProtect = createCsrfProtect({
 })
 
 const CSRF_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
+const CSRF_TOKEN_ENDPOINT = "/api/csrf-token"
 
 export async function middleware(request: NextRequest) {
   const sessionResponse = await updateSession(request)
@@ -19,10 +20,21 @@ export async function middleware(request: NextRequest) {
     return sessionResponse
   }
 
-  if (CSRF_METHODS.has(request.method)) {
-    const csrfError = await csrfProtect(request, sessionResponse)
-    if (csrfError) {
-      return new NextResponse("Invalid CSRF token", { status: 403 })
+  const isApiRoute = request.nextUrl.pathname.startsWith("/api/")
+  const isServerActionRequest = request.headers.has("next-action")
+
+  const shouldValidateCsrf = CSRF_METHODS.has(request.method) && isApiRoute && !isServerActionRequest
+  const shouldIssueToken = request.nextUrl.pathname === CSRF_TOKEN_ENDPOINT
+
+  if ((shouldValidateCsrf || shouldIssueToken) && isApiRoute) {
+    try {
+      await csrfProtect(request, sessionResponse)
+    } catch (error) {
+      if (error instanceof CsrfError && shouldValidateCsrf) {
+        return new NextResponse("Invalid CSRF token", { status: 403 })
+      }
+      // If we're just issuing a token, propagate other errors so the request fails fast.
+      throw error
     }
   }
 

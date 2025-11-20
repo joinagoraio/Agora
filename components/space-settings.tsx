@@ -8,10 +8,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { inviteUserToSpace } from "@/lib/actions/invitation"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { inviteUserToSpace, resendInvitation, revokeInvitation } from "@/lib/actions/invitation"
 import { deleteSpace } from "@/lib/actions/space"
 import { useRouter } from "next/navigation"
-import { Trash2, Send } from "lucide-react"
+import { Trash2, Send, MoreVertical } from "lucide-react"
+import { toast } from "sonner"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +25,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 interface SpaceSettingsProps {
   space: any
@@ -34,8 +37,10 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<"member" | "admin" | "viewer">("member")
   const [isInviting, setIsInviting] = useState(false)
-  const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [inviteLinkInfo, setInviteLinkInfo] = useState<{ link: string; email: string } | null>(null)
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
+  const [invitationAction, setInvitationAction] = useState<{ id: string; type: "resend" | "revoke" } | null>(null)
+  const [isDeletingSpace, setIsDeletingSpace] = useState(false)
   const router = useRouter()
 
   const handleDeleteSpace = async () => {
@@ -44,7 +49,16 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
       return
     }
     
-    await deleteSpace(space.id)
+    setIsDeletingSpace(true)
+    const result = await deleteSpace(space.id)
+    setIsDeletingSpace(false)
+
+    if (result?.error) {
+      toast.error("Failed to delete space", { description: result.error })
+      return
+    }
+
+    toast.success("Space deleted", { description: `${space.name} and all related workspaces were removed.` })
     router.push("/dashboard")
   }
 
@@ -54,14 +68,59 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
+    const email = inviteEmail.trim()
+
+    if (!email) {
+      toast.error("Email required", { description: "Please enter who you want to invite." })
+      return
+    }
+
     setIsInviting(true)
-    const result = await inviteUserToSpace(space.id, inviteEmail, inviteRole)
-    if (result.inviteLink) {
-      setInviteLink(result.inviteLink)
+    const result = await inviteUserToSpace(space.id, email, inviteRole)
+    setIsInviting(false)
+
+    if (result.error) {
+      toast.error("Invitation failed", { description: result.error })
+      return
+    }
+
+    if ("inviteLink" in result && result.inviteLink) {
+      setInviteLinkInfo({ link: result.inviteLink, email })
     }
     setInviteEmail("")
-    setIsInviting(false)
+    toast.success("Invitation sent", { description: `Sent to ${email}.` })
     router.refresh()
+  }
+
+  const handleInvitationAction = async (invitation: { id: string; email: string }, type: "resend" | "revoke") => {
+    setInvitationAction({ id: invitation.id, type })
+    const result =
+      type === "resend" ? await resendInvitation(invitation.id) : await revokeInvitation(invitation.id)
+
+    if (type === "resend" && result && "inviteLink" in result && result.inviteLink) {
+      setInviteLinkInfo({ link: result.inviteLink, email: invitation.email })
+    }
+
+    setInvitationAction(null)
+
+    if (result?.error) {
+      toast.error(`Failed to ${type === "resend" ? "resend" : "revoke"} invitation`, {
+        description: result.error,
+      })
+      return
+    }
+
+    toast.success(
+      type === "resend" ? "Invitation resent" : "Invitation revoked",
+      { description: `${invitation.email}` },
+    )
+    router.refresh()
+  }
+
+  const formatStatusLabel = (status?: string | null) => {
+    const normalized = status?.trim()
+    if (!normalized) return "Pending"
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1)
   }
 
   return (
@@ -122,15 +181,16 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
                   required
                   className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
-                <select
-                  value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value as any)}
-                  className="rounded-md border px-3 py-2"
-                >
-                  <option value="viewer">Viewer</option>
-                  <option value="member">Member</option>
-                  <option value="admin">Admin</option>
-                </select>
+                <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as "member" | "admin" | "viewer")}>
+                  <SelectTrigger className="min-w-28">
+                    <SelectValue placeholder="Role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="viewer">Viewer</SelectItem>
+                    <SelectItem value="member">Member</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Button type="submit" disabled={isInviting}>
                   <Send className="mr-2 h-4 w-4" />
                   Invite
@@ -138,10 +198,13 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
               </div>
             </form>
 
-            {inviteLink && (
+            {inviteLinkInfo && (
               <div className="rounded-md bg-muted p-4">
-                <p className="mb-2 text-sm font-medium">Invitation Link:</p>
-                <code className="block break-all text-xs">{inviteLink}</code>
+                <p className="mb-1 text-sm font-medium">Latest Invitation Link</p>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Sent to <span className="font-semibold">{inviteLinkInfo.email}</span>
+                </p>
+                <code className="block break-all text-xs">{inviteLinkInfo.link}</code>
               </div>
             )}
 
@@ -155,6 +218,9 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
                       <TableHead>Role</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Expires</TableHead>
+                      <TableHead className="text-right">
+                        <span className="sr-only">Actions</span>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -165,9 +231,38 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
                           <Badge variant="secondary">{invite.role}</Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge>{invite.status}</Badge>
+                          <Badge variant="secondary">{formatStatusLabel(invite.status)}</Badge>
                         </TableCell>
                         <TableCell className="text-sm">{new Date(invite.expires_at).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Invitation actions">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => handleInvitationAction(invite, "resend")}
+                                disabled={
+                                  invitationAction?.id === invite.id && invitationAction?.type === "resend"
+                                }
+                              >
+                                Resend invitation
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleInvitationAction(invite, "revoke")}
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10 focus:text-destructive"
+                                disabled={
+                                  invitationAction?.id === invite.id && invitationAction?.type === "revoke"
+                                }
+                              >
+                                Revoke invitation
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -193,7 +288,7 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
                 </div>
                 <AlertDialog onOpenChange={handleDeleteDialogClose}>
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive">
+                    <Button variant="destructive" disabled={isDeletingSpace}>
                       <Trash2 className="mr-2 h-4 w-4" />
                       Delete Space
                     </Button>
@@ -211,13 +306,23 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
                       </p>
                     )}
                     <AlertDialogFooter>
-                      <AlertDialogCancel onClick={() => setNeedsConfirmation(false)}>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel onClick={() => setNeedsConfirmation(false)} disabled={isDeletingSpace}>
+                        Cancel
+                      </AlertDialogCancel>
                       {needsConfirmation ? (
-                        <AlertDialogAction onClick={handleDeleteSpace} className="bg-destructive text-white hover:bg-destructive/90">
-                          Confirm?
+                        <AlertDialogAction
+                          onClick={handleDeleteSpace}
+                          className="bg-destructive text-white hover:bg-destructive/90"
+                          disabled={isDeletingSpace}
+                        >
+                          {isDeletingSpace ? "Deleting..." : "Confirm?"}
                         </AlertDialogAction>
                       ) : (
-                        <Button onClick={() => setNeedsConfirmation(true)} className="bg-destructive text-white hover:bg-destructive/90">
+                        <Button
+                          onClick={() => setNeedsConfirmation(true)}
+                          className="bg-destructive text-white hover:bg-destructive/90"
+                          disabled={isDeletingSpace}
+                        >
                           Delete Space
                         </Button>
                       )}

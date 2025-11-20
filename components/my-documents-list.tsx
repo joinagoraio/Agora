@@ -26,6 +26,7 @@ import {
 import { CreateWorkspaceDocumentDialog } from "@/components/create-workspace-document-dialog"
 import { deleteDocument } from "@/lib/actions/document"
 import { Calendar, Edit3, FileText, MoreVertical, Search, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 
 interface MyDocumentsListProps {
   workspaceId: string
@@ -86,10 +87,12 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
     setIsDeleting(true)
     setDeleteError(null)
 
+    const targetTitle = documentToDelete.title || "Document"
     const result = await deleteDocument(documentToDelete.id, workspaceId)
 
     if (result.error) {
       setDeleteError(result.error)
+      toast.error("Failed to delete document", { description: result.error })
       setIsDeleting(false)
       return
     }
@@ -103,6 +106,9 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
     setIsDeleting(false)
     // Close dialog and refresh after animation completes
     setDocumentToDelete(null)
+    toast.success("Document deleted", {
+      description: `${targetTitle} was removed.`,
+    })
     setTimeout(() => {
       router.refresh()
     }, 200)

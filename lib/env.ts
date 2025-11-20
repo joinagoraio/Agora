@@ -22,6 +22,8 @@ const envSchema = z
     E2E_TEST_PASSWORD: z.string().min(1).optional(),
     E2E_WORKSPACE_PATH: z.string().min(1).optional(),
     NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
+    RESEND_API_KEY: z.string().min(1).optional(),
+    INVITE_EMAIL_FROM: z.string().email().optional(),
   })
   .superRefine((envValues, ctx) => {
     const hasRedisUrl = Boolean(envValues.UPSTASH_REDIS_REST_URL)
@@ -55,6 +57,8 @@ const parsedEnv = envSchema.safeParse({
   E2E_TEST_PASSWORD: process.env.E2E_TEST_PASSWORD,
   E2E_WORKSPACE_PATH: process.env.E2E_WORKSPACE_PATH,
   NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
+  INVITE_EMAIL_FROM: process.env.INVITE_EMAIL_FROM,
 })
 
 if (!parsedEnv.success) {

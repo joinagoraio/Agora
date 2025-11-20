@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createSpace } from "@/lib/actions/space"
 import { Plus } from "lucide-react"
+import { toast } from "sonner"
 
 export function CreateSpaceDialog() {
   const [open, setOpen] = useState(false)
@@ -28,19 +29,31 @@ export function CreateSpaceDialog() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const trimmedName = name.trim()
+    if (!trimmedName) {
+      setError("Please provide a space name")
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
-    const result = await createSpace(name)
+    const result = await createSpace(trimmedName)
 
     if (result.error) {
       setError(result.error)
+      toast.error("Could not create space", {
+        description: result.error,
+      })
       setIsLoading(false)
     } else {
       setOpen(false)
       setName("")
       setIsLoading(false)
-      router.push(`/spaces/${result.data.id}`)
+      toast.success("Space created", {
+        description: `${result.data?.name || trimmedName} is ready.`,
+      })
+      router.push(`/spaces/${result.data?.id}`)
     }
   }
 

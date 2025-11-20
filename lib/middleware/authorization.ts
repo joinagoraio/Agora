@@ -30,10 +30,9 @@ export async function getUserSpaceRole(userId: string, spaceId: string): Promise
 export async function getUserWorkspaceRole(userId: string, workspaceId: string): Promise<Role | null> {
   const supabase = await createClient()
   
-  // Get workspace to find parent space
   const { data: workspace } = await supabase
     .from("workspaces")
-    .select("space_id")
+    .select("space_id, created_by")
     .eq("id", workspaceId)
     .maybeSingle()
 
@@ -41,7 +40,33 @@ export async function getUserWorkspaceRole(userId: string, workspaceId: string):
     return null
   }
 
-  return getUserSpaceRole(userId, workspace.space_id)
+  if (workspace.created_by === userId) {
+    return "admin"
+  }
+
+  const { data: workspaceMembership } = await supabase
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (workspaceMembership?.role) {
+    return workspaceMembership.role as Role
+  }
+
+  const { data: spaceMembership } = await supabase
+    .from("space_members")
+    .select("role")
+    .eq("space_id", workspace.space_id)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (spaceMembership?.role && ["owner", "admin"].includes(spaceMembership.role)) {
+    return spaceMembership.role as Role
+  }
+
+  return null
 }
 
 /**

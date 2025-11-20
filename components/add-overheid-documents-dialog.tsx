@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ensureOverheidNLSource, addDocumentsFromSource } from "@/lib/actions/document"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 interface AddOverheidDocumentsDialogProps {
   workspaceId: string
@@ -153,7 +154,9 @@ export function AddOverheidDocumentsDialog({
       // Ensure overheid_nl source exists
       const sourceResult = await ensureOverheidNLSource(workspaceId)
       if (sourceResult.error || !sourceResult.data) {
-        setError(sourceResult.error || "Failed to create Overheid.nl source")
+        const description = sourceResult.error || "Failed to create Overheid.nl source"
+        setError(description)
+        toast.error("Cannot add documents", { description })
         setAdding(false)
         return
       }
@@ -168,10 +171,16 @@ export function AddOverheidDocumentsDialog({
 
       if (result.error) {
         setError(result.error)
+        toast.error("Failed to add documents", { description: result.error })
       } else if (result.addedCount === 0 && documents.length > 0) {
-        setError("Failed to add documents. Please check the console for details or try again.")
+        const message = "Failed to add documents. Please check the console for details or try again."
+        setError(message)
+        toast.error("No documents added", { description: message })
       } else {
         setSuccess(`Successfully added ${result.addedCount || 0} document(s)`)
+        toast.success("Overheid.nl documents added", {
+          description: `${result.addedCount || documents.length} publication(s) imported.`,
+        })
         router.refresh()
         onSuccess?.()
         
@@ -186,7 +195,9 @@ export function AddOverheidDocumentsDialog({
         }, 2000)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add documents")
+      const description = err instanceof Error ? err.message : "Failed to add documents"
+      setError(description)
+      toast.error("Failed to add documents", { description })
     } finally {
       setAdding(false)
     }

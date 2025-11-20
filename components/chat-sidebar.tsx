@@ -36,6 +36,7 @@ import { X, Plus, MoreVertical, Archive, Trash2, List, GripVertical, Pencil, Loa
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { toast } from "sonner"
 
 interface ChatSidebarProps {
   workspaceId: string
@@ -309,21 +310,26 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
       contextType,
       contextId,
     })
-    if (result.data) {
-      // Reset state for new conversation
-      setHasLoadedInitial(false)
-      setMessages([])
-      setCurrentConversationId(result.data.id)
-      updateConversationId(result.data.id)
-      await loadConversations()
-      // Load messages (will be empty for new conversation)
-      await loadMessages(result.data.id)
-      setHasLoadedInitial(true)
-      // Expand list when conversation is created
-      setIsListExpanded(true)
-      // Ensure chat sidebar is open
-      setIsChatOpen(true)
+    if (result.error || !result.data) {
+      toast.error("Could not start chat", { description: result.error || "Something went wrong." })
+      return
     }
+
+    toast.success("New chat started", { description: "Say hello to Agora AI." })
+
+    // Reset state for new conversation
+    setHasLoadedInitial(false)
+    setMessages([])
+    setCurrentConversationId(result.data.id)
+    updateConversationId(result.data.id)
+    await loadConversations()
+    // Load messages (will be empty for new conversation)
+    await loadMessages(result.data.id)
+    setHasLoadedInitial(true)
+    // Expand list when conversation is created
+    setIsListExpanded(true)
+    // Ensure chat sidebar is open
+    setIsChatOpen(true)
   }
 
   const handleConversationSelect = async (conversationId: string) => {
@@ -381,7 +387,12 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
     }
     
     const result = await deleteConversation(conversationToDelete)
-    if (result.success) {
+    if (result?.error) {
+      toast.error("Failed to delete chat", { description: result.error })
+    } else if (result?.success) {
+      toast.success("Chat deleted")
+    }
+    if (result?.success) {
       // Reload conversations to get updated list
       const updated = await loadConversations()
         
@@ -463,6 +474,7 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
 
     if (result.error) {
       setRenameError(result.error)
+      toast.error("Failed to rename chat", { description: result.error })
       setIsRenaming(false)
       return
     }
@@ -474,6 +486,7 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
     }
 
     setIsRenaming(false)
+    toast.success("Chat renamed")
     setRenameDialogOpen(false)
     setConversationToRename(null)
     setRenameValue("")
@@ -505,7 +518,13 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
     const wasActiveConversation = conversationId === currentConversationId
     
     const result = await archiveConversation(conversationId)
-    if (result.success) {
+    if (result?.error) {
+      toast.error("Failed to archive chat", { description: result.error })
+      return
+    }
+
+    toast.success("Chat archived")
+    if (result?.success) {
       // Reload conversations to get updated list
       const updated = await loadConversations()
 

@@ -40,6 +40,21 @@ export async function createWorkspace(spaceId: string, name: string, description
     return { error: error.message }
   }
 
+  const { error: membershipError } = await supabase
+    .from("workspace_members")
+    .upsert(
+      {
+        workspace_id: data.id,
+        user_id: user.id,
+        role: "admin",
+      },
+      { onConflict: "workspace_id,user_id" },
+    )
+
+  if (membershipError) {
+    console.error("[Workspace] Failed to seed workspace membership", membershipError)
+  }
+
   let scopeSyncWarning: string | undefined
   try {
     await syncAllScopeDocumentsToWorkspace(spaceId, data.id)

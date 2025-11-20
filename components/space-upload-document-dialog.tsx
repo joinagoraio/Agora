@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Loader2, Upload, X } from "lucide-react"
+import { fetchCsrfToken } from "@/lib/utils/csrf"
+import { toast } from "sonner"
 
 type SpaceDocument = any
 
@@ -44,7 +46,9 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
 
   const handleUpload = async () => {
     if (!file) {
-      setError("Choose a file to upload.")
+      const message = "Choose a file to upload."
+      setError(message)
+      toast.error("No file selected", { description: message })
       return
     }
 
@@ -62,15 +66,39 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
       formData.append("notes", notes.trim())
     }
 
+    const csrfToken = await fetchCsrfToken()
+    if (!csrfToken) {
+      const message = "Could not verify your session. Refresh and try again."
+      setError(message)
+      toast.error("Upload blocked", { description: message })
+      setIsUploading(false)
+      return
+    }
+
     const response = await fetch(`/api/spaces/${spaceId}/documents/upload`, {
       method: "POST",
       body: formData,
+      headers: {
+        "x-csrf-token": csrfToken,
+      },
     })
 
-    const payload = await response.json()
+    let payload: any = null
+    try {
+      payload = await response.json()
+    } catch (parseError) {
+      console.error("[SpaceUpload] Failed to parse response payload:", parseError)
+      const message = "Upload failed: received an unexpected response from the server."
+      setError(message)
+      toast.error("Upload failed", { description: message })
+      setIsUploading(false)
+      return
+    }
 
     if (!response.ok) {
-      setError(payload.error || "Upload failed.")
+      const message = payload.error || "Upload failed."
+      setError(message)
+      toast.error("Upload failed", { description: message })
       setIsUploading(false)
       return
     }
@@ -83,8 +111,19 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
       setFile(null)
       setTitle("")
       setNotes("")
+      toast.warning("Document uploaded with warnings", {
+        description: payload.warnings.join(" "),
+      })
       return
     }
+
+    const uploadedName =
+      payload?.data?.payload?.title ||
+      payload?.data?.payload?.file_name ||
+      payload?.data?.title ||
+      title.trim() ||
+      file?.name ||
+      "Space document"
 
     setIsUploading(false)
     setIsOpen(false)
@@ -92,6 +131,9 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
     setTitle("")
     setNotes("")
     setClassification("public")
+    toast.success("Document uploaded", {
+      description: `${uploadedName} is now available.`,
+    })
   }
 
   const handleOpenChange = (open: boolean) => {

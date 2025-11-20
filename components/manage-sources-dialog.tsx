@@ -399,7 +399,7 @@ export function ManageSourcesDialog({
                 <p className="text-sm text-muted-foreground">Loading sources...</p>
               </div>
             ) : displaySources && displaySources.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="overflow-hidden rounded-md border divide-y divide-border">
                 {displaySources.map((source) => (
                   <SourceCard key={source.id} source={source} />
                 ))}

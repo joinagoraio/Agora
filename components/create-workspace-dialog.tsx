@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createWorkspace } from "@/lib/actions/workspace"
 import { Plus } from "lucide-react"
+import { toast } from "sonner"
 
 interface CreateWorkspaceDialogProps {
   spaceId: string
@@ -33,19 +34,31 @@ export function CreateWorkspaceDialog({ spaceId, trigger }: CreateWorkspaceDialo
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const trimmedName = name.trim()
+    if (!trimmedName) {
+      setError("Please provide a workspace name")
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
-    const result = await createWorkspace(spaceId, name)
+    const result = await createWorkspace(spaceId, trimmedName)
 
     if (result.error) {
       setError(result.error)
+      toast.error("Could not create workspace", {
+        description: result.error,
+      })
       setIsLoading(false)
     } else {
       setOpen(false)
       setName("")
       setIsLoading(false)
-      router.push(`/workspaces/${result.data.id}?new=true`)
+      toast.success("Workspace created", {
+        description: `${result.data?.name || trimmedName} is live.`,
+      })
+      router.push(`/workspaces/${result.data?.id}?new=true`)
     }
   }
 

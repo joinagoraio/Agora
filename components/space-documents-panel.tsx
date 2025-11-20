@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 
 import Link from "next/link"
 
@@ -16,6 +17,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { fetchCsrfToken } from "@/lib/utils/csrf"
+import { toast } from "sonner"
 
 export type SpaceDocumentItem = {
   id: string
@@ -38,7 +41,10 @@ interface SpaceDocumentsPanelProps {
   spaceName: string
 }
 
+const CSRF_ERROR_MESSAGE = "Could not verify your session. Refresh and try again."
+
 export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spaceName }: SpaceDocumentsPanelProps) {
+  const router = useRouter()
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<"grid" | "list">("list")
@@ -64,26 +70,82 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
     }
   }
 
-  const handleDelete = async (itemId: string) => {
+  const handleDelete = async (doc: SpaceDocumentItem) => {
+    const itemId = doc.id
+    const docTitle = doc.payload?.title || doc.payload?.file_name || "Space document"
+
     setError(null)
     setIsDeleting(itemId)
 
-    const response = await fetch(`/api/spaces/${spaceId}/items/${itemId}`, { method: "DELETE" })
-    const payload = await response.json()
+    try {
+      console.log(`[SpaceDocumentsPanel] Deleting item ${itemId} from space ${spaceId}`)
+      const csrfToken = await fetchCsrfToken()
+      if (!csrfToken) {
+        setError(CSRF_ERROR_MESSAGE)
+        toast.error("Failed to delete document", { description: CSRF_ERROR_MESSAGE })
+        setIsDeleting(null)
+        return
+      }
 
-    if (!response.ok) {
-      setError(payload.error || "Failed to delete document.")
+      const response = await fetch(`/api/spaces/${spaceId}/items/${itemId}`, {
+        method: "DELETE",
+        headers: {
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+      })
+
+      console.log(`[SpaceDocumentsPanel] Delete response status: ${response.status}`)
+
+      const responseText = await response.text()
+      let payload: any = null
+      if (responseText) {
+        try {
+          payload = JSON.parse(responseText)
+        } catch {
+          payload = { error: responseText }
+        }
+      }
+
+      if (!response.ok) {
+        const errorMessage = payload?.error || payload?.message || "Failed to delete document."
+        console.error(`[SpaceDocumentsPanel] Delete error payload:`, payload)
+        setError(errorMessage)
+        toast.error("Failed to delete document", { description: errorMessage })
+        setIsDeleting(null)
+        return
+      }
+
+      if (payload?.error) {
+        setError(payload.error)
+        toast.error("Failed to delete document", { description: payload.error })
+        setIsDeleting(null)
+        return
+      }
+
+      console.log(`[SpaceDocumentsPanel] Document deleted successfully, updating UI`)
+      const updatedDocuments = safeDocuments.filter((doc) => doc.id !== itemId)
+      if (onDocumentsChange) {
+        onDocumentsChange(updatedDocuments)
+      } else {
+        setInternalDocuments(updatedDocuments)
+      }
       setIsDeleting(null)
-      return
+      toast.success("Document deleted", {
+        description: `${docTitle} removed from ${spaceName}.`,
+      })
+      
+      // Refresh the page to ensure server component data is updated
+      setTimeout(() => {
+        router.refresh()
+      }, 200)
+    } catch (error) {
+      console.error("[SpaceDocumentsPanel] Error deleting document:", error)
+      const message = error instanceof Error ? error.message : "An unexpected error occurred"
+      setError(message)
+      toast.error("Failed to delete document", { description: message })
+      setIsDeleting(null)
     }
-
-    const updatedDocuments = safeDocuments.filter((doc) => doc.id !== itemId)
-    if (onDocumentsChange) {
-      onDocumentsChange(updatedDocuments)
-    } else {
-      setInternalDocuments(updatedDocuments)
-    }
-    setIsDeleting(null)
   }
 
   return (
@@ -214,7 +276,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                         onSelect={(event) => {
                           event.preventDefault()
                           if (isDeleting !== doc.id) {
-                            handleDelete(doc.id)
+                            handleDelete(doc)
                           }
                         }}
                       >
@@ -296,10 +358,10 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                               <DropdownMenuItem
                                 className="group cursor-pointer focus:bg-destructive/10 focus:text-destructive"
                                 disabled={isDeleting === doc.id}
-                                onSelect={(event) => {
+                        onSelect={(event) => {
                                   event.preventDefault()
                                   if (isDeleting !== doc.id) {
-                                    handleDelete(doc.id)
+                            handleDelete(doc)
                                   }
                                 }}
                               >

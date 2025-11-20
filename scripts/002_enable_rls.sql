@@ -4,6 +4,8 @@ alter table public.profiles enable row level security;
 alter table public.space_members enable row level security;
 alter table public.invitations enable row level security;
 alter table public.workspaces enable row level security;
+alter table public.workspace_members enable row level security;
+alter table public.workspace_invitations enable row level security;
 alter table public.connectors enable row level security;
 alter table public.documents enable row level security;
 alter table public.document_embeddings enable row level security;
@@ -49,6 +51,46 @@ returns boolean as $$
         when 'viewer' then space_members.role in ('owner', 'admin', 'member', 'viewer')
       end
     )
+  );
+$$ language sql security definer;
+
+-- Helper functions for workspace membership
+create or replace function public.is_workspace_member(workspace_id uuid)
+returns boolean as $$
+  select exists (
+    select 1 from public.workspaces
+    where workspaces.id = is_workspace_member.workspace_id
+      and (workspaces.created_by = auth.uid())
+  )
+  or exists (
+    select 1 from public.workspace_members
+    where workspace_members.workspace_id = is_workspace_member.workspace_id
+      and workspace_members.user_id = auth.uid()
+  )
+  or exists (
+    select 1
+    from public.workspaces
+    where workspaces.id = is_workspace_member.workspace_id
+      and public.has_space_role(workspaces.space_id, 'admin')
+  );
+$$ language sql security definer;
+
+create or replace function public.is_workspace_admin(workspace_id uuid)
+returns boolean as $$
+  select exists (
+    select 1
+    from public.workspaces
+    where workspaces.id = is_workspace_admin.workspace_id
+      and (
+        workspaces.created_by = auth.uid()
+        or public.has_space_role(workspaces.space_id, 'admin')
+      )
+  )
+  or exists (
+    select 1 from public.workspace_members
+    where workspace_members.workspace_id = is_workspace_admin.workspace_id
+      and workspace_members.user_id = auth.uid()
+      and workspace_members.role = 'admin'
   );
 $$ language sql security definer;
 
@@ -104,63 +146,43 @@ create policy "Space admins can delete invitations"
   using (public.has_space_role(space_id, 'admin'));
 
 -- Workspaces policies
-create policy "Space members can view workspaces"
+create policy "Workspace access can view workspaces"
   on public.workspaces for select
-  using (public.is_space_member(space_id));
+  using (public.is_workspace_member(id));
 
 create policy "Space members can create workspaces"
   on public.workspaces for insert
   with check (public.has_space_role(space_id, 'member'));
 
-create policy "Space members can update workspaces"
+create policy "Workspace admins can update workspaces"
   on public.workspaces for update
-  using (public.has_space_role(space_id, 'member'));
+  using (public.is_workspace_admin(id));
 
-create policy "Space admins can delete workspaces"
+create policy "Workspace admins can delete workspaces"
   on public.workspaces for delete
-  using (public.has_space_role(space_id, 'admin'));
+  using (public.is_workspace_admin(id));
 
 -- Connectors policies
-create policy "Space members can view connectors"
+create policy "Workspace access can view connectors"
   on public.connectors for select
-  using (exists (
-    select 1 from public.workspaces
-    where workspaces.id = connectors.workspace_id
-    and public.is_space_member(workspaces.space_id)
-  ));
+  using (public.is_workspace_member(connectors.workspace_id));
 
-create policy "Space members can create connectors"
+create policy "Workspace members can create connectors"
   on public.connectors for insert
-  with check (exists (
-    select 1 from public.workspaces
-    where workspaces.id = connectors.workspace_id
-    and public.has_space_role(workspaces.space_id, 'member')
-  ));
+  with check (public.is_workspace_member(connectors.workspace_id));
 
-create policy "Space members can update connectors"
+create policy "Workspace admins or creators can update connectors"
   on public.connectors for update
-  using (exists (
-    select 1 from public.workspaces
-    where workspaces.id = connectors.workspace_id
-    and public.has_space_role(workspaces.space_id, 'member')
-  ));
+  using (public.is_workspace_admin(connectors.workspace_id) or created_by = auth.uid());
 
-create policy "Space members can delete connectors"
+create policy "Workspace admins or creators can delete connectors"
   on public.connectors for delete
-  using (exists (
-    select 1 from public.workspaces
-    where workspaces.id = connectors.workspace_id
-    and public.has_space_role(workspaces.space_id, 'member')
-  ));
+  using (public.is_workspace_admin(connectors.workspace_id) or created_by = auth.uid());
 
 -- Documents policies
-create policy "Space members can view documents"
+create policy "Workspace access can view documents"
   on public.documents for select
-  using (exists (
-    select 1 from public.workspaces
-    where workspaces.id = documents.workspace_id
-    and public.is_space_member(workspaces.space_id)
-  ));
+  using (public.is_workspace_member(documents.workspace_id));
 
 create policy "System can manage documents"
   on public.documents for all
@@ -168,51 +190,38 @@ create policy "System can manage documents"
   with check (true);
 
 -- Document embeddings policies
-create policy "Space members can view embeddings"
+create policy "Workspace access can view embeddings"
   on public.document_embeddings for select
   using (exists (
     select 1 from public.documents
-    join public.workspaces on workspaces.id = documents.workspace_id
     where documents.id = document_embeddings.document_id
-    and public.is_space_member(workspaces.space_id)
+      and public.is_workspace_member(documents.workspace_id)
   ));
 
 -- Conversations policies
-create policy "Users can view their own conversations"
+create policy "Workspace access can view conversations"
   on public.conversations for select
-  using (user_id = auth.uid() or exists (
-    select 1 from public.workspaces
-    where workspaces.id = conversations.workspace_id
-    and public.is_space_member(workspaces.space_id)
-  ));
+  using (user_id = auth.uid() or public.is_workspace_member(conversations.workspace_id));
 
-create policy "Users can create conversations in their workspaces"
+create policy "Workspace members can create conversations"
   on public.conversations for insert
-  with check (user_id = auth.uid() and exists (
-    select 1 from public.workspaces
-    where workspaces.id = conversations.workspace_id
-    and public.is_space_member(workspaces.space_id)
-  ));
+  with check (user_id = auth.uid() and public.is_workspace_member(conversations.workspace_id));
 
 create policy "Users can update their own conversations"
   on public.conversations for update
   using (user_id = auth.uid());
 
-create policy "Users can delete their own conversations"
+create policy "Creators or admins can delete conversations"
   on public.conversations for delete
-  using (user_id = auth.uid());
+  using (user_id = auth.uid() or public.is_workspace_admin(conversations.workspace_id));
 
 -- Messages policies
-create policy "Users can view messages in their conversations"
+create policy "Workspace access can view messages"
   on public.messages for select
   using (exists (
     select 1 from public.conversations
     where conversations.id = messages.conversation_id
-    and (conversations.user_id = auth.uid() or exists (
-      select 1 from public.workspaces
-      where workspaces.id = conversations.workspace_id
-      and public.is_space_member(workspaces.space_id)
-    ))
+      and (conversations.user_id = auth.uid() or public.is_workspace_member(conversations.workspace_id))
   ));
 
 create policy "Users can create messages in their conversations"
@@ -222,6 +231,30 @@ create policy "Users can create messages in their conversations"
     where conversations.id = messages.conversation_id
     and conversations.user_id = auth.uid()
   ));
+
+-- Workspace members policies
+create policy "Workspace members can view workspace members"
+  on public.workspace_members for select
+  using (public.is_workspace_member(workspace_id));
+
+create policy "Workspace admins manage workspace members"
+  on public.workspace_members for all
+  using (public.is_workspace_admin(workspace_id))
+  with check (public.is_workspace_admin(workspace_id));
+
+-- Workspace invitations policies
+create policy "Workspace admins can manage workspace invitations"
+  on public.workspace_invitations for all
+  using (public.is_workspace_admin(workspace_id))
+  with check (public.is_workspace_admin(workspace_id));
+
+create policy "Workspace invitees can view their invitations"
+  on public.workspace_invitations for select
+  using (auth.uid() is not null);
+
+create policy "Workspace invitees can update their invitations"
+  on public.workspace_invitations for update
+  using (auth.uid() is not null);
 
 -- Shared links policies (public access)
 create policy "Anyone can view shared conversations via token"

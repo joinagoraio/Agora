@@ -4,10 +4,21 @@
 -- NOTE: If you get errors about existing policies or triggers, you can safely ignore them
 -- or drop existing policies first. This script is idempotent for tables and indexes.
 
--- Step 1: Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "vector";
+
+-- Ensure required enums exist
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'invitation_status') THEN
+    CREATE TYPE invitation_status AS ENUM ('pending', 'accepted', 'declined', 'expired');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+    CREATE TYPE user_role AS ENUM ('owner', 'admin', 'member', 'viewer');
+  END IF;
+END;
+$$;
 
 -- Step 2: Create core tables
 CREATE TABLE IF NOT EXISTS profiles (
@@ -57,6 +68,30 @@ CREATE TABLE IF NOT EXISTS workspaces (
   name TEXT NOT NULL,
   description TEXT,
   created_by UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS workspace_members (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'member', 'viewer')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(workspace_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS workspace_invitations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'member', 'viewer')),
+  token TEXT NOT NULL UNIQUE,
+  invited_by UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  status invitation_status NOT NULL DEFAULT 'pending',
+  expires_at TIMESTAMPTZ NOT NULL,
+  accepted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -164,6 +199,8 @@ CREATE TABLE IF NOT EXISTS shared_links (
 -- Step 3: Create indexes
 CREATE INDEX IF NOT EXISTS idx_space_members_space_id ON space_members(space_id);
 CREATE INDEX IF NOT EXISTS idx_space_members_user_id ON space_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace_id ON workspace_members(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_members_user_id ON workspace_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_workspaces_space_id ON workspaces(space_id);
 CREATE INDEX IF NOT EXISTS idx_connectors_workspace_id ON connectors(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_documents_connector_id ON documents(connector_id);
@@ -173,6 +210,9 @@ CREATE INDEX IF NOT EXISTS idx_conversations_workspace_id ON conversations(works
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token);
 CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(email);
+CREATE INDEX IF NOT EXISTS idx_workspace_invitations_workspace_id ON workspace_invitations(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_invitations_email ON workspace_invitations(email);
+CREATE INDEX IF NOT EXISTS idx_workspace_invitations_token ON workspace_invitations(token);
 CREATE INDEX IF NOT EXISTS idx_shared_links_token ON shared_links(token);
 
 -- Vector similarity search index (drop and recreate if exists)
@@ -183,7 +223,9 @@ CREATE INDEX document_embeddings_embedding_idx ON document_embeddings USING ivff
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE spaces ENABLE ROW LEVEL SECURITY;
 ALTER TABLE space_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workspace_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invitations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workspace_invitations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE workspaces ENABLE ROW LEVEL SECURITY;
 ALTER TABLE connectors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
@@ -215,6 +257,24 @@ BEGIN
     SELECT oid::regprocedure as func_name
     FROM pg_proc
     WHERE proname = 'is_space_admin'
+  LOOP
+    EXECUTE 'DROP FUNCTION IF EXISTS ' || func_record.func_name || ' CASCADE';
+  END LOOP;
+
+  -- Drop all versions of is_workspace_member
+  FOR func_record IN 
+    SELECT oid::regprocedure as func_name
+    FROM pg_proc
+    WHERE proname = 'is_workspace_member'
+  LOOP
+    EXECUTE 'DROP FUNCTION IF EXISTS ' || func_record.func_name || ' CASCADE';
+  END LOOP;
+
+  -- Drop all versions of is_workspace_admin
+  FOR func_record IN 
+    SELECT oid::regprocedure as func_name
+    FROM pg_proc
+    WHERE proname = 'is_workspace_admin'
   LOOP
     EXECUTE 'DROP FUNCTION IF EXISTS ' || func_record.func_name || ' CASCADE';
   END LOOP;
@@ -273,6 +333,78 @@ BEGIN
 END;
 $$;
 
+-- Workspace access helpers
+CREATE OR REPLACE FUNCTION is_workspace_member(workspace_uuid UUID, user_uuid UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  space_uuid UUID;
+  creator_uuid UUID;
+BEGIN
+  SELECT space_id, created_by INTO space_uuid, creator_uuid FROM workspaces WHERE id = workspace_uuid;
+  IF space_uuid IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  IF creator_uuid = user_uuid THEN
+    RETURN TRUE;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM workspace_members
+    WHERE workspace_id = workspace_uuid
+      AND user_id = user_uuid
+  ) THEN
+    RETURN TRUE;
+  END IF;
+
+  IF is_space_admin(space_uuid, user_uuid) THEN
+    RETURN TRUE;
+  END IF;
+
+  RETURN FALSE;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION is_workspace_admin(workspace_uuid UUID, user_uuid UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  space_uuid UUID;
+  creator_uuid UUID;
+BEGIN
+  SELECT space_id, created_by INTO space_uuid, creator_uuid FROM workspaces WHERE id = workspace_uuid;
+  IF space_uuid IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  IF creator_uuid = user_uuid THEN
+    RETURN TRUE;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM workspace_members
+    WHERE workspace_id = workspace_uuid
+      AND user_id = user_uuid
+      AND role = 'admin'
+  ) THEN
+    RETURN TRUE;
+  END IF;
+
+  IF is_space_admin(space_uuid, user_uuid) THEN
+    RETURN TRUE;
+  END IF;
+  
+  RETURN FALSE;
+END;
+$$;
+
 -- Drop existing policies if they exist (for idempotency)
 DO $$ 
 BEGIN
@@ -304,6 +436,17 @@ BEGIN
   DROP POLICY IF EXISTS "Space members can create workspaces" ON workspaces;
   DROP POLICY IF EXISTS "Admins can update workspaces" ON workspaces;
   DROP POLICY IF EXISTS "Admins can delete workspaces" ON workspaces;
+
+  -- Workspace members policies
+  DROP POLICY IF EXISTS "Workspace members can view workspace members" ON workspace_members;
+  DROP POLICY IF EXISTS "Workspace admins manage workspace members" ON workspace_members;
+
+  -- Workspace invitations policies
+  DROP POLICY IF EXISTS "Workspace admins can view workspace invitations" ON workspace_invitations;
+  DROP POLICY IF EXISTS "Workspace admins can create workspace invitations" ON workspace_invitations;
+  DROP POLICY IF EXISTS "Workspace admins can update workspace invitations" ON workspace_invitations;
+  DROP POLICY IF EXISTS "Workspace invitees can view by token" ON workspace_invitations;
+  DROP POLICY IF EXISTS "Workspace invitees can update their invitations" ON workspace_invitations;
   
   -- Connectors policies
   DROP POLICY IF EXISTS "Workspace members can view connectors" ON connectors;
@@ -427,16 +570,10 @@ CREATE POLICY "Invitees can update their invitation"
   ON invitations FOR UPDATE
   USING (auth.uid() IS NOT NULL);
 
--- Workspaces: Space members can view workspaces
-CREATE POLICY "Space members can view workspaces"
+-- Workspaces: workspace-level access
+CREATE POLICY "Workspace access can view workspaces"
   ON workspaces FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM space_members
-      WHERE space_members.space_id = workspaces.space_id
-      AND space_members.user_id = auth.uid()
-    )
-  );
+  USING (is_workspace_member(workspaces.id, auth.uid()));
 
 CREATE POLICY "Space members can create workspaces"
   ON workspaces FOR INSERT
@@ -449,89 +586,73 @@ CREATE POLICY "Space members can create workspaces"
     )
   );
 
-CREATE POLICY "Admins can update workspaces"
+CREATE POLICY "Workspace admins can update workspaces"
   ON workspaces FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM space_members
-      WHERE space_members.space_id = workspaces.space_id
-      AND space_members.user_id = auth.uid()
-      AND space_members.role IN ('owner', 'admin')
-    )
-  );
+  USING (is_workspace_admin(workspaces.id, auth.uid()));
 
-CREATE POLICY "Admins can delete workspaces"
+CREATE POLICY "Workspace admins can delete workspaces"
   ON workspaces FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM space_members
-      WHERE space_members.space_id = workspaces.space_id
-      AND space_members.user_id = auth.uid()
-      AND space_members.role IN ('owner', 'admin')
-    )
-  );
+  USING (is_workspace_admin(workspaces.id, auth.uid()));
 
--- Connectors: Workspace members can view connectors
-CREATE POLICY "Workspace members can view connectors"
+-- Workspace members table policies
+CREATE POLICY "Workspace members can view workspace members"
+  ON workspace_members FOR SELECT
+  USING (is_workspace_member(workspace_members.workspace_id, auth.uid()));
+
+CREATE POLICY "Workspace admins manage workspace members"
+  ON workspace_members FOR ALL
+  USING (is_workspace_admin(workspace_members.workspace_id, auth.uid()))
+  WITH CHECK (is_workspace_admin(workspace_members.workspace_id, auth.uid()));
+
+-- Workspace invitations policies
+CREATE POLICY "Workspace admins can view workspace invitations"
+  ON workspace_invitations FOR SELECT
+  USING (is_workspace_admin(workspace_invitations.workspace_id, auth.uid()));
+
+CREATE POLICY "Workspace admins can create workspace invitations"
+  ON workspace_invitations FOR INSERT
+  WITH CHECK (is_workspace_admin(workspace_invitations.workspace_id, auth.uid()));
+
+CREATE POLICY "Workspace admins can update workspace invitations"
+  ON workspace_invitations FOR UPDATE
+  USING (is_workspace_admin(workspace_invitations.workspace_id, auth.uid()))
+  WITH CHECK (is_workspace_admin(workspace_invitations.workspace_id, auth.uid()));
+
+CREATE POLICY "Workspace invitees can view by token"
+  ON workspace_invitations FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+
+CREATE POLICY "Workspace invitees can update their invitations"
+  ON workspace_invitations FOR UPDATE
+  USING (auth.uid() IS NOT NULL);
+
+-- Connectors: Workspace access
+CREATE POLICY "Workspace access can view connectors"
   ON connectors FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM workspaces w
-      JOIN space_members sm ON sm.space_id = w.space_id
-      WHERE w.id = connectors.workspace_id
-      AND sm.user_id = auth.uid()
-    )
-  );
+  USING (is_workspace_member(connectors.workspace_id, auth.uid()));
 
 CREATE POLICY "Workspace members can create connectors"
   ON connectors FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM workspaces w
-      JOIN space_members sm ON sm.space_id = w.space_id
-      WHERE w.id = connectors.workspace_id
-      AND sm.user_id = auth.uid()
-      AND sm.role IN ('owner', 'admin', 'member')
-    )
-  );
+  WITH CHECK (is_workspace_member(connectors.workspace_id, auth.uid()));
 
 CREATE POLICY "Creators and admins can update connectors"
   ON connectors FOR UPDATE
   USING (
-    created_by = auth.uid() OR
-    EXISTS (
-      SELECT 1 FROM workspaces w
-      JOIN space_members sm ON sm.space_id = w.space_id
-      WHERE w.id = connectors.workspace_id
-      AND sm.user_id = auth.uid()
-      AND sm.role IN ('owner', 'admin')
-    )
+    created_by = auth.uid()
+    OR is_workspace_admin(connectors.workspace_id, auth.uid())
   );
 
 CREATE POLICY "Creators and admins can delete connectors"
   ON connectors FOR DELETE
   USING (
-    created_by = auth.uid() OR
-    EXISTS (
-      SELECT 1 FROM workspaces w
-      JOIN space_members sm ON sm.space_id = w.space_id
-      WHERE w.id = connectors.workspace_id
-      AND sm.user_id = auth.uid()
-      AND sm.role IN ('owner', 'admin')
-    )
+    created_by = auth.uid()
+    OR is_workspace_admin(connectors.workspace_id, auth.uid())
   );
 
--- Documents: Workspace members can view documents
-CREATE POLICY "Workspace members can view documents"
+-- Documents: Workspace access controls
+CREATE POLICY "Workspace access can view documents"
   ON documents FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM workspaces w
-      JOIN space_members sm ON sm.space_id = w.space_id
-      WHERE w.id = documents.workspace_id
-      AND sm.user_id = auth.uid()
-    )
-  );
+  USING (is_workspace_member(documents.workspace_id, auth.uid()));
 
 CREATE POLICY "System can insert documents"
   ON documents FOR INSERT
@@ -541,28 +662,18 @@ CREATE POLICY "System can update documents"
   ON documents FOR UPDATE
   USING (true);
 
-CREATE POLICY "Admins can delete documents"
+CREATE POLICY "Workspace admins can delete documents"
   ON documents FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM workspaces w
-      JOIN space_members sm ON sm.space_id = w.space_id
-      WHERE w.id = documents.workspace_id
-      AND sm.user_id = auth.uid()
-      AND sm.role IN ('owner', 'admin')
-    )
-  );
+  USING (is_workspace_admin(documents.workspace_id, auth.uid()));
 
 -- Document Embeddings: Same as documents
-CREATE POLICY "Workspace members can view embeddings"
+CREATE POLICY "Workspace access can view embeddings"
   ON document_embeddings FOR SELECT
   USING (
     EXISTS (
       SELECT 1 FROM documents d
-      JOIN workspaces w ON w.id = d.workspace_id
-      JOIN space_members sm ON sm.space_id = w.space_id
       WHERE d.id = document_embeddings.document_id
-      AND sm.user_id = auth.uid()
+        AND is_workspace_member(d.workspace_id, auth.uid())
     )
   );
 
@@ -574,27 +685,19 @@ CREATE POLICY "System can delete embeddings"
   ON document_embeddings FOR DELETE
   USING (true);
 
--- Conversations: Workspace members can view conversations
-CREATE POLICY "Workspace members can view conversations"
+-- Conversations: Workspace access
+CREATE POLICY "Workspace access can view conversations"
   ON conversations FOR SELECT
   USING (
-    EXISTS (
-      SELECT 1 FROM workspaces w
-      JOIN space_members sm ON sm.space_id = w.space_id
-      WHERE w.id = conversations.workspace_id
-      AND sm.user_id = auth.uid()
-    )
+    user_id = auth.uid()
+    OR is_workspace_member(conversations.workspace_id, auth.uid())
   );
 
 CREATE POLICY "Workspace members can create conversations"
   ON conversations FOR INSERT
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM workspaces w
-      JOIN space_members sm ON sm.space_id = w.space_id
-      WHERE w.id = conversations.workspace_id
-      AND sm.user_id = auth.uid()
-    )
+    user_id = auth.uid()
+    AND is_workspace_member(conversations.workspace_id, auth.uid())
   );
 
 CREATE POLICY "Creators can update conversations"
@@ -604,26 +707,21 @@ CREATE POLICY "Creators can update conversations"
 CREATE POLICY "Creators and admins can delete conversations"
   ON conversations FOR DELETE
   USING (
-    user_id = auth.uid() OR
-    EXISTS (
-      SELECT 1 FROM workspaces w
-      JOIN space_members sm ON sm.space_id = w.space_id
-      WHERE w.id = conversations.workspace_id
-      AND sm.user_id = auth.uid()
-      AND sm.role IN ('owner', 'admin')
-    )
+    user_id = auth.uid()
+    OR is_workspace_admin(conversations.workspace_id, auth.uid())
   );
 
 -- Messages: Conversation members can view messages
-CREATE POLICY "Conversation members can view messages"
+CREATE POLICY "Workspace access can view messages"
   ON messages FOR SELECT
   USING (
     EXISTS (
       SELECT 1 FROM conversations c
-      JOIN workspaces w ON w.id = c.workspace_id
-      JOIN space_members sm ON sm.space_id = w.space_id
       WHERE c.id = messages.conversation_id
-      AND sm.user_id = auth.uid()
+        AND (
+          c.user_id = auth.uid()
+          OR is_workspace_member(c.workspace_id, auth.uid())
+        )
     )
   );
 
@@ -663,9 +761,11 @@ $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS update_profiles_updated_at ON profiles;
 DROP TRIGGER IF EXISTS update_spaces_updated_at ON spaces;
 DROP TRIGGER IF EXISTS update_space_members_updated_at ON space_members;
+DROP TRIGGER IF EXISTS update_workspace_members_updated_at ON workspace_members;
 DROP TRIGGER IF EXISTS update_workspaces_updated_at ON workspaces;
 DROP TRIGGER IF EXISTS update_connectors_updated_at ON connectors;
 DROP TRIGGER IF EXISTS update_documents_updated_at ON documents;
+DROP TRIGGER IF EXISTS update_workspace_invitations_updated_at ON workspace_invitations;
 DROP TRIGGER IF EXISTS update_conversations_updated_at ON conversations;
 
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles
@@ -677,6 +777,9 @@ CREATE TRIGGER update_spaces_updated_at BEFORE UPDATE ON spaces
 CREATE TRIGGER update_space_members_updated_at BEFORE UPDATE ON space_members
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_workspace_members_updated_at BEFORE UPDATE ON workspace_members
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER update_workspaces_updated_at BEFORE UPDATE ON workspaces
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -684,6 +787,9 @@ CREATE TRIGGER update_connectors_updated_at BEFORE UPDATE ON connectors
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON documents
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_workspace_invitations_updated_at BEFORE UPDATE ON workspace_invitations
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_conversations_updated_at BEFORE UPDATE ON conversations

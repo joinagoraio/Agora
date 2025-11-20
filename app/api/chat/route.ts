@@ -10,6 +10,64 @@ import { getClientIdentifier } from "@/lib/utils/request"
 
 let cachedOpenAIClient: OpenAI | null = null
 
+function readMessageContent(message: any): string {
+  if (!message || typeof message !== "object") {
+    return ""
+  }
+
+  const extractFromValue = (value: unknown): string => {
+    if (!value) {
+      return ""
+    }
+
+    if (typeof value === "string") {
+      return value
+    }
+
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => {
+          if (typeof item === "string") {
+            return item
+          }
+          if (item && typeof item === "object") {
+            const { text, content: innerContent } = item as { text?: unknown; content?: unknown }
+            if (typeof text === "string") {
+              return text
+            }
+            if (typeof innerContent === "string") {
+              return innerContent
+            }
+          }
+          return ""
+        })
+        .join("")
+    }
+
+    if (typeof value === "object") {
+      const { text, content } = value as { text?: unknown; content?: unknown }
+      if (typeof text === "string") {
+        return text
+      }
+      if (typeof content === "string") {
+        return content
+      }
+      if (Array.isArray(content)) {
+        return extractFromValue(content)
+      }
+    }
+
+    return ""
+  }
+
+  const { content, parts } = message as { content?: unknown; parts?: unknown }
+  const contentText = extractFromValue(content)
+  if (contentText) {
+    return contentText
+  }
+  return extractFromValue(parts)
+}
+
 function getOpenAIClient() {
   const apiKey = env.OPENAI_API_KEY
   if (!apiKey) {
@@ -82,7 +140,7 @@ export async function POST(req: Request) {
       )
     }
     const lastMessage = messages[messages.length - 1]
-    const userQuery = lastMessage?.content || ""
+    const userQuery = readMessageContent(lastMessage)
 
     // Validate input with Zod
     const validationResult = chatMessageSchema.safeParse({
@@ -365,7 +423,7 @@ Citation formatting rules:
       { role: "system", content: systemPrompt },
       ...messages.map((msg: any) => ({
         role: msg.role === "assistant" ? "assistant" : "user",
-        content: msg.content,
+        content: readMessageContent(msg),
       })),
     ]
 
@@ -407,15 +465,7 @@ Citation formatting rules:
             const content = chunk.choices[0]?.delta?.content || ""
             if (content) {
               fullResponse += content
-              // Format for useChat hook - it expects: 0:"text content"
-              // We need to properly escape the content
-              const escapedContent = content
-                .replace(/\\/g, '\\\\')
-                .replace(/"/g, '\\"')
-                .replace(/\n/g, '\\n')
-                .replace(/\r/g, '\\r')
-              const data = `0:"${escapedContent}"\n`
-              controller.enqueue(encoder.encode(data))
+              controller.enqueue(encoder.encode(content))
             }
           }
 
@@ -514,7 +564,7 @@ Citation formatting rules:
 
           // Try to send error message to client before closing
           try {
-            const errorData = `0:"[Error: ${errorMessage}]"\n`
+            const errorData = `[Error: ${errorMessage}]`
             controller.enqueue(encoder.encode(errorData))
           } catch (sendError) {
             console.error("[Chat API] Failed to send error message:", sendError)
@@ -541,7 +591,7 @@ Citation formatting rules:
 
     return withRateLimit(new Response(readableStream, {
       headers: {
-        "Content-Type": "text/event-stream",
+        "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
       },

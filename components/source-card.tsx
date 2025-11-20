@@ -2,11 +2,11 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { deleteSource } from "@/lib/actions/source"
 import { Cloud, MoreVertical, Trash2, TestTube, Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 import { formatSourceType } from "@/lib/utils"
+import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -17,7 +17,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 
 interface SourceCardProps {
@@ -37,6 +36,7 @@ export function SourceCard({ source }: SourceCardProps) {
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const isWorkspaceSource = source.type === "workspace_generated"
 
   const handleDelete = async () => {
     if (!needsConfirmation) {
@@ -50,13 +50,13 @@ export function SourceCard({ source }: SourceCardProps) {
       
       if (result.error) {
         alert(`Failed to delete source: ${result.error}`)
-    setIsDeleting(false)
+        setIsDeleting(false)
         return
       }
       
       // Close dialog first
-    setDeleteDialogOpen(false)
-    setNeedsConfirmation(false)
+      setDeleteDialogOpen(false)
+      setNeedsConfirmation(false)
       setIsDeleting(false)
       
       // Force remove all overlays and portals immediately
@@ -90,14 +90,41 @@ export function SourceCard({ source }: SourceCardProps) {
     setTestResult(null)
 
     try {
+      const csrfToken = await fetchCsrfToken()
+      if (!csrfToken) {
+        setTestResult({
+          success: false,
+          message: "Could not verify your session. Refresh and try again.",
+        })
+        return
+      }
+
       const response = await fetch(`/api/connectors/${source.id}/test`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
         body: JSON.stringify({ testConnection: true }),
       })
 
-      const result = await response.json()
-      setTestResult(result)
+      let payload: { success: boolean; message: string; error?: string } | null = null
+      try {
+        payload = await response.json()
+      } catch (parseError) {
+        console.error("[SourceCard] Failed to parse connector test response:", parseError)
+      }
+
+      if (!response.ok || !payload) {
+        setTestResult({
+          success: false,
+          message: payload?.message || payload?.error || "Connection test failed. Please try again.",
+        })
+        return
+      }
+
+      setTestResult(payload)
     } catch (error) {
       setTestResult({
         success: false,
@@ -123,58 +150,67 @@ export function SourceCard({ source }: SourceCardProps) {
   }
 
   return (
-    <Card className="pt-6 pb-6 gap-0">
-      <CardHeader className="pb-0 mb-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <Cloud className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <CardTitle className="text-lg">{source.name}</CardTitle>
-              <CardDescription>{formatSourceType(source.type)}</CardDescription>
-              {source.last_sync_at && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Last sync: {new Date(source.last_sync_at).toLocaleString()}
-                </p>
-              )}
-            </div>
+    <div className="px-4 py-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10">
+            <Cloud className="h-4 w-4 text-primary" />
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" disabled={isDeleting}>
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleTest} disabled={isTesting}>
-                {isTesting ? (
-                  <>
-                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                    <span>Testing...</span>
-                  </>
-                ) : (
-                  <>
-                    <TestTube className="mr-2 h-3.5 w-3.5" />
-                    <span>Test Connection</span>
-                  </>
-                )}
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={() => setDeleteDialogOpen(true)} 
-                className="hover:!bg-destructive/10 hover:!text-destructive focus:!bg-destructive/10 focus:!text-destructive [&:hover_svg]:!text-destructive [&:focus_svg]:!text-destructive [&:hover_span]:!text-destructive [&:focus_span]:!text-destructive"
-              >
-                <Trash2 className="mr-2 h-3.5 w-3.5" />
-                <span>Delete</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium leading-tight">{source.name}</p>
+            <p className="text-xs text-muted-foreground leading-tight">{formatSourceType(source.type)}</p>
+            {source.last_sync_at && (
+              <p className="text-xs text-muted-foreground leading-tight">
+                Last sync: {new Date(source.last_sync_at).toLocaleString()}
+              </p>
+            )}
+          </div>
         </div>
-      </CardHeader>
-
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center rounded-full border border-muted px-2 py-0.5 text-xs font-medium capitalize text-muted-foreground">
+            {source.status.replaceAll("_", " ")}
+          </span>
+          {!isWorkspaceSource && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isDeleting}>
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleTest} disabled={isTesting}>
+                  {isTesting ? (
+                    <>
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                      <span>Testing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <TestTube className="mr-2 h-3.5 w-3.5" />
+                      <span>Test Connection</span>
+                    </>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setDeleteDialogOpen(true)}
+                  className="hover:!bg-destructive/10 hover:!text-destructive focus:!bg-destructive/10 focus:!text-destructive [&:hover_svg]:!text-destructive [&:focus_svg]:!text-destructive [&:hover_span]:!text-destructive [&:focus_span]:!text-destructive"
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  <span>Delete</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+      </div>
       {testResult && (
-        <div className="px-6 pb-4">
-          <Alert variant={testResult.success ? "default" : "destructive"}>
+        <div className="pt-3">
+          <Alert
+            variant={testResult.success ? "default" : "destructive"}
+            className={
+              testResult.success ? "border-none bg-green-50 text-green-800 [&>svg]:text-green-600" : undefined
+            }
+          >
             {testResult.success ? (
               <CheckCircle2 className="h-4 w-4" />
             ) : (
@@ -185,33 +221,43 @@ export function SourceCard({ source }: SourceCardProps) {
         </div>
       )}
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={handleDeleteDialogClose}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Source?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this source? All associated documents will be removed.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {needsConfirmation && (
-            <p className="text-sm text-destructive font-medium">
-              This action cannot be undone.
-            </p>
-          )}
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            {needsConfirmation ? (
-              <AlertDialogAction onClick={handleDelete} className="bg-destructive text-white hover:bg-destructive/90" disabled={isDeleting}>
-                {isDeleting ? "Deleting..." : "Confirm?"}
-              </AlertDialogAction>
-            ) : (
-              <Button onClick={() => setNeedsConfirmation(true)} className="bg-destructive text-white hover:bg-destructive/90" disabled={isDeleting}>
-                Delete
-              </Button>
+      {!isWorkspaceSource && (
+        <AlertDialog open={deleteDialogOpen} onOpenChange={handleDeleteDialogClose}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Source?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this source? All associated documents will be removed.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            {needsConfirmation && (
+              <p className="text-sm font-medium text-destructive">
+                This action cannot be undone.
+              </p>
             )}
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </Card>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              {needsConfirmation ? (
+                <AlertDialogAction
+                  onClick={handleDelete}
+                  className="bg-destructive text-white hover:bg-destructive/90"
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? "Deleting..." : "Confirm?"}
+                </AlertDialogAction>
+              ) : (
+                <Button
+                  onClick={() => setNeedsConfirmation(true)}
+                  className="bg-destructive text-white hover:bg-destructive/90"
+                  disabled={isDeleting}
+                >
+                  Delete
+                </Button>
+              )}
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+    </div>
   )
 }

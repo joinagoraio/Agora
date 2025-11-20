@@ -122,7 +122,6 @@ export async function POST(req: NextRequest) {
     const {
       data: { user },
     } = await supabase.auth.getUser()
-
     const identifier = user?.id ?? getClientIdentifier(req.headers)
     const rateLimitKey = user ? `upload:user:${user.id}` : `upload:ip:${identifier}`
     const currentRateLimit = await checkRateLimit(uploadRateLimit, rateLimitKey)
@@ -173,7 +172,7 @@ export async function POST(req: NextRequest) {
     })
 
     if (!validationResult.success) {
-      return respondWithRateLimit(
+      const response = NextResponse.json(
         { 
           error: "Validation failed", 
           details: validationResult.error.errors.map(e => ({
@@ -183,6 +182,7 @@ export async function POST(req: NextRequest) {
         },
         { status: 400 },
       )
+      return respondWithRateLimit(response)
     }
 
     const validated = validationResult.data
@@ -202,10 +202,11 @@ export async function POST(req: NextRequest) {
     try {
       await requireAuthAndPermission("workspace_item:create", { workspaceId: validated.workspaceId })
     } catch (authError) {
-      return respondWithRateLimit(
+      const response = NextResponse.json(
         { error: authError instanceof Error ? authError.message : "Unauthorized" },
         { status: 403 }
       )
+      return respondWithRateLimit(response)
     }
 
     const { data: workspaceRecord, error: workspaceLookupError } = await supabase

@@ -18,6 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertTriangle, Upload, FileText, X, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+import { fetchCsrfToken } from "@/lib/utils/csrf"
 
 interface UploadDocumentDialogProps {
   workspaceId: string
@@ -47,7 +49,12 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
     setFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const uploadFileWithProgress = (file: File): Promise<any> => {
+  const uploadFileWithProgress = async (file: File): Promise<any> => {
+    const csrfToken = await fetchCsrfToken()
+    if (!csrfToken) {
+      throw new Error("Unable to upload right now. Please refresh and try again.")
+    }
+
     return new Promise((resolve, reject) => {
       const fileId = `${file.name}-${file.size}`
       const xhr = new XMLHttpRequest()
@@ -121,16 +128,21 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
       })
 
       // Start upload
-      xhr.open("POST", "/api/documents/upload")
+      xhr.open("POST", `/api/documents/upload?workspaceId=${encodeURIComponent(workspaceId)}`)
+      xhr.setRequestHeader("x-csrf-token", csrfToken)
       xhr.send(formData)
     })
   }
 
   const handleUpload = async () => {
     if (files.length === 0) {
-      setError("Please select at least one file")
+      const message = "Please select at least one file"
+      setError(message)
+      toast.error("No files selected", { description: message })
       return
     }
+
+    const fileNames = files.map((file) => file.name)
 
     setIsUploading(true)
     setError(null)
@@ -146,6 +158,7 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
         await uploadFileWithProgress(file)
       }
 
+      const uploadedCount = files.length
       // Clear files and reset
       setFiles([])
       if (fileInputRef.current) {
@@ -154,13 +167,18 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
       setOpen(false) // Close dialog on success
       onSuccess?.()
       router.refresh()
+      toast.success(uploadedCount === 1 ? "Document uploaded" : "Documents uploaded", {
+        description: uploadedCount === 1 ? fileNames[0] || "Upload complete" : `${uploadedCount} files added.`,
+      })
       
       // Dispatch custom event to notify chat interface and other components
       window.dispatchEvent(new CustomEvent("documentUploaded", { 
         detail: { workspaceId } 
       }))
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred during upload")
+      const description = err instanceof Error ? err.message : "An error occurred during upload"
+      setError(description)
+      toast.error("Upload failed", { description })
     } finally {
       setIsUploading(false)
       setUploadProgress({})

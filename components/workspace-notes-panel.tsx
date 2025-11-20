@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
+import { fetchCsrfToken } from "@/lib/utils/csrf"
 
 export type WorkspaceNote = {
   id: string
@@ -39,6 +40,41 @@ interface WorkspaceNotesPanelProps {
 type DraftWorkspaceNote = {
   id: string
   isDraft: true
+}
+
+const CSRF_ERROR_MESSAGE = "Could not verify your session. Refresh and try again."
+
+async function requestWithCsrf<T = unknown>(input: RequestInfo, init: RequestInit, defaultError: string): Promise<T> {
+  const csrfToken = await fetchCsrfToken()
+  if (!csrfToken) {
+    throw new Error(CSRF_ERROR_MESSAGE)
+  }
+
+  const headers = new Headers(init.headers ?? undefined)
+  headers.set("x-csrf-token", csrfToken)
+
+  const response = await fetch(input, {
+    ...init,
+    credentials: init.credentials ?? "include",
+    headers,
+  })
+
+  const responseBody = await response.text()
+  let payload: any = null
+
+  if (responseBody) {
+    try {
+      payload = JSON.parse(responseBody)
+    } catch {
+      payload = { error: responseBody }
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(payload?.error || payload?.message || defaultError)
+  }
+
+  return payload as T
 }
 
 export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes }: WorkspaceNotesPanelProps) {
@@ -122,17 +158,15 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes }
     setGeneralError(null)
 
     try {
-      const response = await fetch(`/api/workspaces/${workspaceId}/notes/${editingNoteId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: editContent, includeInAiContext: noteToUpdate.include_in_ai_context }),
-      })
-
-      const payload = await response.json()
-
-      if (!response.ok) {
-        throw new Error(payload.error || "Unable to update note.")
-      }
+      const payload = await requestWithCsrf<{ data: WorkspaceNote }>(
+        `/api/workspaces/${workspaceId}/notes/${editingNoteId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: editContent, includeInAiContext: noteToUpdate.include_in_ai_context }),
+        },
+        "Unable to update note.",
+      )
 
       setNotes((prev) => prev.map((note) => (note.id === editingNoteId ? payload.data : note)))
       setEditingNoteId(null)
@@ -161,17 +195,15 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes }
     setDraftError(null)
 
     try {
-      const response = await fetch(`/api/workspaces/${workspaceId}/notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: draftContent, includeInAiContext: draftIncludeInAiContext }),
-      })
-
-      const payload = await response.json()
-
-      if (!response.ok) {
-        throw new Error(payload.error || "Unable to save note.")
-      }
+      const payload = await requestWithCsrf<{ data: WorkspaceNote }>(
+        `/api/workspaces/${workspaceId}/notes`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: draftContent, includeInAiContext: draftIncludeInAiContext }),
+        },
+        "Unable to save note.",
+      )
 
       setNotes((prev) => [payload.data, ...prev])
       setDraftNote(null)
@@ -195,15 +227,7 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes }
     setGeneralError(null)
 
     try {
-      const response = await fetch(`/api/workspaces/${workspaceId}/notes/${noteId}`, {
-        method: "DELETE",
-      })
-
-      const payload = await response.json()
-
-      if (!response.ok) {
-        throw new Error(payload.error || "Unable to delete note.")
-      }
+      await requestWithCsrf(`/api/workspaces/${workspaceId}/notes/${noteId}`, { method: "DELETE" }, "Unable to delete note.")
 
       setNotes((prev) => prev.filter((note) => note.id !== noteId))
       emitWorkspaceContextUpdate({
@@ -232,17 +256,15 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes }
     )
 
     try {
-      const response = await fetch(`/api/workspaces/${workspaceId}/notes/${noteId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ includeInAiContext: nextValue }),
-      })
-
-      const payload = await response.json()
-
-      if (!response.ok) {
-        throw new Error(payload.error || "Unable to update note.")
-      }
+      const payload = await requestWithCsrf<{ data: WorkspaceNote }>(
+        `/api/workspaces/${workspaceId}/notes/${noteId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ includeInAiContext: nextValue }),
+        },
+        "Unable to update note.",
+      )
 
       setNotes((prev) => prev.map((note) => (note.id === noteId ? payload.data : note)))
       emitWorkspaceContextUpdate({

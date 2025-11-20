@@ -7,7 +7,7 @@ import { getSpaceItems } from "@/lib/actions/space-item"
 import { UserMenu } from "@/components/user-menu"
 import { Button } from "@/components/ui/button"
 import { SpacePageClient } from "@/components/space-page-client"
-import { Settings, ArrowLeft } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 
 export default async function SpacePage({
   params,
@@ -65,11 +65,6 @@ export default async function SpacePage({
                 {membership.role}
               </span>
             )}
-            <Button variant="ghost" size="icon" asChild title="Settings">
-              <Link href={`/spaces/${spaceId}/settings`}>
-                <Settings className="h-5 w-5" />
-              </Link>
-            </Button>
             <UserMenu />
           </div>
         </div>

@@ -55,6 +55,10 @@ export default async function SpaceSettingsPage({
     .eq("space_id", spaceId)
     .order("created_at", { ascending: false })
 
+  const pendingInvitations = (invitations ?? []).filter(
+    (invite) => !Object.prototype.hasOwnProperty.call(invite, "status") || invite.status === "pending",
+  )
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="bg-card">
@@ -76,7 +80,7 @@ export default async function SpaceSettingsPage({
           <div className="mb-6">
             <h1 className="text-2xl font-semibold">{space.name} Settings</h1>
           </div>
-          <SpaceSettings space={space} members={members || []} invitations={invitations || []} />
+          <SpaceSettings space={space} members={members || []} invitations={pendingInvitations} />
         </div>
       </main>
     </div>

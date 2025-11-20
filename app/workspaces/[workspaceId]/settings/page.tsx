@@ -52,31 +52,40 @@ export default async function SettingsPage({
     redirect("/dashboard")
   }
 
-  // Check if user is admin/owner of the space
-  const { data: membership } = await supabase
+  const { data: workspaceMembership } = await supabase
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  const { data: spaceMembership } = await supabase
     .from("space_members")
     .select("role")
     .eq("space_id", workspace.space_id)
     .eq("user_id", user.id)
-    .single()
+    .maybeSingle()
 
-  if (!membership || !["owner", "admin"].includes(membership.role)) {
+  const isWorkspaceAdmin = workspace.created_by === user.id || workspaceMembership?.role === "admin"
+  const isSpaceAdmin = spaceMembership && ["owner", "admin"].includes(spaceMembership.role)
+
+  if (!isWorkspaceAdmin && !isSpaceAdmin) {
     redirect(`/workspaces/${workspaceId}`)
   }
 
-  // Get members from parent space
   const { data: members } = await supabase
-    .from("space_members")
+    .from("workspace_members")
     .select("*, profiles(*)")
-    .eq("space_id", workspace.space_id)
+    .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false })
 
-  // Get invitations from parent space
   const { data: invitations } = await supabase
-    .from("invitations")
+    .from("workspace_invitations")
     .select("*")
-    .eq("space_id", workspace.space_id)
+    .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false })
+
+  const pendingInvitations = (invitations ?? []).filter((invite) => invite.status === "pending")
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -99,7 +108,7 @@ export default async function SettingsPage({
           <div className="mb-6">
             <h1 className="text-2xl font-semibold">{workspace.name} Settings</h1>
           </div>
-          <WorkspaceSettings workspace={workspace} space={space} members={members || []} invitations={invitations || []} />
+          <WorkspaceSettings workspace={workspace} space={space} members={members || []} invitations={pendingInvitations} />
         </div>
       </main>
     </div>

@@ -32,6 +32,10 @@ NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
 NEXT_PUBLIC_BASE_URL=https://your-app.vercel.app
 NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=http://localhost:3000/auth/callback
 
+# Email (Resend)
+RESEND_API_KEY=re_123
+INVITE_EMAIL_FROM="Agora <no-reply@agora.example>"
+
 # Error Tracking
 NEXT_PUBLIC_SENTRY_DSN=https://your-sentry-dsn
 

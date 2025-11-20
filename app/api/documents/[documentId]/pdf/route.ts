@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
+const TEXT_CONTENT_TYPES = new Set([
+  "text/plain",
+  "text/markdown",
+  "text/x-markdown",
+  "text/html",
+  "application/json",
+])
+
 // Helper function to determine content type from file extension or metadata
 function getContentType(filename: string, metadataType?: string): string {
-  // First check metadata type if available
   if (metadataType) {
     return metadataType
   }
 
-  // Fall back to file extension
   const ext = filename.split(".").pop()?.toLowerCase()
   const contentTypes: Record<string, string> = {
     pdf: "application/pdf",
@@ -22,6 +28,33 @@ function getContentType(filename: string, metadataType?: string): string {
   }
 
   return contentTypes[ext || ""] || "application/octet-stream"
+}
+
+async function userHasWorkspaceAccess(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  workspaceId: string,
+  spaceId: string,
+  userId: string,
+) {
+  const { data: workspaceMember } = await supabase
+    .from("workspace_members")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (workspaceMember) {
+    return true
+  }
+
+  const { data: spaceMembership } = await supabase
+    .from("space_members")
+    .select("role")
+    .eq("space_id", spaceId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  return Boolean(spaceMembership && ["owner", "admin"].includes(spaceMembership.role))
 }
 
 export async function GET(
@@ -63,15 +96,8 @@ export async function GET(
       return NextResponse.json({ error: "Workspace not found" }, { status: 404 })
     }
 
-    // Check if user is a member of the space
-    const { data: membership } = await supabase
-    .from("space_members")
-    .select("id")
-    .eq("space_id", workspace.space_id)
-    .eq("user_id", user.id)
-    .single()
-
-    if (!membership) {
+    const canAccess = await userHasWorkspaceAccess(supabase, workspace.id, workspace.space_id, user.id)
+    if (!canAccess) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
@@ -84,7 +110,11 @@ export async function GET(
     try {
       // Determine content type
       const filename = document.metadata?.filename || url.split("/").pop() || "document"
-      const contentType = getContentType(filename, document.metadata?.type)
+    const contentType = getContentType(filename, document.metadata?.type)
+    if (TEXT_CONTENT_TYPES.has(contentType.toLowerCase())) {
+      // Text-based content should be handled by text endpoint
+      return NextResponse.redirect(new URL(`/api/documents/${documentId}/text-content`, request.url))
+    }
 
       // Check if it's a Supabase Storage URL
       const isSupabaseStorage = url.includes("supabase.co/storage") || url.includes("supabase.in/storage")
