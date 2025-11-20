@@ -26,9 +26,14 @@ export default async function SpacePage({
   }
 
   // Get space details
-  const { data: space } = await supabase.from("spaces").select("*").eq("id", spaceId).single()
+  const { data: space, error: spaceError } = await supabase.from("spaces").select("*").eq("id", spaceId).single()
+
+  if (spaceError) {
+    console.error("[SpacePage] Error fetching space:", spaceError.message, spaceError)
+  }
 
   if (!space) {
+    console.error("[SpacePage] Space not found, redirecting to dashboard. SpaceId:", spaceId, "User:", user.id)
     redirect("/dashboard")
   }
 
