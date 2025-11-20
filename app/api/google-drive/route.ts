@@ -5,7 +5,7 @@ import {
   decryptGoogleTokenBundle,
   encryptGoogleTokenBundle,
   GOOGLE_TOKEN_METADATA_KEY,
-} from "@/lib/actions/auth"
+} from "@/lib/security/googleTokens"
 import { env } from "@/lib/env"
 import { applyRateLimitHeaders, checkRateLimit, driveRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { getClientIdentifier } from "@/lib/utils/request"
