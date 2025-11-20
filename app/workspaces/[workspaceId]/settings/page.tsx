@@ -108,7 +108,13 @@ export default async function SettingsPage({
           <div className="mb-6">
             <h1 className="text-2xl font-semibold">{workspace.name} Settings</h1>
           </div>
-          <WorkspaceSettings workspace={workspace} space={space} members={members || []} invitations={pendingInvitations} />
+          <WorkspaceSettings
+            workspace={workspace}
+            space={space}
+            members={members || []}
+            invitations={pendingInvitations}
+            currentUserId={user.id}
+          />
         </div>
       </main>
     </div>

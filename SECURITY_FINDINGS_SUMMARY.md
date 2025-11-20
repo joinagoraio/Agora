@@ -8,6 +8,14 @@
 
 ## KEY FINDINGS
 
+### Remediation Snapshot (November 20, 2025)
+- **RLS/Access Control:** Deployed `scripts/031` and `032` to replace permissive policies, drop legacy helper definitions, and enforce workspace-scoped checks across documents, messages, embeddings, invitations, profiles, and storage objects.
+- **Document Viewer:** Added explicit workspace authorization in search/PDF/text endpoints, introduced DOCX zip-bomb detection plus parser timeouts, and tightened storage delivery logic.
+- **Credential Security:** Google Drive OAuth tokens are now encrypted before storage, never sent via query parameters, and refreshed through a secured flow requiring `TOKEN_ENCRYPTION_KEY`.
+- **Platform Hardening:** CSP now avoids third-party workers and reduces inline allowances; the pdf.js worker is bundled locally and additional rate limiters guard connector tests and public data proxies.
+- **Membership Operations:** Space/workspace settings pages gained audited removal actions with last-admin protection, closing high-severity membership gaps.
+- **Testing:** `npm test -- --run` completes successfully post-remediation, verifying rate-limit suites and new safety checks.
+
 ### 3 CRITICAL VULNERABILITIES IDENTIFIED
 
 #### 1. RLS Policy Bypass on Documents Table

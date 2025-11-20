@@ -1,32 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
+import { userHasWorkspaceAccess } from "@/lib/utils/workspace-access"
 import { NextRequest, NextResponse } from "next/server"
-
-async function userHasWorkspaceAccess(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  workspaceId: string,
-  spaceId: string,
-  userId: string,
-) {
-  const { data: workspaceMember } = await supabase
-    .from("workspace_members")
-    .select("id")
-    .eq("workspace_id", workspaceId)
-    .eq("user_id", userId)
-    .maybeSingle()
-
-  if (workspaceMember) {
-    return true
-  }
-
-  const { data: spaceMembership } = await supabase
-    .from("space_members")
-    .select("role")
-    .eq("space_id", spaceId)
-    .eq("user_id", userId)
-    .maybeSingle()
-
-  return Boolean(spaceMembership && ["owner", "admin"].includes(spaceMembership.role))
-}
 
 async function fetchDocumentTextFromSource(
   document: { url: string | null; metadata: Record<string, any> | null; title: string | null },

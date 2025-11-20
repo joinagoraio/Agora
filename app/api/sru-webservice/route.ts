@@ -1,6 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { applyRateLimitHeaders, checkRateLimit, externalSearchRateLimit, RateLimitStatus } from "@/lib/rate-limit"
+import { getClientIdentifier } from "@/lib/utils/request"
 
 export async function GET(request: NextRequest) {
+  let rateLimitStatus: RateLimitStatus | undefined
   const startTime = Date.now()
 
   try {
@@ -12,6 +15,16 @@ export async function GET(request: NextRequest) {
 
     if (!query) {
       return NextResponse.json({ error: "Query parameter is required" }, { status: 400 })
+    }
+
+    const identifier = getClientIdentifier(request.headers)
+    rateLimitStatus = await checkRateLimit(externalSearchRateLimit, `sru-webservice:ip:${identifier}`)
+    const respondWithRateLimit = (response: NextResponse) => applyRateLimitHeaders(response, rateLimitStatus)
+
+    if (!rateLimitStatus.success) {
+      return respondWithRateLimit(
+        NextResponse.json({ error: "SRU search rate limit exceeded. Please wait and try again." }, { status: 429 }),
+      )
     }
 
     let cqlQuery = `keyword="${query}"`
@@ -55,26 +68,31 @@ export async function GET(request: NextRequest) {
 
     const totalDuration = Date.now() - startTime
 
-    return NextResponse.json({
-      records,
-      totalRecords,
-      collection,
-      metadata: {
-        duration: totalDuration,
-        resultCount: records.length,
+    return respondWithRateLimit(
+      NextResponse.json({
+        records,
         totalRecords,
-        endpoint: sruUrl.origin + sruUrl.pathname,
-        query: cqlQuery,
-      },
-    })
+        collection,
+        metadata: {
+          duration: totalDuration,
+          resultCount: records.length,
+          totalRecords,
+          endpoint: sruUrl.origin + sruUrl.pathname,
+          query: cqlQuery,
+        },
+      }),
+    )
   } catch (error) {
     const totalDuration = Date.now() - startTime
     console.error("SRU webservice error:", error)
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to search SRU webservice",
-      },
-      { status: 500 },
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        {
+          error: error instanceof Error ? error.message : "Failed to search SRU webservice",
+        },
+        { status: 500 },
+      ),
+      rateLimitStatus,
     )
   }
 }

@@ -1,6 +1,34 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { decryptSecret, encryptSecret } from "@/lib/security/crypto"
+
+export const GOOGLE_TOKEN_METADATA_KEY = "google_drive_tokens_enc"
+
+type GoogleTokenBundle = {
+  accessToken: string
+  refreshToken?: string | null
+  expiresAt?: number | string | null
+  storedAt?: string
+}
+
+export function encryptGoogleTokenBundle(bundle: GoogleTokenBundle) {
+  return encryptSecret(JSON.stringify(bundle))
+}
+
+export function decryptGoogleTokenBundle(encrypted?: string | null): GoogleTokenBundle | null {
+  const decrypted = decryptSecret(encrypted)
+  if (!decrypted) {
+    return null
+  }
+
+  try {
+    return JSON.parse(decrypted)
+  } catch (error) {
+    console.error("[Google Tokens] Failed to parse decrypted payload:", error)
+    return null
+  }
+}
 
 export async function getGoogleTokens() {
   const supabase = await createClient()
@@ -8,23 +36,50 @@ export async function getGoogleTokens() {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  
+
   if (!user) {
     return { error: "Unauthorized" }
   }
 
-  // Try to get tokens from user metadata first
-  const googleAccessToken = user.user_metadata?.google_access_token
-  const googleRefreshToken = user.user_metadata?.google_refresh_token
+  const encryptedBundle = user.user_metadata?.[GOOGLE_TOKEN_METADATA_KEY]
+  const tokenBundle = decryptGoogleTokenBundle(encryptedBundle)
 
-  if (googleAccessToken) {
+  if (tokenBundle?.accessToken) {
     return {
-      access_token: googleAccessToken,
-      refresh_token: googleRefreshToken,
+      access_token: tokenBundle.accessToken,
+      refresh_token: tokenBundle.refreshToken ?? null,
     }
   }
 
-  // If not in metadata, try to get from session
+  const legacyAccessToken = user.user_metadata?.google_access_token
+  if (legacyAccessToken) {
+    const legacyBundle: GoogleTokenBundle = {
+      accessToken: legacyAccessToken,
+      refreshToken: user.user_metadata?.google_refresh_token ?? null,
+      expiresAt: user.user_metadata?.google_token_expires_at ?? null,
+      storedAt: new Date().toISOString(),
+    }
+
+    try {
+      const encrypted = encryptGoogleTokenBundle(legacyBundle)
+      await supabase.auth.updateUser({
+        data: {
+          [GOOGLE_TOKEN_METADATA_KEY]: encrypted,
+          google_access_token: null,
+          google_refresh_token: null,
+          google_token_expires_at: null,
+        },
+      })
+    } catch (error) {
+      console.error("[Google Tokens] Failed to migrate legacy tokens:", error)
+    }
+
+    return {
+      access_token: legacyAccessToken,
+      refresh_token: legacyBundle.refreshToken ?? null,
+    }
+  }
+
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -32,7 +87,7 @@ export async function getGoogleTokens() {
   if (session?.provider_token) {
     return {
       access_token: session.provider_token,
-      refresh_token: session.provider_refresh_token,
+      refresh_token: session.provider_refresh_token ?? null,
     }
   }
 
@@ -40,7 +95,6 @@ export async function getGoogleTokens() {
 }
 
 export async function refreshGoogleToken(refreshToken: string) {
-  // This would need to be implemented using Google OAuth2 API
-  // For now, we'll return an error and let the user re-authenticate
-  return { error: "Token refresh not implemented. Please re-authenticate with Google." }
+  // Placeholder for future direct Google OAuth refresh integration
+  return { error: refreshToken ? "Re-authentication required." : "Token refresh not available." }
 }

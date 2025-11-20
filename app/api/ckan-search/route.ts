@@ -1,4 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { applyRateLimitHeaders, checkRateLimit, externalSearchRateLimit, RateLimitStatus } from "@/lib/rate-limit"
+import { getClientIdentifier } from "@/lib/utils/request"
 
 interface CKANResponse {
   success: boolean
@@ -27,6 +29,7 @@ interface CKANResponse {
 }
 
 export async function GET(request: NextRequest) {
+  let rateLimitStatus: RateLimitStatus | undefined
   const startTime = Date.now()
   const searchParams = request.nextUrl.searchParams
   const query = searchParams.get("query")
@@ -38,6 +41,16 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const identifier = getClientIdentifier(request.headers)
+    rateLimitStatus = await checkRateLimit(externalSearchRateLimit, `ckan-search:ip:${identifier}`)
+    const respondWithRateLimit = (response: NextResponse) => applyRateLimitHeaders(response, rateLimitStatus)
+
+    if (!rateLimitStatus.success) {
+      return respondWithRateLimit(
+        NextResponse.json({ error: "CKAN search rate limit exceeded. Please wait and try again." }, { status: 429 }),
+      )
+    }
+
     let searchQuery = query
     if (organization) {
       searchQuery = `${query} organization:${organization}`
@@ -68,25 +81,30 @@ export async function GET(request: NextRequest) {
 
     const totalDuration = Date.now() - startTime
 
-    return NextResponse.json({
-      datasets: data.result.results,
-      count: data.result.count,
-      metadata: {
-        duration: totalDuration,
-        resultCount: data.result.results.length,
-        totalRecords: data.result.count,
-        endpoint: ckanEndpoint,
-        query: searchQuery,
-      },
-    })
+    return respondWithRateLimit(
+      NextResponse.json({
+        datasets: data.result.results,
+        count: data.result.count,
+        metadata: {
+          duration: totalDuration,
+          resultCount: data.result.results.length,
+          totalRecords: data.result.count,
+          endpoint: ckanEndpoint,
+          query: searchQuery,
+        },
+      }),
+    )
   } catch (error) {
     const totalDuration = Date.now() - startTime
     console.error("CKAN search error:", error)
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Search failed",
-      },
-      { status: 500 },
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        {
+          error: error instanceof Error ? error.message : "Search failed",
+        },
+        { status: 500 },
+      ),
+      rateLimitStatus,
     )
   }
 }

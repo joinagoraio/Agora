@@ -80,7 +80,12 @@ export default async function SpaceSettingsPage({
           <div className="mb-6">
             <h1 className="text-2xl font-semibold">{space.name} Settings</h1>
           </div>
-          <SpaceSettings space={space} members={members || []} invitations={pendingInvitations} />
+          <SpaceSettings
+            space={space}
+            members={members || []}
+            invitations={pendingInvitations}
+            currentUserId={user.id}
+          />
         </div>
       </main>
     </div>

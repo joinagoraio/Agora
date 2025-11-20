@@ -15,16 +15,15 @@ if (typeof Promise.withResolvers === 'undefined') {
 }
 
 import * as pdfjs from "pdfjs-dist"
+import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url"
 import type { TextItem } from "pdfjs-dist/types/src/display/api"
 
 // Configure PDF.js worker
 if (typeof window === "undefined") {
-  // Server-side: Use legacy build or disable worker
-  // In server actions, we can't use require.resolve, so disable worker
+  // Server-side: disable worker to avoid bundler issues
   pdfjs.GlobalWorkerOptions.workerSrc = ""
 } else {
-  // Client-side: Use CDN or local worker
-  pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
+  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerSrc
 }
 
 export interface TextItemWithCoords {

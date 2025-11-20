@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { userHasWorkspaceAccess } from "@/lib/utils/workspace-access"
 import { findTextSpan, getHighlightCoordinates } from "@/lib/utils/pdf-extraction"
 import { NextRequest, NextResponse } from "next/server"
 
@@ -51,7 +52,22 @@ export async function POST(
       return NextResponse.json({ error: "Document not found" }, { status: 404 })
     }
 
-    // Fetch document pages
+    const { data: workspace } = await supabase
+      .from("workspaces")
+      .select("id, space_id")
+      .eq("id", document.workspace_id)
+      .maybeSingle()
+
+    if (!workspace) {
+      return NextResponse.json({ error: "Workspace not found" }, { status: 404 })
+    }
+
+    const canAccess = await userHasWorkspaceAccess(supabase, workspace.id, workspace.space_id, user.id)
+    if (!canAccess) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+    }
+
+    // Fetch document pages after verifying access
     const { data: pages, error: pagesError } = await supabase
       .from("document_pages")
       .select("*")

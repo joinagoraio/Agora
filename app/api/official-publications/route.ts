@@ -1,6 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { applyRateLimitHeaders, checkRateLimit, externalSearchRateLimit, RateLimitStatus } from "@/lib/rate-limit"
+import { getClientIdentifier } from "@/lib/utils/request"
 
 export async function GET(request: NextRequest) {
+  let rateLimitStatus: RateLimitStatus | undefined
   const startTime = Date.now()
   const searchParams = request.nextUrl.searchParams
   const query = searchParams.get("query")
@@ -12,6 +15,19 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const identifier = getClientIdentifier(request.headers)
+    rateLimitStatus = await checkRateLimit(externalSearchRateLimit, `official-publications:ip:${identifier}`)
+    const respondWithRateLimit = (response: NextResponse) => applyRateLimitHeaders(response, rateLimitStatus)
+
+    if (!rateLimitStatus.success) {
+      return respondWithRateLimit(
+        NextResponse.json(
+          { error: "Official publications search rate limit exceeded. Please wait and try again." },
+          { status: 429 },
+        ),
+      )
+    }
+
     let searchQuery = query
 
     if (type && type !== "all") {
@@ -43,24 +59,29 @@ export async function GET(request: NextRequest) {
 
     const totalDuration = Date.now() - startTime
 
-    return NextResponse.json({
-      publications,
-      metadata: {
-        duration: totalDuration,
-        resultCount: publications.length,
-        totalRecords,
-        endpoint: apiEndpoint,
-        query: searchQuery,
-      },
-    })
+    return respondWithRateLimit(
+      NextResponse.json({
+        publications,
+        metadata: {
+          duration: totalDuration,
+          resultCount: publications.length,
+          totalRecords,
+          endpoint: apiEndpoint,
+          query: searchQuery,
+        },
+      }),
+    )
   } catch (error) {
     const totalDuration = Date.now() - startTime
     console.error("Official publications search error:", error)
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Search failed",
-      },
-      { status: 500 },
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        {
+          error: error instanceof Error ? error.message : "Search failed",
+        },
+        { status: 500 },
+      ),
+      rateLimitStatus,
     )
   }
 }

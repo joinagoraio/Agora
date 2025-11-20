@@ -28,9 +28,14 @@ export function getSecurityHeaders(): SecurityHeaders {
 function getCSP(): string {
   const isDev = process.env.NODE_ENV !== "production"
 
-  const scriptSources = ["'self'"]
+  const scriptSources = ["'self'", "https://va.vercel-scripts.com"]
   if (isDev) {
     scriptSources.push("'unsafe-eval'", "'unsafe-inline'", "https://vercel.live")
+  }
+
+  const styleSources = ["'self'"]
+  if (isDev) {
+    styleSources.push("'unsafe-inline'")
   }
 
   const connectSources = [
@@ -46,10 +51,11 @@ function getCSP(): string {
   const directives = [
     "default-src 'self'",
     `script-src ${scriptSources.join(" ")}`,
-    "style-src 'self' 'unsafe-inline'", // unsafe-inline needed for Tailwind
-    "img-src 'self' data: https: blob:",
+    `style-src ${styleSources.join(" ")}`,
+    "img-src 'self' data: https:",
     "font-src 'self' data:",
     `connect-src ${connectSources.join(" ")}`,
+    "worker-src 'self' blob:",
     "frame-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",

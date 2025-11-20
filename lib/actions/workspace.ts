@@ -153,6 +153,56 @@ export async function deleteWorkspace(workspaceId: string) {
   return { success: true }
 }
 
+export async function removeWorkspaceMember(workspaceId: string, memberUserId: string) {
+  const supabase = await createClient()
+
+  try {
+    await requireAuthAndPermission("workspace:share", { workspaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+
+  const { data: member, error: memberFetchError } = await supabase
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", memberUserId)
+    .maybeSingle()
+
+  if (memberFetchError) {
+    return { error: memberFetchError.message }
+  }
+
+  if (!member) {
+    return { error: "Member not found" }
+  }
+
+  if (member.role === "admin") {
+    const { data: admins } = await supabase
+      .from("workspace_members")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("role", "admin")
+
+    if ((admins?.length ?? 0) <= 1) {
+      return { error: "Workspaces must have at least one admin. Promote another member before removing this admin." }
+    }
+  }
+
+  const { error: deleteError } = await supabase
+    .from("workspace_members")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", memberUserId)
+
+  if (deleteError) {
+    return { error: deleteError.message }
+  }
+
+  revalidatePath(`/workspaces/${workspaceId}`)
+  return { success: true }
+}
+
 export async function getWorkspacesBySpace(spaceId: string) {
   const supabase = await createClient()
 

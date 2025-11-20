@@ -30,15 +30,9 @@ BEGIN
   ) THEN
     EXECUTE 'DROP POLICY "Workspace members can delete documents" ON storage.objects';
   END IF;
-  IF EXISTS (
-    SELECT 1 FROM pg_policies WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'Public can read documents'
-  ) THEN
-    EXECUTE 'DROP POLICY "Public can read documents" ON storage.objects';
-  END IF;
 END;
 $$;
 
--- Option 1: If bucket is PUBLIC - Allow public reads, workspace members can upload
 DO $$
 BEGIN
   IF current_user != 'service_role' THEN
@@ -46,7 +40,6 @@ BEGIN
     RETURN;
   END IF;
 
-  EXECUTE 'CREATE POLICY "Public can read documents" ON storage.objects FOR SELECT USING (bucket_id = ''documents'')';
   EXECUTE $pol$
     CREATE POLICY "Workspace members can upload documents"
     ON storage.objects FOR INSERT
@@ -56,6 +49,20 @@ BEGIN
         SELECT 1 FROM workspaces w
         WHERE (storage.foldername(name))[1] = 'workspaces'
           AND (storage.foldername(name))[2] = w.id::text
+          AND is_workspace_member(w.id, auth.uid())
+      )
+    );
+  $pol$;
+
+  EXECUTE $pol$
+    CREATE POLICY "Workspace members can read documents"
+    ON storage.objects FOR SELECT
+    USING (
+      bucket_id = 'documents'
+      AND (storage.foldername(name))[1] = 'workspaces'
+      AND EXISTS (
+        SELECT 1 FROM workspaces w
+        WHERE (storage.foldername(name))[2] = w.id::text
           AND is_workspace_member(w.id, auth.uid())
       )
     );
