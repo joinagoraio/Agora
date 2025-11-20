@@ -64,6 +64,12 @@ export async function GET(req: NextRequest) {
 
     const validated = validationResult.data
 
+    // Escape wildcards to prevent SQL injection via ilike patterns
+    const escapedQuery = validated.query
+      .replace(/\\/g, "\\\\") // Escape backslashes first
+      .replace(/%/g, "\\%") // Escape percent signs
+      .replace(/_/g, "\\_") // Escape underscores
+
     if (!user) {
       return respondWithRateLimit(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
     }
@@ -74,7 +80,7 @@ export async function GET(req: NextRequest) {
       .select("*")
       .eq("workspace_id", validated.workspaceId)
       .eq("status", "active")
-      .or(`title.ilike.%${validated.query}%,content.ilike.%${validated.query}%`)
+      .or(`title.ilike.%${escapedQuery}%,content.ilike.%${escapedQuery}%`)
 
     // Apply filters
     if (validated.domain) {
@@ -217,6 +223,12 @@ export async function POST(req: Request) {
 
     const validated = validationResult.data
 
+    // Escape wildcards to prevent SQL injection via ilike patterns
+    const escapedQuery = validated.query
+      .replace(/\\/g, "\\\\") // Escape backslashes first
+      .replace(/%/g, "\\%") // Escape percent signs
+      .replace(/_/g, "\\_") // Escape underscores
+
     if (!user) {
       return respondWithRateLimit(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
     }
@@ -234,7 +246,7 @@ export async function POST(req: Request) {
       .select("*")
       .eq("workspace_id", validated.workspaceId)
       .eq("status", "active")
-      .or(`title.ilike.%${validated.query}%,content.ilike.%${validated.query}%`)
+      .or(`title.ilike.%${escapedQuery}%,content.ilike.%${escapedQuery}%`)
 
     // Apply filters
     if (validated.domain) {

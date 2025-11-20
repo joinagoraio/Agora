@@ -36,12 +36,18 @@ export async function createSpace(
 
   if (!profile) {
     // Create profile if it doesn't exist (e.g., user created before trigger existed)
-    const { error: profileError } = await adminClient.from("profiles").insert({
-      id: user.id,
-      email: user.email || "",
-      full_name: user.user_metadata?.full_name || null,
-      avatar_url: user.user_metadata?.avatar_url || null,
-    })
+    // Use upsert to handle race condition where trigger creates profile simultaneously
+    const { error: profileError } = await adminClient.from("profiles").upsert(
+      {
+        id: user.id,
+        email: user.email || "",
+        full_name: user.user_metadata?.full_name || null,
+        avatar_url: user.user_metadata?.avatar_url || null,
+      },
+      {
+        onConflict: "id",
+      },
+    )
 
     if (profileError) {
       console.error("[v0] Error creating profile:", profileError.message)
