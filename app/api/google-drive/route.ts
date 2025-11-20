@@ -1,28 +1,36 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { google } from "googleapis"
 import { createClient } from "@/lib/supabase/server"
+import {
+  decryptGoogleTokenBundle,
+  encryptGoogleTokenBundle,
+  GOOGLE_TOKEN_METADATA_KEY,
+} from "@/lib/actions/auth"
 import { env } from "@/lib/env"
 import { applyRateLimitHeaders, checkRateLimit, driveRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { getClientIdentifier } from "@/lib/utils/request"
 import { logger } from "@/lib/utils/logger"
 
+type TokenPair = {
+  accessToken: string | null
+  refreshToken: string | null
+}
+
 async function getValidAccessToken(
   supabase: Awaited<ReturnType<typeof createClient>>,
   user: any,
-  providedToken?: string | null,
-  refreshToken?: string | null,
-): Promise<string | null> {
-  if (providedToken) {
-    return providedToken
-  }
-
+): Promise<TokenPair> {
   if (!user) {
-    return null
+    return { accessToken: null, refreshToken: null }
   }
 
-  const googleAccessToken = user.user_metadata?.google_access_token
-  if (googleAccessToken) {
-    return googleAccessToken
+  const tokenBundle = decryptGoogleTokenBundle(user.user_metadata?.[GOOGLE_TOKEN_METADATA_KEY])
+
+  if (tokenBundle?.accessToken) {
+    return {
+      accessToken: tokenBundle.accessToken,
+      refreshToken: tokenBundle.refreshToken ?? null,
+    }
   }
 
   const {
@@ -30,13 +38,22 @@ async function getValidAccessToken(
   } = await supabase.auth.getSession()
 
   if (session?.provider_token) {
-    return session.provider_token
+    return {
+      accessToken: session.provider_token,
+      refreshToken: session.provider_refresh_token ?? tokenBundle?.refreshToken ?? null,
+    }
   }
 
-  return null
+  return {
+    accessToken: null,
+    refreshToken: tokenBundle?.refreshToken ?? null,
+  }
 }
 
-async function refreshAccessToken(refreshToken: string, supabase: any): Promise<string | null> {
+async function refreshAccessToken(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  refreshToken: string,
+): Promise<TokenPair> {
   try {
     const {
       data: { session },
@@ -49,22 +66,34 @@ async function refreshAccessToken(refreshToken: string, supabase: any): Promise<
     }
 
     if (session?.provider_token) {
+      const latestRefreshToken = session.provider_refresh_token || refreshToken
+      const encryptedBundle = encryptGoogleTokenBundle({
+        accessToken: session.provider_token,
+        refreshToken: latestRefreshToken,
+        expiresAt: session.expires_at,
+        storedAt: new Date().toISOString(),
+      })
+
       await supabase.auth.updateUser({
         data: {
-          google_access_token: session.provider_token,
-          google_refresh_token: session.provider_refresh_token || refreshToken,
-          google_token_expires_at: session.expires_at?.toString(),
+          [GOOGLE_TOKEN_METADATA_KEY]: encryptedBundle,
+          google_access_token: null,
+          google_refresh_token: null,
+          google_token_expires_at: null,
         },
       })
 
-      return session.provider_token
+      return {
+        accessToken: session.provider_token,
+        refreshToken: latestRefreshToken ?? refreshToken,
+      }
     }
 
     logger.warn("No provider_token in refreshed session, user needs to re-authenticate")
-    return null
+    return { accessToken: null, refreshToken }
   } catch (error) {
     logger.error("Error refreshing token:", error)
-    return null
+    return { accessToken: null, refreshToken }
   }
 }
 
@@ -92,19 +121,14 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams
     const action = searchParams.get("action")
-    const providedToken = searchParams.get("accessToken")
-    const providedRefreshToken = searchParams.get("refreshToken")
     const folderId = searchParams.get("folderId") || "root"
     const query = searchParams.get("query")
     const fileId = searchParams.get("fileId")
     const pageToken = searchParams.get("pageToken")
 
-    let accessToken = await getValidAccessToken(
-      supabase,
-      user,
-      providedToken,
-      providedRefreshToken || undefined,
-    )
+    const tokenPair = await getValidAccessToken(supabase, user)
+    let accessToken = tokenPair.accessToken
+    let refreshToken = tokenPair.refreshToken
 
     if (!accessToken) {
       return respondWithRateLimit(
@@ -114,8 +138,6 @@ export async function GET(request: NextRequest) {
         ),
       )
     }
-
-    const refreshToken = providedRefreshToken || user?.user_metadata?.google_refresh_token
 
     const oauth2Client = new google.auth.OAuth2()
     oauth2Client.setCredentials({ access_token: accessToken })
@@ -135,11 +157,12 @@ export async function GET(request: NextRequest) {
 
         if (isAuthError && refreshToken && user) {
           logger.info("Access token expired, attempting refresh...")
-          const newAccessToken = await refreshAccessToken(refreshToken, supabase)
+          const refreshedTokens = await refreshAccessToken(supabase, refreshToken)
 
-          if (newAccessToken && newAccessToken !== accessToken) {
-            oauth2Client.setCredentials({ access_token: newAccessToken })
-            accessToken = newAccessToken
+          if (refreshedTokens.accessToken && refreshedTokens.accessToken !== accessToken) {
+            accessToken = refreshedTokens.accessToken
+            refreshToken = refreshedTokens.refreshToken
+            oauth2Client.setCredentials({ access_token: accessToken })
 
             try {
               return await requestFn()

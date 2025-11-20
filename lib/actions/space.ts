@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
 import OpenAI from "openai"
 import { env } from "@/lib/env"
-import { requireAuth } from "@/lib/middleware/authorization"
+import { requireAuth, requireAuthAndPermission } from "@/lib/middleware/authorization"
 
 export async function createSpace(
   name: string,
@@ -357,6 +357,78 @@ export async function updateSpaceSetupState(
 
   revalidatePath(`/spaces/${spaceId}`)
   return { data }
+}
+
+export async function removeSpaceMember(spaceId: string, memberUserId: string) {
+  const supabase = await createClient()
+
+  try {
+    await requireAuthAndPermission("space:invite", { spaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+
+  const { data: targetMember, error: memberFetchError } = await supabase
+    .from("space_members")
+    .select("role")
+    .eq("space_id", spaceId)
+    .eq("user_id", memberUserId)
+    .maybeSingle()
+
+  if (memberFetchError) {
+    return { error: memberFetchError.message }
+  }
+
+  if (!targetMember) {
+    return { error: "Member not found" }
+  }
+
+  if (targetMember.role === "owner") {
+    const { data: owners } = await supabase
+      .from("space_members")
+      .select("id")
+      .eq("space_id", spaceId)
+      .eq("role", "owner")
+
+    if ((owners?.length ?? 0) <= 1) {
+      return {
+        error: "Spaces must always have at least one owner. Promote another member before removing this owner.",
+      }
+    }
+  }
+
+  const { error: deleteError } = await supabase
+    .from("space_members")
+    .delete()
+    .eq("space_id", spaceId)
+    .eq("user_id", memberUserId)
+
+  if (deleteError) {
+    return { error: deleteError.message }
+  }
+
+  const { data: workspaceRows } = await supabase
+    .from("workspaces")
+    .select("id")
+    .eq("space_id", spaceId)
+
+  if (workspaceRows && workspaceRows.length > 0) {
+    const workspaceIds = workspaceRows.map((workspace) => workspace.id)
+    const { error: workspaceRemovalError } = await supabase
+      .from("workspace_members")
+      .delete()
+      .eq("user_id", memberUserId)
+      .in("workspace_id", workspaceIds)
+
+    if (workspaceRemovalError) {
+      console.error("[Space] Failed to remove workspace memberships when removing space member", workspaceRemovalError)
+    }
+
+    workspaceIds.forEach((workspaceId) => revalidatePath(`/workspaces/${workspaceId}`))
+  }
+
+  revalidatePath(`/spaces/${spaceId}`)
+  return { success: true }
 }
 
 export async function deleteSpace(spaceId: string) {

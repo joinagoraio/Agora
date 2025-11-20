@@ -1,11 +1,15 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import { syncSource } from "@/lib/actions/source"
+import { applyRateLimitHeaders, checkRateLimit, connectorTestRateLimit, RateLimitStatus } from "@/lib/rate-limit"
+import { getClientIdentifier } from "@/lib/utils/request"
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ connectorId: string }> },
 ) {
+  let rateLimitStatus: RateLimitStatus | undefined
+
   try {
     const { connectorId } = await params
     const body = await req.json()
@@ -16,8 +20,24 @@ export async function POST(
       data: { user },
     } = await supabase.auth.getUser()
 
+    const identifier = user?.id ?? getClientIdentifier(req.headers)
+    rateLimitStatus = await checkRateLimit(
+      connectorTestRateLimit,
+      user ? `connector-test:user:${user.id}` : `connector-test:ip:${identifier}`,
+    )
+    const respondWithRateLimit = (response: NextResponse) => applyRateLimitHeaders(response, rateLimitStatus)
+
+    if (!rateLimitStatus.success) {
+      return respondWithRateLimit(
+        NextResponse.json(
+          { error: "Connector test rate limit exceeded. Please wait before trying again." },
+          { status: 429 },
+        ),
+      )
+    }
+
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return respondWithRateLimit(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
     }
 
     // Get source details
@@ -28,7 +48,7 @@ export async function POST(
       .single()
 
     if (sourceError || !source) {
-      return NextResponse.json({ error: "Source not found" }, { status: 404 })
+      return respondWithRateLimit(NextResponse.json({ error: "Source not found" }, { status: 404 }))
     }
 
     // Test connection based on source type
@@ -129,16 +149,19 @@ export async function POST(
       }
     }
 
-    return NextResponse.json(testResult)
+    return respondWithRateLimit(NextResponse.json(testResult))
   } catch (error) {
     console.error("[v0] Connector test API error:", error)
-    return NextResponse.json(
+    return applyRateLimitHeaders(
+      NextResponse.json(
       {
         success: false,
         message: "Connection test failed",
         error: error instanceof Error ? error.message : "Internal server error",
       },
       { status: 500 },
+      ),
+      rateLimitStatus,
     )
   }
 }

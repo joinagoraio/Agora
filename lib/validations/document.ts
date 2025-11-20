@@ -1,4 +1,5 @@
 import { z } from "zod"
+import JSZip from "jszip"
 
 export const documentUploadSchema = z.object({
   workspaceId: z.string().uuid("workspaceId must be a valid UUID"),
@@ -42,4 +43,44 @@ export const overheidIntelligentSearchSchema = z.object({
   location: z.string().max(200).optional(),
   customQueries: z.array(z.string().max(200)).optional(),
 })
+
+const DOCX_MIME =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+const MAX_DECOMPRESSION_RATIO = 100
+const MAX_UNCOMPRESSED_DOCUMENT_BYTES = 500 * 1024 * 1024
+
+export type DocumentSafetyContext = {
+  docxArrayBuffer?: ArrayBuffer
+}
+
+export async function validateDocumentSafety(file: File): Promise<DocumentSafetyContext> {
+  if (file.type !== DOCX_MIME) {
+    return {}
+  }
+
+  const arrayBuffer = await file.arrayBuffer()
+  await ensureDocxIsNotZipBomb(arrayBuffer, file.size)
+  return { docxArrayBuffer: arrayBuffer }
+}
+
+async function ensureDocxIsNotZipBomb(arrayBuffer: ArrayBuffer, compressedSize: number) {
+  const zip = await JSZip.loadAsync(arrayBuffer, { checkCRC32: true })
+  const entries = Object.values(zip.files)
+  let totalUncompressedBytes = 0
+
+  for (const entry of entries) {
+    if (entry.dir) continue
+    const content = await entry.async("uint8array")
+    totalUncompressedBytes += content.byteLength
+
+    if (totalUncompressedBytes > MAX_UNCOMPRESSED_DOCUMENT_BYTES) {
+      throw new Error("Document expands beyond the allowed limit. Please upload a smaller file.")
+    }
+  }
+
+  const compressionRatio = totalUncompressedBytes / Math.max(1, compressedSize)
+  if (compressionRatio > MAX_DECOMPRESSION_RATIO) {
+    throw new Error("Document appears to be a compression bomb and was rejected.")
+  }
+}
 

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { encryptGoogleTokenBundle, GOOGLE_TOKEN_METADATA_KEY } from "@/lib/actions/auth"
 import { NextResponse } from "next/server"
 
 export async function GET(request: Request) {
@@ -23,12 +24,19 @@ export async function GET(request: Request) {
     if (data.session?.provider_token && data.session?.provider_refresh_token) {
       try {
         console.log("[Auth Callback] Storing Google tokens in user metadata")
-        // Update user metadata with Google tokens
+        const encryptedBundle = encryptGoogleTokenBundle({
+          accessToken: data.session.provider_token,
+          refreshToken: data.session.provider_refresh_token,
+          expiresAt: data.session.expires_at,
+          storedAt: new Date().toISOString(),
+        })
+
         const { error: updateError } = await supabase.auth.updateUser({
           data: {
-            google_access_token: data.session.provider_token,
-            google_refresh_token: data.session.provider_refresh_token,
-            google_token_expires_at: data.session.expires_at?.toString(),
+            [GOOGLE_TOKEN_METADATA_KEY]: encryptedBundle,
+            google_access_token: null,
+            google_refresh_token: null,
+            google_token_expires_at: null,
           },
         })
 

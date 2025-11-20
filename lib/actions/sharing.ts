@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { randomBytes } from "node:crypto"
 import { env } from "@/lib/env"
 
@@ -51,10 +52,10 @@ export async function createSharedLink(conversationId: string, expiresInDays?: n
 }
 
 export async function getSharedConversation(token: string) {
-  const supabase = await createClient()
+  const adminClient = createAdminClient()
 
-  // Get shared link
-  const { data: sharedLink, error: linkError } = await supabase
+  // Get shared link using service role to avoid exposing broad RLS policies
+  const { data: sharedLink, error: linkError } = await adminClient
     .from("shared_links")
     .select("*, conversations(*, workspaces(name))")
     .eq("token", token)
@@ -73,9 +74,9 @@ export async function getSharedConversation(token: string) {
 }
 
 export async function getSharedMessages(conversationId: string) {
-  const supabase = await createClient()
+  const adminClient = createAdminClient()
 
-  const { data, error } = await supabase
+  const { data, error } = await adminClient
     .from("messages")
     .select("*")
     .eq("conversation_id", conversationId)

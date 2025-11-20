@@ -6,6 +6,11 @@ This audit examined the space and workspace membership systems in the Agora code
 
 The system demonstrates a generally solid architecture with SECURITY DEFINER helper functions and RLS policies, but several security gaps and edge cases require immediate attention.
 
+### Remediation Note (November 20, 2025)
+- Added server actions (`removeSpaceMember`, `removeWorkspaceMember`) with last-admin checks, workspace cascade removal, and UI controls in `SpaceSettings`/`WorkspaceSettings`, addressing Critical issue 1.3 and High issue 2.5.
+- Tightened helper function definitions and EXECUTE privileges via `scripts/032_helper_function_consistency.sql`, ensuring a single authoritative signature for membership checks.
+- Expanded public documentation (ENVIRONMENT, security reports) to capture new operational controls and test coverage following remediation.
+
 ---
 
 ## 1. CRITICAL SECURITY ISSUES

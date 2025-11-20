@@ -7,11 +7,15 @@ const nextConfig = {
   async headers() {
     const isDev = process.env.NODE_ENV !== "production"
     
-    const scriptSources = ["'self'"]
+    const scriptSources = ["'self'", "https://va.vercel-scripts.com"]
     if (isDev) {
       scriptSources.push("'unsafe-eval'", "'unsafe-inline'", "https://vercel.live")
     }
-    scriptSources.push("https://va.vercel-scripts.com")
+    
+    const styleSources = ["'self'"]
+    if (isDev) {
+      styleSources.push("'unsafe-inline'")
+    }
     
     const connectSources = [
       "'self'",
@@ -26,10 +30,11 @@ const nextConfig = {
     const csp = [
       "default-src 'self'",
       `script-src ${scriptSources.join(" ")}`,
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: https: blob:",
+      `style-src ${styleSources.join(" ")}`,
+      "img-src 'self' data: https:",
       "font-src 'self' data:",
       `connect-src ${connectSources.join(" ")}`,
+      "worker-src 'self' blob:",
       "frame-src 'self'",
       "object-src 'none'",
       "base-uri 'self'",

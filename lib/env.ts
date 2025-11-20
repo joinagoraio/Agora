@@ -1,6 +1,10 @@
 import "server-only"
 import { z } from "zod"
 
+if (process.env.NODE_ENV === "test" && !process.env.TOKEN_ENCRYPTION_KEY) {
+  process.env.TOKEN_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef"
+}
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -24,6 +28,7 @@ const envSchema = z
     NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
     RESEND_API_KEY: z.string().min(1).optional(),
     INVITE_EMAIL_FROM: z.string().email().optional(),
+    TOKEN_ENCRYPTION_KEY: z.string().min(32, "TOKEN_ENCRYPTION_KEY must be at least 32 characters"),
   })
   .superRefine((envValues, ctx) => {
     const hasRedisUrl = Boolean(envValues.UPSTASH_REDIS_REST_URL)
@@ -59,6 +64,7 @@ const parsedEnv = envSchema.safeParse({
   NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   INVITE_EMAIL_FROM: process.env.INVITE_EMAIL_FROM,
+  TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY,
 })
 
 if (!parsedEnv.success) {

@@ -29,3 +29,8 @@ declare module "markdown-it-footnote" {
   export default footnote
 }
 
+declare module "*?url" {
+  const url: string
+  export default url
+}
+

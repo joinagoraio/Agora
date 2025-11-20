@@ -22,6 +22,14 @@ This comprehensive security audit of the Agora platform has identified **critica
 - High Priority: 1 week
 - All Issues: 2-3 weeks
 
+### Remediation Update (November 20, 2025)
+- Implemented `scripts/031_critical_rls_fixes.sql` and `scripts/032_helper_function_consistency.sql` to tighten document/message/storage RLS policies and consolidate helper functions with restricted EXECUTE grants.
+- Added workspace-level authorization checks for document viewer APIs plus zip-bomb detection, parser timeouts, and storage policy updates for document uploads.
+- Hardened Google Drive integration by encrypting OAuth tokens at rest, avoiding query-string token exposure, and updating the callback/refresh flows; introduced required `TOKEN_ENCRYPTION_KEY`.
+- Tightened CSP defaults (removed CDN worker, self-hosted `pdfjs` worker, reduced `style-src` exceptions) and expanded rate limiting to connector testing and public data proxies.
+- Delivered space/workspace member removal server actions and UI controls with last-admin safeguards, aligning with membership audit findings.
+- Test suite (`npm test -- --run`) executed successfully after the changes (see logs from 2025-11-20 14:57 UTC).
+
 ---
 
 ## SEVERITY BREAKDOWN

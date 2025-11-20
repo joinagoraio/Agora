@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
 import OpenAI from "openai"
-import { documentUploadSchema } from "@/lib/validations/document"
+import { documentUploadSchema, type DocumentSafetyContext, validateDocumentSafety } from "@/lib/validations/document"
 import { applyRateLimitHeaders, checkRateLimit, uploadRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { requireAuthAndPermission } from "@/lib/middleware/authorization"
 import { invalidateCacheByTag } from "@/lib/cache/api-cache"
@@ -15,6 +15,7 @@ import { validateFileMagicNumber } from "@/lib/utils/file-validation"
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 const MAX_FILE_SIZE_MB = MAX_FILE_SIZE_BYTES / (1024 * 1024)
+const PARSER_TIMEOUT_MS = 30_000
 
 // Helper function to strip markdown syntax for better AI processing
 function stripMarkdown(text: string): string {
@@ -44,6 +45,25 @@ function stripMarkdown(text: string): string {
   text = text.replace(/^>\s+/gm, '')
   
   return text.trim()
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(timeoutMessage))
+    }, timeoutMs)
+
+    promise.then(
+      (value) => {
+        clearTimeout(timeoutId)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timeoutId)
+        reject(error)
+      },
+    )
+  })
 }
 
 // Helper function to generate a concise AI summary of document content
@@ -187,6 +207,20 @@ export async function POST(req: NextRequest) {
 
     const validated = validationResult.data
 
+    let safetyContext: DocumentSafetyContext = {}
+    try {
+      safetyContext = await validateDocumentSafety(validated.file)
+    } catch (safetyError) {
+      return respondWithRateLimit(
+        NextResponse.json(
+          {
+            error: safetyError instanceof Error ? safetyError.message : "File failed safety checks",
+          },
+          { status: 400 },
+        ),
+      )
+    }
+
     // Validate file magic number to prevent MIME type spoofing
     const isValidFileType = await validateFileMagicNumber(validated.file, validated.file.type)
     if (!isValidFileType) {
@@ -311,24 +345,28 @@ export async function POST(req: NextRequest) {
 
         const PDFParser = (await import("pdf2json")).default
 
-        const pdfData = await new Promise<string>((resolve, reject) => {
-          const pdfParser = new PDFParser(null, true)
+        const pdfData = await withTimeout(
+          new Promise<string>((resolve, reject) => {
+            const pdfParser = new PDFParser(null, true)
 
-          pdfParser.on("pdfParser_dataError", (errData: any) => {
-            reject(new Error(errData.parserError))
-          })
+            pdfParser.on("pdfParser_dataError", (errData: any) => {
+              reject(new Error(errData.parserError))
+            })
 
-          pdfParser.on("pdfParser_dataReady", () => {
-            try {
-              const text = pdfParser.getRawTextContent() || ""
-              resolve(text)
-            } catch (err) {
-              reject(err)
-            }
-          })
+            pdfParser.on("pdfParser_dataReady", () => {
+              try {
+                const text = pdfParser.getRawTextContent() || ""
+                resolve(text)
+              } catch (err) {
+                reject(err)
+              }
+            })
 
-          pdfParser.parseBuffer(buffer)
-        })
+            pdfParser.parseBuffer(buffer)
+          }),
+          PARSER_TIMEOUT_MS,
+          "PDF parsing timed out",
+        )
 
         content = pdfData || ""
         content = content.replace(/\\u(?![\da-fA-F]{4})/g, "u")
@@ -348,13 +386,17 @@ export async function POST(req: NextRequest) {
       })
       try {
         // Convert File to ArrayBuffer, then to Buffer for Word parsing
-        const arrayBuffer = await validated.file.arrayBuffer()
+        const arrayBuffer = safetyContext.docxArrayBuffer ?? (await validated.file.arrayBuffer())
         const buffer = Buffer.from(arrayBuffer)
         logger.debug("[Upload API] Converted Word document to Buffer", { size: buffer.length })
         
         // Use mammoth to extract text content from Word document
         const mammoth = await import("mammoth")
-        const result = await mammoth.extractRawText({ buffer })
+        const result = await withTimeout(
+          mammoth.extractRawText({ buffer }),
+          PARSER_TIMEOUT_MS,
+          "DOCX parsing timed out",
+        )
         
         content = result.value || ""
         

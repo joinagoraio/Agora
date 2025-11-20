@@ -16,6 +16,9 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
+# Application secrets
+TOKEN_ENCRYPTION_KEY=32+character-secret-used-for-encryption
+
 # OpenAI
 OPENAI_API_KEY=sk-...
 ```

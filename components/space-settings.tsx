@@ -10,9 +10,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { inviteUserToSpace, resendInvitation, revokeInvitation } from "@/lib/actions/invitation"
-import { deleteSpace } from "@/lib/actions/space"
+import { deleteSpace, removeSpaceMember } from "@/lib/actions/space"
 import { useRouter } from "next/navigation"
-import { Trash2, Send, MoreVertical } from "lucide-react"
+import { Trash2, Send, MoreVertical, UserMinus } from "lucide-react"
 import { toast } from "sonner"
 import {
   AlertDialog,
@@ -31,9 +31,10 @@ interface SpaceSettingsProps {
   space: any
   members: any[]
   invitations: any[]
+  currentUserId: string
 }
 
-export function SpaceSettings({ space, members, invitations }: SpaceSettingsProps) {
+export function SpaceSettings({ space, members, invitations, currentUserId }: SpaceSettingsProps) {
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<"member" | "admin" | "viewer">("member")
   const [isInviting, setIsInviting] = useState(false)
@@ -41,7 +42,22 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
   const [invitationAction, setInvitationAction] = useState<{ id: string; type: "resend" | "revoke" } | null>(null)
   const [isDeletingSpace, setIsDeletingSpace] = useState(false)
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null)
   const router = useRouter()
+  const handleRemoveMember = async (memberId: string) => {
+    setRemovingMemberId(memberId)
+    const result = await removeSpaceMember(space.id, memberId)
+    setRemovingMemberId(null)
+
+    if (result?.error) {
+      toast.error("Failed to remove member", { description: result.error })
+      return
+    }
+
+    toast.success("Member removed", { description: "They no longer have access to this space." })
+    router.refresh()
+  }
+
 
   const handleDeleteSpace = async () => {
     if (!needsConfirmation) {
@@ -145,6 +161,9 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
                   <TableHead>Name</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Joined</TableHead>
+                  <TableHead className="text-right">
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -156,6 +175,18 @@ export function SpaceSettings({ space, members, invitations }: SpaceSettingsProp
                       <Badge>{member.role}</Badge>
                     </TableCell>
                     <TableCell>{new Date(member.created_at).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleRemoveMember(member.user_id)}
+                        disabled={removingMemberId === member.user_id || member.user_id === currentUserId}
+                      >
+                        <UserMinus className="mr-1 h-4 w-4" />
+                        Remove
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
