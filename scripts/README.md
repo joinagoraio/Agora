@@ -54,6 +54,21 @@ If you have already run `complete_migration.sql`, **immediately apply**:
 - **011-020**: User roles, workspace features
 - **021-030**: Workspace memberships, invitations
 
+### Security Verification & Remediation
+
+**verify_security_policies.sql** 🔍 **NEW**
+- Comprehensive security policy verification
+- Checks all RLS policies for vulnerabilities
+- Verifies helper functions
+- Generates security score
+- **Run this regularly** to ensure your database is secure
+
+**fix_vulnerable_policies.sql** 🛠️ **NEW**
+- Automated remediation script
+- Fixes vulnerable RLS policies
+- Only run if verify script shows issues
+- **Requires database backup** before running
+
 ### Other Files
 
 - **storage_rls_policies.sql**: Supabase Storage bucket policies
