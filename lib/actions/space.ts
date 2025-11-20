@@ -25,13 +25,26 @@ export async function createSpace(
     return { error: "Unauthorized" }
   }
 
-  // SECURITY NOTE: Space creation is currently unrestricted for authenticated users.
-  // This is acceptable if spaces represent individual organizations/tenants.
-  // For multi-tenant SaaS, consider adding:
-  //   1. A global permission check (e.g., requireGlobalRole("org_admin"))
-  //   2. Invitation-only space creation
-  //   3. Payment/plan-based restrictions
-  // RLS policies still enforce space-level isolation after creation.
+  // SECURITY: Limit number of spaces per user to prevent abuse
+  // This can be configured via MAX_SPACES_PER_USER env variable (default: 10)
+  const maxSpacesPerUser = parseInt(env.MAX_SPACES_PER_USER || "10", 10)
+
+  const { count: existingSpaceCount, error: countError } = await supabase
+    .from("space_members")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("role", "owner")
+
+  if (countError) {
+    console.error("[v0] Error checking space count:", countError.message)
+    return { error: "Failed to verify space creation eligibility" }
+  }
+
+  if ((existingSpaceCount ?? 0) >= maxSpacesPerUser) {
+    return {
+      error: `You have reached the maximum limit of ${maxSpacesPerUser} spaces. Please contact support if you need to create additional spaces.`,
+    }
+  }
 
   const adminClient = createAdminClient()
 

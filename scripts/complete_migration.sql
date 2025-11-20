@@ -1,24 +1,38 @@
--- AGORA Complete Database Migration
--- Run this script in your Supabase SQL Editor: https://supabase.com/dashboard/project/_/sql
+-- ❌❌❌ THIS FILE IS DEPRECATED AND INSECURE - DO NOT USE ❌❌❌
 --
--- ⚠️  WARNING: THIS FILE IS OUTDATED AND SHOULD NOT BE USED FOR NEW DEPLOYMENTS ⚠️
+-- AGORA Complete Database Migration (DEPRECATED)
 --
--- This complete_migration.sql file does NOT include critical security fixes from:
---   - 031_critical_rls_fixes.sql (RLS policy hardening)
---   - 032_helper_function_consistency.sql (Helper function updates)
+-- ⚠️  CRITICAL WARNING: THIS FILE IS OUTDATED AND CONTAINS SECURITY VULNERABILITIES ⚠️
 --
--- RECOMMENDED APPROACH:
---   Run migrations sequentially: 000 → 001 → 002 → ... → 032
---   This ensures all security patches are properly applied.
+-- This file does NOT include critical security fixes and contains vulnerable RLS policies.
+-- Using this file will result in an INSECURE database.
 --
--- If you have already run this script, IMMEDIATELY apply:
---   1. scripts/031_critical_rls_fixes.sql
---   2. scripts/032_helper_function_consistency.sql
+-- ════════════════════════════════════════════════════════════════════════════════
+-- FOR NEW DEPLOYMENTS:
+-- ════════════════════════════════════════════════════════════════════════════════
+--   1. Run migrations sequentially: 000_enable_extensions.sql → 001_create_core_schema.sql → ... → 030_workspace_memberships.sql
+--   2. Run scripts/verify_security_policies.sql to verify your setup
+--   3. See scripts/README.md for complete deployment guide
 --
--- This file is kept for reference only. Last updated: Nov 20, 2025 (before security patches)
+-- ════════════════════════════════════════════════════════════════════════════════
+-- IF YOU ALREADY RAN THIS FILE:
+-- ════════════════════════════════════════════════════════════════════════════════
+--   1. Run scripts/verify_security_policies.sql to check for vulnerabilities
+--   2. If vulnerabilities found, run scripts/fix_vulnerable_policies.sql
+--   3. Re-run verification to confirm all issues are resolved
 --
--- NOTE: If you get errors about existing policies or triggers, you can safely ignore them
--- or drop existing policies first. This script is idempotent for tables and indexes.
+-- ════════════════════════════════════════════════════════════════════════════════
+-- WHY IS THIS FILE DEPRECATED?
+-- ════════════════════════════════════════════════════════════════════════════════
+--   - Contains vulnerable RLS policies (e.g., "System can..." policies with qual='true')
+--   - Missing workspace-scoped access controls
+--   - Missing helper functions with SECURITY DEFINER
+--   - Does not include recent security hardening
+--   - Sequential migrations are the officially supported method
+--
+-- This file is kept for reference only. Last updated: 2024-11-20 (INSECURE VERSION)
+--
+-- ❌❌❌ DO NOT RUN THIS FILE IN PRODUCTION ❌❌❌
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
