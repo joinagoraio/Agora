@@ -29,7 +29,10 @@ export async function createSpace(
   // This can be configured via MAX_SPACES_PER_USER env variable (default: 10)
   const maxSpacesPerUser = parseInt(env.MAX_SPACES_PER_USER || "10", 10)
 
-  const { count: existingSpaceCount, error: countError } = await supabase
+  const adminClient = createAdminClient()
+
+  // Use admin client to bypass RLS for counting user's own spaces
+  const { count: existingSpaceCount, error: countError } = await adminClient
     .from("space_members")
     .select("*", { count: "exact", head: true })
     .eq("user_id", user.id)
@@ -45,8 +48,6 @@ export async function createSpace(
       error: `You have reached the maximum limit of ${maxSpacesPerUser} spaces. Please contact support if you need to create additional spaces.`,
     }
   }
-
-  const adminClient = createAdminClient()
 
   // Ensure profile exists before creating space (owner_id references profiles.id)
   const { data: profile } = await adminClient
