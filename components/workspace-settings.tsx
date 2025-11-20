@@ -62,12 +62,6 @@ export function WorkspaceSettings({ workspace, space, members, invitations, curr
     return normalized.charAt(0).toUpperCase() + normalized.slice(1)
   }
 
-  const formatStatusLabel = (status?: string | null) => {
-    const normalized = status?.trim()
-    if (!normalized) return "Pending"
-    return normalized.charAt(0).toUpperCase() + normalized.slice(1)
-  }
-
   const handleDeleteWorkspace = async () => {
     if (!needsConfirmation) {
       setNeedsConfirmation(true)

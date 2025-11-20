@@ -28,11 +28,6 @@ const envSchema = z
     NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
     RESEND_API_KEY: z.string().min(1).optional(),
     INVITE_EMAIL_FROM: z.string().email().optional(),
-    MAX_SPACES_PER_USER: z
-      .string()
-      .regex(/^\d+$/, "MAX_SPACES_PER_USER must be a positive integer")
-      .optional()
-      .default("10"),
     TOKEN_ENCRYPTION_KEY: z.string().min(32, "TOKEN_ENCRYPTION_KEY must be at least 32 characters"),
     MAX_SPACES_PER_USER: z
       .string()
@@ -74,7 +69,6 @@ const parsedEnv = envSchema.safeParse({
   NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   INVITE_EMAIL_FROM: process.env.INVITE_EMAIL_FROM,
-  MAX_SPACES_PER_USER: process.env.MAX_SPACES_PER_USER,
   TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY,
   MAX_SPACES_PER_USER: process.env.MAX_SPACES_PER_USER,
 })

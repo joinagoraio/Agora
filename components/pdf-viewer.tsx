@@ -27,10 +27,9 @@ import {
 // Import react-pdf CSS for TextLayer and AnnotationLayer
 import "react-pdf/dist/Page/AnnotationLayer.css"
 import "react-pdf/dist/Page/TextLayer.css"
-import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url"
 
-// Configure PDF.js worker for Next.js using local asset
-pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerSrc
+// Configure PDF.js worker for Next.js using CDN (Next.js 16/Turbopack compatible)
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
 
 export type ViewerFitMode = "width" | "height"
 
