@@ -29,7 +29,10 @@ export async function createSpace(
   // This can be configured via MAX_SPACES_PER_USER env variable (default: 10)
   const maxSpacesPerUser = parseInt(env.MAX_SPACES_PER_USER || "10", 10)
 
-  const { count: existingSpaceCount, error: countError } = await supabase
+  const adminClient = createAdminClient()
+
+  // Use admin client to bypass RLS for counting user's own spaces
+  const { count: existingSpaceCount, error: countError } = await adminClient
     .from("space_members")
     .select("*", { count: "exact", head: true })
     .eq("user_id", user.id)
@@ -45,8 +48,6 @@ export async function createSpace(
       error: `You have reached the maximum limit of ${maxSpacesPerUser} spaces. Please contact support if you need to create additional spaces.`,
     }
   }
-
-  const adminClient = createAdminClient()
 
   // Ensure profile exists before creating space (owner_id references profiles.id)
   const { data: profile } = await adminClient
@@ -489,28 +490,32 @@ export async function getUserSpaces() {
   }
 
   const adminClient = createAdminClient()
-  const { data: spaces, error } = await adminClient
-    .from("spaces")
-    .select("*, space_members(role, user_id)")
+
+  // Query space_members first to get only user's spaces, then join to spaces table
+  const { data: memberships, error } = await adminClient
+    .from("space_members")
+    .select(`
+      role,
+      space:spaces(*)
+    `)
+    .eq("user_id", user.id)
 
   if (error) {
     console.error("[v0] Error fetching spaces:", error.message)
     return { data: [], error: error.message }
   }
 
-  if (!spaces || spaces.length === 0) {
+  if (!memberships || memberships.length === 0) {
     return { data: [] }
   }
 
-  const result = spaces.map((space) => {
-    const memberRole = space.space_members?.find((sm: any) => sm.user_id === user.id)?.role ?? "viewer"
-    const { space_members, ...rest } = space
-
-    return {
-      ...rest,
-      role: memberRole,
-    }
-  })
+  // Map memberships to spaces with user's role
+  const result = memberships
+    .filter((m) => m.space) // Filter out any null spaces
+    .map((m) => ({
+      ...m.space,
+      role: m.role,
+    }))
 
   return { data: result }
 }
