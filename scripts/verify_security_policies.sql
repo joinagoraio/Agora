@@ -231,7 +231,7 @@ SELECT
 FROM pg_policies
 WHERE schemaname = 'storage'
   AND tablename = 'objects'
-  AND (policyname LIKE '%document%' OR bucket_id = 'documents')
+  AND policyname LIKE '%document%'
 ORDER BY policyname;
 
 -- =============================================================================
