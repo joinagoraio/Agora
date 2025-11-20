@@ -1,5 +1,5 @@
--- Security Policy Verification Script
--- Run this in your Supabase SQL Editor to verify all security policies are correctly configured
+-- Security Policy Verification Script for Supabase SQL Editor
+-- Run this to verify all security policies are correctly configured
 --
 -- This script checks for:
 --   1. Presence of secure RLS policies
@@ -7,16 +7,15 @@
 --   3. Helper function existence and configuration
 --   4. Storage bucket policies
 
-\echo '=== AGORA SECURITY POLICY VERIFICATION ==='
-\echo ''
-\echo 'Checking RLS policies on critical tables...'
-\echo ''
-
+-- =============================================================================
+-- 1. RLS ENABLED CHECK
+-- =============================================================================
 -- Check if RLS is enabled on all critical tables
-\echo '1. RLS ENABLED CHECK'
-\echo '-------------------'
 SELECT
-    schemaname,
+    '1. RLS ENABLED CHECK' as section,
+    '' as spacer;
+
+SELECT
     tablename,
     CASE
         WHEN rowsecurity THEN '✅ ENABLED'
@@ -42,13 +41,14 @@ WHERE schemaname = 'public'
   )
 ORDER BY tablename;
 
-\echo ''
-\echo '2. CRITICAL: DOCUMENTS TABLE POLICIES'
-\echo '-------------------------------------'
--- Check documents table for vulnerable policies
+-- =============================================================================
+-- 2. CRITICAL: DOCUMENTS TABLE POLICIES
+-- =============================================================================
+SELECT '' as spacer, '2. CRITICAL: DOCUMENTS TABLE POLICIES' as section;
+
 SELECT
     policyname,
-    cmd,
+    cmd as operation,
     CASE
         WHEN policyname LIKE '%System can%' AND (qual = 'true' OR with_check = 'true')
             THEN '❌ VULNERABLE - MUST FIX'
@@ -56,18 +56,21 @@ SELECT
             THEN '✅ SECURE'
         ELSE '⚠️  REVIEW NEEDED'
     END as security_status,
-    LEFT(qual, 50) as using_clause,
-    LEFT(with_check, 50) as check_clause
+    LEFT(COALESCE(qual, 'N/A'), 60) as using_clause,
+    LEFT(COALESCE(with_check, 'N/A'), 60) as check_clause
 FROM pg_policies
-WHERE tablename = 'documents'
+WHERE schemaname = 'public'
+  AND tablename = 'documents'
 ORDER BY cmd, policyname;
 
-\echo ''
-\echo '3. CRITICAL: MESSAGES TABLE POLICIES'
-\echo '------------------------------------'
+-- =============================================================================
+-- 3. CRITICAL: MESSAGES TABLE POLICIES
+-- =============================================================================
+SELECT '' as spacer, '3. CRITICAL: MESSAGES TABLE POLICIES' as section;
+
 SELECT
     policyname,
-    cmd,
+    cmd as operation,
     CASE
         WHEN policyname LIKE '%System can%' AND (qual = 'true' OR with_check = 'true')
             THEN '❌ VULNERABLE - MUST FIX'
@@ -76,32 +79,38 @@ SELECT
         ELSE '⚠️  REVIEW NEEDED'
     END as security_status
 FROM pg_policies
-WHERE tablename = 'messages'
+WHERE schemaname = 'public'
+  AND tablename = 'messages'
 ORDER BY cmd, policyname;
 
-\echo ''
-\echo '4. CRITICAL: PROFILES TABLE POLICIES'
-\echo '------------------------------------'
+-- =============================================================================
+-- 4. CRITICAL: PROFILES TABLE POLICIES
+-- =============================================================================
+SELECT '' as spacer, '4. CRITICAL: PROFILES TABLE POLICIES' as section;
+
 SELECT
     policyname,
-    cmd,
+    cmd as operation,
     CASE
-        WHEN policyname LIKE '%Public%' AND with_check = 'true'
+        WHEN policyname LIKE '%Public%' AND qual = 'true'
             THEN '❌ VULNERABLE - Exposes all profiles'
         WHEN policyname LIKE '%connected%' OR policyname LIKE '%workspace%' OR policyname LIKE '%space%'
             THEN '✅ SECURE - Restricted visibility'
         ELSE '⚠️  REVIEW NEEDED'
     END as security_status
 FROM pg_policies
-WHERE tablename = 'profiles'
+WHERE schemaname = 'public'
+  AND tablename = 'profiles'
 ORDER BY cmd, policyname;
 
-\echo ''
-\echo '5. DOCUMENT EMBEDDINGS POLICIES'
-\echo '-------------------------------'
+-- =============================================================================
+-- 5. DOCUMENT EMBEDDINGS POLICIES
+-- =============================================================================
+SELECT '' as spacer, '5. DOCUMENT EMBEDDINGS POLICIES' as section;
+
 SELECT
     policyname,
-    cmd,
+    cmd as operation,
     CASE
         WHEN policyname LIKE '%System can%' AND (qual = 'true' OR with_check = 'true')
             THEN '❌ VULNERABLE - MUST FIX'
@@ -110,15 +119,18 @@ SELECT
         ELSE '⚠️  REVIEW NEEDED'
     END as security_status
 FROM pg_policies
-WHERE tablename = 'document_embeddings'
+WHERE schemaname = 'public'
+  AND tablename = 'document_embeddings'
 ORDER BY cmd, policyname;
 
-\echo ''
-\echo '6. WORKSPACE INVITATIONS POLICIES'
-\echo '---------------------------------'
+-- =============================================================================
+-- 6. WORKSPACE INVITATIONS POLICIES
+-- =============================================================================
+SELECT '' as spacer, '6. WORKSPACE INVITATIONS POLICIES' as section;
+
 SELECT
     policyname,
-    cmd,
+    cmd as operation,
     CASE
         WHEN qual = 'true' AND cmd = 'SELECT'
             THEN '❌ VULNERABLE - Allows enumeration'
@@ -127,15 +139,18 @@ SELECT
         ELSE '⚠️  REVIEW NEEDED'
     END as security_status
 FROM pg_policies
-WHERE tablename = 'workspace_invitations'
+WHERE schemaname = 'public'
+  AND tablename = 'workspace_invitations'
 ORDER BY cmd, policyname;
 
-\echo ''
-\echo '7. SHARED LINKS POLICIES'
-\echo '-----------------------'
+-- =============================================================================
+-- 7. SHARED LINKS POLICIES
+-- =============================================================================
+SELECT '' as spacer, '7. SHARED LINKS POLICIES' as section;
+
 SELECT
     policyname,
-    cmd,
+    cmd as operation,
     CASE
         WHEN qual = 'true' AND cmd = 'SELECT'
             THEN '⚠️  WARNING - May expose tokens'
@@ -144,40 +159,42 @@ SELECT
         ELSE '⚠️  REVIEW NEEDED'
     END as security_status
 FROM pg_policies
-WHERE tablename = 'shared_links'
+WHERE schemaname = 'public'
+  AND tablename = 'shared_links'
 ORDER BY cmd, policyname;
 
-\echo ''
-\echo '8. HELPER FUNCTIONS CHECK'
-\echo '------------------------'
--- Check that security helper functions exist
+-- =============================================================================
+-- 8. HELPER FUNCTIONS CHECK
+-- =============================================================================
+SELECT '' as spacer, '8. HELPER FUNCTIONS CHECK' as section;
+
 SELECT
     p.proname as function_name,
     pg_get_function_arguments(p.oid) as parameters,
     CASE p.prosecdef
-        WHEN true THEN '✅ SECURITY DEFINER (correct)'
+        WHEN true THEN '✅ SECURITY DEFINER'
         ELSE '❌ NOT SECURITY DEFINER'
     END as security_mode,
     CASE
         WHEN p.proname IN ('is_space_member', 'is_space_admin', 'is_workspace_member', 'is_workspace_admin')
-            THEN '✅ EXISTS'
-        ELSE '⚠️  UNEXPECTED'
+            THEN '✅ REQUIRED FUNCTION'
+        ELSE '⚠️  OTHER'
     END as status
 FROM pg_proc p
 JOIN pg_namespace n ON p.pronamespace = n.oid
 WHERE n.nspname = 'public'
-  AND p.proname LIKE 'is_%member' OR p.proname LIKE 'is_%admin'
+  AND (p.proname LIKE 'is_%member' OR p.proname LIKE 'is_%admin')
 ORDER BY p.proname;
 
-\echo ''
-\echo '9. VULNERABLE POLICY DETECTION'
-\echo '------------------------------'
--- Detect any policies with 'true' as the only condition (very permissive)
+-- =============================================================================
+-- 9. VULNERABLE POLICY DETECTION
+-- =============================================================================
+SELECT '' as spacer, '9. VULNERABLE POLICY DETECTION' as section;
+
 SELECT
-    schemaname,
     tablename,
     policyname,
-    cmd,
+    cmd as operation,
     '❌ VULNERABLE' as status,
     'Policy allows all authenticated users' as issue
 FROM pg_policies
@@ -196,10 +213,11 @@ WHERE schemaname = 'public'
   )
 ORDER BY tablename, cmd;
 
-\echo ''
-\echo '10. STORAGE BUCKET POLICIES'
-\echo '--------------------------'
--- Check storage.objects policies
+-- =============================================================================
+-- 10. STORAGE BUCKET POLICIES
+-- =============================================================================
+SELECT '' as spacer, '10. STORAGE BUCKET POLICIES' as section;
+
 SELECT
     policyname,
     CASE
@@ -209,18 +227,18 @@ SELECT
             THEN '✅ SECURE'
         ELSE '⚠️  REVIEW NEEDED'
     END as security_status,
-    LEFT(with_check, 60) as policy_check
+    LEFT(COALESCE(with_check, qual, 'N/A'), 70) as policy_condition
 FROM pg_policies
 WHERE schemaname = 'storage'
   AND tablename = 'objects'
-  AND policyname LIKE '%document%'
+  AND (policyname LIKE '%document%' OR bucket_id = 'documents')
 ORDER BY policyname;
 
-\echo ''
-\echo '=== SUMMARY ==='
-\echo ''
+-- =============================================================================
+-- SUMMARY
+-- =============================================================================
+SELECT '' as spacer, '=== SECURITY SUMMARY ===' as section;
 
--- Overall security score
 WITH policy_check AS (
     SELECT
         COUNT(*) FILTER (
@@ -234,35 +252,62 @@ WITH policy_check AS (
     WHERE schemaname = 'public'
 )
 SELECT
-    vulnerable_policies,
-    total_policies,
+    vulnerable_policies as "Vulnerable Policies",
+    total_policies as "Total Policies Checked",
     CASE
         WHEN vulnerable_policies = 0 THEN '✅ SECURE - No vulnerable policies detected'
         WHEN vulnerable_policies <= 2 THEN '⚠️  WARNING - Some vulnerable policies found'
         ELSE '❌ CRITICAL - Multiple vulnerable policies detected'
-    END as overall_status,
+    END as "Overall Status",
     CASE
-        WHEN vulnerable_policies = 0 THEN 'Your database is properly secured!'
-        ELSE 'Run the remediation script to fix vulnerable policies'
-    END as recommendation
+        WHEN vulnerable_policies = 0 THEN '✅ Your database is properly secured!'
+        ELSE '❌ Run fix_vulnerable_policies.sql to remediate'
+    END as "Recommendation"
 FROM policy_check;
 
-\echo ''
-\echo '=== KEY INDICATORS ==='
-\echo ''
-\echo 'Look for these signs of a secure database:'
-\echo '  ✅ All tables have RLS enabled'
-\echo '  ✅ Documents table uses "Workspace members/admins" policies'
-\echo '  ✅ Messages table checks conversation membership'
-\echo '  ✅ Profiles table restricts visibility to connected users'
-\echo '  ✅ NO policies with "System can" + "true" conditions'
-\echo '  ✅ Helper functions use SECURITY DEFINER'
-\echo '  ✅ Storage policies check workspace membership'
-\echo ''
-\echo 'Signs of vulnerability:'
-\echo '  ❌ Policies with name "System can..." and qual/with_check = "true"'
-\echo '  ❌ Profiles policy named "Public profiles are viewable by everyone"'
-\echo '  ❌ Storage policy named "Public can read documents"'
-\echo '  ❌ Workspace invitations SELECT policy with qual = "true"'
-\echo ''
-\echo 'Run complete!'
+-- =============================================================================
+-- INTERPRETATION GUIDE
+-- =============================================================================
+SELECT '' as spacer, '=== HOW TO INTERPRET RESULTS ===' as section;
+
+SELECT
+    '✅ SECURE' as indicator,
+    'Policy correctly restricts access - Good!' as meaning
+UNION ALL
+SELECT
+    '❌ VULNERABLE',
+    'Policy allows unrestricted access - MUST FIX!'
+UNION ALL
+SELECT
+    '⚠️  WARNING',
+    'Policy may need review or has minor issues'
+UNION ALL
+SELECT
+    '✅ ENABLED',
+    'RLS is active on this table - Good!'
+UNION ALL
+SELECT
+    '❌ DISABLED',
+    'RLS is NOT active - CRITICAL SECURITY ISSUE!';
+
+-- =============================================================================
+-- WHAT TO DO NEXT
+-- =============================================================================
+SELECT '' as spacer, '=== NEXT STEPS ===' as section;
+
+WITH vulnerability_count AS (
+    SELECT COUNT(*) as count
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND (qual = 'true' OR with_check = 'true')
+      AND tablename IN ('documents', 'messages', 'document_embeddings', 'profiles')
+)
+SELECT
+    CASE
+        WHEN count = 0 THEN '✅ All checks passed! Your database is secure.'
+        WHEN count <= 2 THEN '⚠️  Found ' || count || ' vulnerable policies. Review and fix recommended.'
+        ELSE '❌ Found ' || count || ' vulnerable policies. Run fix_vulnerable_policies.sql immediately!'
+    END as action_required
+FROM vulnerability_count;
+
+-- End of verification script

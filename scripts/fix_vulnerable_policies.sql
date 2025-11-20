@@ -1,23 +1,21 @@
--- Security Policy Remediation Script
+-- Security Policy Remediation Script for Supabase SQL Editor
 -- Run this script ONLY if verify_security_policies.sql shows vulnerable policies
+--
+-- ⚠️  WARNING: This script will modify RLS policies
+-- ⚠️  Make sure you have a database backup before proceeding
 --
 -- This script will:
 --   1. Drop vulnerable policies
 --   2. Create secure replacement policies
---   3. Fix helper functions if needed
+--   3. Verify helper functions exist
 
-\echo '=== AGORA SECURITY POLICY REMEDIATION ==='
-\echo ''
-\echo '⚠️  WARNING: This script will modify RLS policies'
-\echo '⚠️  Make sure you have a database backup before proceeding'
-\echo ''
-\echo 'Starting remediation...'
-\echo ''
+SELECT '=== AGORA SECURITY POLICY REMEDIATION ===' as status;
+SELECT '⚠️  Starting remediation - Make sure you have a backup!' as warning;
 
 -- ============================================================================
 -- 1. FIX DOCUMENTS TABLE POLICIES
 -- ============================================================================
-\echo '1. Fixing documents table policies...'
+SELECT '1. Fixing documents table policies...' as step;
 
 -- Drop vulnerable policies
 DROP POLICY IF EXISTS "System can insert documents" ON public.documents;
@@ -89,12 +87,12 @@ CREATE POLICY "Workspace admins can update documents"
     )
   );
 
-\echo '  ✅ Documents table policies fixed'
+SELECT '  ✅ Documents table policies fixed' as result;
 
 -- ============================================================================
 -- 2. FIX DOCUMENT EMBEDDINGS POLICIES
 -- ============================================================================
-\echo '2. Fixing document_embeddings table policies...'
+SELECT '2. Fixing document_embeddings table policies...' as step;
 
 DROP POLICY IF EXISTS "System can insert embeddings" ON public.document_embeddings;
 DROP POLICY IF EXISTS "System can delete embeddings" ON public.document_embeddings;
@@ -144,12 +142,12 @@ CREATE POLICY "Workspace admins can manage embeddings"
     )
   );
 
-\echo '  ✅ Document embeddings policies fixed'
+SELECT '  ✅ Document embeddings policies fixed' as result;
 
 -- ============================================================================
 -- 3. FIX MESSAGES TABLE POLICIES
 -- ============================================================================
-\echo '3. Fixing messages table policies...'
+SELECT '3. Fixing messages table policies...' as step;
 
 DROP POLICY IF EXISTS "System can insert messages" ON public.messages;
 
@@ -175,12 +173,12 @@ CREATE POLICY "Workspace members can insert messages"
     )
   );
 
-\echo '  ✅ Messages table policies fixed'
+SELECT '  ✅ Messages table policies fixed' as result;
 
 -- ============================================================================
 -- 4. FIX PROFILES TABLE POLICIES
 -- ============================================================================
-\echo '4. Fixing profiles table policies...'
+SELECT '4. Fixing profiles table policies...' as step;
 
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
 
@@ -197,12 +195,12 @@ CREATE POLICY "Users can view connected profiles"
     )
   );
 
-\echo '  ✅ Profiles table policies fixed'
+SELECT '  ✅ Profiles table policies fixed' as result;
 
 -- ============================================================================
 -- 5. FIX WORKSPACE INVITATIONS POLICIES
 -- ============================================================================
-\echo '5. Fixing workspace_invitations table policies...'
+SELECT '5. Fixing workspace_invitations table policies...' as step;
 
 -- Drop overly permissive policies
 DROP POLICY IF EXISTS "Workspace invitees can view by token" ON public.workspace_invitations;
@@ -243,12 +241,12 @@ CREATE POLICY "Workspace invitees can view their invitation"
     )
   );
 
-\echo '  ✅ Workspace invitations policies fixed'
+SELECT '  ✅ Workspace invitations policies fixed' as result;
 
 -- ============================================================================
 -- 6. FIX STORAGE BUCKET POLICIES
 -- ============================================================================
-\echo '6. Fixing storage bucket policies...'
+SELECT '6. Fixing storage bucket policies...' as step;
 
 -- Drop public access policy
 DROP POLICY IF EXISTS "Public can read documents" ON storage.objects;
@@ -300,12 +298,12 @@ CREATE POLICY "Workspace members can upload documents"
     )
   );
 
-\echo '  ✅ Storage bucket policies fixed'
+SELECT '  ✅ Storage bucket policies fixed' as result;
 
 -- ============================================================================
 -- 7. VERIFY HELPER FUNCTIONS
 -- ============================================================================
-\echo '7. Verifying helper functions exist...'
+SELECT '7. Verifying helper functions exist...' as step;
 
 -- These should already exist, but verify they're using SECURITY DEFINER
 DO $$
@@ -331,15 +329,15 @@ BEGIN
   END IF;
 END $$;
 
-\echo '  ✅ Helper functions verified'
+SELECT '  ✅ Helper functions verified' as result;
 
 -- ============================================================================
 -- FINAL VERIFICATION
 -- ============================================================================
-\echo ''
-\echo '=== REMEDIATION COMPLETE ==='
-\echo ''
-\echo 'Verifying all vulnerable policies have been removed...'
+SELECT '' as spacer;
+SELECT '=== REMEDIATION COMPLETE ===' as status;
+SELECT '' as spacer;
+SELECT 'Verifying all vulnerable policies have been removed...' as step;
 
 WITH vulnerable_check AS (
     SELECT COUNT(*) as count
@@ -358,6 +356,6 @@ SELECT
     END as result
 FROM vulnerable_check;
 
-\echo ''
-\echo 'Run verify_security_policies.sql to see detailed results.'
-\echo ''
+SELECT '' as spacer;
+SELECT 'Run verify_security_policies.sql to see detailed results.' as recommendation;
+SELECT '' as spacer;
