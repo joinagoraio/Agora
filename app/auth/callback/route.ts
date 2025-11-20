@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { encryptGoogleTokenBundle, GOOGLE_TOKEN_METADATA_KEY } from "@/lib/actions/auth"
+import { encryptGoogleTokenBundle, GOOGLE_TOKEN_METADATA_KEY } from "@/lib/security/googleTokens"
 import { NextResponse } from "next/server"
 
 export async function GET(request: Request) {

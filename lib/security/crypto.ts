@@ -1,4 +1,4 @@
-"use server"
+import "server-only"
 
 import { createHash, randomBytes, createCipheriv, createDecipheriv } from "node:crypto"
 import { env } from "@/lib/env"

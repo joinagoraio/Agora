@@ -34,6 +34,11 @@ const envSchema = z
       .optional()
       .default("10"),
     TOKEN_ENCRYPTION_KEY: z.string().min(32, "TOKEN_ENCRYPTION_KEY must be at least 32 characters"),
+    MAX_SPACES_PER_USER: z
+      .string()
+      .regex(/^\d+$/, "MAX_SPACES_PER_USER must be a positive integer")
+      .optional()
+      .default("10"),
   })
   .superRefine((envValues, ctx) => {
     const hasRedisUrl = Boolean(envValues.UPSTASH_REDIS_REST_URL)
@@ -71,6 +76,7 @@ const parsedEnv = envSchema.safeParse({
   INVITE_EMAIL_FROM: process.env.INVITE_EMAIL_FROM,
   MAX_SPACES_PER_USER: process.env.MAX_SPACES_PER_USER,
   TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY,
+  MAX_SPACES_PER_USER: process.env.MAX_SPACES_PER_USER,
 })
 
 if (!parsedEnv.success) {
