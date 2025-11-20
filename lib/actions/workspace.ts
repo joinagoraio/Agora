@@ -7,9 +7,17 @@ import { env } from "@/lib/env"
 
 import { syncAllScopeDocumentsToWorkspace } from "@/lib/services/scope-documents"
 import { withCache, workspaceCacheKey } from "@/lib/cache/api-cache"
+import { requireAuthAndPermission } from "@/lib/middleware/authorization"
 
 export async function createWorkspace(spaceId: string, name: string, description?: string) {
   const supabase = await createClient()
+
+  // Verify user has permission to create workspaces in this space
+  try {
+    await requireAuthAndPermission("workspace:create", { spaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
 
   const {
     data: { user },

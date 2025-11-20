@@ -1,6 +1,22 @@
 -- AGORA Complete Database Migration
 -- Run this script in your Supabase SQL Editor: https://supabase.com/dashboard/project/_/sql
--- 
+--
+-- ⚠️  WARNING: THIS FILE IS OUTDATED AND SHOULD NOT BE USED FOR NEW DEPLOYMENTS ⚠️
+--
+-- This complete_migration.sql file does NOT include critical security fixes from:
+--   - 031_critical_rls_fixes.sql (RLS policy hardening)
+--   - 032_helper_function_consistency.sql (Helper function updates)
+--
+-- RECOMMENDED APPROACH:
+--   Run migrations sequentially: 000 → 001 → 002 → ... → 032
+--   This ensures all security patches are properly applied.
+--
+-- If you have already run this script, IMMEDIATELY apply:
+--   1. scripts/031_critical_rls_fixes.sql
+--   2. scripts/032_helper_function_consistency.sql
+--
+-- This file is kept for reference only. Last updated: Nov 20, 2025 (before security patches)
+--
 -- NOTE: If you get errors about existing policies or triggers, you can safely ignore them
 -- or drop existing policies first. This script is idempotent for tables and indexes.
 

@@ -25,6 +25,14 @@ export async function createSpace(
     return { error: "Unauthorized" }
   }
 
+  // SECURITY NOTE: Space creation is currently unrestricted for authenticated users.
+  // This is acceptable if spaces represent individual organizations/tenants.
+  // For multi-tenant SaaS, consider adding:
+  //   1. A global permission check (e.g., requireGlobalRole("org_admin"))
+  //   2. Invitation-only space creation
+  //   3. Payment/plan-based restrictions
+  // RLS policies still enforce space-level isolation after creation.
+
   const adminClient = createAdminClient()
 
   // Ensure profile exists before creating space (owner_id references profiles.id)
