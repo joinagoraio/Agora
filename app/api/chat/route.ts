@@ -273,7 +273,7 @@ export async function POST(req: Request) {
     // Get workspace to fetch additional context
     const { data: workspace } = await supabase
       .from("workspaces")
-      .select("name, context, location, description, metadata, space_id")
+      .select("name, context, location, summary, description, metadata, space_id")
       .eq("id", workspaceId)
       .single()
 

@@ -2,6 +2,7 @@ type WorkspaceRecord = {
   name?: string | null
   context?: string | null
   location?: string | null
+  summary?: string | null
   description?: string | null
   metadata?: Record<string, unknown> | null
 }
@@ -48,7 +49,8 @@ export function buildWorkspaceContext({
 
   const scopeMetadata = (((workspace?.metadata as Record<string, unknown> | null) ?? {}).scope ??
     null) as Record<string, unknown> | null
-  const workspaceSummary = workspace?.description ?? undefined
+  const workspaceSummary = workspace?.summary ?? undefined
+  const workspaceDescription = workspace?.description ?? undefined
   const workspaceScopeDescription = (scopeMetadata?.description as string | undefined) ?? undefined
   const workspaceScopeTimeframe = (scopeMetadata?.timeframe as string | undefined) ?? undefined
 
@@ -61,8 +63,11 @@ export function buildWorkspaceContext({
   if (workspaceSummary) {
     appendWorkspaceContextSection(`Workspace summary:\n${workspaceSummary}`)
   }
+  if (workspaceDescription) {
+    appendWorkspaceContextSection(`Workspace description:\n${workspaceDescription}`)
+  }
   if (workspaceScopeDescription) {
-    appendWorkspaceContextSection(`Workspace description:\n${workspaceScopeDescription}`)
+    appendWorkspaceContextSection(`Workspace scope details:\n${workspaceScopeDescription}`)
   }
   if (workspaceScopeTimeframe) {
     appendWorkspaceContextSection(`Workspace programme timeframe: ${workspaceScopeTimeframe}`)
@@ -81,7 +86,7 @@ export function buildWorkspaceContext({
   const spaceScopeTimeframe = (spaceScopeMetadata?.timeframe as string | undefined) ?? undefined
 
   if (spaceScopeDescription) {
-    appendWorkspaceContextSection(`Space scope details:\n${spaceScopeDescription}`)
+    appendWorkspaceContextSection(`Space description:\n${spaceScopeDescription}`)
   }
   if (spaceScopeTimeframe) {
     appendWorkspaceContextSection(`Space programme timeframe: ${spaceScopeTimeframe}`)
@@ -101,6 +106,7 @@ export function buildWorkspaceContext({
       workspace?.context ||
       workspace?.location ||
       workspaceSummary ||
+      workspaceDescription ||
       workspaceScopeDescription ||
       workspaceScopeTimeframe ||
       space?.name ||

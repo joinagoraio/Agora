@@ -6,7 +6,8 @@ const baseWorkspace = {
   name: "Climate Taskforce",
   context: "Focus on energy transition policies.",
   location: "Amsterdam",
-  description: "Improving sustainability across the organization.",
+  summary: "Improving sustainability across the organization.",
+  description: "A detailed workspace focused on implementing climate policies and supporting local governments in their sustainability efforts.",
   metadata: {
     scope: {
       description: "Guide municipalities in drafting climate action plans.",
@@ -46,7 +47,10 @@ describe("buildWorkspaceContext", () => {
     expect(result.workspaceContextSection).toContain("Workspace location: Amsterdam")
     expect(result.workspaceContextSection).toContain("Workspace summary:\nImproving sustainability across the organization.")
     expect(result.workspaceContextSection).toContain(
-      "Workspace description:\nGuide municipalities in drafting climate action plans.",
+      "Workspace description:\nA detailed workspace focused on implementing climate policies",
+    )
+    expect(result.workspaceContextSection).toContain(
+      "Workspace scope details:\nGuide municipalities in drafting climate action plans.",
     )
     expect(result.workspaceContextSection).toContain("Workspace programme timeframe: 2024-2026")
     expect(result.hasWorkspaceContext).toBe(true)
@@ -57,7 +61,7 @@ describe("buildWorkspaceContext", () => {
 
     expect(result.workspaceContextSection).toContain("---\n\nParent Space name: EU Climate Mandate")
     expect(result.workspaceContextSection).toContain("Space mission statement:\nAlignment with EU directives.")
-    expect(result.workspaceContextSection).toContain("Space scope details:\nEnsure compliance with Fit for 55")
+    expect(result.workspaceContextSection).toContain("Space description:\nEnsure compliance with Fit for 55")
     expect(result.workspaceContextSection).toContain("Space programme timeframe: 2024-2025")
     expect(result.workspaceContextSection).toContain("Space jurisdiction: Netherlands • Noord-Holland")
   })
