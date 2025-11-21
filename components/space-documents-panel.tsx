@@ -39,11 +39,13 @@ interface SpaceDocumentsPanelProps {
   documents: SpaceDocumentItem[]
   onDocumentsChange?: (documents: SpaceDocumentItem[]) => void
   spaceName: string
+  canUpload?: boolean
+  canManage?: boolean
 }
 
 const CSRF_ERROR_MESSAGE = "Could not verify your session. Refresh and try again."
 
-export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spaceName }: SpaceDocumentsPanelProps) {
+export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spaceName, canUpload = true, canManage = true }: SpaceDocumentsPanelProps) {
   const router = useRouter()
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -182,16 +184,18 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
               <span className="sr-only">Show as cards</span>
             </Button>
           </div>
-          <SpaceUploadDocumentDialog
-            spaceId={spaceId}
-            onUploaded={handleUploaded}
-            trigger={
-              <Button className="gap-2">
-                <Upload className="h-4 w-4" />
-                Upload document
-              </Button>
-            }
-          />
+          {canUpload && (
+            <SpaceUploadDocumentDialog
+              spaceId={spaceId}
+              onUploaded={handleUploaded}
+              trigger={
+                <Button className="gap-2">
+                  <Upload className="h-4 w-4" />
+                  Upload document
+                </Button>
+              }
+            />
+          )}
         </div>
       </div>
 
@@ -207,15 +211,17 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                 Upload policies, directives, or briefing notes so every workspace starts with the same foundation.
               </p>
             </div>
-            <SpaceUploadDocumentDialog
-              spaceId={spaceId}
-              onUploaded={handleUploaded}
-              trigger={
-                <Button variant="outline">
-                  Upload a document
-                </Button>
-              }
-            />
+            {canUpload && (
+              <SpaceUploadDocumentDialog
+                spaceId={spaceId}
+                onUploaded={handleUploaded}
+                trigger={
+                  <Button variant="outline">
+                    Upload a document
+                  </Button>
+                }
+              />
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -246,52 +252,54 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                     {doc.payload?.mime_type && <span>{doc.payload.mime_type}</span>}
                   </div>
                 </CardContent>
-                <CardFooter className="flex items-center justify-end gap-2">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreVertical className="h-4 w-4" />
-                        <span className="sr-only">Open document menu</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-40">
-                      {doc.source_url ? (
-                        <DropdownMenuItem asChild className="cursor-pointer">
-                          <Link
-                            href={doc.source_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2"
-                          >
-                            <Download className="h-4 w-4" />
-                            Download
-                          </Link>
-                        </DropdownMenuItem>
-                      ) : (
-                        <DropdownMenuItem disabled>No file URL</DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem
-                        className="group cursor-pointer focus:bg-destructive/10 focus:text-destructive"
-                        disabled={isDeleting === doc.id}
-                        onSelect={(event) => {
-                          event.preventDefault()
-                          if (isDeleting !== doc.id) {
-                            handleDelete(doc)
-                          }
-                        }}
-                      >
-                        {isDeleting === doc.id ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" />
+                {canManage && (
+                  <CardFooter className="flex items-center justify-end gap-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
+                          <span className="sr-only">Open document menu</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-40">
+                        {doc.source_url ? (
+                          <DropdownMenuItem asChild className="cursor-pointer">
+                            <Link
+                              href={doc.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2"
+                            >
+                              <Download className="h-4 w-4" />
+                              Download
+                            </Link>
+                          </DropdownMenuItem>
                         ) : (
-                          <Trash2 className="mr-2 h-4 w-4 text-muted-foreground transition-colors group-hover:text-destructive group-focus:text-destructive" />
+                          <DropdownMenuItem disabled>No file URL</DropdownMenuItem>
                         )}
-                        <span className="transition-colors group-hover:text-destructive group-focus:text-destructive">
-                          Delete
-                        </span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </CardFooter>
+                        <DropdownMenuItem
+                          className="group cursor-pointer focus:bg-destructive/10 focus:text-destructive"
+                          disabled={isDeleting === doc.id}
+                          onSelect={(event) => {
+                            event.preventDefault()
+                            if (isDeleting !== doc.id) {
+                              handleDelete(doc)
+                            }
+                          }}
+                        >
+                          {isDeleting === doc.id ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" />
+                          ) : (
+                            <Trash2 className="mr-2 h-4 w-4 text-muted-foreground transition-colors group-hover:text-destructive group-focus:text-destructive" />
+                          )}
+                          <span className="transition-colors group-hover:text-destructive group-focus:text-destructive">
+                            Delete
+                          </span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </CardFooter>
+                )}
               </Card>
             )
           })
@@ -331,52 +339,54 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           {doc.payload?.file_name && <Badge variant="secondary">{doc.payload.file_name}</Badge>}
                         </div>
-                        <div className="flex justify-end">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreVertical className="h-4 w-4" />
-                                <span className="sr-only">Open document menu</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-40">
-                              {doc.source_url ? (
-                                <DropdownMenuItem asChild className="cursor-pointer">
-                                  <Link
-                                    href={doc.source_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-2"
-                                  >
-                                    <Download className="h-4 w-4" />
-                                    Download
-                                  </Link>
-                                </DropdownMenuItem>
-                              ) : (
-                                <DropdownMenuItem disabled>No file URL</DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem
-                                className="group cursor-pointer focus:bg-destructive/10 focus:text-destructive"
-                                disabled={isDeleting === doc.id}
-                        onSelect={(event) => {
-                                  event.preventDefault()
-                                  if (isDeleting !== doc.id) {
-                            handleDelete(doc)
-                                  }
-                                }}
-                              >
-                                {isDeleting === doc.id ? (
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" />
+                        {canManage && (
+                          <div className="flex justify-end">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreVertical className="h-4 w-4" />
+                                  <span className="sr-only">Open document menu</span>
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-40">
+                                {doc.source_url ? (
+                                  <DropdownMenuItem asChild className="cursor-pointer">
+                                    <Link
+                                      href={doc.source_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-2"
+                                    >
+                                      <Download className="h-4 w-4" />
+                                      Download
+                                    </Link>
+                                  </DropdownMenuItem>
                                 ) : (
-                                  <Trash2 className="mr-2 h-4 w-4 text-muted-foreground transition-colors group-hover:text-destructive group-focus:text-destructive" />
+                                  <DropdownMenuItem disabled>No file URL</DropdownMenuItem>
                                 )}
-                                <span className="transition-colors group-hover:text-destructive group-focus:text-destructive">
-                                  Delete
-                                </span>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
+                                <DropdownMenuItem
+                                  className="group cursor-pointer focus:bg-destructive/10 focus:text-destructive"
+                                  disabled={isDeleting === doc.id}
+                          onSelect={(event) => {
+                                    event.preventDefault()
+                                    if (isDeleting !== doc.id) {
+                              handleDelete(doc)
+                                    }
+                                  }}
+                                >
+                                  {isDeleting === doc.id ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" />
+                                  ) : (
+                                    <Trash2 className="mr-2 h-4 w-4 text-muted-foreground transition-colors group-hover:text-destructive group-focus:text-destructive" />
+                                  )}
+                                  <span className="transition-colors group-hover:text-destructive group-focus:text-destructive">
+                                    Delete
+                                  </span>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        )}
                       </div>
                     )
                   })}

@@ -25,6 +25,7 @@ interface HealthCheckResult {
     }
     redis?: {
       status: "healthy" | "unhealthy"
+      responseTime?: number
       error?: string
     }
   }

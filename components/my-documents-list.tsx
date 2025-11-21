@@ -32,6 +32,7 @@ interface MyDocumentsListProps {
   workspaceId: string
   initialDocuments: Array<any>
   showHeader?: boolean
+  canManage?: boolean
 }
 
 function extractMetadataValue<T>(metadata: any, key: string, fallback: T | null = null): T | null {
@@ -41,7 +42,7 @@ function extractMetadataValue<T>(metadata: any, key: string, fallback: T | null 
   return (metadata[key] as T | undefined) ?? fallback
 }
 
-export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = true }: MyDocumentsListProps) {
+export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = true, canManage = true }: MyDocumentsListProps) {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [documentToDelete, setDocumentToDelete] = useState<any | null>(null)
@@ -133,17 +134,21 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
         <FileText className="mb-4 h-12 w-12 text-muted-foreground" />
         <h3 className="mb-2 text-lg font-semibold">No documents yet</h3>
         <p className="text-center text-sm text-muted-foreground">
-          Create a document to capture your AI-assisted analysis and share it with your team.
+          {canManage 
+            ? "Create a document to capture your AI-assisted analysis and share it with your team."
+            : "No documents have been shared with you yet."}
         </p>
-        <CreateWorkspaceDocumentDialog
-          workspaceId={workspaceId}
-          trigger={
-            <Button variant="outline">
-              <Edit3 className="mr-2 h-4 w-4" />
-              Create your first document
-            </Button>
-          }
-        />
+        {canManage && (
+          <CreateWorkspaceDocumentDialog
+            workspaceId={workspaceId}
+            trigger={
+              <Button variant="outline">
+                <Edit3 className="mr-2 h-4 w-4" />
+                Create your first document
+              </Button>
+            }
+          />
+        )}
       </CardContent>
     </Card>
   )
@@ -176,10 +181,12 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
                 </span>
               </div>
               <p className="text-sm text-muted-foreground">
-                Draft new documents with AI support and keep editable versions tied to this workspace.
+                {canManage 
+                  ? "Draft new documents with AI support and keep editable versions tied to this workspace."
+                  : "Documents that have been shared with you."}
               </p>
             </div>
-            <CreateWorkspaceDocumentDialog workspaceId={workspaceId} />
+            {canManage && <CreateWorkspaceDocumentDialog workspaceId={workspaceId} />}
           </div>
         </div>
       )}
@@ -222,30 +229,32 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
                           </span>
                         </CardDescription>
                       </div>
-                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.preventDefault()}>
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem asChild>
-                              <Link href={`/workspaces/${workspaceId}/my-documents/${doc.id}`}>
-                                <Edit3 className="mr-2 h-4 w-4" />
-                                Edit
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={() => setDocumentToDelete(doc)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
+                      {canManage && (
+                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.preventDefault()}>
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem asChild>
+                                <Link href={`/workspaces/${workspaceId}/my-documents/${doc.id}`}>
+                                  <Edit3 className="mr-2 h-4 w-4" />
+                                  Edit
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => setDocumentToDelete(doc)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      )}
                     </div>
                   </CardHeader>
                   {instructions && (

@@ -119,3 +119,4 @@ WHERE tablename = 'documents'
   AND (cmd = 'INSERT' OR cmd = 'ALL')
 ORDER BY policyname;
 
+

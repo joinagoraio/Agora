@@ -67,17 +67,67 @@ export default async function SettingsPage({
     .maybeSingle()
 
   const isWorkspaceAdmin = workspace.created_by === user.id || workspaceMembership?.role === "admin"
-  const isSpaceAdmin = spaceMembership && ["owner", "admin"].includes(spaceMembership.role)
+  // Space owner, admin, AND members can access workspace Settings
+  const isSpaceAdminOrMember = spaceMembership && ["owner", "admin", "member"].includes(spaceMembership.role)
 
-  if (!isWorkspaceAdmin && !isSpaceAdmin) {
+  if (!isWorkspaceAdmin && !isSpaceAdminOrMember) {
     redirect(`/workspaces/${workspaceId}`)
   }
 
-  const { data: members } = await supabase
+  // Fetch direct workspace members
+  const { data: workspaceMembers, error: workspaceMembersError } = await supabase
     .from("workspace_members")
     .select("*, profiles(*)")
     .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false })
+
+  if (workspaceMembersError) {
+    console.error("[WorkspaceSettings] Error fetching workspace members:", workspaceMembersError)
+  }
+
+  // Fetch space members (who have automatic access to all workspaces)
+  const { data: spaceMembers, error: spaceMembersError } = await supabase
+    .from("space_members")
+    .select("*, profiles(*)")
+    .eq("space_id", workspace.space_id)
+    .order("created_at", { ascending: false })
+
+  if (spaceMembersError) {
+    console.error("[WorkspaceSettings] Error fetching space members:", spaceMembersError)
+  }
+
+  // Debug: Check if profiles are being fetched
+  console.log("[WorkspaceSettings] Workspace members with profiles:", JSON.stringify(workspaceMembers, null, 2))
+
+  // Merge and deduplicate: space members get priority (their space role is what matters)
+  const memberMap = new Map()
+  
+  // Add all space members (including viewers for transparency)
+  for (const spaceMember of spaceMembers ?? []) {
+    memberMap.set(spaceMember.user_id, {
+      ...spaceMember,
+      source: "space" as const,
+      workspace_role: null, // They have access via space
+    })
+  }
+  
+  // Add or update with workspace members
+  for (const workspaceMember of workspaceMembers ?? []) {
+    const existing = memberMap.get(workspaceMember.user_id)
+    if (existing) {
+      // User is both space member and workspace member - show workspace role too
+      existing.workspace_role = workspaceMember.role
+    } else {
+      // Direct workspace member only
+      memberMap.set(workspaceMember.user_id, {
+        ...workspaceMember,
+        source: "workspace" as const,
+        workspace_role: workspaceMember.role,
+      })
+    }
+  }
+  
+  const members = Array.from(memberMap.values())
 
   const { data: invitations } = await supabase
     .from("workspace_invitations")

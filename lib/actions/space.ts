@@ -274,18 +274,23 @@ export async function enhanceScopeText(
     const systemPrompt = isMissionStatement
       ? `You are a helpful assistant that writes clear, concise mission statements for policy initiatives.
 The mission statement you return should:
-- Be very brief and concise (1-2 sentences maximum, ideally one sentence)
+- Be very brief and concise (1-2 sentences maximum)
 - Capture the core purpose and mandate of the initiative
 - Stay faithful to the original meaning
 - Use neutral, professional language
-- Be suitable as a high-level summary that appears at the top of a space overview`
+- Be suitable as a high-level summary that appears at the top of a space overview
+
+Return ONLY the mission statement text, nothing else.`
       : `You are a helpful assistant that writes clear, comprehensive descriptions for policy initiatives.
 The description you return should:
-- Be more extensive than the mission statement but still concise (3-5 sentences)
-- Expand on the mission statement with policy domain, stakeholders, and key objectives
+- Be longer than the mission statement but still concise (4-6 sentences)
+- Expand with specific details about policy domain, stakeholders, and key objectives
 - Stay faithful to the original meaning
 - Use neutral, professional language
-- Provide enough detail for colleagues and AI assistants to understand the scope and act accurately`
+- Provide enough detail for colleagues and AI assistants to understand the scope and act accurately
+- Not be overly lengthy or verbose
+
+Return ONLY the description text, nothing else.`
 
     const userPrompt = isMissionStatement
       ? `Write a concise mission statement for this initiative:${contextText}\n\nCurrent text:\n${text}`
@@ -303,7 +308,7 @@ The description you return should:
           content: userPrompt,
         },
       ],
-      max_tokens: isMissionStatement ? 150 : 400,
+      max_tokens: isMissionStatement ? 120 : 500,
       temperature: 0.7,
     })
 
@@ -385,6 +390,60 @@ export async function updateSpaceSetupState(
 
   revalidatePath(`/spaces/${spaceId}`)
   return { data }
+}
+
+export async function updateSpaceMemberRole(
+  spaceId: string,
+  memberUserId: string,
+  newRole: "admin" | "member" | "viewer"
+) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  // Check if current user is owner or admin
+  const { data: currentMembership } = await supabase
+    .from("space_members")
+    .select("role")
+    .eq("space_id", spaceId)
+    .eq("user_id", user.id)
+    .single()
+
+  if (!currentMembership || !["owner", "admin"].includes(currentMembership.role)) {
+    return { error: "You don't have permission to change member roles" }
+  }
+
+  // Prevent changing owner's role
+  const { data: targetMembership } = await supabase
+    .from("space_members")
+    .select("role")
+    .eq("space_id", spaceId)
+    .eq("user_id", memberUserId)
+    .single()
+
+  if (targetMembership?.role === "owner") {
+    return { error: "Cannot change the owner's role" }
+  }
+
+  // Update the member's role
+  const { error } = await supabase
+    .from("space_members")
+    .update({ role: newRole })
+    .eq("space_id", spaceId)
+    .eq("user_id", memberUserId)
+
+  if (error) {
+    console.error("[updateSpaceMemberRole] Error:", error)
+    return { error: "Failed to update member role" }
+  }
+
+  revalidatePath(`/spaces/${spaceId}/settings`)
+  return { success: true }
 }
 
 export async function removeSpaceMember(spaceId: string, memberUserId: string) {

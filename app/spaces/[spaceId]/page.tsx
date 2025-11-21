@@ -45,6 +45,13 @@ export default async function SpacePage({
     .eq("user_id", user.id)
     .single()
 
+  // If user is not a space member, they should not access this space
+  // (even if they're a member of a workspace within this space)
+  if (!membership) {
+    console.error("[SpacePage] User is not a space member, redirecting to dashboard. SpaceId:", spaceId, "User:", user.id)
+    redirect("/dashboard")
+  }
+
   // Get workspaces
   const { data: workspaces } = await getWorkspacesBySpace(spaceId)
 
@@ -52,7 +59,11 @@ export default async function SpacePage({
 
   const scopeMetadata = (space.metadata as Record<string, any> | null) ?? {}
   const scopeDetails = (scopeMetadata.scope as Record<string, any> | null) ?? {}
-  const canManage = membership?.role === "owner" || membership?.role === "admin"
+  const userRole = membership.role
+  // Members can do everything except access Settings
+  const canManage = membership.role === "owner" || membership.role === "admin" || membership.role === "member"
+  // Only owner and admin can access Settings
+  const canAccessSettings = membership.role === "owner" || membership.role === "admin"
 
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden bg-background">
@@ -90,6 +101,7 @@ export default async function SpacePage({
           initialDocuments={documents ?? []}
           initialWorkspaces={workspaces ?? []}
           canManage={canManage}
+          canAccessSettings={canAccessSettings}
           wizardState={(space.metadata as Record<string, any> | null)?.setupWizard ?? null}
         />
       </main>

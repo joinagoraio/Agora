@@ -40,7 +40,7 @@ export default async function InvitePage({
       .single()
     
     if (spaceData) {
-      invitation.spaces = spaceData
+      invitation.spaces = [spaceData]
     }
   }
 
@@ -48,10 +48,13 @@ export default async function InvitePage({
   if (error) {
     console.error("[Invite] Error fetching invitation:", error)
   } else {
+    const spaceName = Array.isArray(invitation?.spaces) 
+      ? invitation?.spaces[0]?.name 
+      : (invitation?.spaces as any)?.name
     console.log("[Invite] Invitation found:", { 
       id: invitation?.id, 
       email: invitation?.email, 
-      spaceName: invitation?.spaces?.name,
+      spaceName,
       hasSpace: !!invitation?.spaces 
     })
   }

@@ -1,9 +1,5 @@
-import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { acceptWorkspaceInvitation } from "@/lib/actions/workspace-invitation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import Link from "next/link"
+import WorkspaceInvitePageClient from "./workspace-invite-page-client"
 
 export default async function WorkspaceInvitePage({
   params,
@@ -17,55 +13,52 @@ export default async function WorkspaceInvitePage({
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user) {
-    redirect(`/auth/sign-up?redirect=/workspace-invite/${token}`)
-  }
-
-  const { data: invitation } = await supabase
+  // Get invitation details (RLS policy allows public viewing by token)
+  const { data: invitation, error } = await supabase
     .from("workspace_invitations")
-    .select("*, workspaces(name, id)")
+    .select(`
+      id, 
+      email, 
+      role, 
+      status,
+      expires_at,
+      workspace_id,
+      workspaces (
+        id,
+        name
+      )
+    `)
     .eq("token", token)
-    .eq("status", "pending")
     .single()
 
-  if (!invitation) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-6">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Invalid Invitation</CardTitle>
-            <CardDescription>This workspace invitation link is invalid or has expired.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild className="w-full">
-              <Link href="/dashboard">Go to Dashboard</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
+  // If invitation exists but workspace info is missing (due to RLS), fetch it separately
+  if (invitation && !invitation.workspaces) {
+    const { data: workspaceData } = await supabase
+      .from("workspaces")
+      .select("id, name")
+      .eq("id", invitation.workspace_id)
+      .single()
+
+    if (workspaceData) {
+      invitation.workspaces = [workspaceData]
+    }
   }
 
-  const result = await acceptWorkspaceInvitation(token)
-
-  if (result.error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-6">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Error</CardTitle>
-            <CardDescription>{result.error}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild className="w-full">
-              <Link href="/dashboard">Go to Dashboard</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
+  // Log for debugging
+  if (error) {
+    console.error("[Workspace Invite] Error fetching invitation:", error)
+  } else {
+    const workspaceName = Array.isArray(invitation?.workspaces)
+      ? invitation?.workspaces[0]?.name
+      : (invitation?.workspaces as any)?.name
+    console.log("[Workspace Invite] Invitation found:", {
+      id: invitation?.id,
+      email: invitation?.email,
+      workspaceName,
+      hasWorkspace: !!invitation?.workspaces,
+    })
   }
 
-  redirect(`/workspaces/${result.workspaceId}`)
+  return <WorkspaceInvitePageClient token={token} invitation={invitation} user={user} error={error} />
 }
 

@@ -19,11 +19,11 @@ export type DocumentType = "pdf" | "word" | "html" | "text" | "unknown"
 const WORD_HTML_SANITIZE_OPTIONS = {
   ALLOWED_TAGS: ["p", "span", "div", "strong", "em", "u", "br", "h1", "h2", "h3"] as string[],
   ALLOWED_ATTR: ["class", "style"] as string[],
-} as const
+}
 
 const GENERIC_HTML_SANITIZE_OPTIONS = {
-  ALLOWED_ATTR: ["class", "style", "href", "target", "rel", "download"],
-} as const
+  ALLOWED_ATTR: ["class", "style", "href", "target", "rel", "download"] as string[],
+}
 
 const WORD_HIGHLIGHT_CLASS = "word-highlight"
 const TEXT_HIGHLIGHT_CLASS = "workspace-text-highlight"
@@ -1315,7 +1315,7 @@ export function MultiFormatViewer({
         scale={scale}
         zoomIn={zoomIn}
         zoomOut={zoomOut}
-        fitMode={fitMode}
+        fitMode={fitMode === "width"}
         rotation={rotation}
         containerRef={containerRef}
         contentRef={contentRef}

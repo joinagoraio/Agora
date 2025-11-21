@@ -5,7 +5,7 @@ import { CreateSpaceDialog } from "@/components/create-space-dialog"
 import { UserMenu } from "@/components/user-menu"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-import { Layers2 } from "lucide-react"
+import { Layers2, FolderKanban } from "lucide-react"
 import { WelcomeUserDialog } from "@/components/welcome-user-dialog"
 
 export default async function DashboardPage() {
@@ -19,7 +19,43 @@ export default async function DashboardPage() {
   }
 
   const { data: spaces } = await getUserSpaces()
+  
+  // Get user's space memberships to filter out workspaces where user is also a space member
+  const { data: spaceMemberships } = await supabase
+    .from("space_members")
+    .select("space_id")
+    .eq("user_id", user.id)
+  
+  const userSpaceIds = new Set(spaceMemberships?.map(sm => sm.space_id) ?? [])
+  
+  // Fetch workspaces where user is a direct member
+  const { data: allWorkspaceMemberships, error: workspaceError } = await supabase
+    .from("workspace_members")
+    .select(`
+      role,
+      workspace:workspaces(
+        id,
+        name,
+        description,
+        space_id
+      )
+    `)
+    .eq("user_id", user.id)
+  
+  if (workspaceError) {
+    console.error("[Dashboard] Error fetching workspace memberships:", workspaceError)
+  }
+  
+  // Filter to only show workspaces where user is NOT a member of the parent space
+  const directWorkspaces = allWorkspaceMemberships?.filter((membership: any) => {
+    const workspace = Array.isArray(membership.workspace) 
+      ? membership.workspace[0] 
+      : membership.workspace
+    return workspace && !userSpaceIds.has(workspace.space_id)
+  }) ?? []
+  
   const hasSpaces = Boolean(spaces && spaces.length > 0)
+  const hasDirectWorkspaces = Boolean(directWorkspaces && directWorkspaces.length > 0)
   const displayName =
     (user.user_metadata as Record<string, any> | null | undefined)?.full_name ??
     (user.user_metadata as Record<string, any> | null | undefined)?.name ??
@@ -28,7 +64,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <WelcomeUserDialog userId={user.id} userName={displayName} hasSpaces={hasSpaces} />
+      <WelcomeUserDialog userId={user.id} userName={displayName} hasSpaces={hasSpaces} hasWorkspaces={hasDirectWorkspaces} />
       <header className="bg-card">
         <div className="flex h-16 items-center justify-between px-4">
           <div></div>
@@ -88,6 +124,55 @@ export default async function DashboardPage() {
                 <CreateSpaceDialog />
               </CardContent>
             </Card>
+          )}
+          
+          {/* Direct Workspace Memberships Section */}
+          {hasDirectWorkspaces && (
+            <div className="mt-12">
+              <div className="mb-8">
+                <h2 className="text-2xl font-semibold">My Workspaces</h2>
+                <p className="text-sm text-muted-foreground">
+                  Workspaces you've been invited to directly
+                </p>
+              </div>
+              
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {directWorkspaces?.map((membership: any) => {
+                  const workspace = Array.isArray(membership.workspace) 
+                    ? membership.workspace[0] 
+                    : membership.workspace
+                  
+                  if (!workspace) return null
+                  
+                  return (
+                    <Link key={workspace.id} href={`/workspaces/${workspace.id}`}>
+                      <Card className="transition-all hover:shadow-md">
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                              <FolderKanban className="h-5 w-5 text-primary" />
+                              <div>
+                                <CardTitle className="mt-0">{workspace.name}</CardTitle>
+                              </div>
+                            </div>
+                            <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                              {membership.role}
+                            </span>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          {workspace.description && (
+                            <p className="text-sm text-muted-foreground line-clamp-2">
+                              {workspace.description}
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
           )}
         </div>
       </main>

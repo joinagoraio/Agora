@@ -46,6 +46,7 @@ interface SpacePageClientProps {
   initialDocuments: SpaceDocumentItem[]
   initialWorkspaces: SpaceWorkspace[]
   canManage: boolean
+  canAccessSettings: boolean
   wizardState?: SetupWizardState | null
 }
 
@@ -59,6 +60,7 @@ export function SpacePageClient({
   initialDocuments,
   initialWorkspaces,
   canManage,
+  canAccessSettings,
   wizardState,
 }: SpacePageClientProps) {
   const [spaceTitle, setSpaceTitle] = useState(spaceName)
@@ -182,12 +184,14 @@ export function SpacePageClient({
                   <PencilLine className="h-4 w-4" />
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href={`/spaces/${spaceId}/settings`}>
-                    <Settings className="h-4 w-4" />
-                    Settings
-                  </Link>
-                </DropdownMenuItem>
+                {canAccessSettings && (
+                  <DropdownMenuItem asChild>
+                    <Link href={`/spaces/${spaceId}/settings`}>
+                      <Settings className="h-4 w-4" />
+                      Settings
+                    </Link>
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -674,6 +678,8 @@ export function SpacePageClient({
           documents={documents}
           onDocumentsChange={setDocuments}
           spaceName={spaceTitle}
+          canUpload={canManage}
+          canManage={canManage}
         />
       </div>
     </div>

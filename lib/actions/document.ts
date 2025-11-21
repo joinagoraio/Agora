@@ -235,9 +235,10 @@ export async function getArchivedDocumentCount(workspaceId: string) {
     return { count: 0, error: "Unauthorized" }
   }
 
-  const { count, error } = await supabase
+  // Get archived documents, then filter out inherited ones
+  const { data, error } = await supabase
     .from("documents")
-    .select("*", { count: "exact", head: true })
+    .select("metadata")
     .eq("workspace_id", workspaceId)
     .eq("status", "archived")
 
@@ -245,7 +246,17 @@ export async function getArchivedDocumentCount(workspaceId: string) {
     return { count: 0, error: error.message }
   }
 
-  return { count: count || 0 }
+  // Filter out inherited documents (origin: space_scope)
+  const nonInheritedCount = (data || []).filter((doc: any) => {
+    const metadata = doc?.metadata
+    if (!metadata || typeof metadata !== "object") {
+      return true // Include if no metadata
+    }
+    const origin = (metadata as Record<string, any>).origin
+    return origin !== "space_scope" // Exclude inherited documents
+  }).length
+
+  return { count: nonInheritedCount }
 }
 
 export async function deleteDocument(documentId: string, workspaceId: string): Promise<{ error?: string }> {
@@ -1412,7 +1423,7 @@ export async function ensureOverheidNLSource(
   
   // Authorization check before admin operation
   try {
-    await requireAuthAndPermission("workspace:read", { workspaceId })
+    await requireAuthAndPermission("source:create", { workspaceId })
   } catch (authError) {
     return { error: authError instanceof Error ? authError.message : "Unauthorized" }
   }

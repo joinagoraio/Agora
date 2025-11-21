@@ -7,13 +7,24 @@ export const documentUploadSchema = z.object({
     .refine((file) => file.size <= 50_000_000, {
       message: "File must be less than 50MB",
     })
-    .refine((file) => [
-      "application/pdf",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "text/plain",
-      "text/markdown",
-    ].includes(file.type), {
-      message: "Invalid file type. Allowed: PDF, Word, plain text, or markdown",
+    .refine((file) => {
+      // Check MIME type
+      const allowedMimeTypes = [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "text/plain",
+        "text/markdown",
+      ]
+      
+      // Check file extension (case-insensitive)
+      const fileName = file.name.toLowerCase()
+      const allowedExtensions = ['.pdf', '.docx', '.txt', '.md', '.markdown']
+      const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext))
+      
+      // Accept if either MIME type OR extension is valid
+      return allowedMimeTypes.includes(file.type) || hasValidExtension
+    }, {
+      message: "Invalid file type. Allowed: PDF (.pdf), Word (.docx), plain text (.txt), or markdown (.md)",
     }),
   classification: z.enum(["public", "internal", "confidential"]).default("public"),
   title: z.string().max(500).optional().nullable(),

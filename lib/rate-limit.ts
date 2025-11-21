@@ -107,9 +107,12 @@ function createLimiter(slidingWindow: [number, string]) {
   }
 
   // Use Redis limiter with in-memory fallback on error
+  const [slidingWindowMax, slidingWindowDuration] = slidingWindow
+  // Convert duration string to format expected by Ratelimit (e.g., "10s" -> "10 s")
+  const formattedDuration = slidingWindowDuration.replace(/^(\d+)([a-z]+)$/i, "$1 $2") as any
   const redisLimiter = new Ratelimit({
     redis,
-    limiter: Ratelimit.slidingWindow(...slidingWindow),
+    limiter: Ratelimit.slidingWindow(slidingWindowMax, formattedDuration),
     analytics: true,
   })
 

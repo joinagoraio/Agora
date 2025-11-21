@@ -37,6 +37,8 @@ interface WorkspaceOverviewProps {
   initialContext?: string | null
   initialLocation?: string | null
   parentSpaces: ParentSpace[]
+  canManage?: boolean
+  canAccessSettings?: boolean
 }
 
 export function WorkspaceOverview({
@@ -46,6 +48,8 @@ export function WorkspaceOverview({
   initialContext,
   initialLocation,
   parentSpaces,
+  canManage = true,
+  canAccessSettings = true,
 }: WorkspaceOverviewProps) {
   const router = useRouter()
   const [name, setName] = useState(initialName)
@@ -349,26 +353,30 @@ export function WorkspaceOverview({
                 <span className="text-sm font-medium text-muted-foreground">{location}</span>
               )}
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" title="More options">
-                  <MoreVertical className="h-4 w-4" />
-                  <span className="sr-only">More options</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+            {canManage && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" title="More options">
+                    <MoreVertical className="h-4 w-4" />
+                    <span className="sr-only">More options</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={handleStartEditing}>
                   <PencilLine className="h-4 w-4" />
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href={`/workspaces/${workspaceId}/settings`}>
-                    <Settings className="h-4 w-4" />
-                    Settings
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                {canAccessSettings && (
+                  <DropdownMenuItem asChild>
+                    <Link href={`/workspaces/${workspaceId}/settings`}>
+                      <Settings className="h-4 w-4" />
+                      Settings
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
           <div className="space-y-2">
             {description.trim().length > 0 && (

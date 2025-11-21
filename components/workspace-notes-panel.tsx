@@ -35,6 +35,7 @@ interface WorkspaceNotesPanelProps {
   workspaceId: string
   currentUserId: string
   initialNotes: WorkspaceNote[]
+  canManage?: boolean
 }
 
 type DraftWorkspaceNote = {
@@ -77,7 +78,7 @@ async function requestWithCsrf<T = unknown>(input: RequestInfo, init: RequestIni
   return payload as T
 }
 
-export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes }: WorkspaceNotesPanelProps) {
+export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, canManage = true }: WorkspaceNotesPanelProps) {
   const [notes, setNotes] = useState<WorkspaceNote[]>(initialNotes)
   const [draftNote, setDraftNote] = useState<DraftWorkspaceNote | null>(null)
   const [draftContent, setDraftContent] = useState("")
@@ -293,13 +294,17 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes }
         <div className="space-y-1">
           <h3 className="text-lg font-semibold">Workspace Notes</h3>
           <p className="text-sm text-muted-foreground">
-            Capture research logs, to-do lists, and team context that evolves over time.
+            {canManage 
+              ? "Capture research logs, to-do lists, and team context that evolves over time."
+              : "View team notes and context for this workspace."}
           </p>
         </div>
-        <Button onClick={handleAddDraft} disabled={!!draftNote}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Note
-        </Button>
+        {canManage && (
+          <Button onClick={handleAddDraft} disabled={!!draftNote}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Note
+          </Button>
+        )}
       </div>
 
       {generalError && <p className="text-sm text-destructive">{generalError}</p>}
@@ -307,13 +312,18 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes }
       {items.length === 0 ? (
         <Card className="shadow">
           <CardContent className="py-6 text-sm text-muted-foreground">
-            No notes yet. Capture insights, pending tasks, or decisions for this workspace.
+            {canManage 
+              ? "No notes yet. Capture insights, pending tasks, or decisions for this workspace."
+              : "No notes have been created yet."}
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => {
             if ("isDraft" in item && item.isDraft) {
+              // Viewers cannot create notes, so skip rendering draft cards
+              if (!canManage) return null
+              
               return (
                 <Card key={item.id} className="flex h-full flex-col shadow">
                   <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

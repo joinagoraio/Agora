@@ -30,6 +30,7 @@ export async function userHasWorkspaceAccess(
     .eq("user_id", userId)
     .maybeSingle()
 
-  return Boolean(spaceMembership && ["owner", "admin"].includes(spaceMembership.role))
+  // Members have full access to workspaces, same as admin
+  return Boolean(spaceMembership && ["owner", "admin", "member"].includes(spaceMembership.role))
 }
 

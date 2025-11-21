@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { inviteUserToWorkspace, resendWorkspaceInvitation, revokeWorkspaceInvitation } from "@/lib/actions/workspace-invitation"
-import { deleteWorkspace, removeWorkspaceMember } from "@/lib/actions/workspace"
+import { deleteWorkspace, removeWorkspaceMember, updateWorkspaceMemberRole } from "@/lib/actions/workspace"
 import { useRouter } from "next/navigation"
 import { Trash2, Send, MoreVertical, UserMinus } from "lucide-react"
 import { toast } from "sonner"
@@ -49,7 +49,6 @@ export function WorkspaceSettings({ workspace, space, members, invitations, curr
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<"member" | "admin" | "viewer">("member")
   const [isInviting, setIsInviting] = useState(false)
-  const [inviteLinkInfo, setInviteLinkInfo] = useState<{ link: string; email: string } | null>(null)
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
   const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false)
   const [invitationAction, setInvitationAction] = useState<{ id: string; type: "resend" | "revoke" } | null>(null)
@@ -103,15 +102,11 @@ export function WorkspaceSettings({ workspace, space, members, invitations, curr
       return
     }
 
-    if ("inviteLink" in result && result.inviteLink) {
-      setInviteLinkInfo({ link: result.inviteLink, email })
-    }
     setInviteEmail("")
     toast.success("Invitation sent", { description: `Sent to ${email}.` })
     router.refresh()
   }
 
-  const handleInvitationAction = async (invitation: { id: string; email: string }, type: "resend" | "revoke") => {
   const handleRemoveMember = async (memberId: string) => {
     setRemovingMemberId(memberId)
     const result = await removeWorkspaceMember(workspace.id, memberId)
@@ -126,13 +121,22 @@ export function WorkspaceSettings({ workspace, space, members, invitations, curr
     router.refresh()
   }
 
+  const handleWorkspaceRoleChange = async (userId: string, newRole: "admin" | "member" | "viewer") => {
+    const result = await updateWorkspaceMemberRole(workspace.id, userId, newRole)
+
+    if (result?.error) {
+      toast.error("Failed to update role", { description: result.error })
+      return
+    }
+
+    toast.success("Role updated", { description: `Member role has been changed to ${newRole}.` })
+    router.refresh()
+  }
+
+  const handleInvitationAction = async (invitation: { id: string; email: string }, type: "resend" | "revoke") => {
     setInvitationAction({ id: invitation.id, type })
     const result =
       type === "resend" ? await resendWorkspaceInvitation(invitation.id) : await revokeWorkspaceInvitation(invitation.id)
-
-    if (type === "resend" && result && "inviteLink" in result && result.inviteLink) {
-      setInviteLinkInfo({ link: result.inviteLink, email: invitation.email })
-    }
 
     setInvitationAction(null)
 
@@ -162,14 +166,16 @@ export function WorkspaceSettings({ workspace, space, members, invitations, curr
         <Card className="shadow">
           <CardHeader>
             <CardTitle>Workspace Members</CardTitle>
-            <CardDescription>Manage who has access to this workspace</CardDescription>
+            <CardDescription>
+              All users with access to this workspace, including space members and direct workspace invitations
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Email</TableHead>
                   <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Joined</TableHead>
                   <TableHead className="text-right">
@@ -178,28 +184,59 @@ export function WorkspaceSettings({ workspace, space, members, invitations, curr
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {members.map((member) => (
-                  <TableRow key={member.id}>
-                    <TableCell>{member.profiles?.email}</TableCell>
-                    <TableCell>{member.profiles?.full_name || "—"}</TableCell>
-                    <TableCell>
-                      <Badge>{member.role}</Badge>
-                    </TableCell>
-                    <TableCell>{new Date(member.created_at).toLocaleDateString()}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => handleRemoveMember(member.user_id)}
-                        disabled={removingMemberId === member.user_id || member.user_id === currentUserId}
-                      >
-                        <UserMinus className="mr-1 h-4 w-4" />
-                        Remove
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {members.map((member) => {
+                  const isSpaceMember = member.source === "space"
+                  const isWorkspaceMember = member.source === "workspace"
+                  const canRemove = !isSpaceMember && member.user_id !== currentUserId
+                  const displayRole = member.workspace_role || member.role
+                  
+                  return (
+                    <TableRow key={member.user_id}>
+                      <TableCell>{member.profiles?.full_name || "—"}</TableCell>
+                      <TableCell>{member.profiles?.email || "—"}</TableCell>
+                      <TableCell>
+                        {isWorkspaceMember && (
+                          <Select
+                            value={displayRole}
+                            onValueChange={(newRole) => handleWorkspaceRoleChange(member.user_id, newRole as "admin" | "member" | "viewer")}
+                            disabled={member.user_id === currentUserId}
+                          >
+                            <SelectTrigger className="w-[120px] h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">Admin</SelectItem>
+                              <SelectItem value="member">Member</SelectItem>
+                              <SelectItem value="viewer">Viewer</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                        {isSpaceMember && (
+                          <span className="capitalize">{displayRole}</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{new Date(member.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-right">
+                        {isSpaceMember ? (
+                          <span className="text-xs text-muted-foreground">
+                            Managed in Space
+                          </span>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleRemoveMember(member.user_id)}
+                            disabled={removingMemberId === member.user_id || !canRemove}
+                          >
+                            <UserMinus className="mr-1 h-4 w-4" />
+                            Remove
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           </CardContent>
@@ -239,16 +276,6 @@ export function WorkspaceSettings({ workspace, space, members, invitations, curr
                 </Button>
               </div>
             </form>
-
-            {inviteLinkInfo && (
-              <div className="rounded-md bg-muted p-4">
-                <p className="mb-1 text-sm font-medium">Latest Invitation Link</p>
-                <p className="mb-2 text-xs text-muted-foreground">
-                  Sent to <span className="font-semibold">{inviteLinkInfo.email}</span>
-                </p>
-                <code className="block break-all text-xs">{inviteLinkInfo.link}</code>
-              </div>
-            )}
 
             {invitations.length > 0 && (
               <div>

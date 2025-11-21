@@ -130,7 +130,32 @@ export async function GET(req: NextRequest) {
     // Get total count for pagination (only if page 1, to avoid extra query on subsequent pages)
     let total: number | undefined
     if (page === 1) {
-      const { count } = await searchQuery.select("*", { count: "exact", head: true })
+      // Create a fresh count query with the same filters as searchQuery
+      let countQuery = supabase
+        .from("workspace_items")
+        .select("*", { count: "exact", head: true })
+        .eq("workspace_id", validated.workspaceId)
+      
+      // Apply same filters as main query
+      if (validated.domain) {
+        countQuery = countQuery.eq("domain", validated.domain)
+      }
+      if (validated.municipality) {
+        countQuery = countQuery.eq("municipality", validated.municipality)
+      }
+      if (validated.classification) {
+        countQuery = countQuery.eq("classification", validated.classification)
+      }
+      if (validated.year) {
+        const yearInt = parseInt(validated.year)
+        if (!isNaN(yearInt)) {
+          const startDate = `${yearInt}-01-01`
+          const endDate = `${yearInt}-12-31`
+          countQuery = countQuery.gte("publication_date", startDate).lte("publication_date", endDate)
+        }
+      }
+      
+      const { count } = await countQuery
       total = count || undefined
     }
 
@@ -273,7 +298,34 @@ export async function POST(req: Request) {
     // Get total count for pagination (only if page 1, to avoid extra query on subsequent pages)
     let total: number | undefined
     if (paginatedPage === 1) {
-      const { count } = await searchQuery.select("*", { count: "exact", head: true })
+      // Create a fresh count query with the same filters as searchQuery
+      let countQuery = supabase
+        .from("documents")
+        .select("*", { count: "exact", head: true })
+        .eq("workspace_id", validated.workspaceId)
+        .eq("status", "active")
+        .or(`title.ilike.%${escapedQuery}%,content.ilike.%${escapedQuery}%`)
+      
+      // Apply same filters as main query
+      if (validated.domain) {
+        countQuery = countQuery.eq("domain", validated.domain)
+      }
+      if (validated.municipality) {
+        countQuery = countQuery.eq("municipality", validated.municipality)
+      }
+      if (validated.classification) {
+        countQuery = countQuery.eq("classification", validated.classification)
+      }
+      if (validated.year) {
+        const yearInt = parseInt(validated.year)
+        if (!isNaN(yearInt)) {
+          const startDate = `${yearInt}-01-01`
+          const endDate = `${yearInt}-12-31`
+          countQuery = countQuery.gte("publication_date", startDate).lte("publication_date", endDate)
+        }
+      }
+      
+      const { count } = await countQuery
       total = count || undefined
     }
 
@@ -320,7 +372,11 @@ export async function POST(req: Request) {
           classification: validated.classification,
           layer: validated.layer,
         },
-      }).catch(err => console.error("[Search] Failed to save search query:", err))
+      }).then(({ error }) => {
+        if (error) {
+          console.error("[Search] Failed to save search query:", error)
+        }
+      })
     }
 
     const paginatedResponse = createPaginatedResponse(results, paginatedPage, paginatedPageSize, total)

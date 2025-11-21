@@ -88,9 +88,10 @@ interface ChatInterfaceProps {
   conversationId: string
   initialMessages?: any[]
   documentId?: string // Optional: when provided, only show this document
+  canManage?: boolean
 }
 
-export function ChatInterface({ workspaceId, conversationId, initialMessages = [], documentId }: ChatInterfaceProps) {
+export function ChatInterface({ workspaceId, conversationId, initialMessages = [], documentId, canManage = true }: ChatInterfaceProps) {
   const highlightContext = useHighlightContext()
   const { setHighlights, setActiveDocument, autoHighlight } = highlightContext
   
@@ -98,6 +99,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   const [documents, setDocuments] = useState<any[]>([])
   const [contextNotes, setContextNotes] = useState<WorkspaceNoteForContext[]>([])
   const [evidenceItems, setEvidenceItems] = useState<any[]>([])
+  const [evidenceVersion, setEvidenceVersion] = useState(0) // Force re-render on evidence update
   const [workspaceContextText, setWorkspaceContextText] = useState<string | null>(null)
   const [workspaceLocation, setWorkspaceLocation] = useState<string | null>(null)
   const [hasLoadedWorkspaceMetadata, setHasLoadedWorkspaceMetadata] = useState(false)
@@ -197,6 +199,14 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     excludedNoteIds: Array.from(excludedNoteIds),
     excludedEvidenceIds: Array.from(excludedEvidenceIds),
   })
+  const csrfTokenRef = useRef<string | null>(null)
+
+  // Fetch CSRF token on mount and keep it in ref
+  useEffect(() => {
+    fetchCsrfToken().then(token => {
+      csrfTokenRef.current = token
+    })
+  }, [])
 
   useEffect(() => {
     requestBodyRef.current = {
@@ -213,13 +223,12 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       new TextStreamChatTransport({
         api: "/api/chat",
         body: () => requestBodyRef.current,
-        headers: async () => {
-          const csrfToken = await fetchCsrfToken()
-          if (!csrfToken) {
+        headers: (): Record<string, string> => {
+          if (!csrfTokenRef.current) {
             clientLogger.error("[ChatInterface] Missing CSRF token for chat request")
             return {}
           }
-          return { "x-csrf-token": csrfToken }
+          return { "x-csrf-token": csrfTokenRef.current }
         },
       }),
     [],
@@ -391,6 +400,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   }, [contextNotes])
 
   useEffect(() => {
+    clientLogger.info("[ChatInterface] evidenceItems changed, new count:", evidenceItems.length)
     setExcludedEvidenceIds((prev) => {
       const validIds = new Set(evidenceItems.map((item) => item.id))
       let hasChanges = false
@@ -844,16 +854,17 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     if (isLoading) {
       thinkingStartRef.current = Date.now()
       setLastThinkingDuration(null)
-      setEllipsis(".")
+      setEllipsis("")
 
       interval = setInterval(() => {
         setEllipsis((prev) => {
+          // Cycle through: "" -> "." -> ".." -> "..." -> ""
           if (prev.length >= 3) {
-            return "."
+            return ""
           }
           return prev + "."
         })
-      }, 350)
+      }, 400)
     } else {
       if (thinkingStartRef.current) {
         const duration = (Date.now() - thinkingStartRef.current) / 1000
@@ -1054,6 +1065,51 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     setEvidenceError(null)
   }
 
+  const refreshEvidenceItems = async () => {
+    try {
+      const currentCount = evidenceItems.length
+      // Query Supabase directly from client to bypass server action cache
+      const { createClient } = await import("@/lib/supabase/client")
+      const supabase = createClient()
+      
+      const { data, error } = await supabase
+        .from("workspace_items")
+        .select(
+          "*, created_by:profiles(id, email, full_name), source_space_item:space_items(id, item_type, classification, payload, source_url, source_doc_id, source_page)",
+        )
+        .eq("workspace_id", workspaceId)
+        .eq("inheritance", "local")
+        .order("created_at", { ascending: false })
+      
+      if (error) {
+        clientLogger.error("[ChatInterface] Failed to refresh evidence items:", error)
+        return
+      }
+      
+      // Filter for evidence items with include_in_ai_context=true
+      const evidenceData = (data ?? []).filter(
+        (item: any) => item.payload?.type === "evidence" && item.include_in_ai_context === true,
+      )
+      clientLogger.info("[ChatInterface] Refreshed evidence items:", {
+        previousCount: currentCount,
+        totalWorkspaceItems: data?.length ?? 0,
+        filteredEvidenceCount: evidenceData.length,
+        countIncreased: evidenceData.length > currentCount,
+        sampleItem: evidenceData[0] ? {
+          id: evidenceData[0].id,
+          type: evidenceData[0].payload?.type,
+          include_in_ai_context: evidenceData[0].include_in_ai_context,
+        } : 'none'
+      })
+      // Force state update with new array reference to trigger re-render
+      setEvidenceItems([...evidenceData])
+      // Increment version to force component re-render
+      setEvidenceVersion(prev => prev + 1)
+    } catch (error) {
+      clientLogger.error("[ChatInterface] Failed to refresh evidence items:", error)
+    }
+  }
+
   const handleSaveEvidence = async () => {
     if (!pendingEvidence) {
       return
@@ -1112,9 +1168,22 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
         setEvidenceError(errorMessage)
         updateEvidenceStatus(messageKey, "error", errorMessage)
       } else {
+        const result = await response.json()
+        clientLogger.info("[ChatInterface] Evidence saved successfully:", result)
         updateEvidenceStatus(messageKey, "success")
         setPendingEvidence(null)
-        router.refresh()
+        // Small delay to ensure database write has completed
+        await new Promise(resolve => setTimeout(resolve, 300))
+        // Refresh evidence items from server to ensure UI is in sync
+        clientLogger.info("[ChatInterface] Refreshing evidence items after save...")
+        await refreshEvidenceItems()
+        
+        // Emit custom event to notify workspace page that evidence was saved
+        if (typeof window !== 'undefined') {
+          const event = new CustomEvent('evidenceSaved', { detail: { workspaceId } })
+          window.dispatchEvent(event)
+          clientLogger.info("[ChatInterface] Dispatched evidenceSaved event")
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to save evidence."
@@ -1150,8 +1219,19 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   
   const availableNotes = contextNotes.filter((note) => !excludedNoteIds.has(note.id))
   const excludedNotes = contextNotes.filter((note) => excludedNoteIds.has(note.id))
+  // Use evidenceVersion to ensure React detects changes
   const availableEvidence = evidenceItems.filter((item) => !excludedEvidenceIds.has(item.id))
   const excludedEvidence = evidenceItems.filter((item) => excludedEvidenceIds.has(item.id))
+  
+  // Log for debugging counter update
+  if (typeof window !== 'undefined' && evidenceVersion > 0) {
+    clientLogger.info("[ChatInterface] Rendering with evidence counts:", {
+      evidenceItemsLength: evidenceItems.length,
+      availableEvidenceLength: availableEvidence.length,
+      excludedEvidenceLength: excludedEvidence.length,
+      evidenceVersion
+    })
+  }
   const isContextLoading = isLoadingDocuments || isLoadingNotes || isLoadingEvidence
   const hasContextItems =
     hasLoadedWorkspaceMetadata || documents.length > 0 || contextNotes.length > 0 || evidenceItems.length > 0
@@ -1355,6 +1435,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           const isAssistant = message.role === "assistant"
           const isLastAssistant = isAssistant && index === messages.length - 1
           const shouldShowThinkingTooltip = isAssistant && (!isLastAssistant || !isLoading)
+          const shouldShowLiveThinking = isLastAssistant && isLoading
           const messageKey = getMessageKey(message, index)
           const evidenceStatusEntry = evidenceStatusByMessage[messageKey]
           const evidenceStatus = evidenceStatusEntry?.status ?? "idle"
@@ -1502,6 +1583,13 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           return (
             <div key={index} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
               <div className="space-y-2 group">
+                {shouldShowLiveThinking && (
+                  <div className="flex items-center px-2 mb-1 animate-pulse">
+                    <span className="text-xs italic text-muted-foreground">
+                      Thinking{ellipsis}
+                    </span>
+                  </div>
+                )}
                 {shouldShowThinkingTooltip && (
                   <span className="text-xs italic text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
                     {(() => {
@@ -1545,8 +1633,11 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                           const extractText = (node: any): string => {
                             if (typeof node === 'string') return node
                             if (Array.isArray(node)) return node.map(extractText).join('')
-                            if (React.isValidElement(node) && node.props?.children) {
-                              return extractText(node.props.children)
+                            if (React.isValidElement(node)) {
+                              const props = node.props as any
+                              if (props?.children) {
+                                return extractText(props.children)
+                              }
                             }
                             return ''
                           }
@@ -1705,15 +1796,17 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                                     const part = parts[pIdx]
                                     if (React.isValidElement(part) && part.type === 'span') {
                                       // Found a span, check if it's a quote span
-                                      const spanChildren = part.props?.children
+                                      const partProps = part.props as any
+                                      const spanChildren = partProps?.children
                                       if (Array.isArray(spanChildren)) {
-                                        const quoteSpan = spanChildren.find((c: any) => 
-                                          React.isValidElement(c) && c.type === 'span' && 
-                                          typeof c.props?.children === 'string' && 
-                                          c.props.children.startsWith('"')
-                                        )
+                                        const quoteSpan = spanChildren.find((c: any) => {
+                                          if (!React.isValidElement(c) || c.type !== 'span') return false
+                                          const cProps = c.props as any
+                                          return typeof cProps?.children === 'string' && cProps.children.startsWith('"')
+                                        })
                                         if (quoteSpan) {
-                                        const quoteText = quoteSpan.props.children.replace(/^"|"$/g, '')
+                                        const quoteProps = quoteSpan.props as any
+                                        const quoteText = quoteProps.children.replace(/^"|"$/g, '')
                                           // Check if icon already exists
                                           const hasIcon = spanChildren.some((c: any) => 
                                             React.isValidElement(c) && c.type === 'button'
@@ -1815,16 +1908,18 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                                     for (let rIdx = result.length - 1; rIdx >= 0; rIdx--) {
                                       const lastItem = result[rIdx]
                                       if (React.isValidElement(lastItem) && lastItem.type === 'span') {
-                                        const spanChildren = lastItem.props?.children
+                                        const lastItemProps = lastItem.props as any
+                                        const spanChildren = lastItemProps?.children
                                         if (Array.isArray(spanChildren)) {
                                           // Check if this span contains a quote
-                                          const quoteSpan = spanChildren.find((c: any) => 
-                                            React.isValidElement(c) && c.type === 'span' && 
-                                            typeof c.props?.children === 'string' && 
-                                            c.props.children.startsWith('"')
-                                          )
+                                          const quoteSpan = spanChildren.find((c: any) => {
+                                            if (!React.isValidElement(c) || c.type !== 'span') return false
+                                            const cProps = c.props as any
+                                            return typeof cProps?.children === 'string' && cProps.children.startsWith('"')
+                                          })
                                           if (quoteSpan) {
-                                            const quoteText = quoteSpan.props.children.replace(/^"|"$/g, '')
+                                            const quoteSpanProps = quoteSpan.props as any
+                                            const quoteText = quoteSpanProps.children.replace(/^"|"$/g, '')
                                             // Check if icon already exists
                                             const hasIcon = spanChildren.some((c: any) => 
                                               React.isValidElement(c) && c.type === 'button'
@@ -1897,23 +1992,26 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                                 } else {
                                   // Non-string child - check if it's a [doc] link
                                   if (React.isValidElement(child) && child.type === 'a') {
-                                    const linkText = typeof child.props?.children === 'string' 
-                                      ? child.props.children 
-                                      : (Array.isArray(child.props?.children) 
-                                          ? child.props.children.join('') 
-                                          : String(child.props?.children || ''))
+                                    const childProps = child.props as any
+                                    const linkText = typeof childProps?.children === 'string' 
+                                      ? childProps.children 
+                                      : (Array.isArray(childProps?.children) 
+                                          ? childProps.children.join('') 
+                                          : String(childProps?.children || ''))
                                     
-                                    if (linkText === '[doc]' || child.props?.href === '[doc]') {
+                                    if (linkText === '[doc]' || childProps?.href === '[doc]') {
                                       // Look backwards for a quote span in the result
                                       for (let rIdx = result.length - 1; rIdx >= 0; rIdx--) {
                                         const lastItem = result[rIdx]
                                         if (React.isValidElement(lastItem) && lastItem.type === 'span') {
                                           // Check if it's a quote span without a badge
-                                          const spanChildren = lastItem.props?.children
+                                          const lastItemProps = lastItem.props as any
+                                          const spanChildren = lastItemProps?.children
                                           if (Array.isArray(spanChildren) && spanChildren.length === 1) {
                                             const quoteSpan = spanChildren[0]
                                             if (React.isValidElement(quoteSpan) && quoteSpan.type === 'span') {
-                                              const quoteText = quoteSpan.props?.children
+                                              const quoteSpanProps = quoteSpan.props as any
+                                              const quoteText = quoteSpanProps?.children
                                               if (quoteText && typeof quoteText === 'string' && quoteText.startsWith('"')) {
                                                 // Found a quote without badge - add badge and skip the [doc] link
                                                 const cleanQuoteText = quoteText.replace(/^"|"$/g, '')
@@ -1991,7 +2089,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                       {readMessageContent(message)}
                     </ReactMarkdown>
                   </div>
-                  {isAssistant && (
+                  {isAssistant && canManage && (
                     <div className="flex flex-wrap items-center justify-end gap-2 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <>
                         <Button
@@ -2028,9 +2126,13 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           )
         })}
 
-        {isLoading && (
+        {isLoading && (messages.length === 0 || messages[messages.length - 1]?.role === "user") && (
           <div className="flex justify-start">
-            <span className="px-2 text-sm italic text-muted-foreground">{`Thinking${ellipsis.padEnd(3, ".")}`}</span>
+            <div className="flex items-center px-2 animate-pulse">
+              <span className="text-sm italic text-muted-foreground">
+                Thinking{ellipsis}
+              </span>
+            </div>
           </div>
         )}
 
@@ -2133,17 +2235,23 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                       </div>
                     ) : (
                       <Tabs defaultValue="sources" className="w-full">
-                        <TabsList className="grid w-full grid-cols-4 h-8">
-                          <TabsTrigger value="sources" className="text-xs">
+                        <TabsList className="grid w-full grid-cols-4 h-8" key={`tablist-${evidenceVersion}-${availableEvidence.length}`}>
+                          <TabsTrigger value="sources" className="text-xs" key={`src-${availableSourceDocuments.length}`}>
                             Sources <span className="font-normal">({availableSourceDocuments.length})</span>
                           </TabsTrigger>
-                          <TabsTrigger value="inherited" className="text-xs">
+                          <TabsTrigger value="inherited" className="text-xs" key={`inh-${availableInheritedDocuments.length}`}>
                             Inherited <span className="font-normal">({availableInheritedDocuments.length})</span>
                           </TabsTrigger>
-                          <TabsTrigger value="evidence" className="text-xs">
-                            Evidence <span className="font-normal">({availableEvidence.length})</span>
+                          <TabsTrigger value="evidence" className="text-xs" key={`ev-${availableEvidence.length}-${evidenceVersion}`}>
+                            Evidence <span className="font-normal" key={`ev-count-${availableEvidence.length}`}>
+                              ({availableEvidence.length})
+                              {(() => {
+                                console.log('[RENDER CHECK] Evidence counter rendering with:', availableEvidence.length);
+                                return null;
+                              })()}
+                            </span>
                           </TabsTrigger>
-                          <TabsTrigger value="notes" className="text-xs">
+                          <TabsTrigger value="notes" className="text-xs" key={`notes-${availableNotes.length}`}>
                             Notes <span className="font-normal">({availableNotes.length})</span>
                           </TabsTrigger>
                         </TabsList>

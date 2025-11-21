@@ -28,6 +28,7 @@ import { CreateWorkspaceDocumentDialog } from "@/components/create-workspace-doc
 import { WorkspaceOverview } from "@/components/workspace-overview"
 import { ManageSourcesDialog } from "@/components/manage-sources-dialog"
 import { CreateSourceDialog } from "@/components/create-source-dialog"
+import { EvidenceRefreshListener } from "@/components/evidence-refresh-listener"
 
 type WorkspaceCommentRecord = {
   id: string
@@ -82,6 +83,44 @@ export default async function WorkspacePage({
     console.error("Error fetching space for workspace")
     redirect("/dashboard")
   }
+
+  // Get user's space role (if they're a space member)
+  const { data: spaceMembership } = await supabase
+    .from("space_members")
+    .select("role")
+    .eq("space_id", workspace.space_id)
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  // Check if user is a direct workspace member (not via space)
+  const { data: workspaceMembership } = await supabase
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  // Determine if user is workspace-only (invited directly to workspace, not via space)
+  const isWorkspaceOnlyMember = !spaceMembership && !!workspaceMembership
+  const userSpaceRole = spaceMembership?.role ?? null
+  const userWorkspaceRole = workspaceMembership?.role ?? null
+  
+  // Members can do everything except Settings
+  // Space members (owner/admin/member) OR workspace members (admin/member) can manage
+  const canManage = 
+    userSpaceRole === "owner" || 
+    userSpaceRole === "admin" || 
+    userSpaceRole === "member" ||
+    userWorkspaceRole === "admin" ||
+    userWorkspaceRole === "member"
+  
+  const isViewer = userSpaceRole === "viewer" || userWorkspaceRole === "viewer"
+  
+  // Only owners and admins can access Settings (not members)
+  const canAccessSettings = 
+    userSpaceRole === "owner" || 
+    userSpaceRole === "admin" ||
+    userWorkspaceRole === "admin" || userWorkspaceRole === "viewer"
 
   // Create workspace object with space attached for compatibility
   const workspaceWithSpace = {
@@ -300,7 +339,8 @@ export default async function WorkspacePage({
     ) ?? {}
 
   return (
-    <WorkspaceChatWrapper workspaceId={workspaceId} workspaceName={workspace.name}>
+    <WorkspaceChatWrapper workspaceId={workspaceId} workspaceName={workspace.name} canManage={canManage}>
+      <EvidenceRefreshListener />
       <Suspense fallback={null}>
         <WelcomeWorkspaceWrapper workspace={workspace} />
       </Suspense>
@@ -308,14 +348,34 @@ export default async function WorkspacePage({
         <header className="sticky top-0 z-40 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75">
           <div className="flex h-16 items-center justify-between px-4">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" asChild>
-                <Link href={`/spaces/${workspaceWithSpace.spaces.id}`}>
-                  <ArrowLeft className="mr-2 h-3 w-3" />
-                  <span className="text-xs font-normal">Back to {workspaceWithSpace.spaces.name}</span>
-                </Link>
-              </Button>
+              {!isWorkspaceOnlyMember && (
+                <Button variant="ghost" asChild>
+                  <Link href={`/spaces/${workspaceWithSpace.spaces.id}`}>
+                    <ArrowLeft className="mr-2 h-3 w-3" />
+                    <span className="text-xs font-normal">Back to {workspaceWithSpace.spaces.name}</span>
+                  </Link>
+                </Button>
+              )}
+              {isWorkspaceOnlyMember && (
+                <Button variant="ghost" asChild>
+                  <Link href="/dashboard">
+                    <ArrowLeft className="mr-2 h-3 w-3" />
+                    <span className="text-xs font-normal">Back to Dashboard</span>
+                  </Link>
+                </Button>
+              )}
             </div>
             <div className="flex items-center gap-2">
+              {userSpaceRole && (
+                <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-primary">
+                  {userSpaceRole}
+                </span>
+              )}
+              {isWorkspaceOnlyMember && workspaceMembership && (
+                <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-primary">
+                  {workspaceMembership.role}
+                </span>
+              )}
               <UserMenu />
             </div>
           </div>
@@ -331,6 +391,8 @@ export default async function WorkspacePage({
                 initialContext={workspace.context}
                 initialLocation={workspace.location}
                 parentSpaces={parentSpaces}
+                canManage={canManage}
+                canAccessSettings={canAccessSettings}
               />
             </div>
 
@@ -378,17 +440,24 @@ export default async function WorkspacePage({
                       ({createdDocuments.length})
                     </span>
                   </div>
-                  <CreateWorkspaceDocumentDialog
-                    workspaceId={workspaceId}
-                    trigger={
-                      <Button size="sm">
-                        <Plus className="mr-2 h-4 w-4" />
-                        New Document
-                      </Button>
-                    }
-                  />
+                  {canManage && (
+                    <CreateWorkspaceDocumentDialog
+                      workspaceId={workspaceId}
+                      trigger={
+                        <Button size="sm">
+                          <Plus className="mr-2 h-4 w-4" />
+                          New Document
+                        </Button>
+                      }
+                    />
+                  )}
                 </div>
-                <MyDocumentsList workspaceId={workspaceId} initialDocuments={createdDocuments} showHeader={false} />
+                <MyDocumentsList 
+                  workspaceId={workspaceId} 
+                  initialDocuments={createdDocuments} 
+                  showHeader={false}
+                  canManage={canManage}
+                />
               </div>
 
               <div className="space-y-4">
@@ -424,7 +493,8 @@ export default async function WorkspacePage({
                     workspaceId={workspaceId} 
                     initialDocuments={uploadedDocuments} 
                     initialArchivedCount={archivedDocCount}
-                    sources={sourcesArray} 
+                    sources={sourcesArray}
+                    canManage={canManage}
                   />
                 </TabsContent>
 
@@ -463,6 +533,7 @@ export default async function WorkspacePage({
                     workspaceId={workspaceId}
                     currentUserId={user.id}
                     initialNotes={workspaceNotes}
+                    canManage={canManage}
                   />
                 </TabsContent>
               </Tabs>

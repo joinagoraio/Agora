@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { inviteUserToSpace, resendInvitation, revokeInvitation } from "@/lib/actions/invitation"
-import { deleteSpace, removeSpaceMember } from "@/lib/actions/space"
+import { deleteSpace, removeSpaceMember, updateSpaceMemberRole } from "@/lib/actions/space"
 import { useRouter } from "next/navigation"
 import { Trash2, Send, MoreVertical, UserMinus } from "lucide-react"
 import { toast } from "sonner"
@@ -44,6 +44,12 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null)
   const [memberToRemove, setMemberToRemove] = useState<{ id: string; email: string; name: string } | null>(null)
   const [needsRemoveConfirmation, setNeedsRemoveConfirmation] = useState(false)
+  const [roleChangeDialog, setRoleChangeDialog] = useState<{
+    isOpen: boolean
+    member: { id: string; name: string; email: string; currentRole: string } | null
+    newRole: "admin" | "member" | "viewer" | null
+  }>({ isOpen: false, member: null, newRole: null })
+  const [isChangingRole, setIsChangingRole] = useState(false)
   const router = useRouter()
   
   const handleRemoveMember = async () => {
@@ -144,6 +150,41 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
     router.refresh()
   }
 
+  const handleRoleChangeRequest = (
+    member: { user_id: string; role: string; profiles: any },
+    newRole: "admin" | "member" | "viewer"
+  ) => {
+    setRoleChangeDialog({
+      isOpen: true,
+      member: {
+        id: member.user_id,
+        name: member.profiles?.full_name || "Unknown",
+        email: member.profiles?.email || "Unknown",
+        currentRole: member.role,
+      },
+      newRole,
+    })
+  }
+
+  const handleRoleChangeConfirm = async () => {
+    if (!roleChangeDialog.member || !roleChangeDialog.newRole) return
+
+    setIsChangingRole(true)
+    const result = await updateSpaceMemberRole(space.id, roleChangeDialog.member.id, roleChangeDialog.newRole)
+    setIsChangingRole(false)
+
+    if (result?.error) {
+      toast.error("Failed to change role", { description: result.error })
+      return
+    }
+
+    toast.success("Role updated", {
+      description: `${roleChangeDialog.member.name} is now a ${roleChangeDialog.newRole}.`,
+    })
+    setRoleChangeDialog({ isOpen: false, member: null, newRole: null })
+    router.refresh()
+  }
+
   const formatStatusLabel = (status?: string | null) => {
     const normalized = status?.trim()
     if (!normalized) return "Pending"
@@ -151,6 +192,7 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
   }
 
   return (
+    <>
     <Tabs defaultValue="members" className="space-y-6">
       <TabsList>
         <TabsTrigger value="members">Members</TabsTrigger>
@@ -168,8 +210,8 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Email</TableHead>
                   <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Joined</TableHead>
                   <TableHead className="text-right">
@@ -180,14 +222,30 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
               <TableBody>
                 {members.map((member) => (
                   <TableRow key={member.id}>
-                    <TableCell>{member.profiles?.email}</TableCell>
                     <TableCell>{member.profiles?.full_name || "—"}</TableCell>
+                    <TableCell>{member.profiles?.email}</TableCell>
                     <TableCell>
-                      <Badge>{member.role}</Badge>
+                      {member.role === "owner" || member.user_id === currentUserId ? (
+                        <Badge>{member.role}</Badge>
+                      ) : (
+                        <Select
+                          value={member.role}
+                          onValueChange={(value) => handleRoleChangeRequest(member, value as "admin" | "member" | "viewer")}
+                        >
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="viewer">Viewer</SelectItem>
+                            <SelectItem value="member">Member</SelectItem>
+                            <SelectItem value="admin">Admin</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
                     </TableCell>
                     <TableCell>{new Date(member.created_at).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">
-                      {member.user_id === currentUserId ? null : (
+                      {member.user_id === currentUserId || member.role === "owner" ? null : (
                         <AlertDialog onOpenChange={handleRemoveDialogClose}>
                           <AlertDialogTrigger asChild>
                             <Button
@@ -417,5 +475,43 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
         </div>
       </TabsContent>
     </Tabs>
+
+    <AlertDialog
+      open={roleChangeDialog.isOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          setRoleChangeDialog({ isOpen: false, member: null, newRole: null })
+        }
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Change member role?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Change {roleChangeDialog.member?.name} ({roleChangeDialog.member?.email}) from{" "}
+            <strong>{roleChangeDialog.member?.currentRole}</strong> to{" "}
+            <strong>{roleChangeDialog.newRole}</strong>?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="text-sm text-muted-foreground space-y-2">
+          {roleChangeDialog.newRole === "viewer" && (
+            <p>Viewers have read-only access and cannot create or modify content.</p>
+          )}
+          {roleChangeDialog.newRole === "member" && (
+            <p>Members can manage workspaces and documents but cannot access space Settings.</p>
+          )}
+          {roleChangeDialog.newRole === "admin" && (
+            <p>Admins have full access including space Settings and member management.</p>
+          )}
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isChangingRole}>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={handleRoleChangeConfirm} disabled={isChangingRole}>
+            {isChangingRole ? "Changing..." : "Changing Role"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }

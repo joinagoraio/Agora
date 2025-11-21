@@ -192,7 +192,11 @@ export function SpaceSetupWizard({
       setOriginalDescription(targetText)
     }
     startEnhancing(async () => {
-      const result = await enhanceScopeText(targetText)
+      const result = await enhanceScopeText(targetText, {
+        field,
+        spaceName: field === "summary" ? spaceName : undefined,
+        missionStatement: field === "description" ? summary : undefined,
+      })
       if (result.error) {
         setStepError(result.error)
         setEnhancingField(null)

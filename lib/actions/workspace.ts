@@ -84,6 +84,7 @@ export async function updateWorkspace(
   description?: string | null,
   context?: string | null,
   location?: string | null,
+  summary?: string | null,
 ) {
   const supabase = await createClient()
 
@@ -99,6 +100,7 @@ export async function updateWorkspace(
     description?: string | null
     context?: string | null
     location?: string | null
+    summary?: string | null
   } = { name }
 
   if (description !== undefined) {
@@ -109,6 +111,9 @@ export async function updateWorkspace(
   }
   if (location !== undefined) {
     updateData.location = location
+  }
+  if (summary !== undefined) {
+    updateData.summary = summary
   }
 
   const { data, error } = await supabase
@@ -199,6 +204,44 @@ export async function removeWorkspaceMember(workspaceId: string, memberUserId: s
     return { error: deleteError.message }
   }
 
+  revalidatePath(`/workspaces/${workspaceId}`)
+  return { success: true }
+}
+
+export async function updateWorkspaceMemberRole(
+  workspaceId: string,
+  memberUserId: string,
+  newRole: "admin" | "member" | "viewer"
+) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  // Check if current user has permission
+  try {
+    await requireAuthAndPermission("workspace:share", { workspaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+
+  // Update the member's role
+  const { error } = await supabase
+    .from("workspace_members")
+    .update({ role: newRole })
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", memberUserId)
+
+  if (error) {
+    console.error("[updateWorkspaceMemberRole] Error:", error)
+    return { error: "Failed to update member role" }
+  }
+
+  revalidatePath(`/workspaces/${workspaceId}/settings`)
   revalidatePath(`/workspaces/${workspaceId}`)
   return { success: true }
 }
@@ -322,6 +365,105 @@ Rules:
     return { error: "Failed to generate enhanced text" }
   } catch (error) {
     console.error("[enhanceContextText] Error:", error)
+    return { error: error instanceof Error ? error.message : "Failed to enhance text" }
+  }
+}
+
+/**
+ * AI enhancement for workspace summary and description fields
+ * Similar to enhanceScopeText for spaces, but for workspaces
+ */
+export async function enhanceWorkspaceText(
+  text: string,
+  options?: {
+    field?: "summary" | "description"
+    workspaceName?: string
+    summary?: string
+  },
+): Promise<{ enhanced?: string; error?: string }> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  if (!env.OPENAI_API_KEY) {
+    return { error: "OpenAI API key not configured" }
+  }
+
+  if (!text || text.trim().length === 0) {
+    return { error: "Text is empty" }
+  }
+
+  const field = options?.field ?? "description"
+  const isSummary = field === "summary"
+
+  try {
+    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
+
+    // Build context for the prompt
+    let contextParts: string[] = []
+    if (isSummary && options?.workspaceName) {
+      contextParts.push(`Workspace name: ${options.workspaceName}`)
+    }
+    if (!isSummary && options?.summary) {
+      contextParts.push(`Summary: ${options.summary}`)
+    }
+
+    const contextText = contextParts.length > 0 ? `\n\nContext:\n${contextParts.join("\n")}` : ""
+
+    const systemPrompt = isSummary
+      ? `You are a helpful assistant that writes clear, concise summaries for policy workspaces.
+The summary you return should:
+- Be very brief and concise (1-2 sentences maximum)
+- Capture the core purpose and scope of the workspace
+- Stay faithful to the original meaning
+- Use neutral, professional language
+- Be suitable as a high-level overview that appears at the top of the workspace
+
+Return ONLY the summary text, nothing else.`
+      : `You are a helpful assistant that writes clear, comprehensive descriptions for policy workspaces.
+The description you return should:
+- Be longer than the summary but still concise (4-6 sentences)
+- Expand with specific details about the workspace's focus, documents, and objectives
+- Stay faithful to the original meaning
+- Use neutral, professional language
+- Provide enough detail for colleagues and AI assistants to understand the workspace's scope
+- Not be overly lengthy or verbose
+
+Return ONLY the description text, nothing else.`
+
+    const userPrompt = isSummary
+      ? `Write a concise summary for this workspace:${contextText}\n\nCurrent text:\n${text}`
+      : `Write a comprehensive but concise description for this workspace:${contextText}\n\nCurrent text:\n${text}`
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt,
+        },
+        {
+          role: "user",
+          content: userPrompt,
+        },
+      ],
+      max_tokens: isSummary ? 120 : 500,
+      temperature: 0.7,
+    })
+
+    const enhanced = response.choices[0]?.message?.content?.trim()
+    if (enhanced && enhanced.length > 0) {
+      return { enhanced }
+    }
+
+    return { error: "Failed to generate enhanced text" }
+  } catch (error) {
+    console.error("[enhanceWorkspaceText] Error:", error)
     return { error: error instanceof Error ? error.message : "Failed to enhance text" }
   }
 }

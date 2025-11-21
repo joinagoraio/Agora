@@ -54,6 +54,36 @@ export default async function ChatPage({
     redirect("/dashboard")
   }
 
+  // Get user's space role (if they're a space member)
+  const { data: spaceMembership } = await supabase
+    .from("space_members")
+    .select("role")
+    .eq("space_id", workspace.space_id)
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  // Check if user is a direct workspace member (not via space)
+  const { data: workspaceMembership } = await supabase
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  // Determine if user is workspace-only (invited directly to workspace, not via space)
+  const isWorkspaceOnlyMember = !spaceMembership && !!workspaceMembership
+  const userSpaceRole = spaceMembership?.role ?? null
+  const userWorkspaceRole = workspaceMembership?.role ?? null
+  
+  // Members can do everything except Settings
+  // Space members (owner/admin/member) OR workspace members (admin/member) can manage
+  const canManage = 
+    userSpaceRole === "owner" || 
+    userSpaceRole === "admin" || 
+    userSpaceRole === "member" ||
+    userWorkspaceRole === "admin" ||
+    userWorkspaceRole === "member"
+
   // Create workspace object with space attached for compatibility
   const workspaceWithSpace = {
     ...workspace,
@@ -89,12 +119,22 @@ export default async function ChatPage({
       <header className="bg-card">
         <div className="flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" asChild>
-              <Link href={`/spaces/${workspaceWithSpace.spaces.id}`}>
-                <ArrowLeft className="mr-2 h-3 w-3" />
-                <span className="text-xs font-normal">Back to {workspaceWithSpace.spaces.name}</span>
-              </Link>
-            </Button>
+            {!isWorkspaceOnlyMember && (
+              <Button variant="ghost" asChild>
+                <Link href={`/spaces/${workspaceWithSpace.spaces.id}`}>
+                  <ArrowLeft className="mr-2 h-3 w-3" />
+                  <span className="text-xs font-normal">Back to {workspaceWithSpace.spaces.name}</span>
+                </Link>
+              </Button>
+            )}
+            {isWorkspaceOnlyMember && (
+              <Button variant="ghost" asChild>
+                <Link href={`/workspaces/${workspaceId}`}>
+                  <ArrowLeft className="mr-2 h-3 w-3" />
+                  <span className="text-xs font-normal">Back to Workspace</span>
+                </Link>
+              </Button>
+            )}
             <div>
               <h1 className="text-2xl font-semibold">{workspace.name}</h1>
               <p className="text-sm text-muted-foreground">AI Assistant</p>
@@ -103,6 +143,16 @@ export default async function ChatPage({
           <div className="flex items-center gap-2">
             {currentConversationId && messages && messages.length > 0 && (
               <ShareConversationDialog conversationId={currentConversationId} />
+            )}
+            {userSpaceRole && (
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-primary">
+                {userSpaceRole}
+              </span>
+            )}
+            {isWorkspaceOnlyMember && workspaceMembership && (
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-primary">
+                {workspaceMembership.role}
+              </span>
             )}
             <UserMenu />
           </div>
@@ -150,6 +200,7 @@ export default async function ChatPage({
               workspaceId={workspaceId}
               conversationId={currentConversationId}
               initialMessages={formattedMessages}
+              canManage={canManage}
             />
           ) : (
             <div className="flex h-full items-center justify-center">

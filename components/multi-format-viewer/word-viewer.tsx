@@ -12,9 +12,9 @@ interface WordViewerProps {
   zoomOut: () => void
   fitMode: boolean
   rotation: number
-  containerRef: RefObject<HTMLDivElement>
-  contentRef: RefObject<HTMLDivElement>
-  innerContentRef: RefObject<HTMLDivElement>
+  containerRef: RefObject<HTMLDivElement | null>
+  contentRef: RefObject<HTMLDivElement | null>
+  innerContentRef: RefObject<HTMLDivElement | null>
   safeWordContent: string
 }
 

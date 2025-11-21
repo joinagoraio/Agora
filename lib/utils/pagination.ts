@@ -3,8 +3,8 @@
  */
 
 export interface PaginationParams {
-  page?: number
-  pageSize?: number
+  page: number
+  pageSize: number
   cursor?: string
 }
 
@@ -37,9 +37,10 @@ export interface CursorPaginationResult<T> {
 export function parsePaginationParams(
   searchParams: URLSearchParams | Record<string, string | undefined>,
 ): PaginationParams {
-  const page = searchParams.get?.("page") || (searchParams as any).page
-  const pageSize = searchParams.get?.("pageSize") || (searchParams as any).pageSize
-  const cursor = searchParams.get?.("cursor") || (searchParams as any).cursor
+  const isURLSearchParams = searchParams instanceof URLSearchParams
+  const page = isURLSearchParams ? searchParams.get("page") : (searchParams as any).page
+  const pageSize = isURLSearchParams ? searchParams.get("pageSize") : (searchParams as any).pageSize
+  const cursor = isURLSearchParams ? searchParams.get("cursor") : (searchParams as any).cursor
 
   const parsedPage = page ? parseInt(page, 10) : 1
   const parsedPageSize = pageSize ? parseInt(pageSize, 10) : 20

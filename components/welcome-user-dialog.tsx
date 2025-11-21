@@ -9,57 +9,50 @@ interface WelcomeUserDialogProps {
   userId: string
   userName?: string | null
   hasSpaces: boolean
+  hasWorkspaces: boolean
 }
 
 const DISMISS_KEY_PREFIX = "agora:welcome-modal-dismissed:"
-const VISITED_KEY_PREFIX = "agora:welcome-modal-visited:"
+const SESSION_SHOWN_KEY = "agora:welcome-modal-shown-this-session"
 
-export function WelcomeUserDialog({ userId, userName, hasSpaces }: WelcomeUserDialogProps) {
+export function WelcomeUserDialog({ userId, userName, hasSpaces, hasWorkspaces }: WelcomeUserDialogProps) {
   const [open, setOpen] = useState(false)
-  const [isReturning, setIsReturning] = useState<boolean>(false)
 
   const dismissStorageKey = useMemo(() => `${DISMISS_KEY_PREFIX}${userId}`, [userId])
-  const visitedStorageKey = useMemo(() => `${VISITED_KEY_PREFIX}${userId}`, [userId])
 
   useEffect(() => {
     if (typeof window === "undefined") {
       return
     }
 
-    const hasVisited = !!window.localStorage.getItem(visitedStorageKey)
     const hasDismissed = window.localStorage.getItem(dismissStorageKey)
+    const hasShownThisSession = window.sessionStorage.getItem(SESSION_SHOWN_KEY)
+    const hasAccess = hasSpaces || hasWorkspaces
 
-    setIsReturning(hasVisited)
-    const shouldShow = !hasDismissed || (!hasSpaces && hasVisited)
-    setOpen(shouldShow)
-  }, [dismissStorageKey, visitedStorageKey, hasSpaces])
+    // Only show if:
+    // 1. User has not permanently dismissed it
+    // 2. User has no access to any workspace or space
+    // 3. Not already shown in this session (signin)
+    const shouldShow = !hasDismissed && !hasAccess && !hasShownThisSession
+    
+    if (shouldShow) {
+      setOpen(true)
+      // Mark as shown for this session to prevent showing again on navigation
+      window.sessionStorage.setItem(SESSION_SHOWN_KEY, "1")
+    }
+  }, [dismissStorageKey, hasSpaces, hasWorkspaces])
 
   const handleClose = (shouldPersist = false) => {
-    if (typeof window !== "undefined") {
-      if (shouldPersist) {
-        window.localStorage.setItem(dismissStorageKey, "1")
-      }
-      window.localStorage.setItem(visitedStorageKey, "1")
-      setIsReturning(true)
+    if (typeof window !== "undefined" && shouldPersist) {
+      window.localStorage.setItem(dismissStorageKey, "1")
     }
     setOpen(false)
   }
 
   const greetingName = userName?.trim().length ? userName : undefined
-  const greetingPrefix = isReturning ? "Welcome back" : "Welcome"
-  const descriptionContent = isReturning ? (
-    hasSpaces ? (
-      <span className="inline-block whitespace-nowrap">
-        Great to see you again. Dive back into your spaces and pick up where you left off.
-      </span>
-    ) : (
-      <span className="inline-block whitespace-nowrap">
-        Great to see you again. Create your first space to get started with Agora.
-      </span>
-    )
-  ) : (
+  const descriptionContent = (
     <span className="inline-block whitespace-nowrap">
-      Thanks for joining Agora. Let’s get your first space set up and connected.
+      Thanks for joining Agora. Let's get your first space set up and connected.
     </span>
   )
 
@@ -69,8 +62,7 @@ export function WelcomeUserDialog({ userId, userName, hasSpaces }: WelcomeUserDi
         <DialogHeader className="items-center space-y-4">
           <Image src="/logo.svg" alt="Agora" width={160} height={32} priority className="h-auto w-32" />
           <DialogTitle className="w-full text-pretty text-2xl font-semibold tracking-tight text-center text-balance">
-            {greetingPrefix}
-            {greetingName ? `, ${greetingName}` : ""}!
+            Welcome{greetingName ? `, ${greetingName}` : ""}!
           </DialogTitle>
           <DialogDescription className="text-base text-muted-foreground text-balance">
             {descriptionContent}

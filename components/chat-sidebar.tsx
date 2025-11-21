@@ -43,9 +43,10 @@ interface ChatSidebarProps {
   workspaceName: string
   isOpen: boolean
   onClose: () => void
+  canManage?: boolean
 }
 
-export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: ChatSidebarProps) {
+export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canManage = true }: ChatSidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -830,6 +831,7 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose }: Cha
               conversationId={currentConversationId}
               initialMessages={formattedMessages}
               documentId={activeDocumentId}
+              canManage={canManage}
             />
           ) : (
             <div className="flex h-full items-center justify-center">

@@ -66,3 +66,4 @@ JOIN latest_doc ld ON d.metadata->>'sourceSpaceItemId' = ld.id::text
 WHERE d.metadata->>'origin' = 'space_scope'
 ORDER BY d.created_at DESC;
 
+

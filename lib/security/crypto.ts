@@ -10,10 +10,10 @@ const AUTH_TAG_LENGTH = 16
 
 export function encryptSecret(plaintext: string) {
   const iv = randomBytes(IV_LENGTH)
-  const cipher = createCipheriv(ALGORITHM, KEY, iv)
-  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()])
+  const cipher = createCipheriv(ALGORITHM, new Uint8Array(KEY), new Uint8Array(iv))
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8") as any, cipher.final() as any])
   const authTag = cipher.getAuthTag()
-  return Buffer.concat([iv, authTag, encrypted]).toString("base64")
+  return Buffer.concat([iv as any, authTag as any, encrypted as any]).toString("base64")
 }
 
 export function decryptSecret(payload?: string | null) {
@@ -31,9 +31,9 @@ export function decryptSecret(payload?: string | null) {
     const authTag = buffer.subarray(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH)
     const ciphertext = buffer.subarray(IV_LENGTH + AUTH_TAG_LENGTH)
 
-    const decipher = createDecipheriv(ALGORITHM, KEY, iv)
-    decipher.setAuthTag(authTag)
-    const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()])
+    const decipher = createDecipheriv(ALGORITHM, new Uint8Array(KEY), new Uint8Array(iv))
+    decipher.setAuthTag(authTag as any)
+    const decrypted = Buffer.concat([decipher.update(ciphertext as any) as any, decipher.final() as any])
     return decrypted.toString("utf8")
   } catch {
     return null

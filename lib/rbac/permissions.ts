@@ -3,7 +3,7 @@ type LegacyRole = "owner" | "admin" | "member" | "viewer"
 type NewRole = "tenant_admin" | "org_manager" | "project_owner" | "analyst" | "contributor" | "viewer" | "external"
 export type Role = LegacyRole | NewRole
 
-type Permission =
+export type Permission =
   | "space:delete"
   | "space:update"
   | "space:invite"
@@ -99,6 +99,13 @@ const rolePermissions: Record<NewRole, Permission[]> = {
     "conversation:share",
   ],
   contributor: [
+    "workspace:create",
+    "workspace:update",
+    "workspace:delete",
+    "workspace:share",
+    "source:create",
+    "source:update",
+    "source:delete",
     "workspace_item:create",
     "workspace_item:update",
     "evidence:save",
@@ -157,4 +164,9 @@ export function canShareWorkspace(role: Role): boolean {
 
 export function canViewExternal(role: Role): boolean {
   return hasPermission(role, "external:view")
+}
+
+export function canAccessSettings(role: Role): boolean {
+  // Only owner and admin can access Settings
+  return role === "owner" || role === "admin" || role === "tenant_admin" || role === "org_manager"
 }

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { getRelevantContext } from "@/lib/rag/search"
 import { buildWorkspaceContext } from "@/lib/chat/context"
 import { analyzePromptInjection } from "@/lib/chat/prompt-guard"
@@ -91,6 +92,7 @@ export async function POST(req: Request) {
 
   try {
     const supabase = await createClient()
+    const adminSupabase = createAdminClient() // Admin client for message writes (bypasses RLS)
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -239,9 +241,9 @@ export async function POST(req: Request) {
     // Get the last user message (already extracted above for validation)
     // lastMessage is already defined above
 
-    // Save user message to database
+    // Save user message to database (using admin client to bypass RLS)
     if (lastMessage.role === "user") {
-      await supabase.from("messages").insert({
+      await adminSupabase.from("messages").insert({
         conversation_id: conversationId,
         role: "user",
         content: userQuery,
@@ -250,7 +252,7 @@ export async function POST(req: Request) {
 
     // Pre-create assistant message placeholder to ensure persistence even if streaming fails
     let assistantMessageId: string | null = null
-    const { data: placeholderMessage, error: placeholderError } = await supabase
+    const { data: placeholderMessage, error: placeholderError } = await adminSupabase
       .from("messages")
       .insert({
         conversation_id: conversationId,
@@ -469,10 +471,10 @@ Citation formatting rules:
             }
           }
 
-          // Save assistant message to database after streaming completes
+          // Save assistant message to database after streaming completes (using admin client to bypass RLS)
           try {
             if (assistantMessageId) {
-              await supabase
+              const { error: updateError } = await adminSupabase
                 .from("messages")
                 .update({
                   content: fullResponse,
@@ -480,14 +482,24 @@ Citation formatting rules:
                   thinking_duration: thinkingDuration,
                 })
                 .eq("id", assistantMessageId)
+              
+              if (updateError) {
+                console.error("[Chat API] Failed to update assistant message:", updateError)
+                throw updateError
+              }
             } else {
-              await supabase.from("messages").insert({
+              const { error: insertError } = await adminSupabase.from("messages").insert({
                 conversation_id: conversationId,
                 role: "assistant",
                 content: fullResponse,
                 sources: sources,
                 thinking_duration: thinkingDuration,
               })
+              
+              if (insertError) {
+                console.error("[Chat API] Failed to insert assistant message:", insertError)
+                throw insertError
+              }
             }
 
             // Generate conversation title if it's still "New Conversation"

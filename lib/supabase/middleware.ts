@@ -39,6 +39,7 @@ export async function updateSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith("/auth") &&
     !request.nextUrl.pathname.startsWith("/shared") &&
     !request.nextUrl.pathname.startsWith("/invite") &&
+    !request.nextUrl.pathname.startsWith("/workspace-invite") &&
     !request.nextUrl.pathname.startsWith("/api") &&
     request.nextUrl.pathname !== "/"
   ) {

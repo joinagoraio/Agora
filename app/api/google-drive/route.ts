@@ -62,7 +62,7 @@ async function refreshAccessToken(
 
     if (refreshError) {
       logger.error("Failed to refresh Supabase session:", refreshError)
-      return null
+      return { accessToken: null, refreshToken: null }
     }
 
     if (session?.provider_token) {

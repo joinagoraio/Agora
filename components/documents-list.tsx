@@ -46,9 +46,10 @@ interface DocumentsListProps {
     type: string
     config?: Record<string, any>
   }>
+  canManage?: boolean
 }
 
-export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCount = 0, sources = [] }: DocumentsListProps) {
+export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCount = 0, sources = [], canManage = true }: DocumentsListProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [documentToDelete, setDocumentToDelete] = useState<any | null>(null)
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
@@ -75,10 +76,22 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
     [workspaceId],
   )
 
+  // Helper to check if document is inherited
+  const isInheritedDocument = useCallback((doc: any) => {
+    const metadata = doc?.metadata
+    if (!metadata || typeof metadata !== "object") {
+      return false
+    }
+    const originValue = (metadata as Record<string, any>).origin
+    return originValue === "space_scope"
+  }, [])
+
   // Sync local state with server-side props when they change (e.g., after upload/refresh)
   useEffect(() => {
-    setDocuments(initialDocuments)
-  }, [initialDocuments])
+    // Filter out inherited documents - they're shown in the "Inherited" tab
+    const nonInheritedDocs = initialDocuments.filter((doc: any) => !isInheritedDocument(doc))
+    setDocuments(nonInheritedDocs)
+  }, [initialDocuments, isInheritedDocument])
 
   useEffect(() => {
     setArchivedCount(initialArchivedCount)
@@ -94,7 +107,9 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
       ])
       
       if (documentsResult.data) {
-        setDocuments(documentsResult.data)
+        // Filter out inherited documents - they're shown in the "Inherited" tab, not "Sources"
+        const nonInheritedDocs = documentsResult.data.filter((doc: any) => !isInheritedDocument(doc))
+        setDocuments(nonInheritedDocs)
       }
       
       // Always update archived count from the dedicated query
@@ -105,7 +120,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
     } finally {
       setIsLoadingArchived(false)
     }
-  }, [workspaceId])
+  }, [workspaceId, isInheritedDocument])
 
   // Listen for document upload events and refresh the list
   useEffect(() => {
@@ -252,7 +267,8 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
             </Button>
           )}
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        {canManage && (
+          <div className="flex items-center gap-2 flex-shrink-0">
             {availableSources.length > 0 && (
               <ManageSourcesDialog
                 workspaceId={workspaceId}
@@ -304,6 +320,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
               }
             />
           </div>
+        )}
         </div>
 
         <Card className="shadow">
@@ -311,42 +328,44 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
             <FileText className="mb-4 h-12 w-12 text-muted-foreground" />
             <h3 className="mb-2 text-lg font-semibold">No documents yet</h3>
             <p className="text-center text-sm text-muted-foreground">
-              Upload documents or connect external sources to get started
+              {canManage ? "Upload documents or connect external sources to get started" : "No documents have been uploaded yet"}
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
-              {availableSources.length === 0 ? (
-                <CreateSourceDialog
+            {canManage && (
+              <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+                {availableSources.length === 0 ? (
+                  <CreateSourceDialog
+                    workspaceId={workspaceId}
+                    existingSources={availableSources}
+                    trigger={
+                      <Button variant="outline">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Source
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <AddFromSourceDialog
+                    workspaceId={workspaceId}
+                    sources={sources}
+                    trigger={
+                      <Button variant="outline">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add from Source
+                      </Button>
+                    }
+                  />
+                )}
+                <UploadDocumentDialog
                   workspaceId={workspaceId}
-                  existingSources={availableSources}
                   trigger={
                     <Button variant="outline">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Source
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload Documents
                     </Button>
                   }
                 />
-              ) : (
-                <AddFromSourceDialog
-                  workspaceId={workspaceId}
-                  sources={sources}
-                  trigger={
-                    <Button variant="outline">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add from Source
-                    </Button>
-                  }
-                />
-              )}
-              <UploadDocumentDialog
-                workspaceId={workspaceId}
-                trigger={
-                  <Button variant="outline">
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload Documents
-                  </Button>
-                }
-              />
-            </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -379,58 +398,60 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
             </Button>
           )}
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {availableSources.length > 0 && (
-            <ManageSourcesDialog
+        {canManage && (
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {availableSources.length > 0 && (
+              <ManageSourcesDialog
+                workspaceId={workspaceId}
+                initialSources={sources as Array<{
+                  id: string
+                  name: string
+                  type: string
+                  status: string
+                  last_sync_at: string | null
+                }>}
+                trigger={
+                  <Button variant="outline" size="sm">
+                    <Plug className="mr-2 h-4 w-4" />
+                    Manage Sources
+                  </Button>
+                }
+              />
+            )}
+            {availableSources.length === 0 ? (
+              <CreateSourceDialog
+                workspaceId={workspaceId}
+                existingSources={availableSources}
+                trigger={
+                  <Button size="sm">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Source
+                  </Button>
+                }
+              />
+            ) : (
+              <AddFromSourceDialog
+                workspaceId={workspaceId}
+                sources={sources}
+                trigger={
+                  <Button size="sm">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add from Source
+                  </Button>
+                }
+              />
+            )}
+            <UploadDocumentDialog
               workspaceId={workspaceId}
-              initialSources={sources as Array<{
-                id: string
-                name: string
-                type: string
-                status: string
-                last_sync_at: string | null
-              }>}
-              trigger={
-                <Button variant="outline" size="sm">
-                  <Plug className="mr-2 h-4 w-4" />
-                  Manage Sources
-                </Button>
-              }
-            />
-          )}
-          {availableSources.length === 0 ? (
-            <CreateSourceDialog
-              workspaceId={workspaceId}
-              existingSources={availableSources}
               trigger={
                 <Button size="sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Source
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Documents
                 </Button>
               }
             />
-          ) : (
-            <AddFromSourceDialog
-              workspaceId={workspaceId}
-              sources={sources}
-              trigger={
-                <Button size="sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add from Source
-                </Button>
-              }
-            />
-          )}
-          <UploadDocumentDialog
-            workspaceId={workspaceId}
-            trigger={
-              <Button size="sm">
-                <Upload className="mr-2 h-4 w-4" />
-                Upload Documents
-              </Button>
-            }
-          />
-        </div>
+          </div>
+        )}
       </div>
       
       {showArchived && archivedCount > 0 && (
@@ -493,55 +514,57 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                         </Link>
                       </Button>
                     )}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {doc.url && (
-                          <DropdownMenuItem asChild>
-                            <a
-                              href={doc.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                    {canManage && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {doc.url && (
+                            <DropdownMenuItem asChild>
+                              <a
+                                href={doc.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="cursor-pointer"
+                              >
+                                <Download className="mr-2 h-4 w-4" />
+                                Download
+                              </a>
+                            </DropdownMenuItem>
+                          )}
+                          {doc.status === "archived" ? (
+                            <DropdownMenuItem
+                              onClick={() => handleArchive(doc.id, false)}
                               className="cursor-pointer"
                             >
-                              <Download className="mr-2 h-4 w-4" />
-                              Download
-                            </a>
-                          </DropdownMenuItem>
-                        )}
-                        {doc.status === "archived" ? (
+                              <ArchiveRestore className="mr-2 h-4 w-4" />
+                              Unarchive
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={() => handleArchive(doc.id, true)}
+                              className="cursor-pointer"
+                            >
+                              <Archive className="mr-2 h-4 w-4" />
+                              Archive
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
-                            onClick={() => handleArchive(doc.id, false)}
-                            className="cursor-pointer"
+                            onClick={() => {
+                              setDocumentToDelete(doc)
+                              setNeedsConfirmation(false)
+                            }}
+                            className="hover:!bg-destructive/10 hover:!text-destructive focus:!bg-destructive/10 focus:!text-destructive [&:hover_svg]:!text-destructive [&:focus_svg]:!text-destructive [&:hover_span]:!text-destructive [&:focus_span]:!text-destructive"
                           >
-                            <ArchiveRestore className="mr-2 h-4 w-4" />
-                            Unarchive
+                            <Trash2 className="mr-2 h-3.5 w-3.5" />
+                            <span>Delete</span>
                           </DropdownMenuItem>
-                        ) : (
-                          <DropdownMenuItem
-                            onClick={() => handleArchive(doc.id, true)}
-                            className="cursor-pointer"
-                          >
-                            <Archive className="mr-2 h-4 w-4" />
-                            Archive
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setDocumentToDelete(doc)
-                            setNeedsConfirmation(false)
-                          }}
-                          className="hover:!bg-destructive/10 hover:!text-destructive focus:!bg-destructive/10 focus:!text-destructive [&:hover_svg]:!text-destructive [&:focus_svg]:!text-destructive [&:hover_span]:!text-destructive [&:focus_span]:!text-destructive"
-                        >
-                          <Trash2 className="mr-2 h-3.5 w-3.5" />
-                          <span>Delete</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                 </div>
               </CardHeader>

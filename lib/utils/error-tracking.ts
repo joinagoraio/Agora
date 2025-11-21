@@ -66,7 +66,8 @@ class SentryErrorTracking implements ErrorTrackingService {
 
   captureMessage(message: string, level: "info" | "warning" | "error" = "info", context?: Record<string, any>): void {
     if (!this.sentry) {
-      logger[level]("[Error Tracking] Message (Sentry not configured)", context || {}, { message })
+      const logLevel = level === "warning" ? "warn" : level
+      logger[logLevel]("[Error Tracking] Message (Sentry not configured)", { ...context, message })
       return
     }
 

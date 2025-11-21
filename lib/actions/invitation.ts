@@ -45,10 +45,20 @@ export async function inviteUserToSpace(
   const inviteLink = `${appUrl}/invite/${token}`
   const spaceName = await getSpaceName(supabase, spaceId)
 
+  // Get inviter's name from profile
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, email")
+    .eq("id", user.id)
+    .single()
+  
+  const inviterName = profile?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || null
+
   const emailResult = await sendSpaceInvitationEmail({
     to: email,
     inviteLink,
     spaceName,
+    invitedByName: inviterName,
     invitedByEmail: user.email,
   })
 
@@ -213,10 +223,20 @@ export async function resendInvitation(invitationId: string) {
   const inviteLink = `${appUrl}/invite/${token}`
   const spaceName = await getSpaceName(supabase, invitation.space_id)
 
+  // Get inviter's name from profile
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, email")
+    .eq("id", user.id)
+    .single()
+  
+  const inviterName = profile?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || null
+
   const emailResult = await sendSpaceInvitationEmail({
     to: invitation.email,
     inviteLink,
     spaceName,
+    invitedByName: inviterName,
     invitedByEmail: user.email,
   })
 

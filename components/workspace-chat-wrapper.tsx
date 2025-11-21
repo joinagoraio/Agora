@@ -11,6 +11,7 @@ interface WorkspaceChatWrapperProps {
   workspaceName: string
   children: React.ReactNode
   defaultOpen?: boolean
+  canManage?: boolean
 }
 
 const ChatContext = createContext<{
@@ -38,6 +39,7 @@ export function WorkspaceChatWrapper({
   workspaceName,
   children,
   defaultOpen = false,
+  canManage = true,
 }: WorkspaceChatWrapperProps) {
   const searchParams = useSearchParams()
   const [isChatOpen, setIsChatOpen] = useState(defaultOpen)
@@ -102,6 +104,7 @@ export function WorkspaceChatWrapper({
           workspaceName={workspaceName}
           isOpen={isChatOpen}
           onClose={handleClose}
+          canManage={canManage}
         />
       </div>
     </ChatContext.Provider>

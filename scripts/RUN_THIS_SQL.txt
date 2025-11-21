@@ -1,0 +1,30 @@
+================================================================================
+  IMPORTANT: Run this SQL script in Supabase SQL Editor
+================================================================================
+
+File to run: scripts/fix_workspace_invitations_complete.sql
+
+Steps:
+1. Open Supabase Dashboard
+2. Go to SQL Editor
+3. Create a new query
+4. Copy the ENTIRE contents of: scripts/fix_workspace_invitations_complete.sql
+5. Paste into SQL Editor
+6. Click "Run" button
+
+DO NOT run the WORKSPACE_INVITATION_COMPLETE_FIX.md file - that's documentation!
+
+After running the script, you should see:
+✓ Added accepted_at column (or already exists)
+✓ Granted EXECUTE permissions
+✓ Granted table permissions
+✓ Dropped all old policies
+✓ Created 4 new workspace_invitations policies
+✓ Created public workspace viewing policy
+✓ Created workspace_members viewing policy
+✓ Verification passed
+
+Then test the invitation flow!
+
+================================================================================
+

@@ -5,6 +5,7 @@ import {
   decryptGoogleTokenBundle,
   encryptGoogleTokenBundle,
   GOOGLE_TOKEN_METADATA_KEY,
+  type GoogleTokenBundle,
 } from "@/lib/security/googleTokens"
 
 export async function getGoogleTokens() {

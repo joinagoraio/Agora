@@ -114,3 +114,4 @@ If the problem persists:
 3. **Check RLS policies** are not too restrictive
 4. **Verify the space has workspaces** linked to it
 
+

@@ -136,8 +136,11 @@ export async function saveEvidenceToWorkspace(
       classification: "internal", // Evidence is internal by default
       payload,
       created_by: user.id,
+      include_in_ai_context: true, // Include evidence in AI context by default when saved from chat
     })
-    .select()
+    .select(
+      "*, created_by:profiles(id, email, full_name), source_space_item:space_items(id, item_type, classification, payload, source_url, source_doc_id, source_page)",
+    )
     .single()
 
   if (error) {

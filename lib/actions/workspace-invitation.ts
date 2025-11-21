@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto"
 import { createClient } from "@/lib/supabase/server"
 import { env } from "@/lib/env"
 import { sendWorkspaceInvitationEmail } from "@/lib/services/email"
+import { revalidatePath } from "next/cache"
 
 type WorkspaceRole = "admin" | "member" | "viewer"
 
@@ -66,11 +67,21 @@ export async function inviteUserToWorkspace(
   const inviteLink = `${appUrl}/workspace-invite/${token}`
   const spaceName = null
 
+  // Get inviter's name from profile
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, email")
+    .eq("id", user.id)
+    .single()
+  
+  const inviterName = profile?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || null
+
   const emailResult = await sendWorkspaceInvitationEmail({
     to: email,
     inviteLink,
     workspaceName: workspace.name,
     spaceName,
+    invitedByName: inviterName,
     invitedByEmail: user.email,
   })
 
@@ -130,11 +141,21 @@ export async function resendWorkspaceInvitation(invitationId: string) {
   const spaceName = null
   const workspaceName = invitation.workspaces?.name ?? "your workspace"
 
+  // Get inviter's name from profile
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, email")
+    .eq("id", user.id)
+    .single()
+  
+  const inviterName = profile?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || null
+
   const emailResult = await sendWorkspaceInvitationEmail({
     to: invitation.email,
     inviteLink,
     workspaceName,
     spaceName,
+    invitedByName: inviterName,
     invitedByEmail: user.email,
   })
 
@@ -229,10 +250,25 @@ export async function acceptWorkspaceInvitation(token: string) {
     )
 
   if (memberError) {
+    console.error("[acceptWorkspaceInvitation] Error adding member:", memberError)
     return { error: memberError.message }
   }
 
-  await supabase.from("workspace_invitations").update({ status: "accepted" }).eq("id", invitation.id)
+  // Update invitation status to accepted
+  const { error: updateError } = await supabase
+    .from("workspace_invitations")
+    .update({ status: "accepted", accepted_at: new Date().toISOString() })
+    .eq("id", invitation.id)
+
+  if (updateError) {
+    console.error("[acceptWorkspaceInvitation] Error updating invitation status:", updateError)
+    // Don't fail here - user is already added to workspace
+  }
+
+  // Revalidate workspace settings page to show new member
+  revalidatePath(`/workspaces/${invitation.workspace_id}/settings`)
+  revalidatePath(`/workspaces/${invitation.workspace_id}`)
+  revalidatePath("/dashboard")
 
   return { success: true, workspaceId: invitation.workspace_id }
 }
