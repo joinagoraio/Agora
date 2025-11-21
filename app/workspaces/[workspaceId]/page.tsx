@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/server"
 import { getSourcesByWorkspace } from "@/lib/actions/source"
-import { getWorkspaceDocuments } from "@/lib/actions/document"
+import { getWorkspaceDocuments, getArchivedDocumentCount } from "@/lib/actions/document"
 import {
   DocumentsList,
   MyDocumentsList,
@@ -97,9 +97,13 @@ export default async function WorkspacePage({
   // Filter out workspace_generated sources since they're for internal workspace documents, not external sources
   const availableSources = sourcesArray.filter((source) => source.type !== "direct_upload" && source.type !== "workspace_generated")
 
-  // Get documents
-  const { data: documents } = await getWorkspaceDocuments(workspaceId)
-  const documentsList = documents || []
+  // Get documents and archived count
+  const [documentsResult, archivedCountResult] = await Promise.all([
+    getWorkspaceDocuments(workspaceId),
+    getArchivedDocumentCount(workspaceId)
+  ])
+  const documentsList = documentsResult.data || []
+  const archivedDocCount = archivedCountResult.count || 0
   const getDocumentOrigin = (doc: any): string | null => {
     const metadata = doc?.metadata
     if (!metadata || typeof metadata !== "object") {
@@ -210,6 +214,7 @@ export default async function WorkspacePage({
   const combinedInheritedItems = [...inheritedDocumentsNormalized, ...inheritedNonDocumentItems].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
   )
+  // Fetch notes - handle gracefully if query fails due to RLS or other issues
   const { data: notesData, error: notesError } = await supabase
     .from("workspace_notes")
     .select(
@@ -220,6 +225,8 @@ export default async function WorkspacePage({
 
   if (notesError) {
     console.error("[workspace-notes] Failed to load notes:", notesError)
+    // Notes failure is less critical - log and continue with empty notes
+    console.warn("[workspace-notes] Continuing with empty notes due to load failure")
   }
 
   const workspaceNotes: WorkspaceNote[] =
@@ -242,6 +249,7 @@ export default async function WorkspacePage({
           : null,
       }
     }) ?? []
+  // Fetch comments - handle gracefully if query fails due to RLS or other issues
   const { data: commentsData, error: commentsError } = await supabase
     .from("workspace_comments")
     .select("id, workspace_id, workspace_item_id, content, created_at, created_by, author:profiles(id, full_name, email)")
@@ -250,6 +258,34 @@ export default async function WorkspacePage({
 
   if (commentsError) {
     console.error("[workspace-comments] Failed to load comments:", commentsError)
+    // Check if this is due to workspace/space being deleted or access being revoked
+    const { data: workspaceCheck } = await supabase
+      .from("workspaces")
+      .select("id, space_id")
+      .eq("id", workspaceId)
+      .single()
+    
+    if (!workspaceCheck) {
+      // Workspace no longer exists - redirect to dashboard
+      console.error("[workspace-comments] Workspace no longer exists, redirecting to dashboard")
+      redirect("/dashboard")
+    }
+
+    // Verify space still exists and user has access
+    const { data: spaceCheck } = await supabase
+      .from("spaces")
+      .select("id")
+      .eq("id", workspaceCheck.space_id)
+      .single()
+    
+    if (!spaceCheck) {
+      // Parent space was deleted - redirect to dashboard
+      console.error("[workspace-comments] Parent space was deleted, redirecting to dashboard")
+      redirect("/dashboard")
+    }
+
+    // If we get here, comments just failed to load but workspace exists - continue with empty comments
+    console.warn("[workspace-comments] Comments failed to load but workspace exists - continuing with empty comments")
   }
 
   const workspaceCommentsByItem =
@@ -384,7 +420,12 @@ export default async function WorkspacePage({
                       View and manage all files and connections synced into this workspace.
                     </p>
                   </div>
-                  <DocumentsList workspaceId={workspaceId} initialDocuments={uploadedDocuments} sources={sourcesArray} />
+                  <DocumentsList 
+                    workspaceId={workspaceId} 
+                    initialDocuments={uploadedDocuments} 
+                    initialArchivedCount={archivedDocCount}
+                    sources={sourcesArray} 
+                  />
                 </TabsContent>
 
                 <TabsContent value="inherited" className="space-y-5">

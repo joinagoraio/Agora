@@ -1,11 +1,12 @@
 "use client"
 
 import type React from "react"
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,8 +23,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { FileText, ExternalLink, Search, MoreVertical, Archive, Trash2, ArchiveRestore, Plus, Upload, Download, Plug } from "lucide-react"
-import { deleteDocument, archiveDocument } from "@/lib/actions/document"
+import { FileText, ExternalLink, Search, MoreVertical, Archive, Trash2, ArchiveRestore, Plus, Upload, Download, Plug, ArchiveX, Info } from "lucide-react"
+import { deleteDocument, archiveDocument, getWorkspaceDocuments, getArchivedDocumentCount } from "@/lib/actions/document"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { formatSourceType } from "@/lib/utils"
@@ -38,6 +39,7 @@ import { toast } from "sonner"
 interface DocumentsListProps {
   workspaceId: string
   initialDocuments: any[]
+  initialArchivedCount?: number
   sources?: Array<{
     id: string
     name: string
@@ -46,11 +48,15 @@ interface DocumentsListProps {
   }>
 }
 
-export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: DocumentsListProps) {
+export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCount = 0, sources = [] }: DocumentsListProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [documentToDelete, setDocumentToDelete] = useState<any | null>(null)
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
   const [archivingDocId, setArchivingDocId] = useState<string | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
+  const [documents, setDocuments] = useState(initialDocuments)
+  const [archivedCount, setArchivedCount] = useState(initialArchivedCount)
+  const [isLoadingArchived, setIsLoadingArchived] = useState(false)
   const router = useRouter()
 
   const emitWorkspaceContextUpdate = useCallback(
@@ -68,6 +74,54 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
     },
     [workspaceId],
   )
+
+  // Sync local state with server-side props when they change (e.g., after upload/refresh)
+  useEffect(() => {
+    setDocuments(initialDocuments)
+  }, [initialDocuments])
+
+  useEffect(() => {
+    setArchivedCount(initialArchivedCount)
+  }, [initialArchivedCount])
+
+  // Function to fetch documents from server
+  const fetchDocuments = useCallback(async (includeArchived: boolean) => {
+    setIsLoadingArchived(true)
+    try {
+      const [documentsResult, archivedCountResult] = await Promise.all([
+        getWorkspaceDocuments(workspaceId, includeArchived),
+        getArchivedDocumentCount(workspaceId)
+      ])
+      
+      if (documentsResult.data) {
+        setDocuments(documentsResult.data)
+      }
+      
+      // Always update archived count from the dedicated query
+      setArchivedCount(archivedCountResult.count || 0)
+    } catch (error) {
+      console.error("Failed to fetch documents:", error)
+      toast.error("Failed to load documents")
+    } finally {
+      setIsLoadingArchived(false)
+    }
+  }, [workspaceId])
+
+  // Listen for document upload events and refresh the list
+  useEffect(() => {
+    const handleDocumentUploaded = (event: Event) => {
+      const customEvent = event as CustomEvent
+      if (customEvent.detail?.workspaceId === workspaceId) {
+        // Refresh documents from server
+        fetchDocuments(showArchived)
+      }
+    }
+
+    window.addEventListener("documentUploaded", handleDocumentUploaded)
+    return () => {
+      window.removeEventListener("documentUploaded", handleDocumentUploaded)
+    }
+  }, [workspaceId, showArchived, fetchDocuments])
 
   // Filter out direct_upload sources to get available sources for adding documents
   // Filter out workspace_generated sources since they're for internal workspace documents, not external sources
@@ -133,13 +187,20 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
         documentId,
       })
       toast.success(`Document ${archive ? "archived" : "restored"}`)
-      router.refresh()
+      // Refresh documents list to reflect changes
+      await fetchDocuments(showArchived)
     }
+  }
+
+  const toggleShowArchived = async () => {
+    const newShowArchived = !showArchived
+    setShowArchived(newShowArchived)
+    await fetchDocuments(newShowArchived)
   }
 
   // Filter documents client-side as user types - works from first character
   const filteredDocuments = useMemo(() => {
-    const docs = initialDocuments || []
+    const docs = documents || []
     
     // If no search query, show all documents
     if (!searchQuery || searchQuery.trim() === "") {
@@ -157,14 +218,17 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
       
       return title.includes(query) || content.includes(query) || sourceName.includes(query)
     })
-  }, [searchQuery, initialDocuments])
+  }, [searchQuery, documents])
 
   const displayDocuments = filteredDocuments
+  
+  const activeDocuments = documents.filter((doc: any) => doc.status !== "archived")
 
-  if (!initialDocuments || initialDocuments.length === 0) {
+  if (!documents || documents.length === 0 || (!showArchived && activeDocuments.length === 0)) {
     return (
       <div className="space-y-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 flex-1">
           <div className="relative max-w-md flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -175,7 +239,20 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
               disabled
             />
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
+          {archivedCount > 0 && (
+            <Button
+              variant={showArchived ? "default" : "outline"}
+              size="sm"
+              onClick={toggleShowArchived}
+              disabled={isLoadingArchived}
+              className="whitespace-nowrap"
+            >
+              <Archive className="mr-2 h-4 w-4" />
+              {showArchived ? `Hide Archived (${archivedCount})` : `Show Archived (${archivedCount})`}
+            </Button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
             {availableSources.length > 0 && (
               <ManageSourcesDialog
                 workspaceId={workspaceId}
@@ -279,14 +356,28 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative max-w-md flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search sources..."
-            className="pl-10 w-full"
-          />
+        <div className="flex items-center gap-2 flex-1">
+          <div className="relative max-w-md flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search sources..."
+              className="pl-10 w-full"
+            />
+          </div>
+          {archivedCount > 0 && (
+            <Button
+              variant={showArchived ? "default" : "outline"}
+              size="sm"
+              onClick={toggleShowArchived}
+              disabled={isLoadingArchived}
+              className="whitespace-nowrap"
+            >
+              <Archive className="mr-2 h-4 w-4" />
+              {showArchived ? `Hide Archived (${archivedCount})` : `Show Archived (${archivedCount})`}
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {availableSources.length > 0 && (
@@ -341,14 +432,24 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
           />
         </div>
       </div>
+      
+      {showArchived && archivedCount > 0 && (
+        <Alert variant="info">
+          <Info />
+          <AlertDescription>
+            Viewing archived documents. These documents are hidden from AI search and won't appear in chat context.
+          </AlertDescription>
+        </Alert>
+      )}
  
       {displayDocuments.length > 0 ? (
         <div className="space-y-4">
           <div className="grid gap-4">
             {displayDocuments.map((doc: any) => {
                   const fileExtension = getDocumentFileExtension(doc)
+                  const isArchived = doc.status === "archived"
                   return (
-                  <Card key={doc.id} className="shadow hover:shadow-md transition-shadow">
+                  <Card key={doc.id} className={`shadow hover:shadow-md transition-shadow ${isArchived ? "opacity-70 bg-muted/30" : ""}`}>
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -362,9 +463,16 @@ export function DocumentsList({ workspaceId, initialDocuments, sources = [] }: D
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <CardTitle className="text-base truncate">{doc.title}</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-base truncate">{doc.title}</CardTitle>
+                        {isArchived && (
+                          <Badge variant="secondary" className="text-xs">
+                            <Archive className="mr-1 h-3 w-3" />
+                            Archived
+                          </Badge>
+                        )}
+                      </div>
                       <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
-                        {doc.status === "archived" && <span>Archived</span>}
                         <span>{formatSourceType(doc.sources?.type)}</span>
                         {doc.created_at && (
                           <>

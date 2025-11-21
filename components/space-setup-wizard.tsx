@@ -259,6 +259,14 @@ export function SpaceSetupWizard({
       } else {
         nextValue = compactDigits
       }
+    } else {
+      const [start, end = ""] = sanitized.split(/[–-]/)
+      const trimmedEnd = end.replace(/\s/g, "")
+      if (trimmedEnd.length > 4) {
+        const clipped = trimmedEnd.slice(0, 4)
+        const normalizedStart = start.trim()
+        nextValue = `${normalizedStart} – ${clipped}`
+      }
     }
 
     setTimeframe(nextValue)

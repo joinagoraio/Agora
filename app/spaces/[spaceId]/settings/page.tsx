@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export default async function SpaceSettingsPage({
   params,
 }: {
@@ -42,22 +45,25 @@ export default async function SpaceSettingsPage({
   }
 
   // Get members
-  const { data: members } = await supabase
+  const { data: members, error: membersError } = await supabase
     .from("space_members")
     .select("*, profiles(*)")
     .eq("space_id", spaceId)
     .order("created_at", { ascending: false })
 
-  // Get invitations
+  if (membersError) {
+    console.error('[SpaceSettings] Error fetching members:', membersError)
+  } else {
+    console.log('[SpaceSettings] Fetched members:', members?.length, 'members')
+  }
+
+  // Get pending invitations only (those not yet accepted)
   const { data: invitations } = await supabase
     .from("invitations")
     .select("*")
     .eq("space_id", spaceId)
+    .is("accepted_at", null)  // Only get invitations that haven't been accepted
     .order("created_at", { ascending: false })
-
-  const pendingInvitations = (invitations ?? []).filter(
-    (invite) => !Object.prototype.hasOwnProperty.call(invite, "status") || invite.status === "pending",
-  )
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -83,7 +89,7 @@ export default async function SpaceSettingsPage({
           <SpaceSettings
             space={space}
             members={members || []}
-            invitations={pendingInvitations}
+            invitations={invitations || []}
             currentUserId={user.id}
           />
         </div>

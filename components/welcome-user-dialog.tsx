@@ -68,7 +68,7 @@ export function WelcomeUserDialog({ userId, userName, hasSpaces }: WelcomeUserDi
       <DialogContent className="sm:max-w-xl border-0 bg-white text-center shadow-2xl">
         <DialogHeader className="items-center space-y-4">
           <Image src="/logo.svg" alt="Agora" width={160} height={32} priority className="h-auto w-32" />
-          <DialogTitle className="w-full text-pretty text-3xl font-semibold tracking-tight text-center text-balance">
+          <DialogTitle className="w-full text-pretty text-2xl font-semibold tracking-tight text-center text-balance">
             {greetingPrefix}
             {greetingName ? `, ${greetingName}` : ""}!
           </DialogTitle>

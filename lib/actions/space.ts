@@ -469,10 +469,27 @@ export async function deleteSpace(spaceId: string) {
     return { error: "Unauthorized" }
   }
 
+  // First verify the user is the owner of the space
+  const { data: space, error: spaceError } = await supabase
+    .from("spaces")
+    .select("owner_id")
+    .eq("id", spaceId)
+    .single()
+
+  if (spaceError || !space) {
+    return { error: "Space not found or you don't have access to it" }
+  }
+
+  if (space.owner_id !== user.id) {
+    return { error: "Only the space owner can delete this space" }
+  }
+
+  // Proceed with deletion - cascade will handle workspaces and related data
   const { error } = await supabase.from("spaces").delete().eq("id", spaceId)
 
   if (error) {
-    return { error: error.message }
+    console.error("[deleteSpace] Error deleting space:", error)
+    return { error: error.message || "Failed to delete space. Please try again." }
   }
 
   revalidatePath("/dashboard")

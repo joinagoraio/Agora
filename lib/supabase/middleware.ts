@@ -33,11 +33,12 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Redirect unauthenticated users to login (but not for API routes)
+  // Redirect unauthenticated users to login (but not for API routes, auth pages, shared links, or invitations)
   if (
     !user &&
     !request.nextUrl.pathname.startsWith("/auth") &&
     !request.nextUrl.pathname.startsWith("/shared") &&
+    !request.nextUrl.pathname.startsWith("/invite") &&
     !request.nextUrl.pathname.startsWith("/api") &&
     request.nextUrl.pathname !== "/"
   ) {

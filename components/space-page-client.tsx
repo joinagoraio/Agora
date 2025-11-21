@@ -233,6 +233,52 @@ export function SpacePageClient({
     return { label: trimmed }
   }
 
+  const handleTimeframeDraftChange = (value: string, inputType?: string | null) => {
+    if (!value) {
+      setTimeframeDraft("")
+      if (timeframeError) {
+        setTimeframeError(null)
+      }
+      return
+    }
+
+    const sanitized = value.replace(/[^\d\s–-]/g, "").replace(/\s+/g, " ")
+    const normalized = sanitized.replace("-", "–").replace(/\s*–\s*/, " – ")
+    const compactDigits = sanitized.replace(/\s|–|-/g, "")
+    const isDeleting = inputType?.startsWith("delete")
+
+    if (isDeleting) {
+      setTimeframeDraft(value)
+      if (timeframeError) {
+        setTimeframeError(null)
+      }
+      return
+    }
+
+    let nextValue = normalized
+
+    if (!sanitized.includes("–") && !sanitized.includes("-")) {
+      if (/^\d{4}$/.test(compactDigits)) {
+        nextValue = `${compactDigits} – `
+      } else {
+        nextValue = compactDigits
+      }
+    } else {
+      const [start, end = ""] = sanitized.split(/[–-]/)
+      const trimmedEnd = end.replace(/\s/g, "")
+      if (trimmedEnd.length > 4) {
+        const clipped = trimmedEnd.slice(0, 4)
+        const normalizedStart = start.trim()
+        nextValue = `${normalizedStart} – ${clipped}`
+      }
+    }
+
+    setTimeframeDraft(nextValue)
+    if (timeframeError) {
+      setTimeframeError(null)
+    }
+  }
+
   const handleEditClick = () => {
     setSpaceTitleDraft(spaceTitle)
     setSummaryDraft(scopeState.summary ?? "")
@@ -462,8 +508,16 @@ export function SpacePageClient({
             <Input
               id="space-timeframe"
               value={timeframeDraft}
-              onChange={(event) => setTimeframeDraft(event.target.value)}
+              onChange={(event) =>
+                handleTimeframeDraftChange(
+                  event.target.value,
+                  (event.nativeEvent as InputEvent | undefined)?.inputType ?? null,
+                )
+              }
+              onBlur={validateTimeframe}
               placeholder="e.g. 2024 – 2027"
+              inputMode="numeric"
+              pattern="\d{4}(?:\s?–\s?\d{4})?"
             />
             {timeframeError && <p className="text-xs text-destructive">{timeframeError}</p>}
           </div>

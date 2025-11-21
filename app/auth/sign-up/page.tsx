@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useState } from "react"
 
 export default function SignUpPage() {
@@ -19,6 +19,8 @@ export default function SignUpPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTo = searchParams.get("redirect")
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -27,18 +29,29 @@ export default function SignUpPage() {
     setError(null)
 
     try {
+      // Determine the redirect URL after email verification
+      const finalRedirect = redirectTo 
+        ? `${window.location.origin}${redirectTo}`
+        : process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`
+
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
+          emailRedirectTo: finalRedirect,
           data: {
             full_name: fullName,
           },
         },
       })
       if (error) throw error
-      router.push("/auth/verify-email")
+      
+      // If there's a redirect (e.g., invitation), show a different message
+      if (redirectTo) {
+        router.push(`/auth/verify-email?redirect=${encodeURIComponent(redirectTo)}`)
+      } else {
+        router.push("/auth/verify-email")
+      }
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred")
     } finally {
@@ -52,10 +65,15 @@ export default function SignUpPage() {
     setError(null)
 
     try {
+      // Build callback URL with redirect parameter if present (use 'next' for callback route)
+      const callbackUrl = redirectTo
+        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`
+        : `${window.location.origin}/auth/callback`
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: callbackUrl,
           queryParams: {
             access_type: "offline",
             prompt: "consent",
@@ -166,7 +184,10 @@ export default function SignUpPage() {
             </div>
             <div className="mt-4 text-center text-sm text-muted-foreground">
               Already have an account?{" "}
-              <Link href="/auth/login" className="font-medium text-primary underline-offset-4 hover:underline">
+              <Link 
+                href={redirectTo ? `/auth/login?redirect=${encodeURIComponent(redirectTo)}` : "/auth/login"} 
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
                 Sign in
               </Link>
             </div>

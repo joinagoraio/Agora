@@ -78,6 +78,12 @@ async function upsertWorkspaceDocumentForScope(
   spaceItem: SpaceDocumentItem,
   adminClient = createAdminClient(),
 ): Promise<boolean> {
+  console.log(`[ScopeDocuments] upsertWorkspaceDocumentForScope called:`, {
+    spaceId,
+    workspaceId,
+    spaceItemId: spaceItem.id,
+  })
+
   const payload = spaceItem.payload || {}
   const title = (payload.title || payload.file_name || "Scope document").trim()
   const sanitizedFullText = sanitizeScopeContent(payload.full_text || "")
@@ -92,6 +98,12 @@ async function upsertWorkspaceDocumentForScope(
     }
   }
   const hasLimitedContent = sanitizedFullText.length === 0
+
+  console.log(`[ScopeDocuments] Document content prepared:`, {
+    title,
+    contentLength: content.length,
+    hasLimitedContent,
+  })
 
   async function upsertDocumentPageContent(documentId: string) {
     if (!content || content.length === 0) return
@@ -139,6 +151,7 @@ async function upsertWorkspaceDocumentForScope(
   }
 
   // Check if we already created a document for this workspace from this scope item
+  console.log(`[ScopeDocuments] Checking for existing document...`)
   const { data: existingDoc, error: lookupError } = await adminClient
     .from("documents")
     .select("id, metadata")
@@ -161,6 +174,7 @@ async function upsertWorkspaceDocumentForScope(
   }
 
   if (existingDoc) {
+    console.log(`[ScopeDocuments] Found existing document, updating:`, { documentId: existingDoc.id })
     const mergedMetadata = {
       ...(existingDoc.metadata || {}),
       ...metadataExtras,
@@ -183,11 +197,15 @@ async function upsertWorkspaceDocumentForScope(
         return false
       }
 
+      console.log(`[ScopeDocuments] Successfully updated existing document`)
       await upsertDocumentPageContent(existingDoc.id)
       revalidatePath(`/workspaces/${workspaceId}`)
       return true
   }
 
+  console.log(`[ScopeDocuments] No existing document found, creating new one`)
+
+  console.log(`[ScopeDocuments] Fetching workspace record...`)
   const { data: workspaceRecord, error: workspaceError } = await adminClient
     .from("workspaces")
     .select("id, space_id, created_by")
@@ -195,15 +213,23 @@ async function upsertWorkspaceDocumentForScope(
     .single()
 
   if (workspaceError || !workspaceRecord) {
-    console.error("[ScopeDocuments] Failed to fetch workspace for scope document:", workspaceError)
+    console.error("[ScopeDocuments] Failed to fetch workspace for scope document:", {
+      workspaceId,
+      error: workspaceError,
+    })
     return false
   }
 
+  console.log(`[ScopeDocuments] Workspace record found, ensuring source...`)
   let sourceId: string
   try {
     sourceId = await ensureWorkspaceGeneratedSourceAdmin(workspaceId, adminClient, workspaceRecord.created_by)
+    console.log(`[ScopeDocuments] Source ensured:`, { sourceId })
   } catch (sourceError) {
-    console.error("[ScopeDocuments] Failed to ensure workspace source for scope document:", sourceError)
+    console.error("[ScopeDocuments] Failed to ensure workspace source for scope document:", {
+      workspaceId,
+      error: sourceError,
+    })
     return false
   }
 
@@ -214,6 +240,14 @@ async function upsertWorkspaceDocumentForScope(
     lastEditedAt: now,
     ...metadataExtras,
   }
+
+  console.log(`[ScopeDocuments] Creating new document...`, {
+    sourceId,
+    workspaceId,
+    tenantId: workspaceRecord.space_id,
+    title,
+    classification,
+  })
 
   const { data: newDoc, error: createError } = await adminClient
     .from("documents")
@@ -233,7 +267,13 @@ async function upsertWorkspaceDocumentForScope(
     .single()
 
   if (createError || !newDoc) {
-    console.error("[ScopeDocuments] Failed to create workspace document from scope:", createError)
+    console.error("[ScopeDocuments] Failed to create workspace document from scope:", {
+      error: createError,
+      errorMessage: createError?.message,
+      errorDetails: createError?.details,
+      errorHint: createError?.hint,
+      errorCode: createError?.code,
+    })
     return false
   }
 
@@ -274,7 +314,15 @@ export async function syncScopeDocumentToAllWorkspaces(
   const classification = spaceItem.classification ?? "internal"
   const visibility = spaceItem.visibility ?? "internal"
 
+  console.log("[ScopeDocuments] Sync request:", {
+    spaceId,
+    spaceItemId: spaceItem.id,
+    classification,
+    visibility,
+  })
+
   if (classification !== "public" && visibility !== "public") {
+    console.log("[ScopeDocuments] Document is not public, removing from workspaces if exists")
     await removeScopeDocumentFromAllWorkspaces(spaceId, spaceItem.id)
     return
   }
@@ -285,10 +333,12 @@ export async function syncScopeDocumentToAllWorkspaces(
   ])
 
   if (workspacesError) {
+    console.error("[ScopeDocuments] Error fetching workspaces:", workspacesError)
     throw new Error(`[ScopeDocuments] Failed to fetch workspaces for scope sync: ${workspacesError.message}`)
   }
 
   if (linksError) {
+    console.error("[ScopeDocuments] Error fetching linked workspaces:", linksError)
     throw new Error(`[ScopeDocuments] Failed to fetch linked workspaces for scope sync: ${linksError.message}`)
   }
 
@@ -299,29 +349,50 @@ export async function syncScopeDocumentToAllWorkspaces(
   ;(workspaces ?? []).forEach((workspace: WorkspaceRow) => workspaceIds.add(workspace.id))
   ;(linkedWorkspaces ?? []).forEach((link: WorkspaceLinkRow) => workspaceIds.add(link.workspace_id))
 
-  console.log("[ScopeDocuments] Syncing scope document to workspaces", {
+  console.log("[ScopeDocuments] Found workspaces to sync:", {
     spaceId,
     spaceItemId: spaceItem.id,
-    workspaceCount: workspaceIds.size,
+    directWorkspaces: workspaces?.length ?? 0,
+    linkedWorkspaces: linkedWorkspaces?.length ?? 0,
+    totalUniqueWorkspaces: workspaceIds.size,
+    workspaceIds: Array.from(workspaceIds),
   })
 
   if (workspaceIds.size === 0) {
+    console.log("[ScopeDocuments] No workspaces found to sync to - this is expected for new spaces")
     return
   }
 
   const failedWorkspaceIds: string[] = []
+  const failureDetails: { workspaceId: string; reason: string }[] = []
+  
   for (const workspaceId of workspaceIds) {
-    const synced = await upsertFn(spaceId, workspaceId, spaceItem, adminClient)
-    if (!synced) {
+    console.log(`[ScopeDocuments] Syncing to workspace ${workspaceId}...`)
+    try {
+      const synced = await upsertFn(spaceId, workspaceId, spaceItem, adminClient)
+      if (!synced) {
+        failedWorkspaceIds.push(workspaceId)
+        failureDetails.push({ workspaceId, reason: "upsert returned false" })
+        console.error(`[ScopeDocuments] Failed to sync to workspace ${workspaceId}: upsert returned false`)
+      } else {
+        console.log(`[ScopeDocuments] Successfully synced to workspace ${workspaceId}`)
+      }
+    } catch (upsertError) {
       failedWorkspaceIds.push(workspaceId)
+      const errorMsg = upsertError instanceof Error ? upsertError.message : String(upsertError)
+      failureDetails.push({ workspaceId, reason: errorMsg })
+      console.error(`[ScopeDocuments] Exception while syncing to workspace ${workspaceId}:`, upsertError)
     }
   }
 
   if (failedWorkspaceIds.length > 0) {
+    console.error("[ScopeDocuments] Sync failures:", failureDetails)
     throw new Error(
-      `[ScopeDocuments] Failed to sync scope document to ${failedWorkspaceIds.length} workspace(s): ${failedWorkspaceIds.join(", ")}`,
+      `[ScopeDocuments] Failed to sync scope document to ${failedWorkspaceIds.length} workspace(s): ${failedWorkspaceIds.join(", ")}. Details: ${JSON.stringify(failureDetails)}`,
     )
   }
+
+  console.log("[ScopeDocuments] Successfully synced to all workspaces")
 }
 
 export async function syncAllScopeDocumentsToWorkspace(

@@ -74,7 +74,7 @@ export async function acceptInvitation(token: string) {
     .from("invitations")
     .select("*")
     .eq("token", token)
-    .eq("status", "pending")
+    .is("accepted_at", null)
     .single()
 
   if (inviteError || !invitation) {
@@ -83,20 +83,26 @@ export async function acceptInvitation(token: string) {
 
   // Check if expired
   if (new Date(invitation.expires_at) < new Date()) {
-    await supabase.from("invitations").update({ status: "expired" }).eq("id", invitation.id)
     return { error: "Invitation has expired" }
   }
 
-  // Check if email matches
+  // Check if email matches (case-insensitive, trimmed)
   const { data: profile } = await supabase.from("profiles").select("email").eq("id", user.id).single()
 
-  if (profile?.email !== invitation.email) {
+  const profileEmail = profile?.email?.toLowerCase().trim()
+  const invitationEmail = invitation.email?.toLowerCase().trim()
+
+  console.log('[acceptInvitation] Checking emails:', { profileEmail, invitationEmail, match: profileEmail === invitationEmail })
+
+  if (profileEmail !== invitationEmail) {
     return {
       error: "This invitation was sent to a different email address. Please sign in with the invited email.",
     }
   }
 
   // Add user to space
+  console.log('[acceptInvitation] Adding user to space_members:', { space_id: invitation.space_id, user_id: user.id, role: invitation.role })
+  
   const { error: memberError } = await supabase.from("space_members").insert({
     space_id: invitation.space_id,
     user_id: user.id,
@@ -104,12 +110,21 @@ export async function acceptInvitation(token: string) {
   })
 
   if (memberError) {
+    console.error('[acceptInvitation] Error adding member:', memberError)
     return { error: memberError.message }
   }
 
-  // Update invitation status
-  await supabase.from("invitations").update({ status: "accepted" }).eq("id", invitation.id)
+  console.log('[acceptInvitation] User added successfully, marking invitation as accepted')
 
+  // Mark invitation as accepted
+  const { error: updateError } = await supabase.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", invitation.id)
+
+  if (updateError) {
+    console.error('[acceptInvitation] Error updating invitation:', updateError)
+    // Don't fail here - user is already added to space
+  }
+
+  console.log('[acceptInvitation] Success!')
   return { success: true, spaceId: invitation.space_id }
 }
 

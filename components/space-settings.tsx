@@ -38,16 +38,27 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<"member" | "admin" | "viewer">("member")
   const [isInviting, setIsInviting] = useState(false)
-  const [inviteLinkInfo, setInviteLinkInfo] = useState<{ link: string; email: string } | null>(null)
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
   const [invitationAction, setInvitationAction] = useState<{ id: string; type: "resend" | "revoke" } | null>(null)
   const [isDeletingSpace, setIsDeletingSpace] = useState(false)
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null)
+  const [memberToRemove, setMemberToRemove] = useState<{ id: string; email: string; name: string } | null>(null)
+  const [needsRemoveConfirmation, setNeedsRemoveConfirmation] = useState(false)
   const router = useRouter()
-  const handleRemoveMember = async (memberId: string) => {
-    setRemovingMemberId(memberId)
-    const result = await removeSpaceMember(space.id, memberId)
+  
+  const handleRemoveMember = async () => {
+    if (!memberToRemove) return
+    
+    if (!needsRemoveConfirmation) {
+      setNeedsRemoveConfirmation(true)
+      return
+    }
+    
+    setRemovingMemberId(memberToRemove.id)
+    const result = await removeSpaceMember(space.id, memberToRemove.id)
     setRemovingMemberId(null)
+    setMemberToRemove(null)
+    setNeedsRemoveConfirmation(false)
 
     if (result?.error) {
       toast.error("Failed to remove member", { description: result.error })
@@ -56,6 +67,13 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
 
     toast.success("Member removed", { description: "They no longer have access to this space." })
     router.refresh()
+  }
+
+  const handleRemoveDialogClose = (open: boolean) => {
+    if (!open) {
+      setNeedsRemoveConfirmation(false)
+      setMemberToRemove(null)
+    }
   }
 
 
@@ -100,9 +118,6 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
       return
     }
 
-    if ("inviteLink" in result && result.inviteLink) {
-      setInviteLinkInfo({ link: result.inviteLink, email })
-    }
     setInviteEmail("")
     toast.success("Invitation sent", { description: `Sent to ${email}.` })
     router.refresh()
@@ -112,10 +127,6 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
     setInvitationAction({ id: invitation.id, type })
     const result =
       type === "resend" ? await resendInvitation(invitation.id) : await revokeInvitation(invitation.id)
-
-    if (type === "resend" && result && "inviteLink" in result && result.inviteLink) {
-      setInviteLinkInfo({ link: result.inviteLink, email: invitation.email })
-    }
 
     setInvitationAction(null)
 
@@ -176,16 +187,66 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                     </TableCell>
                     <TableCell>{new Date(member.created_at).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => handleRemoveMember(member.user_id)}
-                        disabled={removingMemberId === member.user_id || member.user_id === currentUserId}
-                      >
-                        <UserMinus className="mr-1 h-4 w-4" />
-                        Remove
-                      </Button>
+                      {member.user_id === currentUserId ? null : (
+                        <AlertDialog onOpenChange={handleRemoveDialogClose}>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() =>
+                                setMemberToRemove({
+                                  id: member.user_id,
+                                  email: member.profiles?.email || "Unknown",
+                                  name: member.profiles?.full_name || "Unknown",
+                                })
+                              }
+                              disabled={removingMemberId === member.user_id}
+                            >
+                              <UserMinus className="mr-1 h-4 w-4" />
+                              Remove
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Remove {memberToRemove?.name || "this member"}?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                {memberToRemove?.email} will no longer have access to this space.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            {needsRemoveConfirmation && (
+                              <p className="text-sm text-destructive font-medium">
+                                This action cannot be undone.
+                              </p>
+                            )}
+                            <AlertDialogFooter>
+                              <AlertDialogCancel onClick={() => {
+                                setMemberToRemove(null)
+                                setNeedsRemoveConfirmation(false)
+                              }} disabled={removingMemberId === memberToRemove?.id}>
+                                Cancel
+                              </AlertDialogCancel>
+                              {needsRemoveConfirmation ? (
+                                <AlertDialogAction
+                                  onClick={handleRemoveMember}
+                                  className="bg-destructive text-white hover:bg-destructive/90"
+                                  disabled={removingMemberId === memberToRemove?.id}
+                                >
+                                  {removingMemberId === memberToRemove?.id ? "Removing..." : "Confirm?"}
+                                </AlertDialogAction>
+                              ) : (
+                                <Button
+                                  onClick={() => setNeedsRemoveConfirmation(true)}
+                                  className="bg-destructive text-white hover:bg-destructive/90"
+                                  disabled={removingMemberId === memberToRemove?.id}
+                                >
+                                  Remove Member
+                                </Button>
+                              )}
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -228,16 +289,6 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                 </Button>
               </div>
             </form>
-
-            {inviteLinkInfo && (
-              <div className="rounded-md bg-muted p-4">
-                <p className="mb-1 text-sm font-medium">Latest Invitation Link</p>
-                <p className="mb-2 text-xs text-muted-foreground">
-                  Sent to <span className="font-semibold">{inviteLinkInfo.email}</span>
-                </p>
-                <code className="block break-all text-xs">{inviteLinkInfo.link}</code>
-              </div>
-            )}
 
             {invitations.length > 0 && (
               <div>

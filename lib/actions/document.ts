@@ -225,6 +225,29 @@ export async function getWorkspaceDocuments(workspaceId: string, includeArchived
   return { data }
 }
 
+export async function getArchivedDocumentCount(workspaceId: string) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { count: 0, error: "Unauthorized" }
+  }
+
+  const { count, error } = await supabase
+    .from("documents")
+    .select("*", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId)
+    .eq("status", "archived")
+
+  if (error) {
+    return { count: 0, error: error.message }
+  }
+
+  return { count: count || 0 }
+}
+
 export async function deleteDocument(documentId: string, workspaceId: string): Promise<{ error?: string }> {
   const supabase = await createClient()
   const adminClient = createAdminClient()

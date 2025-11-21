@@ -1,9 +1,5 @@
-import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { acceptInvitation } from "@/lib/actions/invitation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import Link from "next/link"
+import InvitePageClient from "./invite-page-client"
 
 export default async function InvitePage({
   params,
@@ -17,58 +13,48 @@ export default async function InvitePage({
     data: { user },
   } = await supabase.auth.getUser()
 
-  // If not logged in, redirect to signup with return URL
-  if (!user) {
-    redirect(`/auth/sign-up?redirect=/invite/${token}`)
-  }
-
-  // Get invitation details
-  const { data: invitation } = await supabase
+  // Get invitation details (RLS policy allows public viewing by token)
+  const { data: invitation, error } = await supabase
     .from("invitations")
-    .select("*, spaces(name)")
+    .select(`
+      id, 
+      email, 
+      role, 
+      expires_at, 
+      accepted_at, 
+      space_id,
+      spaces (
+        id,
+        name
+      )
+    `)
     .eq("token", token)
-    .eq("status", "pending")
     .single()
-
-  if (!invitation) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-6">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Invalid Invitation</CardTitle>
-            <CardDescription>This invitation link is invalid or has expired.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild className="w-full">
-              <Link href="/dashboard">Go to Dashboard</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
+  
+  // If invitation exists but space info is missing (due to RLS), fetch it separately
+  if (invitation && !invitation.spaces) {
+    const { data: spaceData } = await supabase
+      .from("spaces")
+      .select("id, name")
+      .eq("id", invitation.space_id)
+      .single()
+    
+    if (spaceData) {
+      invitation.spaces = spaceData
+    }
   }
 
-  // Auto-accept invitation
-  const result = await acceptInvitation(token)
-
-  if (result.error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-6">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Error</CardTitle>
-            <CardDescription>{result.error}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild className="w-full">
-              <Link href="/dashboard">Go to Dashboard</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
+  // Log for debugging (remove in production)
+  if (error) {
+    console.error("[Invite] Error fetching invitation:", error)
+  } else {
+    console.log("[Invite] Invitation found:", { 
+      id: invitation?.id, 
+      email: invitation?.email, 
+      spaceName: invitation?.spaces?.name,
+      hasSpace: !!invitation?.spaces 
+    })
   }
 
-  // Redirect to space
-  redirect(`/spaces/${result.spaceId}`)
+  return <InvitePageClient token={token} invitation={invitation} user={user} error={error} />
 }
