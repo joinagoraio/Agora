@@ -82,7 +82,7 @@ export default async function SpaceSettingsPage({
       </header>
 
       <main className="flex-1 bg-white">
-        <div className="container mx-auto max-w-4xl py-8 px-4">
+        <div className="container mx-auto max-w-4xl py-8 px-8">
           <div className="mb-6">
             <h1 className="text-2xl font-semibold">{space.name} Settings</h1>
           </div>

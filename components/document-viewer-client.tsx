@@ -123,25 +123,56 @@ export function DocumentViewerClient({
 
   const isTextDocument = useMemo(() => {
     const metadataType = typeof viewerMetadata?.type === "string" ? viewerMetadata.type.toLowerCase() : ""
-    return (
-      metadataType.includes("text") ||
-      metadataType.includes("markdown") ||
+    const origin = typeof viewerMetadata?.origin === "string" ? viewerMetadata.origin.toLowerCase() : ""
+    
+    // Check file extension first (most reliable for text files)
+    const hasTextExtension = 
       documentTitle?.toLowerCase().endsWith(".md") ||
       documentTitle?.toLowerCase().endsWith(".txt") ||
-      documentTitle?.toLowerCase().endsWith(".docx") ||
-      documentTitle?.toLowerCase().endsWith(".doc")
-    )
+      documentTitle?.toLowerCase().endsWith(".markdown")
+    
+    // Check if it's a workspace/space generated text document
+    const isWorkspaceText = origin === "workspace_generated" || origin === "space_scope"
+    
+    // Check metadata type
+    const hasTextType = metadataType.includes("text") || metadataType.includes("markdown")
+    
+    // Exclude Word documents explicitly
+    const isWordDocument = 
+      metadataType.includes("word") ||
+      metadataType.includes("msword") ||
+      documentTitle?.toLowerCase().endsWith(".doc") ||
+      documentTitle?.toLowerCase().endsWith(".docx")
+    
+    // A document is a text document if:
+    // 1. It has a text file extension, OR
+    // 2. It has text/markdown in metadata type, OR
+    // 3. It's a workspace/space generated document
+    // BUT NOT if it's a Word document
+    return (hasTextExtension || hasTextType || isWorkspaceText) && !isWordDocument
   }, [viewerMetadata, documentTitle])
 
   const viewerUrl = useMemo(() => {
+    console.log("[DocumentViewerClient] Computing viewerUrl", {
+      documentId,
+      documentUrl,
+      isTextDocument,
+      documentTitle,
+      viewerMetadata,
+    })
+    
     // Text/markdown documents are rendered via text endpoint regardless of source URL
     if (isTextDocument) {
-      return `/api/documents/${documentId}/text-content`
+      const textContentUrl = `/api/documents/${documentId}/text-content`
+      console.log("[DocumentViewerClient] Using text-content URL", textContentUrl)
+      return textContentUrl
     }
 
     // Always fall back to our proxy route if we don't have a source URL
     if (!documentUrl) {
-      return `/api/documents/${documentId}/pdf`
+      const pdfUrl = `/api/documents/${documentId}/pdf`
+      console.log("[DocumentViewerClient] No source URL, using PDF proxy", pdfUrl)
+      return pdfUrl
     }
 
     // Already pointing to our API - no changes needed
@@ -182,6 +213,12 @@ export function DocumentViewerClient({
   }, [documentUrl, documentId, isTextDocument])
 
   const canRenderDocument = Boolean(viewerUrl)
+  
+  console.log("[DocumentViewerClient] Render decision", {
+    canRenderDocument,
+    viewerUrl,
+    documentId,
+  })
   
   // Function to compute coordinates for highlights that need them (for PDFs)
   const computeHighlightCoordinates = useCallback((highlights: any[]): any[] => {

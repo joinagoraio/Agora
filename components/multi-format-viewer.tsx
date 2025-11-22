@@ -102,6 +102,14 @@ export function MultiFormatViewer({
   onControlsReady,
   autoHighlight = true,
 }: MultiFormatViewerProps) {
+  // Validate required props
+  if (!documentId) {
+    clientLogger.error("[MultiFormatViewer] Missing required documentId prop")
+  }
+  if (!url) {
+    clientLogger.error("[MultiFormatViewer] Missing required url prop")
+  }
+  
   const [documentType, setDocumentType] = useState<DocumentType>("unknown")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -122,17 +130,79 @@ export function MultiFormatViewer({
   // Detect document type and load content
   useEffect(() => {
     const loadDocument = async (retryCount = 0) => {
+      // Ensure we're running on the client side
+      if (typeof window === "undefined") {
+        clientLogger.warn("[MultiFormatViewer] Attempted to load document during SSR, skipping")
+        return
+      }
+      
+      // Log initial state for debugging
+      clientLogger.info("[MultiFormatViewer] Starting document load", {
+        documentId,
+        url,
+        documentTitle,
+        documentMetadata,
+        retryCount,
+      })
+      
+      // Early return if required props are missing
+      if (!documentId || !url) {
+        const missingProps = []
+        if (!documentId) missingProps.push("documentId")
+        if (!url) missingProps.push("url")
+        
+        const errorMsg = `Cannot load document: missing required props: ${missingProps.join(", ")}`
+        clientLogger.error("[MultiFormatViewer] " + errorMsg, {
+          documentId,
+          url,
+          documentTitle,
+        })
+        setError(errorMsg)
+        setLoading(false)
+        return
+      }
+      
       setLoading(true)
       setError(null)
 
       try {
         // For text/markdown documents, use document_pages.text_content API for consistency
         // This ensures the content matches what RAG/search uses
-        const isTextOrMarkdown = 
-          documentMetadata?.type?.includes("text") ||
-          documentMetadata?.type?.includes("markdown") ||
+        // NOTE: Word documents are excluded here as they need special HTML conversion
+        
+        // Check file extension first (most reliable)
+        const hasTextExtension = 
           documentTitle?.toLowerCase().endsWith(".md") ||
-          documentTitle?.toLowerCase().endsWith(".txt")
+          documentTitle?.toLowerCase().endsWith(".txt") ||
+          documentTitle?.toLowerCase().endsWith(".markdown")
+        
+        // Check metadata type
+        const metadataType = typeof documentMetadata?.type === "string" ? documentMetadata.type.toLowerCase() : ""
+        const hasTextType = metadataType.includes("text") || metadataType.includes("markdown")
+        
+        // Check origin for workspace/space generated documents
+        const origin = typeof documentMetadata?.origin === "string" ? documentMetadata.origin.toLowerCase() : ""
+        const isWorkspaceText = origin === "workspace_generated" || origin === "space_scope"
+        
+        // Exclude Word documents
+        const isWordDocument = 
+          metadataType.includes("word") ||
+          metadataType.includes("msword") ||
+          documentTitle?.toLowerCase().endsWith(".doc") ||
+          documentTitle?.toLowerCase().endsWith(".docx")
+        
+        const isTextOrMarkdown = (hasTextExtension || hasTextType || isWorkspaceText) && !isWordDocument
+
+        clientLogger.info("[MultiFormatViewer] Document type detection", {
+          isTextOrMarkdown,
+          hasTextExtension,
+          hasTextType,
+          isWorkspaceText,
+          isWordDocument,
+          metadataType,
+          origin,
+          documentTitle,
+        })
 
         let shouldFallbackToOriginalSource = false
         const isInternalPdfEndpoint = (() => {
@@ -162,17 +232,51 @@ export function MultiFormatViewer({
         }
 
         if (isTextOrMarkdown) {
-          // Use the text-content API endpoint which fetches from document_pages
-          const textContentResponse = await fetch(`/api/documents/${documentId}/text-content`, {
-            credentials: "include",
-            headers: {
-              Accept: "text/plain",
-            },
-            cache: "no-store",
+          // Validate documentId
+          if (!documentId || documentId === "undefined" || documentId === "null") {
+            throw new Error("Invalid document ID - cannot fetch text content")
+          }
+          
+          // Check if the URL is already pointing to the text-content endpoint
+          const isTextContentEndpoint = url.includes("/text-content")
+          const textContentUrl = isTextContentEndpoint 
+            ? url 
+            : `/api/documents/${documentId}/text-content`
+          
+          clientLogger.info("[MultiFormatViewer] Fetching text content", {
+            documentId,
+            textContentUrl,
+            isTextContentEndpoint,
+            originalUrl: url,
           })
+          
+          // Use the text-content API endpoint which fetches from document_pages
+          let textContentResponse: Response
+          try {
+            textContentResponse = await fetch(textContentUrl, {
+              credentials: "include",
+              headers: {
+                Accept: "text/plain",
+              },
+              cache: "no-store",
+            })
+          } catch (fetchError) {
+            clientLogger.error("[MultiFormatViewer] Fetch failed", {
+              error: fetchError,
+              textContentUrl,
+              documentId,
+              errorMessage: fetchError instanceof Error ? fetchError.message : String(fetchError),
+              errorStack: fetchError instanceof Error ? fetchError.stack : undefined,
+            })
+            throw new Error(`Failed to fetch text content: ${fetchError instanceof Error ? fetchError.message : "Network error"}`)
+          }
 
           if (textContentResponse.ok) {
             const textContent = await textContentResponse.text()
+            clientLogger.info("[MultiFormatViewer] Text content fetched successfully", {
+              documentId,
+              contentLength: textContent.length,
+            })
             setDocumentType("text")
             setTextContent(textContent)
             setLoading(false)
@@ -234,8 +338,10 @@ export function MultiFormatViewer({
           // For other document types, fetch from the original URL
           // Fetch document to detect type
           // For API routes, ensure cookies are included for authentication
+          // For Supabase Storage URLs, omit credentials to avoid CORS issues
+            const isApiRoute = url.startsWith('/api') || url.startsWith('http://localhost') || url.startsWith('https://localhost')
             response = await fetch(url, {
-              credentials: "include",
+              credentials: isApiRoute ? "include" : "omit",
               headers: {
                 Accept: "*/*",
               },
@@ -324,7 +430,14 @@ export function MultiFormatViewer({
         // Should not reach here, but guard against it
         throw new Error("Unsupported text document fallback path")
       } catch (err) {
-        clientLogger.error("Error loading document:", err)
+        clientLogger.error("Error loading document:", err, {
+          documentId,
+          url,
+          documentTitle,
+          documentMetadata,
+          errorType: err instanceof Error ? err.constructor.name : typeof err,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        })
         setError(err instanceof Error ? err.message : "Failed to load document")
         setLoading(false)
       }

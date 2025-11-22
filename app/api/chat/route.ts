@@ -304,6 +304,78 @@ export async function POST(req: Request) {
     const contextDuration = (Date.now() - contextStartTime) / 1000
     console.log(`[Chat API] RAG search completed in ${contextDuration.toFixed(2)}s`)
     
+    // Check if this is a continuation of a conversation (has previous messages)
+    const hasPreviousMessages = messages && messages.length > 1
+    
+    // Get explicit lists of included/excluded items for the system prompt
+    let includedItemsList = ""
+    let excludedItemsList = ""
+    
+    if (hasPreviousMessages && (excludedDocumentIds.length > 0 || excludedNoteIds.length > 0 || excludedEvidenceIds.length > 0)) {
+      // Build list of included documents from sources
+      const includedDocTitles = sources
+        .filter((s: any) => s.id && !excludedDocumentIds.includes(s.id))
+        .map((s: any) => s.title || s.id)
+        .filter(Boolean)
+      
+      if (includedDocTitles.length > 0) {
+        includedItemsList += `\nINCLUDED DOCUMENTS (you CAN use these):\n${includedDocTitles.map((title: string) => `- ${title}`).join("\n")}\n`
+      }
+      
+      // Get excluded document titles
+      if (excludedDocumentIds.length > 0) {
+        const { data: excludedDocs } = await supabase
+          .from("documents")
+          .select("id, title")
+          .in("id", excludedDocumentIds)
+          .eq("workspace_id", workspaceId)
+        
+        if (excludedDocs && excludedDocs.length > 0) {
+          const excludedDocTitles = excludedDocs.map((d: any) => d.title || d.id).filter(Boolean)
+          excludedItemsList += `\n\n🚫 EXCLUDED DOCUMENTS (you MUST NOT use these - ignore any references to them in previous messages):\n${excludedDocTitles.map((title: string) => `- ${title}`).join("\n")}\n`
+        }
+      }
+      
+      // Get excluded note titles/content previews
+      if (excludedNoteIds.length > 0) {
+        const { data: excludedNotes } = await supabase
+          .from("workspace_notes")
+          .select("id, content")
+          .in("id", excludedNoteIds)
+          .eq("workspace_id", workspaceId)
+        
+        if (excludedNotes && excludedNotes.length > 0) {
+          const excludedNotePreviews = excludedNotes.map((n: any) => {
+            const preview = typeof n.content === "string" && n.content.length > 0
+              ? n.content.substring(0, 50) + (n.content.length > 50 ? "..." : "")
+              : "Note"
+            return preview
+          })
+          excludedItemsList += `\n\n🚫 EXCLUDED NOTES (you MUST NOT use these):\n${excludedNotePreviews.map((preview: string, idx: number) => `- Note ${idx + 1}: ${preview}`).join("\n")}\n`
+        }
+      }
+      
+      // Get excluded evidence items
+      if (excludedEvidenceIds.length > 0) {
+        const { data: excludedEvidence } = await supabase
+          .from("workspace_items")
+          .select("id, payload")
+          .in("id", excludedEvidenceIds)
+          .eq("workspace_id", workspaceId)
+          .eq("inheritance", "local")
+        
+        if (excludedEvidence && excludedEvidence.length > 0) {
+          excludedItemsList += `\n\n🚫 EXCLUDED EVIDENCE ITEMS (you MUST NOT use these):\n${excludedEvidence.map((e: any, idx: number) => {
+            const evidenceText = e.payload?.text || e.payload?.content || "Evidence item"
+            const preview = typeof evidenceText === "string" && evidenceText.length > 0
+              ? evidenceText.substring(0, 50) + (evidenceText.length > 50 ? "..." : "")
+              : "Evidence"
+            return `- Evidence ${idx + 1}: ${preview}`
+          }).join("\n")}\n`
+        }
+      }
+    }
+    
     // Log context for debugging
     if (includedDocumentIds && includedDocumentIds.length > 0) {
       console.log(`[Chat API] Included document IDs: ${includedDocumentIds.join(", ")}`)
@@ -352,19 +424,86 @@ export async function POST(req: Request) {
         : ""
     
     const contextMentionInstruction = hasWorkspaceContext 
-      ? "  2. The additional workspace context/properties and scope information (if provided)"
+      ? "  2. The workspace and space properties (always included) - these define the purpose, scope, and jurisdiction of the work\n  3. That you ONLY have access to the documents, notes, and evidence that the user has included in the AI Context section - excluded items are not available to you"
       : ""
     
+    // Build a clear context awareness section
+    const contextAwarenessSection = hasWorkspaceContext
+      ? `CRITICAL CONTEXT AWARENESS - READ CAREFULLY:
+
+You have access to TWO types of context, and it is PARAMOUNT that you understand and respect the distinction:
+
+1. **Workspace and Space Properties (ALWAYS INCLUDED)**: 
+   - These are the workspace and space properties (name, description, scope, location, jurisdiction, etc.) that define the organizational context
+   - These are ALWAYS available and provide the scope, purpose, and jurisdiction of the work
+   - This context helps you understand the organizational and jurisdictional framework
+
+2. **User-Selected Document/Note/Evidence Context (USER-CONTROLLED)**:
+   - The user explicitly controls what documents, notes, and evidence items are included in this conversation via the "AI Context" section
+   - You ONLY have access to the documents, notes, and evidence that the user has INCLUDED
+   - You MUST NEVER reference, mention, or use information from documents, notes, or evidence that the user has EXCLUDED
+   - This is PARAMOUNT - the user's choices in the AI Context section must be FULLY respected
+
+The document context provided below contains ONLY the documents, notes, and evidence that the user has specifically included. You must:
+- ONLY use information from the documents/notes/evidence provided in the context below
+- NEVER reference documents, notes, or evidence that are not in the provided context
+- Understand that excluded items are intentionally not available to you
+- If asked about something not in your context, explain that it's not included in the current conversation's context
+
+The workspace and space properties provided below are always part of your knowledge. The document/note/evidence context reflects ONLY what the user has chosen to include.
+
+`
+      : ""
+    
+    const contextChangeNotice = hasPreviousMessages && excludedItemsList
+      ? `\n\n⚠️ CRITICAL: CONTEXT HAS CHANGED ⚠️
+
+The user has EXCLUDED items from the AI Context section. The lists below show what you CAN and CANNOT use.
+
+${includedItemsList}${excludedItemsList}
+
+ABSOLUTE REQUIREMENTS:
+1. You MUST IGNORE any references to the EXCLUDED items listed above in previous messages
+2. You MUST ONLY use information from INCLUDED items (listed above or in the context below)
+3. If a previous message referenced an EXCLUDED item, DO NOT use that information - it has been explicitly excluded
+4. If asked about something from a previous message that's in the EXCLUDED list, clearly state: "That information is no longer available in the current AI Context. The user has excluded it from this conversation."
+5. DO NOT assume information from previous messages is still available - check the lists above first
+
+The conversation history may contain references to EXCLUDED items. You must COMPLETELY IGNORE those references and only use what's currently included.
+
+`
+      : hasPreviousMessages
+      ? `\n\n⚠️ CRITICAL: CONTEXT MAY HAVE CHANGED ⚠️
+
+The context provided below reflects the CURRENT state of the AI Context section. The user may have included or excluded documents, notes, or evidence since previous messages.
+
+YOU MUST:
+1. IGNORE any references to documents, notes, or evidence in previous messages that are NOT in the current context below
+2. ONLY use information from the documents, notes, and evidence that are ACTUALLY provided in the context section below
+3. If a previous message referenced something that's not in the current context, DO NOT use that information - it has been excluded
+4. If asked about something from a previous message that's not in the current context, clearly state: "That information is no longer available in the current AI Context. The user has excluded it from this conversation."
+5. DO NOT assume information from previous messages is still available - always verify it's in the current context below
+
+The conversation history above may contain references to items that are no longer included. You must ONLY use what's in the current context below, regardless of what was mentioned earlier.
+
+`
+      : ""
+
     const systemPrompt = `You are AGORA, an intelligent policy assistant. You help users find and understand information from their organization's documents.
 
-${formattedContextInstructions}${formattedWorkspaceContextSection}
-
-Context from relevant documents:
+${contextAwarenessSection}${formattedContextInstructions}${formattedWorkspaceContextSection}${contextChangeNotice}Context from user-selected documents, notes, and evidence (from AI Context section):
 ${context}
 
 Instructions:
-- Answer questions based on the provided context
-- If the context doesn't contain relevant information, say so clearly
+- Answer questions based ONLY on the context provided below - this is the ONLY source of document/note/evidence information available to you
+- The workspace and space properties define the organizational scope and framework (these are always available)
+- The document/note/evidence context contains ONLY what the user has currently included in the AI Context section
+- PARAMOUNT: You must ONLY use information from the documents, notes, and evidence that are actually provided in the context below
+- NEVER reference documents, notes, or evidence that are not in the provided context - they have been excluded by the user
+- If previous messages in the conversation reference something that's not in the current context below, IGNORE those references - that information is no longer available
+- If asked about something not in your context, explain that it's not included in the current conversation's AI Context
+- If asked to continue or follow up on something from a previous message, check if the referenced items are in the current context - if not, state they're no longer available
+- Use the workspace/space properties to provide contextualized answers within the defined scope
 - Be concise and accurate
 
 CRITICAL QUOTING REQUIREMENTS:
@@ -402,13 +541,19 @@ Your response: "The entrepreneur wants to see their finances" [doc] ❌ WRONG - 
 Your response: "The entrepreneur mentions the need for a clear view of their financial situation" [doc] ❌ WRONG - changed "my" to "their"
 Your response: There are four items: Authentication & Authorization, Encryption & Secrets Management, API Security, Code Organization. [doc] ❌ WRONG - items are not quoted individually
 
-- When referencing workspace/space scope information (not from documents), you can mention it without quotes or use single quotes to distinguish it
-- Be explicit about what comes from documents vs workspace/space scope
+- When referencing workspace/space properties (not from documents), you can mention it without quotes or use single quotes to distinguish it
+- Be explicit about what comes from documents/notes/evidence vs workspace/space properties
+- The workspace and space properties define the scope and purpose of your work - use them actively to provide contextualized answers
+- PARAMOUNT: The document/note/evidence context contains ONLY what the user has included in the AI Context section - you must NEVER reference excluded items
+- CRITICAL: If previous messages in the conversation referenced specific documents, notes, or evidence, and those items are NOT in the current context below, you MUST NOT use that information - ignore those previous references completely
+- When answering follow-up questions, first verify that any documents/notes/evidence mentioned in previous messages are still in the current context - if not, state they're no longer available
 - Cite sources when possible, including page numbers if available
 ${isDocumentPreview ? "- Since you're viewing a specific document, you can reference specific pages and sections. When quoting from this document, use double quotes around the EXACT text (character-for-character match) and add [doc] after each quote." : ""}
-- If asked about something outside the context, politely explain you can only answer based on the workspace documents
-- When asked about your context or what information you have access to, mention:
-  1. The documents you can access (from the document context provided)
+- If asked about something outside your context, politely explain you can only answer based on:
+  1. The documents, notes, and evidence that the user has included in the AI Context section (provided below)
+  2. The workspace and space properties (always available)
+- When asked about your context or what information you have access to, clearly explain:
+  1. The documents, notes, and evidence you can access - these are ONLY the items the user has included in the AI Context section
 ${contextMentionInstruction}
 
 Citation formatting rules:

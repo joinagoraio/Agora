@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { userHasWorkspaceAccess } from "@/lib/utils/workspace-access"
 import { NextRequest, NextResponse } from "next/server"
 
@@ -11,12 +12,21 @@ async function fetchDocumentTextFromSource(
     return null
   }
 
-  const metadataType = typeof document.metadata?.type === "string" ? document.metadata.type.toLowerCase() : ""
-  const looksLikeText =
-    metadataType.includes("text") ||
-    metadataType.includes("markdown") ||
+  // Check file extension first (most reliable)
+  const hasTextExtension =
     document.title?.toLowerCase().endsWith(".md") ||
-    document.title?.toLowerCase().endsWith(".txt")
+    document.title?.toLowerCase().endsWith(".txt") ||
+    document.title?.toLowerCase().endsWith(".markdown")
+  
+  // Check metadata type
+  const metadataType = typeof document.metadata?.type === "string" ? document.metadata.type.toLowerCase() : ""
+  const hasTextType = metadataType.includes("text") || metadataType.includes("markdown")
+  
+  // Check origin
+  const origin = typeof document.metadata?.origin === "string" ? document.metadata.origin.toLowerCase() : ""
+  const isWorkspaceText = origin === "workspace_generated" || origin === "space_scope"
+  
+  const looksLikeText = hasTextExtension || hasTextType || isWorkspaceText
 
   if (!looksLikeText) {
     return null
@@ -121,26 +131,41 @@ export async function GET(
     }
 
     // Check if document is text/markdown or originated from workspace text sources
+    // Word documents are explicitly excluded - they should use the PDF/Word viewer with Mammoth conversion
     const metadata = ((document.metadata as Record<string, any>) || {}) as Record<string, any>
     const documentType = (metadata.type as string) || ""
     const documentOrigin = typeof metadata.origin === "string" ? metadata.origin.toLowerCase() : ""
-    const isTextDocument =
-      documentType.includes("text") ||
-      documentType.includes("markdown") ||
+    
+    // Check file extension first (most reliable for text files)
+    const hasTextExtension = 
       document.title?.toLowerCase().endsWith(".md") ||
       document.title?.toLowerCase().endsWith(".txt") ||
-      document.title?.toLowerCase().endsWith(".docx") ||
-      document.title?.toLowerCase().endsWith(".doc")
-
+      document.title?.toLowerCase().endsWith(".markdown")
+    
+    // Check metadata type
+    const hasTextType = documentType.includes("text") || documentType.includes("markdown")
+    
+    // Check if it's workspace/space generated
     const isWorkspaceGeneratedText =
       documentOrigin === "workspace_generated" || documentOrigin === "space_scope"
+    
+    // Exclude Word documents
+    const isWordDocument = 
+      documentType.includes("word") ||
+      documentType.includes("msword") ||
+      document.title?.toLowerCase().endsWith(".doc") ||
+      document.title?.toLowerCase().endsWith(".docx")
 
-    if (!isTextDocument && !isWorkspaceGeneratedText) {
+    const isTextDocument = (hasTextExtension || hasTextType || isWorkspaceGeneratedText) && !isWordDocument
+
+    if (!isTextDocument) {
       return NextResponse.json({ error: "This endpoint is only for text/markdown documents" }, { status: 400 })
     }
 
-    // Fetch document pages
-    const { data: pages, error: pagesError } = await supabase
+    // Fetch document pages using admin client (bypasses RLS)
+    // The access check was already performed above, so we can safely use admin client
+    const adminClient = createAdminClient()
+    const { data: pages, error: pagesError } = await adminClient
       .from("document_pages")
       .select("text_content, page_number")
       .eq("document_id", documentId)

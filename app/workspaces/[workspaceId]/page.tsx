@@ -382,7 +382,7 @@ export default async function WorkspacePage({
         </header>
 
         <main className="flex-1 bg-white">
-          <div className="container mx-auto py-8 px-4">
+          <div className="container mx-auto py-8 px-8">
             <div className="mb-8">
               <WorkspaceOverview
                 workspaceId={workspaceId}

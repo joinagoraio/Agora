@@ -76,6 +76,16 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
       setIsSaving(false)
     } else {
       setIsSaving(false)
+      
+      // Notify chat interface of workspace context update
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("workspaceContextUpdated", {
+            detail: { workspaceId: workspace.id, type: "workspace", action: "updated" },
+          }),
+        )
+      }
+      
       handleClose(false)
       router.refresh()
     }

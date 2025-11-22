@@ -47,7 +47,7 @@ export default async function SettingsPage() {
       </header>
 
       <main className="flex-1 bg-white">
-        <div className="container mx-auto max-w-4xl py-8 px-4">
+        <div className="container mx-auto max-w-4xl py-8 px-8">
           <OrganizationSettings space={space} />
         </div>
       </main>

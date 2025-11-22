@@ -172,6 +172,16 @@ export function WorkspaceOverview({
     setDescriptionPrevious(null)
     setContextPrevious(null)
     setIsEditing(false)
+    
+    // Notify chat interface of workspace context update
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("workspaceContextUpdated", {
+          detail: { workspaceId, type: "workspace", action: "updated" },
+        }),
+      )
+    }
+    
     router.refresh()
   }
 

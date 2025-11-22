@@ -64,16 +64,29 @@ export default async function DocumentViewerPage({ params, searchParams }: Docum
     documentTitle: document.title,
   })
 
-  // Check if document is text/markdown/word (for simpler highlighting)
+  // Check if document is text/markdown (for simpler highlighting)
+  // Word documents are handled separately with coordinate-based highlighting
   const documentType = document.metadata?.type || ""
-  const isTextDocument = 
-    documentType.includes("text") || 
-    documentType.includes("markdown") ||
-    documentType.includes("word") ||
+  const documentOrigin = typeof document.metadata?.origin === "string" ? document.metadata.origin.toLowerCase() : ""
+  
+  // Check file extension first (most reliable)
+  const hasTextExtension = 
     document.title?.toLowerCase().endsWith(".md") ||
     document.title?.toLowerCase().endsWith(".txt") ||
-    document.title?.toLowerCase().endsWith(".docx") ||
-    document.title?.toLowerCase().endsWith(".doc")
+    document.title?.toLowerCase().endsWith(".markdown")
+  
+  // Check metadata
+  const hasTextType = documentType.includes("text") || documentType.includes("markdown")
+  const isWorkspaceText = documentOrigin === "workspace_generated" || documentOrigin === "space_scope"
+  
+  // Exclude Word documents
+  const isWordDocument = 
+    documentType.includes("word") ||
+    documentType.includes("msword") ||
+    document.title?.toLowerCase().endsWith(".doc") ||
+    document.title?.toLowerCase().endsWith(".docx")
+  
+  const isTextDocument = (hasTextExtension || hasTextType || isWorkspaceText) && !isWordDocument
   
   console.log("[DocumentViewerPage] Document type check:", {
     documentType,

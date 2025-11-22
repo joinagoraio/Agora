@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { deleteDocument, generateWorkspaceDocumentDraft, updateWorkspaceDocument } from "@/lib/actions/document"
-import { Loader2, MoreVertical, Save, Sparkles, Trash2 } from "lucide-react"
+import { CircleStop, Loader2, MoreVertical, Save, Sparkles, Trash2 } from "lucide-react"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { toast } from "sonner"
 
@@ -65,6 +65,7 @@ export function MyDocumentEditor({
   const [isGenerating, setIsGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [generationSources, setGenerationSources] = useState<Array<Record<string, any>> | null>(null)
+  const isCancelledRef = useRef(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -135,6 +136,7 @@ export function MyDocumentEditor({
     }
 
     setIsGenerating(true)
+    isCancelledRef.current = false
     setGenerateError(null)
     setSaveState("idle")
     setError(null)
@@ -142,6 +144,13 @@ export function MyDocumentEditor({
     const result = await generateWorkspaceDocumentDraft(workspaceId, documentId, {
       instructions,
     })
+
+    // Check if generation was cancelled
+    if (isCancelledRef.current) {
+      setIsGenerating(false)
+      toast.info("Generation cancelled")
+      return
+    }
 
     if (result.error || !result.data) {
       const description = result.error || "Failed to generate a draft"
@@ -168,6 +177,14 @@ export function MyDocumentEditor({
       description: "AI generated a fresh version.",
     })
     router.refresh()
+  }
+
+  const handleStopGeneration = () => {
+    if (isGenerating) {
+      isCancelledRef.current = true
+      setIsGenerating(false)
+      toast.info("Stopping generation...")
+    }
   }
 
   const handleReset = () => {
@@ -271,25 +288,36 @@ export function MyDocumentEditor({
           <div className="grid gap-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Label htmlFor="document-instructions">AI instructions</Label>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={handleGenerate}
-                disabled={isGenerating || !instructions.trim()}
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Draft with AI
-                  </>
+              <div className="flex items-center gap-2">
+                {isGenerating && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleStopGeneration}
+                    className="h-6 w-6 p-0"
+                  >
+                    <CircleStop className="h-3 w-3" />
+                  </Button>
                 )}
-              </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleGenerate}
+                  disabled={isGenerating || !instructions.trim()}
+                  className="group"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin text-purple-400" />
+                      Generating...
+                    </>
+                  ) : (
+                    <Sparkles className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
+                  )}
+                </Button>
+              </div>
             </div>
             <Textarea
               id="document-instructions"

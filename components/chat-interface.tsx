@@ -60,10 +60,11 @@ function useChatWithInput(options: UseAiChatOptions) {
         return
       }
 
+      // Clear input immediately when message is sent
+      setInput("")
       setIsSubmitting(true)
       try {
         await chat.sendMessage({ text: trimmed })
-        setInput("")
       } finally {
         setIsSubmitting(false)
       }
@@ -347,35 +348,151 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     loadContextItems()
   }, [loadContextItems])
 
-  // Refresh documents when window gains focus (handles case where user uploads in another tab)
-  useEffect(() => {
-    const handleFocus = () => {
-      loadContextItems()
-    }
-    window.addEventListener("focus", handleFocus)
-    return () => window.removeEventListener("focus", handleFocus)
-  }, [loadContextItems])
+  // Incremental update functions for specific context items
+  const updateDocuments = useCallback(async () => {
+    try {
+      const result = await getWorkspaceDocuments(workspaceId)
+      if (result.error) {
+        clientLogger.error("[ChatInterface] Failed to fetch documents:", result.error)
+        return
+      }
 
-  // Listen for document upload events
+      if (documentId) {
+        const currentDoc = result.data?.find((doc: any) => doc.id === documentId)
+        setDocuments(currentDoc ? [currentDoc] : [])
+      } else {
+        setDocuments(result.data ?? [])
+      }
+    } catch (error) {
+      clientLogger.error("[ChatInterface] Failed to update documents:", error)
+    }
+  }, [workspaceId, documentId])
+
+  const updateNotes = useCallback(async () => {
+    try {
+      const notesResult = await getWorkspaceNotesForContext(workspaceId)
+      if (notesResult.error) {
+        clientLogger.error("[ChatInterface] Failed to fetch workspace notes:", notesResult.error)
+        setContextNotes([])
+      } else {
+        setContextNotes(notesResult.data)
+      }
+    } catch (error) {
+      clientLogger.error("[ChatInterface] Failed to update notes:", error)
+    }
+  }, [workspaceId])
+
+  const updateEvidence = useCallback(async () => {
+    try {
+      const result = await getWorkspaceItems(workspaceId, { inheritance: "local" })
+      if (result.error) {
+        clientLogger.error("[ChatInterface] Failed to fetch evidence items:", result.error)
+        return
+      }
+      // Filter for evidence items with include_in_ai_context=true
+      const evidenceData = (result.data ?? []).filter(
+        (item: any) => item.payload?.type === "evidence" && item.include_in_ai_context === true,
+      )
+      setEvidenceItems(evidenceData)
+    } catch (error) {
+      clientLogger.error("[ChatInterface] Failed to update evidence:", error)
+    }
+  }, [workspaceId])
+
+  const updateWorkspaceContext = useCallback(async () => {
+    try {
+      const result = await getWorkspaceContextDetails(workspaceId)
+      if (result.error) {
+        clientLogger.error("[ChatInterface] Failed to fetch workspace context:", result.error)
+        return
+      }
+      const data = result.data ?? { context: null, location: null }
+      setWorkspaceContextText(typeof data.context === "string" ? data.context : null)
+      setWorkspaceLocation(typeof data.location === "string" ? data.location : null)
+    } catch (error) {
+      clientLogger.error("[ChatInterface] Failed to update workspace context:", error)
+    }
+  }, [workspaceId])
+
+  // Refresh documents when window becomes visible after being hidden for a while
+  // Only reloads if page was hidden for more than 30 seconds to avoid unnecessary reloads
   useEffect(() => {
-    const refreshIfMatchingWorkspace = (event: CustomEvent<{ workspaceId?: string }>) => {
-      const eventWorkspaceId = event.detail?.workspaceId
-      if (!eventWorkspaceId || eventWorkspaceId === workspaceId) {
-        clientLogger.debug(
-          `[ChatInterface] Context event received (${event.type}), refreshing AI context items`,
-        )
-        loadContextItems()
+    let hiddenTime: number | null = null
+    const MIN_HIDDEN_DURATION = 30000 // 30 seconds
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Page became hidden - record the time
+        hiddenTime = Date.now()
+      } else {
+        // Page became visible - only reload if it was hidden for a significant duration
+        if (hiddenTime !== null) {
+          const hiddenDuration = Date.now() - hiddenTime
+          if (hiddenDuration > MIN_HIDDEN_DURATION) {
+            clientLogger.debug(
+              `[ChatInterface] Page was hidden for ${hiddenDuration}ms, refreshing context items`,
+            )
+            loadContextItems()
+          }
+          hiddenTime = null
+        }
       }
     }
 
-    window.addEventListener("documentUploaded" as any, refreshIfMatchingWorkspace as EventListener)
-    window.addEventListener("workspaceContextUpdated" as any, refreshIfMatchingWorkspace as EventListener)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
+  }, [loadContextItems])
+
+  // Listen for document upload and context update events - with incremental updates
+  useEffect(() => {
+    const handleContextUpdate = (event: CustomEvent<{ workspaceId?: string; type?: string; action?: string }>) => {
+      const eventWorkspaceId = event.detail?.workspaceId
+      if (eventWorkspaceId && eventWorkspaceId !== workspaceId) {
+        return // Ignore events from other workspaces
+      }
+
+      const updateType = event.detail?.type
+      const action = event.detail?.action
+
+      clientLogger.debug(
+        `[ChatInterface] Context event received (${event.type}), type: ${updateType}, action: ${action}`,
+      )
+
+      // Handle incremental updates based on what changed
+      if (event.type === "documentUploaded") {
+        // Document was uploaded - update only documents list
+        updateDocuments()
+      } else if (event.type === "workspaceContextUpdated") {
+        // Workspace context changed - update specific items based on type
+        switch (updateType) {
+          case "document":
+            updateDocuments()
+            break
+          case "note":
+            updateNotes()
+            break
+          case "evidence":
+            updateEvidence()
+            break
+          case "workspace":
+            updateWorkspaceContext()
+            break
+          default:
+            // If type is not specified, do a full reload as fallback
+            clientLogger.debug("[ChatInterface] No specific type in event, doing full context reload")
+            loadContextItems()
+        }
+      }
+    }
+
+    window.addEventListener("documentUploaded" as any, handleContextUpdate as EventListener)
+    window.addEventListener("workspaceContextUpdated" as any, handleContextUpdate as EventListener)
 
     return () => {
-      window.removeEventListener("documentUploaded" as any, refreshIfMatchingWorkspace as EventListener)
-      window.removeEventListener("workspaceContextUpdated" as any, refreshIfMatchingWorkspace as EventListener)
+      window.removeEventListener("documentUploaded" as any, handleContextUpdate as EventListener)
+      window.removeEventListener("workspaceContextUpdated" as any, handleContextUpdate as EventListener)
     }
-  }, [workspaceId, loadContextItems])
+  }, [workspaceId, updateDocuments, updateNotes, updateEvidence, updateWorkspaceContext, loadContextItems])
 
   useEffect(() => {
     setExcludedDocumentIds(new Set())

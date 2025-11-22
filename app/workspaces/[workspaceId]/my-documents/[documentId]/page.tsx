@@ -76,7 +76,7 @@ export default async function WorkspaceDocumentEditorPage({ params }: WorkspaceD
         </header>
 
         <main className="flex-1 bg-white">
-          <div className="container mx-auto py-8 px-4">
+          <div className="container mx-auto py-8 px-8">
             <MyDocumentEditor
               workspaceId={workspaceId}
               documentId={documentId}

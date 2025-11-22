@@ -284,6 +284,12 @@ function EvidenceCard({ item, workspaceId, currentUserId, initialComments, paren
               {classificationLabels[item.classification] ?? item.classification}
             </Badge>
           )}
+          <Badge 
+            variant="secondary" 
+            className="flex-shrink-0 text-xs font-normal bg-muted/50 text-muted-foreground"
+          >
+            {includeInAiContext ? "AI Context" : "Not in AI Context"}
+          </Badge>
           {item.payload?.saved_from_chat && (
             <Badge variant="secondary" className="flex-shrink-0">
               <MessageCircle className="mr-1 h-3 w-3" />
