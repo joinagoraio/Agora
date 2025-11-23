@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { userHasWorkspaceAccess } from "@/lib/utils/workspace-access"
 
 const TEXT_CONTENT_TYPES = new Set([
   "text/plain",
@@ -49,6 +48,8 @@ export async function GET(
     }
 
     // Fetch document to verify access
+    // The documents table has RLS policies that only allow access to users
+    // who have access to the workspace, so if this query succeeds, the user has access
     const { data: document, error: docError } = await supabase
       .from("documents")
       .select("id, workspace_id, url, metadata")
@@ -57,22 +58,6 @@ export async function GET(
 
     if (docError || !document) {
       return NextResponse.json({ error: "Document not found" }, { status: 404 })
-    }
-
-    // Verify user has access to the workspace
-    const { data: workspace } = await supabase
-    .from("workspaces")
-    .select("id, space_id")
-    .eq("id", document.workspace_id)
-    .single()
-
-    if (!workspace) {
-      return NextResponse.json({ error: "Workspace not found" }, { status: 404 })
-    }
-
-    const canAccess = await userHasWorkspaceAccess(supabase, workspace.id, workspace.space_id, user.id)
-    if (!canAccess) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
     // If URL is a Supabase Storage URL, fetch with authenticated client

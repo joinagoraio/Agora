@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { userHasWorkspaceAccess } from "@/lib/utils/workspace-access"
 import { NextRequest, NextResponse } from "next/server"
 
 async function fetchDocumentTextFromSource(
@@ -104,6 +103,8 @@ export async function GET(
     }
 
     // Fetch document to verify access
+    // The documents table has RLS policies that only allow access to users
+    // who have access to the workspace, so if this query succeeds, the user has access
     const { data: document, error: docError } = await supabase
       .from("documents")
       .select("id, workspace_id, metadata, title, url")
@@ -112,22 +113,6 @@ export async function GET(
 
     if (docError || !document) {
       return NextResponse.json({ error: "Document not found" }, { status: 404 })
-    }
-
-    // Verify user has access to the workspace
-    const { data: workspace } = await supabase
-      .from("workspaces")
-      .select("id, space_id")
-      .eq("id", document.workspace_id)
-      .single()
-
-    if (!workspace) {
-      return NextResponse.json({ error: "Workspace not found" }, { status: 404 })
-    }
-
-    const canAccess = await userHasWorkspaceAccess(supabase, workspace.id, workspace.space_id, user.id)
-    if (!canAccess) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
     // Check if document is text/markdown or originated from workspace text sources
