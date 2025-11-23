@@ -81,7 +81,11 @@ export function parseStructuredCitations(content: string): ParsedCitation[] {
  * This is the regex-based extraction that was used before
  */
 export function extractQuotedPhrases(content: string): string[] {
-  const quotedPhrases = content.match(/"([^"]{10,500})"/g) || []
+  // CRITICAL: Remove all [citation:{...}] blocks BEFORE extracting quotes
+  // This prevents extracting JSON property values as quotes (e.g., "documentId":"Title")
+  const contentWithoutCitations = content.replace(/\[citation:\{[\s\S]*?\}\]/g, '')
+  
+  const quotedPhrases = contentWithoutCitations.match(/"([^"]{10,500})"/g) || []
   return quotedPhrases
     .map((q: string) => q.replace(/^"|"$/g, "").trim())
     .filter((p: string) => {
@@ -159,8 +163,18 @@ export function parseAllCitations(content: string): {
   // First, try to get structured citations
   const structured = parseStructuredCitations(content)
   
+  // Extract quotes FROM structured citations (these are the actual quotes to search for)
+  const structuredQuotes = structured
+    .map(c => c.quote)
+    .filter(q => q && q.length > 0)
+  
   // Extract quoted phrases (fallback for when structured citations aren't available)
-  const quotes = extractQuotedPhrases(content)
+  // These are extracted from the message content AFTER removing citation markers
+  const fallbackQuotes = extractQuotedPhrases(content)
+  
+  // Combine structured quotes (priority) with fallback quotes
+  // Remove duplicates using Set
+  const quotes = [...new Set([...structuredQuotes, ...fallbackQuotes])]
   
   // Extract list items
   const listItems = extractListItems(content)
