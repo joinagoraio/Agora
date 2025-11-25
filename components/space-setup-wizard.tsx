@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react"
 
 import { updateSpace, updateSpaceScope, enhanceScopeText, updateSpaceSetupState } from "@/lib/actions/space"
 import { createWorkspace } from "@/lib/actions/workspace"
+import { AddOverheidDocumentsDialog } from "@/components/add-overheid-documents-dialog"
 import { SpaceUploadDocumentDialog } from "@/components/space-upload-document-dialog"
 import { type SpaceDocumentItem } from "@/components/space-documents-panel"
 import { type SpaceWorkspace } from "@/components/space-workspace-list"
@@ -16,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, RotateCcw, Sparkles, Upload, Wand2, X } from "lucide-react"
+import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, RotateCcw, Sparkles, Upload, Wand2, X, Search } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 type SetupWizardState = {
@@ -71,6 +72,11 @@ const steps = [
     key: "scope",
     title: "Scope",
     description: "Write the summary everyone will inherit",
+  },
+  {
+    key: "overheid",
+    title: "Official sources",
+    description: "Let Agora pull Overheid.nl publications",
   },
   {
     key: "documents",
@@ -153,11 +159,24 @@ export function SpaceSetupWizard({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null)
   const [localDocuments, setLocalDocuments] = useState<SpaceDocumentItem[]>(documents)
+  const [overheidDialogOpen, setOverheidDialogOpen] = useState(false)
 
   // Update local documents when prop changes
   useEffect(() => {
     setLocalDocuments(documents)
   }, [documents])
+
+  const currentStepKey = steps[currentStep]?.key
+  const trimmedJurisdiction = jurisdictionLabel.trim()
+  const scopeContextSegments = [summary, description].map((value) => (value || "").trim()).filter((value) => value.length > 0)
+  const overheidContext = scopeContextSegments.join("\n\n")
+  const canLaunchOverheidSearch = trimmedJurisdiction.length > 0 && scopeContextSegments.length > 0
+
+  useEffect(() => {
+    if (currentStepKey !== "overheid") {
+      setOverheidDialogOpen(false)
+    }
+  }, [currentStepKey])
 
   const isFirstStep = currentStep === 0
   const isLastStep = currentStep === steps.length - 1
@@ -483,7 +502,7 @@ export function SpaceSetupWizard({
   }
 
   const renderStepContent = () => {
-    const stepKey = steps[currentStep]?.key
+    const stepKey = currentStepKey
     switch (stepKey) {
       case "welcome":
         return (
@@ -747,6 +766,61 @@ export function SpaceSetupWizard({
             </div>
           </div>
         )
+      case "overheid": {
+        const missingOverheidContextMessage = !trimmedJurisdiction
+          ? "Add a jurisdiction under Space basics to unlock the Overheid search."
+          : scopeContextSegments.length === 0
+            ? "Add a mission statement or description in the previous step so we know what to search for."
+            : null
+
+        return (
+          <div className="space-y-6">
+            <div className="flex flex-col gap-2">
+              <h3 className="text-base font-semibold text-foreground">Import official references</h3>
+              <p className="text-sm text-muted-foreground">
+                Agora will query Overheid.nl using your mission statement and jurisdiction to recommend foundational documents.
+              </p>
+            </div>
+            <div className="space-y-4 rounded-lg border border-dashed bg-muted/30 p-4">
+              <div className="flex items-start gap-3">
+                <Sparkles className="h-5 w-5 text-purple-500" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">AI-powered document search</p>
+                  <p className="text-xs text-muted-foreground">
+                    When this step opens we automatically search Overheid.nl and rank the matching publications.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                {trimmedJurisdiction && <Badge variant="secondary">{trimmedJurisdiction}</Badge>}
+                {scopeContextSegments.length > 0 && (
+                  <span>
+                    {scopeContextSegments.length === 1 ? "1 scope input" : `${scopeContextSegments.length} scope inputs`} included in the search.
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="button"
+                  onClick={() => setOverheidDialogOpen(true)}
+                  disabled={!canLaunchOverheidSearch}
+                  className="w-fit gap-2 bg-black text-white hover:bg-black/90"
+                >
+                  <Search className="h-4 w-4" />
+                  Search Overheid.nl
+                </Button>
+                {missingOverheidContextMessage ? (
+                  <p className="text-xs text-muted-foreground">{missingOverheidContextMessage}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    You can reopen the dialog anytime if you want to refine the suggested publications.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      }
       case "documents":
         return (
           <div className="space-y-6">
@@ -880,8 +954,9 @@ export function SpaceSetupWizard({
   }
 
   return (
-    <Dialog open={open} onOpenChange={() => {}}>
-      <DialogContent className="sm:max-w-4xl p-0" showCloseButton={false}>
+    <>
+      <Dialog open={open} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-4xl p-0" showCloseButton={false}>
         <DialogHeader className="space-y-4 border-b border-border px-6 pt-6 pb-4">
           <div className="flex flex-col items-start gap-1">
             <div className="space-y-1">
@@ -998,8 +1073,29 @@ export function SpaceSetupWizard({
             )}
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+      <AddOverheidDocumentsDialog
+        spaceId={spaceId}
+        workspaceLocation={trimmedJurisdiction || undefined}
+        workspaceContext={overheidContext || undefined}
+        open={overheidDialogOpen}
+        onOpenChange={setOverheidDialogOpen}
+        onSuccess={() => setStepError(null)}
+        onDocumentsAdded={(items) => {
+          if (Array.isArray(items) && items.length > 0) {
+            const normalized = items.filter(Boolean) as SpaceDocumentItem[]
+            if (normalized.length > 0) {
+              normalized.forEach((doc) => {
+                onDocumentUploaded(doc)
+              })
+              setLocalDocuments((current) => [...normalized, ...current])
+              setStepError(null)
+            }
+          }
+        }}
+      />
+    </>
   )
 }
 

@@ -7,6 +7,7 @@ import OpenAI from "openai"
 import { applyRateLimitHeaders, chatRateLimit, checkRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { chatMessageSchema } from "@/lib/validations/document"
 import { env } from "@/lib/env"
+import { resolveCitations } from "@/lib/chat/resolve-citations"
 import { getClientIdentifier } from "@/lib/utils/request"
 
 let cachedOpenAIClient: OpenAI | null = null
@@ -258,7 +259,7 @@ export async function POST(req: Request) {
         conversation_id: conversationId,
         role: "assistant",
         content: "",
-        sources: [],
+        sources: { documents: [], citations: [] },
         thinking_duration: null,
       })
       .select("id")
@@ -292,7 +293,7 @@ export async function POST(req: Request) {
     const contextStartTime = Date.now()
     console.log(`[Chat API] Starting RAG search for ${includedDocumentIds?.length || 0} documents...`)
     
-    const { context, sources } = await getRelevantContext(
+    const { context, sources: documentSources } = await getRelevantContext(
       workspaceId,
       userQuery,
       excludedDocumentIds,
@@ -313,7 +314,7 @@ export async function POST(req: Request) {
     
     if (hasPreviousMessages && (excludedDocumentIds.length > 0 || excludedNoteIds.length > 0 || excludedEvidenceIds.length > 0)) {
       // Build list of included documents from sources
-      const includedDocTitles = sources
+      const includedDocTitles = documentSources
         .filter((s: any) => s.id && !excludedDocumentIds.includes(s.id))
         .map((s: any) => s.title || s.id)
         .filter(Boolean)
@@ -380,7 +381,7 @@ export async function POST(req: Request) {
     if (includedDocumentIds && includedDocumentIds.length > 0) {
       console.log(`[Chat API] Included document IDs: ${includedDocumentIds.join(", ")}`)
       console.log(`[Chat API] Context length: ${context.length} chars`)
-      console.log(`[Chat API] Sources count: ${sources.length}`)
+      console.log(`[Chat API] Sources count: ${documentSources.length}`)
       if (context.length < 100) {
         console.warn(`[Chat API] Context is very short, document may not have content`)
       }
@@ -394,16 +395,20 @@ export async function POST(req: Request) {
         conversationId,
         workspaceId,
       })
-      return withRateLimit(
-        new Response(
-          JSON.stringify({
-            error: "Prompt rejected due to security policy",
-            reasons: promptGuard.reasons,
-            severity: promptGuard.severity,
-          }),
-          { status: 400, headers: { "Content-Type": "application/json" } },
-        ),
-      )
+
+      // Only block requests that are high severity. Log and continue for low/medium.
+      if (promptGuard.severity === "high") {
+        return withRateLimit(
+          new Response(
+            JSON.stringify({
+              error: "Prompt rejected due to security policy",
+              reasons: promptGuard.reasons,
+              severity: promptGuard.severity,
+            }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
     }
 
     // Build system prompt with context
@@ -513,33 +518,25 @@ CRITICAL QUOTING REQUIREMENTS:
 - Do NOT change punctuation, capitalization, or wording in quotes
 - Do NOT add or remove words from the original text
 - If you cannot find the exact text in the context, do NOT quote it - instead, describe what you found
-- After each quoted passage, immediately add [doc] to cite the source
-- When listing multiple items from the document, quote EACH item separately with [doc] after each one
-- Do NOT just list items without quotes - each item must be quoted individually
 
-STRUCTURED CITATION FORMAT (PREFERRED - enables perfect highlighting):
-- For each quote, STRONGLY PREFERRED to include structured citation data in this format: [citation:{"quote":"exact quoted text","documentId":"doc-id","textSpan":{"start":100,"end":200},"pageNumber":1}]
+STRUCTURED CITATION FORMAT (MANDATORY):
+- For every quote you include, you MUST add a structured citation in this format: [citation:{"quote":"exact quoted text","documentId":"doc-id","textSpan":{"start":100,"end":200},"pageNumber":1}]
 - The quote field MUST contain the EXACT text you're quoting (character-for-character match)
-- The documentId should match the document ID from the sources provided
-- The textSpan should indicate the character positions (start and end) of the quote in the document
-- The pageNumber should indicate which page the quote is on
-- Structured citations enable 100% accurate highlighting - use them whenever possible
-- Example: "The entrepreneur mentions the need for a clear view" [citation:{"quote":"The entrepreneur mentions the need for a clear view","documentId":"doc-123","textSpan":{"start":150,"end":200},"pageNumber":1}] [doc]
-- FALLBACK: If you cannot determine the exact textSpan, you can use the simple "[doc]" format after the quote, but structured citations are strongly preferred
+- The documentId MUST match the document ID from the sources provided
+- The textSpan MUST indicate the character positions (start and end) of the quote in the document
+- The pageNumber MUST indicate which page the quote is on
+- Structured citations enable accurate highlighting and auditing - they are required for every quote
+- Example: "The entrepreneur mentions the need for a clear view" [citation:{"quote":"The entrepreneur mentions the need for a clear view","documentId":"doc-123","textSpan":{"start":150,"end":200},"pageNumber":1}]
 
 Example of CORRECT quoting:
 Context contains: "The entrepreneur mentions the need for a clear view of my financial situation and a clear view of risks, like employees calling in sick or inability to fire them, and what that can cost."
-Your response: "The entrepreneur mentions the need for a 'clear view of my financial situation' and a 'clear view of risks, like employees calling in sick or inability to fire them, and what that can cost.'" [doc]
-
-Example of CORRECT list quoting:
-Context contains: "Authentication & Authorization\nEncryption & Secrets Management\nAPI Security\nCode Organization"
-Your response: There are four items: "Authentication & Authorization" [doc], "Encryption & Secrets Management" [doc], "API Security" [doc], and "Code Organization" [doc].
+Your response: "The entrepreneur mentions the need for a 'clear view of my financial situation' and a 'clear view of risks, like employees calling in sick or inability to fire them, and what that can cost.'" [citation:{"quote":"The entrepreneur mentions the need for a 'clear view of my financial situation' and a 'clear view of risks, like employees calling in sick or inability to fire them, and what that can cost.","documentId":"doc-123","textSpan":{"start":150,"end":280},"pageNumber":1}]
 
 Example of INCORRECT quoting (DO NOT DO THIS):
 Context contains: "The entrepreneur mentions the need for a clear view of my financial situation"
-Your response: "The entrepreneur wants to see their finances" [doc] ❌ WRONG - this is paraphrased, not quoted
-Your response: "The entrepreneur mentions the need for a clear view of their financial situation" [doc] ❌ WRONG - changed "my" to "their"
-Your response: There are four items: Authentication & Authorization, Encryption & Secrets Management, API Security, Code Organization. [doc] ❌ WRONG - items are not quoted individually
+Your response: "The entrepreneur wants to see their finances" ❌ WRONG - this is paraphrased, not quoted
+Your response: "The entrepreneur mentions the need for a clear view of their financial situation" ❌ WRONG - changed "my" to "their"
+Your response: There are four items: Authentication & Authorization, Encryption & Secrets Management, API Security, Code Organization. ❌ WRONG - items are not quoted individually with structured citations
 
 - When referencing workspace/space properties (not from documents), you can mention it without quotes or use single quotes to distinguish it
 - Be explicit about what comes from documents/notes/evidence vs workspace/space properties
@@ -548,7 +545,7 @@ Your response: There are four items: Authentication & Authorization, Encryption 
 - CRITICAL: If previous messages in the conversation referenced specific documents, notes, or evidence, and those items are NOT in the current context below, you MUST NOT use that information - ignore those previous references completely
 - When answering follow-up questions, first verify that any documents/notes/evidence mentioned in previous messages are still in the current context - if not, state they're no longer available
 - Cite sources when possible, including page numbers if available
-${isDocumentPreview ? "- Since you're viewing a specific document, you can reference specific pages and sections. When quoting from this document, use double quotes around the EXACT text (character-for-character match) and add [doc] after each quote." : ""}
+${isDocumentPreview ? "- Since you're viewing a specific document, you can reference specific pages and sections. Continue to quote exact text and include structured citations for each quote." : ""}
 - If asked about something outside your context, politely explain you can only answer based on:
   1. The documents, notes, and evidence that the user has included in the AI Context section (provided below)
   2. The workspace and space properties (always available)
@@ -558,12 +555,11 @@ ${contextMentionInstruction}
 
 Citation formatting rules:
 - ALWAYS quote specific passages from documents using double quotes ("text") with EXACT character-for-character match
-- PREFERRED: Use structured citations [citation:{...}] for each quote (enables perfect highlighting)
-- FALLBACK: If structured citations aren't possible, add [doc] immediately after each quoted passage
+- ALWAYS include structured citations [citation:{...}] for each quote (enables perfect highlighting)
 - Do NOT summarize, paraphrase, or modify quoted text - copy it EXACTLY
-- For lists of items from documents, quote the relevant passage EXACTLY and add structured citation or [doc] after the quote
+- For lists of items from documents, quote the relevant passage EXACTLY and include a structured citation after the quote
 - You can have multiple quoted passages with citations in a single response
-- If a quote spans multiple sentences, include the entire passage in one quote with citation at the end`
+- If a quote spans multiple sentences, include the entire passage in one quote with a structured citation at the end`
 
     // Prepare messages for OpenAI (convert to OpenAI format)
     const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
@@ -612,8 +608,48 @@ Citation formatting rules:
             const content = chunk.choices[0]?.delta?.content || ""
             if (content) {
               fullResponse += content
-              controller.enqueue(encoder.encode(content))
             }
+          }
+
+          // Resolve structured citations from the full response
+          let resolvedCitations: Awaited<ReturnType<typeof resolveCitations>> = []
+          try {
+            resolvedCitations = await resolveCitations({
+              content: fullResponse,
+              workspaceId,
+              supabase: adminSupabase,
+              documents: documentSources,
+            })
+          } catch (citationError) {
+            console.error("[Chat API] Failed to resolve citations:", citationError)
+          }
+
+          let finalResponse = fullResponse
+          let finalCitations = resolvedCitations
+
+          if (documentSources.length > 0 && resolvedCitations.length === 0) {
+            console.warn("[Chat API] No structured citations found, attempting regeneration with stricter instructions")
+            const regenerationResult = await regenerateResponseWithCitations({
+              openai,
+              model,
+              conversationMessages: openaiMessages,
+              previousAnswer: fullResponse,
+              workspaceId,
+              supabase: adminSupabase,
+              documents: documentSources,
+            })
+
+            if (regenerationResult) {
+              finalResponse = regenerationResult.content
+              finalCitations = regenerationResult.citations
+            } else {
+              console.warn("[Chat API] Regeneration failed to produce citations. Proceeding without highlights.")
+            }
+          }
+
+          const messageSourcesPayload = {
+            documents: documentSources,
+            citations: finalCitations,
           }
 
           // Save assistant message to database after streaming completes (using admin client to bypass RLS)
@@ -622,8 +658,8 @@ Citation formatting rules:
               const { error: updateError } = await adminSupabase
                 .from("messages")
                 .update({
-                  content: fullResponse,
-                  sources: sources,
+                  content: finalResponse,
+                  sources: messageSourcesPayload,
                   thinking_duration: thinkingDuration,
                 })
                 .eq("id", assistantMessageId)
@@ -636,8 +672,8 @@ Citation formatting rules:
               const { error: insertError } = await adminSupabase.from("messages").insert({
                 conversation_id: conversationId,
                 role: "assistant",
-                content: fullResponse,
-                sources: sources,
+                content: finalResponse,
+                sources: messageSourcesPayload,
                 thinking_duration: thinkingDuration,
               })
               
@@ -713,6 +749,10 @@ Citation formatting rules:
             console.error("[Chat API] Failed to persist assistant response:", dbError)
           }
 
+          if (finalResponse) {
+            controller.enqueue(encoder.encode(finalResponse))
+          }
+
           controller.close()
         } catch (streamError) {
           console.error("[Chat API] Stream error:", streamError)
@@ -733,7 +773,7 @@ Citation formatting rules:
                 .from("messages")
                 .update({
                   content: `[Error: ${errorMessage}]`,
-                  sources: [],
+                  sources: { documents: [], citations: [] },
                 })
                 .eq("id", assistantMessageId)
             } catch (placeholderUpdateError) {
@@ -907,5 +947,77 @@ Citation formatting rules:
         }
       )
     )
+  }
+}
+
+async function regenerateResponseWithCitations(params: {
+  openai: OpenAI
+  model: string
+  conversationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+  previousAnswer: string
+  workspaceId: string
+  supabase: ReturnType<typeof createAdminClient>
+  documents: any[]
+}): Promise<{ content: string; citations: Awaited<ReturnType<typeof resolveCitations>> } | null> {
+  const {
+    openai,
+    model,
+    conversationMessages,
+    previousAnswer,
+    workspaceId,
+    supabase,
+    documents,
+  } = params
+
+  const reinforcementMessage: OpenAI.Chat.Completions.ChatCompletionMessageParam = {
+    role: "user",
+    content: `Your previous response failed to include the mandatory exact quotes and structured citations.
+
+Re-answer the user's latest request RIGHT NOW following these STRICT rules:
+1. Quote the exact passages (character-for-character) from the provided context.
+2. After EACH quoted passage, include the required structured citation in this format: [citation:{"quote":"exact quoted text","documentId":"doc-id","textSpan":{"start":100,"end":200},"pageNumber":1}]
+3. If you truly cannot provide at least one exact quote with a structured citation, respond ONLY with: "INSUFFICIENT_CONTEXT_FOR_CITATIONS"
+
+Restate the full answer with the required quotes and citations.`,
+  }
+
+  const regenMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    ...conversationMessages,
+    { role: "assistant", content: previousAnswer },
+    reinforcementMessage,
+  ]
+
+  try {
+    const regenResponse = await openai.chat.completions.create({
+      model,
+      messages: regenMessages,
+      temperature: 0.2,
+    })
+
+    const regenContent = regenResponse.choices[0]?.message?.content?.trim()
+    if (!regenContent || regenContent === "INSUFFICIENT_CONTEXT_FOR_CITATIONS") {
+      console.warn("[Chat API] Regeneration returned insufficient citations response.")
+      return null
+    }
+
+    const regenCitations = await resolveCitations({
+      content: regenContent,
+      workspaceId,
+      supabase,
+      documents,
+    })
+
+    if (regenCitations.length === 0) {
+      console.warn("[Chat API] Regeneration still produced zero citations.")
+      return null
+    }
+
+    return {
+      content: regenContent,
+      citations: regenCitations,
+    }
+  } catch (error) {
+    console.error("[Chat API] Error during regeneration attempt:", error)
+    return null
   }
 }

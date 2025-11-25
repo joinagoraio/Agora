@@ -1,24 +1,33 @@
 "use client"
 
-import { createClient } from "@/lib/supabase/client"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { toast } from "sonner"
+import { LogOut, User, UserCircle, Languages, Loader2 } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { User, LogOut, UserCircle } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
+import { useI18n } from "@/lib/i18n/use-i18n"
+import { SUPPORTED_LANGUAGES, type SupportedLanguage, isSupportedLanguage } from "@/lib/i18n/config"
+import { fetchCsrfToken } from "@/lib/utils/csrf"
 
 export function UserMenu() {
   const router = useRouter()
   const [userName, setUserName] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
+  const [isUpdatingLanguage, setIsUpdatingLanguage] = useState(false)
+  const { language, setLanguage, t } = useI18n()
 
   useEffect(() => {
     setMounted(true)
@@ -56,6 +65,15 @@ export function UserMenu() {
     router.push("/profile")
   }
 
+  const languageOptions = useMemo(
+    () =>
+      SUPPORTED_LANGUAGES.map((value) => ({
+        value,
+        label: value === "en" ? t("common.language.english") : t("common.language.dutch"),
+      })),
+    [t],
+  )
+
   // Prevent hydration mismatch by only rendering Radix UI components on client
   if (!mounted) {
     return (
@@ -65,6 +83,56 @@ export function UserMenu() {
     )
   }
 
+  const persistLanguagePreference = async (nextLanguage: SupportedLanguage) => {
+    setIsUpdatingLanguage(true)
+    try {
+      const csrfToken = await fetchCsrfToken()
+      if (!csrfToken) {
+        throw new Error("CSRF token unavailable")
+      }
+
+      const response = await fetch("/api/profile/language", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        body: JSON.stringify({ language: nextLanguage }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to update language")
+      }
+
+      const payload = (await response.json()) as { language?: string }
+      if (payload.language && isSupportedLanguage(payload.language) && payload.language !== nextLanguage) {
+        setLanguage(payload.language)
+      }
+
+      toast.success(t("common.language.success"))
+    } catch (error) {
+      toast.error(t("common.language.error"))
+      throw error
+    } finally {
+      setIsUpdatingLanguage(false)
+    }
+  }
+
+  const handleLanguageChange = async (nextValue: string) => {
+    if (!isSupportedLanguage(nextValue) || nextValue === language || isUpdatingLanguage) {
+      return
+    }
+
+    const previousLanguage = language
+    setLanguage(nextValue)
+
+    try {
+      await persistLanguagePreference(nextValue)
+    } catch {
+      setLanguage(previousLanguage)
+    }
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -72,7 +140,7 @@ export function UserMenu() {
           <User className="h-5 w-5" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuContent align="end" className="w-64">
         {userName && (
           <>
             <DropdownMenuLabel className="font-normal">
@@ -90,15 +158,32 @@ export function UserMenu() {
         )}
         <DropdownMenuItem onClick={handleProfileClick}>
           <UserCircle className="mr-2 h-3.5 w-3.5" />
-          <span>Profile</span>
+          <span>{t("common.actions.profile")}</span>
         </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
+          <span className="inline-flex items-center gap-2 text-[11px] font-semibold text-muted-foreground">
+            <Languages className="h-3 w-3" />
+            {t("common.language.label")}
+          </span>
+          {isUpdatingLanguage && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+        </DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={language} onValueChange={handleLanguageChange}>
+          {languageOptions.map((option) => (
+            <DropdownMenuRadioItem key={option.value} value={option.value}>
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+
         <DropdownMenuSeparator />
         <DropdownMenuItem 
           onClick={handleSignOut}
           className="hover:!bg-destructive/10 hover:!text-destructive focus:!bg-destructive/10 focus:!text-destructive [&:hover_svg]:!text-destructive [&:focus_svg]:!text-destructive [&:hover_span]:!text-destructive [&:focus_span]:!text-destructive"
         >
           <LogOut className="mr-2 h-3.5 w-3.5" />
-          <span>Sign Out</span>
+          <span>{t("common.actions.signOut")}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

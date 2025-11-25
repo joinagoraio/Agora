@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { MultiFormatViewer } from "@/components/multi-format-viewer"
-import { useHighlightContext } from "@/lib/contexts/highlight-context"
+import { useHighlightContext, type Highlight as HighlightRecord } from "@/lib/contexts/highlight-context"
 import { ZOOM_PRESETS, type ViewerControls } from "@/components/pdf-viewer"
-import { getHighlightCoordinates } from "@/lib/utils/pdf-extraction"
+import { getHighlightCoordinates, findTextSpan } from "@/lib/utils/pdf-extraction"
 import { Button } from "@/components/ui/button"
 import {
   ArrowLeft,
@@ -47,6 +47,25 @@ interface DocumentViewerClientProps {
 }
 
 const DOCUMENT_VIEWER_HEADER_HEIGHT = 64
+const PENDING_HIGHLIGHT_STORAGE_KEY = "agora:pendingHighlight"
+
+type HighlightEventPayload = {
+  documentId?: string
+  highlightId?: string
+  textSpan?: { start: number; end: number }
+  pageNumber?: number
+  quote?: string
+  color?: string
+  source?: HighlightRecord["source"]
+  confidence?: HighlightRecord["confidence"]
+  coordinates?: HighlightRecord["coordinates"]
+}
+
+type PendingHighlightFocus = {
+  highlightId?: string
+  textSpan?: { start: number; end: number }
+  clearStorage?: boolean
+}
 
 export function DocumentViewerClient({
   workspaceId,
@@ -65,11 +84,90 @@ export function DocumentViewerClient({
     getHighlightsForDocument, 
     autoHighlight, 
     setAutoHighlight, 
-    setActiveDocument 
+    setActiveDocument,
+    addHighlight,
   } = highlightContext
   
   const [controls, setControls] = useState<ViewerControls | null>(null)
+  const [hoveredHighlightId, setHoveredHighlightId] = useState<string | null>(null)
   const searchParams = useSearchParams()
+  const pendingHighlightRequestRef = useRef<PendingHighlightFocus | null>(null)
+  
+  const clearPendingHighlightStorage = useCallback((expectedHighlightId?: string) => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    const raw = window.sessionStorage.getItem(PENDING_HIGHLIGHT_STORAGE_KEY)
+    if (!raw) {
+      return
+    }
+
+    try {
+      const payload = JSON.parse(raw)
+      if (!expectedHighlightId || !payload?.highlightId || payload.highlightId === expectedHighlightId) {
+        window.sessionStorage.removeItem(PENDING_HIGHLIGHT_STORAGE_KEY)
+      }
+    } catch {
+      window.sessionStorage.removeItem(PENDING_HIGHLIGHT_STORAGE_KEY)
+    }
+  }, [])
+
+  const ensureHighlightForPayload = useCallback(
+    (payload?: HighlightEventPayload | null) => {
+      if (!payload || !payload.textSpan) {
+        return false
+      }
+
+      const { textSpan } = payload
+      const hasSpan =
+        typeof textSpan.start === "number" &&
+        typeof textSpan.end === "number" &&
+        textSpan.start >= 0 &&
+        textSpan.end > textSpan.start
+
+      if (!hasSpan) {
+        return false
+      }
+
+      const parsedPage = Number(payload.pageNumber ?? 1)
+      const safePageNumber = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1
+
+      const existingHighlights = getHighlightsForDocument(documentId)
+      const alreadyExists = existingHighlights.some((h) => {
+        if (payload.highlightId && h.id === payload.highlightId) {
+          return true
+        }
+        if (!h.textSpan || !h.pageNumber) {
+          return false
+        }
+        return (
+          h.pageNumber === safePageNumber &&
+          h.textSpan.start === textSpan.start &&
+          h.textSpan.end === textSpan.end
+        )
+      })
+
+      if (alreadyExists) {
+        return true
+      }
+
+      addHighlight(documentId, {
+        id: payload.highlightId || `pending-highlight-${documentId}-${safePageNumber}-${Date.now()}`,
+        documentId,
+        textSpan: payload.textSpan,
+        pageNumber: safePageNumber,
+        quote: payload.quote || "",
+        source: payload.source || "ai_response",
+        confidence: payload.confidence || "exact",
+        color: payload.color || "rgba(255, 221, 0, 0.45)",
+        coordinates: payload.coordinates,
+      })
+
+      return false
+    },
+    [addHighlight, documentId, getHighlightsForDocument],
+  )
   
   // Check if there's an active conversation - only show highlights if there is one
   const conversationId = searchParams.get("conversationId")
@@ -232,20 +330,138 @@ export function DocumentViewerClient({
     }
     
     // For PDFs, compute coordinates for highlights that don't have them
-    return highlights.map((highlight) => {
-      if (highlight.coordinates || !highlight.textSpan) {
-        return highlight
+    const adjustTextSpanToOffsets = (
+      span: { start: number; end: number },
+      pageText?: string,
+      offsets?: Record<number, number>,
+    ): { start: number; end: number } | null => {
+      if (!span || typeof span.start !== "number" || typeof span.end !== "number" || span.end <= span.start) {
+        return null
       }
-      
-      const pageData = pages.find((p: any) => p.page_number === highlight.pageNumber)
-      if (pageData) {
-        const coordinates = getHighlightCoordinates(
-          highlight.textSpan,
-          pageData.text_items || [],
-          pageData.character_offsets || {},
-        )
+      if (!offsets) {
+        return null
+      }
+
+      let { start, end } = span
+      while (start < end && offsets[start] === undefined) {
+        start++
+      }
+      while (end > start && offsets[end - 1] === undefined) {
+        end--
+      }
+
+      if (end <= start) {
+        return null
+      }
+
+      if (pageText) {
+        while (start < end && /\s/.test(pageText[start]) && offsets[start] === undefined) {
+          start++
+        }
+        while (end > start && /\s/.test(pageText[end - 1]) && offsets[end - 1] === undefined) {
+          end--
+        }
+      }
+
+      if (end <= start) {
+        return null
+      }
+
+      if (offsets[start] === undefined || offsets[end - 1] === undefined) {
+        return null
+      }
+
+      return { start, end }
+    }
+
+    return highlights.map((highlight) => {
+      const normalizedTargetPage = Number(highlight.pageNumber) || 1
+      if (highlight.coordinates) {
         return {
           ...highlight,
+          pageNumber: normalizedTargetPage,
+        }
+      }
+
+      const pageData = pages.find((p: any) => Number(p.page_number) === normalizedTargetPage)
+      if (pageData) {
+        let textItems = pageData.text_items
+        if (typeof textItems === "string") {
+          try {
+            textItems = JSON.parse(textItems)
+          } catch {
+            textItems = []
+          }
+        } else if (!Array.isArray(textItems)) {
+          textItems = []
+        }
+
+        let characterOffsets = pageData.character_offsets
+        if (typeof characterOffsets === "string") {
+          try {
+            characterOffsets = JSON.parse(characterOffsets)
+          } catch {
+            characterOffsets = {}
+          }
+        } else if (!characterOffsets || typeof characterOffsets !== "object") {
+          characterOffsets = {}
+        }
+
+        const pageTextContent =
+          typeof pageData.text_content === "string" ? pageData.text_content : ""
+
+        let resolvedTextSpan = highlight.textSpan
+        const spanIsValid =
+          resolvedTextSpan &&
+          typeof resolvedTextSpan.start === "number" &&
+          typeof resolvedTextSpan.end === "number" &&
+          resolvedTextSpan.end > resolvedTextSpan.start
+
+        let resolvedSpanWithOffsets: { start: number; end: number } | null = null
+        if (spanIsValid) {
+          resolvedSpanWithOffsets = adjustTextSpanToOffsets(
+            resolvedTextSpan as { start: number; end: number },
+            pageTextContent,
+            characterOffsets,
+          )
+        }
+
+        if ((!spanIsValid || !resolvedSpanWithOffsets) && highlight.quote && pageTextContent) {
+          const fallbackSpan = findTextSpan(pageTextContent, highlight.quote)
+          if (fallbackSpan) {
+            resolvedTextSpan = fallbackSpan
+            resolvedSpanWithOffsets = adjustTextSpanToOffsets(fallbackSpan, pageTextContent, characterOffsets)
+          }
+        }
+
+        if (!resolvedSpanWithOffsets) {
+          return {
+            ...highlight,
+            pageNumber: normalizedTargetPage,
+            textSpan: resolvedTextSpan ?? highlight.textSpan,
+            confidence: highlight.confidence ?? "approximate",
+          }
+        }
+
+        const coordinates = getHighlightCoordinates(
+          resolvedSpanWithOffsets,
+          textItems || [],
+          characterOffsets || {},
+        )
+
+        if (!coordinates) {
+          return {
+            ...highlight,
+            pageNumber: normalizedTargetPage,
+            textSpan: resolvedSpanWithOffsets,
+            confidence: highlight.confidence ?? "approximate",
+          }
+        }
+
+        return {
+          ...highlight,
+          pageNumber: normalizedTargetPage,
+          textSpan: resolvedSpanWithOffsets,
           coordinates,
         }
       }
@@ -261,27 +477,26 @@ export function DocumentViewerClient({
   
   // Determine which highlights to show based on context and auto-highlight toggle
   const hasActiveConversation = !!conversationId
+  const hasAIHighlights = contextHighlights.some((h) => h.source === "ai_response")
   
   // Filter highlights based on source and auto-highlight state
   const highlightsToUse = useMemo(() => {
-    if (!hasActiveConversation && contextHighlights.length === 0) {
-      return [] // No conversation and no highlights
+    if (contextHighlights.length === 0) {
+      return []
     }
-    
-    if (autoHighlight) {
-      // Auto-highlight ON: show all highlights from context
-      return contextHighlights
-    } else {
-      // Auto-highlight OFF: only show highlights from user clicks (not AI responses)
-      return contextHighlights.filter(h => h.source === 'user_click')
+
+    if (!autoHighlight) {
+      return contextHighlights.filter((h) => h.source === "user_click")
     }
-  }, [contextHighlights, autoHighlight, hasActiveConversation])
+
+    return contextHighlights
+  }, [contextHighlights, autoHighlight])
   
   // Compute coordinates for PDF highlights
   const finalHighlights = useMemo(() => {
     return computeHighlightCoordinates(highlightsToUse)
   }, [highlightsToUse, computeHighlightCoordinates])
-  
+
   // Track current highlight index for navigation
   const [currentHighlightIndex, setCurrentHighlightIndex] = useState<number | null>(null)
   
@@ -295,28 +510,107 @@ export function DocumentViewerClient({
   }, [finalHighlights.length, currentHighlightIndex])
           
   // Navigation functions
-  const navigateToHighlight = useCallback((index: number) => {
-    if (index < 0 || index >= finalHighlights.length) return
-    setCurrentHighlightIndex(index)
-    
-    const highlight = finalHighlights[index]
-    if (controls && controls.goToPage && highlight.pageNumber) {
-      controls.goToPage(highlight.pageNumber)
+  const navigateToHighlight = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= finalHighlights.length) return
+      setCurrentHighlightIndex(index)
+      
+      const highlight = finalHighlights[index]
+      if (controls && controls.goToPage && highlight.pageNumber) {
+        controls.goToPage(highlight.pageNumber)
       }
 
-    // Dispatch scroll event for text documents
-      setTimeout(() => {
-      window.dispatchEvent(new CustomEvent("scrollToHighlight", {
-        detail: { highlight, pageNumber: highlight.pageNumber },
-        }))
-      }, 300)
-  }, [finalHighlights, controls])
+      if (typeof window === "undefined") {
+        return
+      }
+
+      if (isTextDocument) {
+        setTimeout(() => {
+          window.dispatchEvent(
+            new CustomEvent("scrollToHighlight", {
+              detail: {
+                highlight,
+                highlightId: highlight.id,
+                highlightIndex: index,
+                pageNumber: highlight.pageNumber,
+              },
+            }),
+          )
+        }, 300)
+      } else if (highlight.pageNumber) {
+        window.dispatchEvent(
+          new CustomEvent("scrollToPage", {
+            detail: {
+              pageNumber: highlight.pageNumber,
+              highlight,
+            },
+          }),
+        )
+      }
+    },
+    [finalHighlights, controls, isTextDocument],
+  )
   
   const navigateToNextHighlight = useCallback(() => {
     if (currentHighlightIndex === null || finalHighlights.length === 0) return
     const nextIndex = (currentHighlightIndex + 1) % finalHighlights.length
     navigateToHighlight(nextIndex)
   }, [currentHighlightIndex, finalHighlights.length, navigateToHighlight])
+
+  const focusHighlightByIdentifier = useCallback(
+    (highlightId?: string, span?: { start: number; end: number }) => {
+      if (!finalHighlights || finalHighlights.length === 0) {
+        return false
+      }
+
+      let targetIndex = -1
+      if (highlightId) {
+        targetIndex = finalHighlights.findIndex((h) => h.id === highlightId)
+      }
+      if (targetIndex === -1 && span) {
+        targetIndex = finalHighlights.findIndex(
+          (h) => h.textSpan && h.textSpan.start === span.start && h.textSpan.end === span.end,
+        )
+      }
+
+      if (targetIndex !== -1) {
+        navigateToHighlight(targetIndex)
+        return true
+      }
+
+      return false
+    },
+    [finalHighlights, navigateToHighlight],
+  )
+  
+  const processHighlightPayload = useCallback(
+    (payload?: HighlightEventPayload | null, options?: { fromStorage?: boolean }) => {
+      if (!payload) {
+        return
+      }
+      if (payload.documentId && payload.documentId !== documentId) {
+        return
+      }
+
+      const highlightReady = ensureHighlightForPayload(payload)
+      if (highlightReady) {
+        const handledNow = focusHighlightByIdentifier(payload.highlightId, payload.textSpan)
+        if (handledNow) {
+          if (options?.fromStorage) {
+            clearPendingHighlightStorage(payload.highlightId)
+          }
+          return
+        }
+      }
+
+      pendingHighlightRequestRef.current = {
+        highlightId: payload.highlightId,
+        textSpan: payload.textSpan,
+        clearStorage: options?.fromStorage ?? false,
+      }
+    },
+    [clearPendingHighlightStorage, documentId, ensureHighlightForPayload, focusHighlightByIdentifier],
+  )
   
   const navigateToPreviousHighlight = useCallback(() => {
     if (currentHighlightIndex === null || finalHighlights.length === 0) return
@@ -326,6 +620,51 @@ export function DocumentViewerClient({
     navigateToHighlight(prevIndex)
   }, [currentHighlightIndex, finalHighlights.length, navigateToHighlight])
   
+  useEffect(() => {
+    if (!pendingHighlightRequestRef.current) {
+      return
+    }
+
+    const { highlightId, textSpan, clearStorage } = pendingHighlightRequestRef.current
+    if (!highlightId && !textSpan) {
+      pendingHighlightRequestRef.current = null
+      return
+    }
+
+    const handled = focusHighlightByIdentifier(highlightId, textSpan)
+    if (handled) {
+      if (clearStorage) {
+        clearPendingHighlightStorage(highlightId)
+      }
+      pendingHighlightRequestRef.current = null
+    }
+  }, [finalHighlights, focusHighlightByIdentifier, clearPendingHighlightStorage])
+  
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+    const raw = window.sessionStorage.getItem(PENDING_HIGHLIGHT_STORAGE_KEY)
+    if (!raw) {
+      return
+    }
+    try {
+      const payload = JSON.parse(raw)
+      processHighlightPayload(payload, { fromStorage: true })
+    } catch {
+      window.sessionStorage.removeItem(PENDING_HIGHLIGHT_STORAGE_KEY)
+    }
+  }, [processHighlightPayload])
+
+  useEffect(() => {
+    const handleFocusRequest = (event: CustomEvent<HighlightEventPayload>) => {
+      processHighlightPayload(event.detail, { fromStorage: false })
+    }
+
+    window.addEventListener("focusDocumentHighlight", handleFocusRequest as EventListener)
+    return () => window.removeEventListener("focusDocumentHighlight", handleFocusRequest as EventListener)
+  }, [processHighlightPayload])
+
   // Keyboard shortcuts for highlight navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -346,6 +685,45 @@ export function DocumentViewerClient({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [finalHighlights.length, navigateToNextHighlight, navigateToPreviousHighlight])
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+    const raw = window.sessionStorage.getItem(PENDING_HIGHLIGHT_STORAGE_KEY)
+    if (!raw) {
+      return
+    }
+    try {
+      const payload = JSON.parse(raw)
+      if (payload.documentId && payload.documentId !== documentId) {
+        return
+      }
+      const handled = focusHighlightByIdentifier(payload.highlightId, payload.textSpan)
+      if (handled) {
+        window.sessionStorage.removeItem(PENDING_HIGHLIGHT_STORAGE_KEY)
+      }
+    } catch {
+      window.sessionStorage.removeItem(PENDING_HIGHLIGHT_STORAGE_KEY)
+    }
+  }, [documentId, focusHighlightByIdentifier])
+
+  useEffect(() => {
+    const handleHover = (event: any) => {
+      const { documentId: targetDocId, highlightId, active } = event.detail || {}
+      if (targetDocId && targetDocId !== documentId) {
+        return
+      }
+      if (!active) {
+        setHoveredHighlightId((current) => (current === highlightId ? null : current))
+      } else {
+        setHoveredHighlightId(highlightId || null)
+      }
+    }
+
+    window.addEventListener("hoverDocumentHighlight", handleHover as EventListener)
+    return () => window.removeEventListener("hoverDocumentHighlight", handleHover as EventListener)
+  }, [documentId])
 
   console.log("[DocumentViewerClient] Computed highlights:", {
     highlightsCount: finalHighlights.length,
@@ -543,6 +921,7 @@ export function DocumentViewerClient({
             viewportOffset={DOCUMENT_VIEWER_HEADER_HEIGHT}
             onControlsReady={setControls}
             autoHighlight={autoHighlight}
+            hoveredHighlightId={hoveredHighlightId}
           />
         ) : (
           <div className="flex h-full items-center justify-center">

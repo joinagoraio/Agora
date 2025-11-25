@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/server"
+import { getServerTranslator } from "@/lib/i18n/server"
 import { getSourcesByWorkspace } from "@/lib/actions/source"
 import { getWorkspaceDocuments, getArchivedDocumentCount } from "@/lib/actions/document"
 import {
@@ -51,6 +52,7 @@ export default async function WorkspacePage({
 }) {
   const { workspaceId } = await params
   const supabase = await createClient()
+  const { t } = await getServerTranslator()
 
   const {
     data: { user },
@@ -223,15 +225,38 @@ export default async function WorkspacePage({
           ? summaryFromContent
           : undefined
 
+    const metadataTypeRaw = typeof metadata.type === "string" ? metadata.type : undefined
+    const metadataType = metadataTypeRaw?.toLowerCase() ?? ""
+    const metadataSourceUrl =
+      typeof metadata.sourceUrl === "string"
+        ? metadata.sourceUrl
+        : typeof metadata.source_url === "string"
+          ? metadata.source_url
+          : undefined
+    const fallbackExternalUrl =
+      typeof doc.url === "string" && !doc.url.startsWith("/") ? (doc.url as string) : undefined
+    const sourcePageUrl = metadataSourceUrl || fallbackExternalUrl
+    const isExternalHtmlDoc = metadataType.includes("html") && !!sourcePageUrl
+    const sourceFileUrl =
+      typeof metadata.sourceFileUrl === "string" && metadata.sourceFileUrl.length > 0
+        ? (metadata.sourceFileUrl as string)
+        : typeof doc.url === "string"
+          ? (doc.url as string)
+          : undefined
+    const viewerUrl = isExternalHtmlDoc && sourcePageUrl ? sourcePageUrl : `/workspaces/${workspaceId}/documents/${doc.id}`
+
     return {
       id: doc.id,
       item_type: "document",
       classification: doc.classification ?? "public",
       created_at: doc.created_at,
+      source_url: sourcePageUrl,
       payload: {
         title: doc.title || (metadata.sourceFileUrl as string | undefined) || "Inherited document",
         summary,
-        file_url: (metadata.sourceFileUrl as string | undefined) ?? (typeof doc.url === "string" ? doc.url : undefined),
+        file_url: isExternalHtmlDoc ? undefined : sourceFileUrl,
+        source_url: sourcePageUrl,
+        mime_type: metadataTypeRaw,
       },
       spaces: originSpace
         ? {
@@ -243,7 +268,7 @@ export default async function WorkspacePage({
       source_doc: {
         id: doc.id,
         title: doc.title || "View document",
-        url: `/workspaces/${workspaceId}/documents/${doc.id}`,
+        url: viewerUrl,
       },
     }
   })
@@ -352,7 +377,9 @@ export default async function WorkspacePage({
                 <Button variant="ghost" asChild>
                   <Link href={`/spaces/${workspaceWithSpace.spaces.id}`}>
                     <ArrowLeft className="mr-2 h-3 w-3" />
-                    <span className="text-xs font-normal">Back to {workspaceWithSpace.spaces.name}</span>
+                    <span className="text-xs font-normal">
+                      {t("workspace.navigation.backToSpace")} {workspaceWithSpace.spaces.name}
+                    </span>
                   </Link>
                 </Button>
               )}
@@ -360,7 +387,7 @@ export default async function WorkspacePage({
                 <Button variant="ghost" asChild>
                   <Link href="/dashboard">
                     <ArrowLeft className="mr-2 h-3 w-3" />
-                    <span className="text-xs font-normal">Back to Dashboard</span>
+                    <span className="text-xs font-normal">{t("workspace.navigation.backToDashboard")}</span>
                   </Link>
                 </Button>
               )}
@@ -387,6 +414,7 @@ export default async function WorkspacePage({
               <WorkspaceOverview
                 workspaceId={workspaceId}
                 initialName={workspace.name}
+                initialSummary={workspace.summary}
                 initialDescription={workspace.description}
                 initialContext={workspace.context}
                 initialLocation={workspace.location}
@@ -399,34 +427,36 @@ export default async function WorkspacePage({
             <div className="mb-8 grid gap-6 sm:grid-cols-3">
               <Card className="shadow">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">Documents</CardTitle>
+                  <CardTitle className="text-sm font-medium">{t("workspace.metrics.documents.title")}</CardTitle>
                   <FileText className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{totalDocumentsCount}</div>
                   <p className="text-xs text-muted-foreground">
-                    Uploaded {uploadedDocumentCount} • Created {createdDocumentCount} • Inherited {inheritedDocumentCount}
+                    {t("workspace.metrics.documents.uploaded")} {uploadedDocumentCount} •{" "}
+                    {t("workspace.metrics.documents.created")} {createdDocumentCount} •{" "}
+                    {t("workspace.metrics.documents.inherited")} {inheritedDocumentCount}
                   </p>
                 </CardContent>
               </Card>
               <Card className="shadow">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">Sources</CardTitle>
+                  <CardTitle className="text-sm font-medium">{t("workspace.metrics.sources.title")}</CardTitle>
                   <Plug className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{sourcesArray.length}</div>
-                  <p className="text-xs text-muted-foreground">Active connections</p>
+                  <p className="text-xs text-muted-foreground">{t("workspace.metrics.sources.subtitle")}</p>
                 </CardContent>
               </Card>
               <Card className="shadow">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">Conversations</CardTitle>
+                  <CardTitle className="text-sm font-medium">{t("workspace.metrics.conversations.title")}</CardTitle>
                   <MessageSquare className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{conversationCount || 0}</div>
-                  <p className="text-xs text-muted-foreground">Your chats</p>
+                  <p className="text-xs text-muted-foreground">{t("workspace.metrics.conversations.subtitle")}</p>
                 </CardContent>
               </Card>
             </div>
@@ -435,7 +465,7 @@ export default async function WorkspacePage({
               <div className="space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-baseline gap-2">
-                    <h2 className="text-xl font-semibold text-foreground">My Documents</h2>
+                    <h2 className="text-xl font-semibold text-foreground">{t("workspace.sections.myDocuments.title")}</h2>
                     <span className="text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
                       ({createdDocuments.length})
                     </span>
@@ -446,7 +476,7 @@ export default async function WorkspacePage({
                       trigger={
                         <Button size="sm">
                           <Plus className="mr-2 h-4 w-4" />
-                          New Document
+                          {t("workspace.sections.myDocuments.create")}
                         </Button>
                       }
                     />
@@ -461,14 +491,20 @@ export default async function WorkspacePage({
               </div>
 
               <div className="space-y-4">
-                <h2 className="text-xl font-semibold text-foreground">Workspace Knowledge</h2>
+                <h2 className="text-xl font-semibold text-foreground">{t("workspace.sections.knowledge.title")}</h2>
                 <Tabs defaultValue="sources" className="space-y-8">
                   <TabsList className="grid w-full max-w-2xl grid-cols-4">
-                    <TabsTrigger value="sources">Sources <span className="font-normal">({uploadedDocuments.length})</span></TabsTrigger>
-                    <TabsTrigger value="inherited">Inherited <span className="font-normal">({combinedInheritedItems.length})</span></TabsTrigger>
-                    <TabsTrigger value="evidence">Evidence <span className="font-normal">({localWorkspaceItems.length})</span></TabsTrigger>
+                    <TabsTrigger value="sources">
+                      {t("workspace.tabs.sources")} <span className="font-normal">({uploadedDocuments.length})</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="inherited">
+                      {t("workspace.tabs.inherited")} <span className="font-normal">({combinedInheritedItems.length})</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="evidence">
+                      {t("workspace.tabs.evidence")} <span className="font-normal">({localWorkspaceItems.length})</span>
+                    </TabsTrigger>
                     <TabsTrigger value="notes">
-                      Notes{" "}
+                      {t("workspace.tabs.notes")}{" "}
                       <WorkspaceNotesCount
                         workspaceId={workspaceId}
                         initialCount={workspaceNotes.length}
@@ -480,13 +516,13 @@ export default async function WorkspacePage({
                 <TabsContent value="sources" className="space-y-5">
                   <div>
                     <div className="flex items-baseline gap-2">
-                      <h3 className="text-lg font-semibold">Sources</h3>
+                      <h3 className="text-lg font-semibold">{t("workspace.sections.sources.title")}</h3>
                       <span className="text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
                         ({uploadedDocuments.length})
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      View and manage all files and connections synced into this workspace.
+                      {t("workspace.sections.sources.description")}
                     </p>
                   </div>
                   <DocumentsList 
@@ -501,10 +537,8 @@ export default async function WorkspacePage({
                 <TabsContent value="inherited" className="space-y-5">
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <h3 className="text-lg font-semibold">Inherited Items</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Read-only answers, policies, and documents inherited from linked parent spaces.
-                      </p>
+                      <h3 className="text-lg font-semibold">{t("workspace.sections.inherited.title")}</h3>
+                      <p className="text-sm text-muted-foreground">{t("workspace.sections.inherited.description")}</p>
                     </div>
                     <WorkspaceInheritedItems items={combinedInheritedItems} />
                   </div>
@@ -513,10 +547,8 @@ export default async function WorkspacePage({
                 <TabsContent value="evidence" className="space-y-8">
                   <div className="space-y-4">
                     <div>
-                      <h3 className="text-lg font-semibold">Workspace Evidence</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Curated findings, insights, and references assembled within this workspace.
-                      </p>
+                      <h3 className="text-lg font-semibold">{t("workspace.sections.evidence.title")}</h3>
+                      <p className="text-sm text-muted-foreground">{t("workspace.sections.evidence.description")}</p>
                     </div>
                     <WorkspaceEvidenceBoard
                       workspaceId={workspaceId}

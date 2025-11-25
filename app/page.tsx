@@ -1,10 +1,71 @@
 import Link from "next/link"
 import Image from "next/image"
-import { Button } from "@/components/ui/button"
 import { ArrowRight, Search, MessageSquare, Database, Users, Shield, Zap } from "lucide-react"
-import { LandingHeader } from "@/components/landing-header"
 
-export default function HomePage() {
+import { Button } from "@/components/ui/button"
+import { LandingHeader } from "@/components/landing-header"
+import { getServerTranslator } from "@/lib/i18n/server"
+
+export default async function HomePage() {
+  const { t } = await getServerTranslator()
+
+  const stats = [
+    { value: "10x", label: t("landing.stats.speed") },
+    { value: "100%", label: t("landing.stats.accuracy") },
+    { value: "24/7", label: t("landing.stats.availability") },
+  ]
+
+  const features = [
+    {
+      icon: Database,
+      title: t("landing.features.connectors.title"),
+      description: t("landing.features.connectors.description"),
+    },
+    {
+      icon: MessageSquare,
+      title: t("landing.features.assistant.title"),
+      description: t("landing.features.assistant.description"),
+    },
+    {
+      icon: Search,
+      title: t("landing.features.search.title"),
+      description: t("landing.features.search.description"),
+    },
+    {
+      icon: Users,
+      title: t("landing.features.collaboration.title"),
+      description: t("landing.features.collaboration.description"),
+    },
+    {
+      icon: Shield,
+      title: t("landing.features.security.title"),
+      description: t("landing.features.security.description"),
+    },
+    {
+      icon: Zap,
+      title: t("landing.features.performance.title"),
+      description: t("landing.features.performance.description"),
+    },
+  ]
+
+  const steps = [
+    {
+      label: "1",
+      title: t("landing.howItWorks.steps.connect.title"),
+      description: t("landing.howItWorks.steps.connect.description"),
+    },
+    {
+      label: "2",
+      title: t("landing.howItWorks.steps.organize.title"),
+      description: t("landing.howItWorks.steps.organize.description"),
+    },
+    {
+      label: "3",
+      title: t("landing.howItWorks.steps.ask.title"),
+      description: t("landing.howItWorks.steps.ask.description"),
+    },
+  ]
+
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-white via-neutral-100 to-white">
       {/* Header */}
@@ -18,7 +79,7 @@ export default function HomePage() {
         <div className="flex flex-col items-center gap-6 max-w-4xl">
           <Image
             src="/logo.svg"
-            alt="AGORA"
+            alt={t("common.appName")}
             width={695}
             height={136}
             className="w-[520px] max-w-full h-auto pb-4"
@@ -26,18 +87,17 @@ export default function HomePage() {
           />
           <div className="inline-flex items-center justify-center">
             <span className="rounded-full border border-border px-4 py-1.5 text-sm font-medium text-muted-foreground">
-              AI-Powered Policy Management
+              {t("landing.hero.badge")}
             </span>
           </div>
           <h1 className="text-balance text-5xl font-bold tracking-tight lg:text-7xl">
             <span className="bg-gradient-to-b from-foreground via-foreground to-muted-foreground bg-clip-text text-transparent">
-              Your team's intelligent
+              {t("landing.hero.headingLineOne")}
             </span>
-            <span className="block text-foreground">policy assistant</span>
+            <span className="block text-foreground">{t("landing.hero.headingLineTwo")}</span>
           </h1>
           <p className="text-balance text-xl text-muted-foreground lg:text-2xl max-w-3xl mx-auto leading-relaxed">
-            Connect your policy documents, ask questions, and get instant AI-powered answers. Built for teams that need
-            fast access to institutional knowledge.
+            {t("landing.hero.description")}
           </p>
         </div>
 
@@ -48,7 +108,7 @@ export default function HomePage() {
             className="h-12 px-8 text-base bg-foreground text-background hover:bg-foreground/90"
           >
             <Link href="/auth/sign-up">
-              Start Free Trial
+              {t("landing.hero.primaryCta")}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>
@@ -58,24 +118,18 @@ export default function HomePage() {
             size="lg"
             className="h-12 px-8 text-base border-border bg-transparent text-foreground hover:bg-muted"
           >
-            <Link href="#how-it-works">See How it Works</Link>
+            <Link href="#how-it-works">{t("landing.hero.secondaryCta")}</Link>
           </Button>
         </div>
 
         {/* Stats */}
         <div className="mt-16 grid w-full max-w-5xl gap-8 sm:grid-cols-3 border-t border-border pt-16">
-          <div className="flex flex-col items-center gap-2">
-            <div className="text-4xl font-bold">10x</div>
-            <div className="text-sm text-muted-foreground">Faster policy search</div>
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <div className="text-4xl font-bold">100%</div>
-            <div className="text-sm text-muted-foreground">Accurate citations</div>
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <div className="text-4xl font-bold">24/7</div>
-            <div className="text-sm text-muted-foreground">Always available</div>
-          </div>
+          {stats.map((stat) => (
+            <div key={stat.label} className="flex flex-col items-center gap-2">
+              <div className="text-4xl font-bold">{stat.value}</div>
+              <div className="text-sm text-muted-foreground">{stat.label}</div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -83,118 +137,50 @@ export default function HomePage() {
       <section id="features" className="mx-auto w-full max-w-6xl px-6 py-24 lg:py-32">
         <div className="flex flex-col items-center gap-4 text-center mb-16">
           <h2 className="text-balance text-4xl font-bold tracking-tight lg:text-5xl">
-            Everything you need to manage policies
+            {t("landing.overview.title")}
           </h2>
           <p className="text-balance text-lg text-muted-foreground max-w-2xl">
-            Connect, search, and chat with your policy documents using advanced AI technology
+            {t("landing.overview.description")}
           </p>
         </div>
 
         <div className="grid gap-8 lg:grid-cols-3">
-          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-foreground/40">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-foreground">
-              <Database className="h-6 w-6" />
+          {features.map((feature) => (
+            <div
+              key={feature.title}
+              className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-foreground/40"
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-foreground">
+                <feature.icon className="h-6 w-6" />
+              </div>
+              <h3 className="text-2xl font-semibold">{feature.title}</h3>
+              <p className="text-muted-foreground leading-relaxed">{feature.description}</p>
             </div>
-            <h3 className="text-2xl font-semibold">Document Connectors</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              Seamlessly integrate with Google Drive, Notion, Confluence, SharePoint, and Dropbox. All your policies in
-              one place.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-foreground/40">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-foreground">
-              <MessageSquare className="h-6 w-6" />
-            </div>
-            <h3 className="text-2xl font-semibold">AI Assistant</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              Ask questions in natural language and get instant answers with accurate citations from your policy
-              documents.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-foreground/40">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-foreground">
-              <Search className="h-6 w-6" />
-            </div>
-            <h3 className="text-2xl font-semibold">Smart Search</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              Full-text search with semantic understanding. Find exactly what you need, even if you don't know the exact
-              wording.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-foreground/40">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-foreground">
-              <Users className="h-6 w-6" />
-            </div>
-            <h3 className="text-2xl font-semibold">Team Collaboration</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              Organize workspaces for different teams, invite members, and control access with role-based permissions.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-foreground/40">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-foreground">
-              <Shield className="h-6 w-6" />
-            </div>
-            <h3 className="text-2xl font-semibold">Enterprise Security</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              Multi-tenant architecture with row-level security. Your data is isolated, encrypted, and protected.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-foreground/40">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-foreground">
-              <Zap className="h-6 w-6" />
-            </div>
-            <h3 className="text-2xl font-semibold">Lightning Fast</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              Built with modern technology for instant responses. Get answers in seconds, not minutes.
-            </p>
-          </div>
+          ))}
         </div>
       </section>
 
       {/* How It Works */}
       <section id="how-it-works" className="mx-auto w-full max-w-6xl border-t border-border px-6 py-24 lg:py-32">
         <div className="flex flex-col items-center gap-4 text-center mb-16">
-          <h2 className="text-balance text-4xl font-bold tracking-tight lg:text-5xl">Get started in minutes</h2>
+          <h2 className="text-balance text-4xl font-bold tracking-tight lg:text-5xl">
+            {t("landing.howItWorks.title")}
+          </h2>
           <p className="text-balance text-lg text-muted-foreground max-w-2xl">
-            Three simple steps to transform how your team accesses policy information
+            {t("landing.howItWorks.description")}
           </p>
         </div>
 
         <div className="grid gap-12 lg:grid-cols-3">
-          <div className="flex flex-col items-center gap-4 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground text-background text-2xl font-bold">
-              1
+          {steps.map((step) => (
+            <div key={step.label} className="flex flex-col items-center gap-4 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground text-background text-2xl font-bold">
+                {step.label}
+              </div>
+              <h3 className="text-2xl font-semibold">{step.title}</h3>
+              <p className="text-muted-foreground leading-relaxed">{step.description}</p>
             </div>
-            <h3 className="text-2xl font-semibold">Connect Your Sources</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              Link your Google Drive, Notion, or other platforms. AGORA automatically syncs your policy documents.
-            </p>
-          </div>
-
-          <div className="flex flex-col items-center gap-4 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground text-background text-2xl font-bold">
-              2
-            </div>
-            <h3 className="text-2xl font-semibold">Organize Workspaces</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              Create spaces for different teams or departments. Invite members and set permissions.
-            </p>
-          </div>
-
-          <div className="flex flex-col items-center gap-4 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground text-background text-2xl font-bold">
-              3
-            </div>
-            <h3 className="text-2xl font-semibold">Ask Questions</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              Chat with your AI assistant to get instant answers with accurate citations from your documents.
-            </p>
-          </div>
+          ))}
         </div>
       </section>
 
@@ -202,10 +188,10 @@ export default function HomePage() {
       <section className="mx-auto w-full max-w-6xl px-6 py-24 lg:py-32">
         <div className="flex flex-col items-center gap-8 rounded-2xl border bg-card p-12 text-center lg:p-20">
           <h2 className="text-balance text-4xl font-bold tracking-tight lg:text-5xl max-w-3xl">
-            Ready to transform your policy management?
+            {t("landing.cta.title")}
           </h2>
           <p className="text-balance text-lg text-muted-foreground max-w-2xl">
-            Join teams already using AGORA to make their institutional knowledge instantly accessible
+            {t("landing.cta.description")}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <Button
@@ -214,7 +200,7 @@ export default function HomePage() {
               className="h-12 px-8 text-base bg-foreground text-background hover:bg-foreground/90"
             >
               <Link href="/auth/sign-up">
-                Get Started Free
+                {t("landing.cta.primaryCta")}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
@@ -224,7 +210,7 @@ export default function HomePage() {
               size="lg"
               className="h-12 px-8 text-base border-border bg-transparent text-foreground hover:bg-muted"
             >
-              <Link href="/auth/login">Sign In</Link>
+              <Link href="/auth/login">{t("landing.cta.secondaryCta")}</Link>
             </Button>
           </div>
         </div>
@@ -236,79 +222,79 @@ export default function HomePage() {
           <div className="grid gap-8 lg:grid-cols-4">
             <div className="flex flex-col gap-4">
               <div className="flex items-center">
-                <Image src="/logo.svg" alt="AGORA" width={695} height={136} className="w-24 h-auto" />
+                <Image src="/logo.svg" alt={t("common.appName")} width={695} height={136} className="w-24 h-auto" />
               </div>
               <p className="text-sm text-muted-foreground">
-                Your intelligent multi-tenant policy assistant powered by AI
+                {t("landing.footer.description")}
               </p>
             </div>
 
             <div className="flex flex-col gap-4">
-              <h4 className="font-semibold">Product</h4>
+              <h4 className="font-semibold">{t("common.navigation.product")}</h4>
               <Link href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                Features
+                {t("common.navigation.features")}
               </Link>
               <Link
                 href="#how-it-works"
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                How it Works
+                {t("common.navigation.howItWorks")}
               </Link>
               <Link
                 href="/auth/sign-up"
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                Pricing
+                {t("common.navigation.pricing")}
               </Link>
             </div>
 
             <div className="flex flex-col gap-4">
-              <h4 className="font-semibold">Resources</h4>
+              <h4 className="font-semibold">{t("common.navigation.resources")}</h4>
               <Link
                 href="/auth/login"
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                Documentation
+                {t("common.navigation.docs")}
               </Link>
               <Link
                 href="/auth/login"
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                Support
+                {t("common.navigation.support")}
               </Link>
               <Link
                 href="/auth/login"
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                Blog
+                {t("common.navigation.blog")}
               </Link>
             </div>
 
             <div className="flex flex-col gap-4">
-              <h4 className="font-semibold">Company</h4>
+              <h4 className="font-semibold">{t("common.navigation.company")}</h4>
               <Link
                 href="/auth/login"
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                About
+                {t("common.navigation.about")}
               </Link>
               <Link
                 href="/auth/login"
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                Contact
+                {t("common.navigation.contact")}
               </Link>
               <Link
                 href="/auth/login"
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                Privacy
+                {t("common.navigation.privacy")}
               </Link>
             </div>
           </div>
 
           <div className="mt-12 border-t border-border pt-8 text-center text-sm text-muted-foreground">
-            <p>&copy; 2025 AGORA. All rights reserved.</p>
+            <p>&copy; 2025 {t("common.appName")}. {t("landing.footer.copyright")}</p>
           </div>
         </div>
       </footer>

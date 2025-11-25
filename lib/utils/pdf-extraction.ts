@@ -136,176 +136,96 @@ export async function extractPdfPages(buffer: Uint8Array | ArrayBuffer): Promise
 }
 
 /**
- * Normalize text for matching by standardizing whitespace, punctuation, and case
- * This ensures quotes from AI responses match document text even with minor variations
- */
-export function normalizeTextForMatching(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/\s+/g, ' ') // Normalize all whitespace to single spaces
-    .replace(/[.,!?;:]/g, '') // Remove punctuation for matching
-    .trim()
-}
-
-/**
- * Find text span in page text and return character positions
- * Enhanced with normalization and fuzzy matching support
+ * Find the exact span of a quote within the document text.
+ * Attempts a direct substring search first, then falls back to a normalized mapping
+ * that ignores markdown/punctuation differences while still returning precise character indices.
  */
 export function findTextSpan(
-  pageText: string, 
-  searchText: string, 
-  options?: { useNormalization?: boolean; fuzzy?: boolean }
+  pageText: string,
+  searchText: string,
 ): { start: number; end: number } | null {
-  const useNormalization = options?.useNormalization ?? false
-  const fuzzy = options?.fuzzy ?? false
-  
-  // Strategy 1: Exact match (case-insensitive)
-  const normalizedPageText = pageText.toLowerCase()
-  const normalizedSearchText = searchText.toLowerCase()
-  
-  let startIndex = normalizedPageText.indexOf(normalizedSearchText)
-  
-  if (startIndex !== -1) {
-  return {
-    start: startIndex,
-    end: startIndex + searchText.length,
-  }
-  }
-  
-  // Strategy 2: Normalized match (remove punctuation, normalize whitespace)
-  if (useNormalization) {
-    const normalizedPage = normalizeTextForMatching(pageText)
-    const normalizedSearch = normalizeTextForMatching(searchText)
-    
-    startIndex = normalizedPage.indexOf(normalizedSearch)
-    
-    if (startIndex !== -1) {
-      // Map back to original text positions
-      // This is approximate - for exact mapping, we'd need character-by-character tracking
-      // For now, we'll use the normalized position as a starting point
-      const originalStart = findOriginalPosition(pageText, normalizedPage, startIndex)
-      if (originalStart !== -1) {
-        return {
-          start: originalStart,
-          end: originalStart + searchText.length,
-        }
-      }
-    }
-  }
-  
-  // Strategy 3: Fuzzy matching (find closest match)
-  if (fuzzy) {
-    const bestMatch = findFuzzyMatch(pageText, searchText)
-    if (bestMatch) {
-      return bestMatch
-    }
-  }
-  
-  return null
-}
-
-/**
- * Find the original position in the source text given a normalized position
- * This is a helper for mapping normalized positions back to original text
- */
-function findOriginalPosition(originalText: string, normalizedText: string, normalizedPos: number): number {
-  // Simple approach: count characters in normalized text up to position
-  // Then find equivalent position in original text
-  let normalizedCount = 0
-  let originalCount = 0
-  
-  const normalizedSearch = normalizedText.substring(0, normalizedPos)
-  const normalizedLength = normalizedSearch.length
-  
-  // Count normalized characters in original text
-  for (let i = 0; i < originalText.length && normalizedCount < normalizedLength; i++) {
-    const char = originalText[i].toLowerCase()
-    if (char.match(/\s/)) {
-      normalizedCount++
-      originalCount++
-    } else if (char.match(/[a-z0-9]/)) {
-      normalizedCount++
-      originalCount++
-    } else if (char.match(/[.,!?;:]/)) {
-      // Skip punctuation in normalized count
-    } else {
-      originalCount++
-    }
-  }
-  
-  return originalCount
-}
-
-/**
- * Find fuzzy match using Levenshtein distance for near-matches
- * Returns the best matching textSpan if found
- */
-function findFuzzyMatch(pageText: string, searchText: string): { start: number; end: number } | null {
-  const normalizedPage = normalizeTextForMatching(pageText)
-  const normalizedSearch = normalizeTextForMatching(searchText)
-  
-  if (normalizedSearch.length < 10) {
-    // Too short for fuzzy matching
+  if (!pageText || !searchText) {
     return null
   }
-  
-  // Try sliding window approach
-  const windowSize = normalizedSearch.length
-  const maxDistance = Math.floor(windowSize * 0.2) // Allow 20% character difference
-  
-  let bestMatch: { start: number; end: number; distance: number } | null = null
-  
-  for (let i = 0; i <= normalizedPage.length - windowSize; i++) {
-    const window = normalizedPage.substring(i, i + windowSize)
-    const distance = levenshteinDistance(window, normalizedSearch)
-    
-    if (distance <= maxDistance) {
-      if (!bestMatch || distance < bestMatch.distance) {
-        // Map back to original position
-        const originalStart = findOriginalPosition(pageText, normalizedPage, i)
-        if (originalStart !== -1) {
-          bestMatch = {
-            start: originalStart,
-            end: originalStart + searchText.length,
-            distance,
-          }
-        }
-      }
-    }
+
+  const directIndex = pageText.indexOf(searchText)
+  if (directIndex !== -1) {
+    return { start: directIndex, end: directIndex + searchText.length }
   }
-  
-  return bestMatch ? { start: bestMatch.start, end: bestMatch.end } : null
+
+  const { normalized: normalizedPage, map } = buildNormalizedTextMap(pageText)
+  const normalizedSearch = buildNormalizedString(searchText)
+
+  if (!normalizedPage || !normalizedSearch) {
+    return null
+  }
+
+  const normalizedIndex = normalizedPage.indexOf(normalizedSearch)
+  if (normalizedIndex === -1) {
+    return null
+  }
+
+  const normalizedEndIndex = normalizedIndex + normalizedSearch.length - 1
+  if (
+    normalizedIndex < 0 ||
+    normalizedEndIndex >= map.length ||
+    map[normalizedIndex] === undefined ||
+    map[normalizedEndIndex] === undefined
+  ) {
+    return null
+  }
+
+  const start = map[normalizedIndex]
+  const end = map[normalizedEndIndex] + 1
+  return { start, end }
 }
 
-/**
- * Calculate Levenshtein distance between two strings
- */
-function levenshteinDistance(str1: string, str2: string): number {
-  const matrix: number[][] = []
-  
-  for (let i = 0; i <= str2.length; i++) {
-    matrix[i] = [i]
-  }
-  
-  for (let j = 0; j <= str1.length; j++) {
-    matrix[0][j] = j
-  }
-  
-  for (let i = 1; i <= str2.length; i++) {
-    for (let j = 1; j <= str1.length; j++) {
-      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1]
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // substitution
-          matrix[i][j - 1] + 1, // insertion
-          matrix[i - 1][j] + 1 // deletion
-        )
-      }
+function buildNormalizedTextMap(text: string): { normalized: string; map: number[] } {
+  const normalizedChars: string[] = []
+  const map: number[] = []
+  let lastWasSpace = false
+
+  for (let i = 0; i < text.length; i++) {
+    let char = text[i]
+
+    if (char === "\u201c" || char === "\u201d") {
+      char = '"'
+    } else if (char === "\u2018" || char === "\u2019") {
+      char = "'"
     }
+
+    if (/\s/.test(char)) {
+      if (normalizedChars.length === 0 || lastWasSpace) {
+        continue
+      }
+      normalizedChars.push(" ")
+      map.push(i)
+      lastWasSpace = true
+      continue
+    }
+
+    if (/[*_`~]/.test(char)) {
+      continue
+    }
+
+    if (/[.,!?;:]/.test(char)) {
+      continue
+    }
+
+    const lower = char.toLowerCase()
+    normalizedChars.push(lower)
+    map.push(i)
+    lastWasSpace = false
   }
-  
-  return matrix[str2.length][str1.length]
+
+  return {
+    normalized: normalizedChars.join(""),
+    map,
+  }
+}
+
+function buildNormalizedString(text: string): string {
+  return buildNormalizedTextMap(text).normalized
 }
 
 /**

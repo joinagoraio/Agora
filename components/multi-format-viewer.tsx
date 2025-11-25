@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from "react"
 import DOMPurify from "dompurify"
 import { PDFViewer, Highlight, type ViewerControls, type ViewerFitMode } from "@/components/pdf-viewer"
 import { Button } from "@/components/ui/button"
@@ -27,6 +27,8 @@ const GENERIC_HTML_SANITIZE_OPTIONS = {
 
 const WORD_HIGHLIGHT_CLASS = "word-highlight"
 const TEXT_HIGHLIGHT_CLASS = "workspace-text-highlight"
+const TEXT_BASE_FONT_SIZE_REM = 0.875
+const TEXT_BASE_LINE_HEIGHT_REM = 1.25
 
 interface MultiFormatViewerProps {
   url: string
@@ -41,6 +43,7 @@ interface MultiFormatViewerProps {
   viewportOffset?: number
   onControlsReady?: (controls: ViewerControls) => void
   autoHighlight?: boolean
+  hoveredHighlightId?: string | null
 }
 
 // Helper function to detect document type from URL, content type, or metadata
@@ -101,6 +104,7 @@ export function MultiFormatViewer({
   viewportOffset = 0,
   onControlsReady,
   autoHighlight = true,
+  hoveredHighlightId = null,
 }: MultiFormatViewerProps) {
   // Validate required props
   if (!documentId) {
@@ -121,11 +125,36 @@ export function MultiFormatViewer({
   const [fitMode, setFitMode] = useState<ViewerFitMode | null>(null)
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 })
   const highlightRef = useRef<HTMLSpanElement>(null)
+  const textHighlightRefs = useRef<Map<string, HTMLSpanElement>>(new Map())
+  const textHighlightIndexRefs = useRef<Map<number, HTMLSpanElement>>(new Map())
   const containerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const innerContentRef = useRef<HTMLDivElement>(null)
   const applyFitRef = useRef<((mode: ViewerFitMode) => void) | undefined>(undefined)
   const isApplyingFitRef = useRef(false)
+
+  const registerTextHighlightRef = useCallback(
+    (id?: string, index?: number) => {
+      return (el: HTMLSpanElement | null) => {
+        if (id) {
+          if (el) {
+            textHighlightRefs.current.set(id, el)
+          } else {
+            textHighlightRefs.current.delete(id)
+          }
+        }
+
+        if (typeof index === "number") {
+          if (el) {
+            textHighlightIndexRefs.current.set(index, el)
+          } else {
+            textHighlightIndexRefs.current.delete(index)
+          }
+        }
+      }
+    },
+    [],
+  )
 
   // Detect document type and load content
   useEffect(() => {
@@ -550,6 +579,16 @@ export function MultiFormatViewer({
     }
   }, [documentType, loading, error, scale, fitMode, zoomIn, zoomOut, rotate, fitToWidth, handleSetScale, noop])
 
+  const textZoomStyles = useMemo<CSSProperties>(() => {
+    const fontSizeRem = TEXT_BASE_FONT_SIZE_REM * scale
+    const lineHeightRem = TEXT_BASE_LINE_HEIGHT_REM * scale
+
+    return {
+      fontSize: `${fontSizeRem}rem`,
+      lineHeight: `${lineHeightRem}rem`,
+    }
+  }, [scale])
+
   // Expose controls only when they change
   const prevControlsRef = useRef<ViewerControls | null>(null)
   const onControlsReadyRef = useRef(onControlsReady)
@@ -596,14 +635,14 @@ export function MultiFormatViewer({
   }, [documentType, highlights])
   
   // For backward compatibility, keep textHighlight for single highlight logic
-  const textHighlight = textHighlights.length > 0 ? textHighlights[0] : null
+  const textHighlight = useMemo(() => (textHighlights.length > 0 ? textHighlights[0] : null), [textHighlights])
   
   // Memoize the deduplication and merging logic (must be at top level, not conditional)
   const processedHighlights = useMemo(() => {
     // Only process if document type is text and we have highlights
     if (documentType !== "text" || textHighlights.length === 0) return []
     
-    // First, deduplicate and merge overlapping highlights
+    // First, deduplicate exact duplicates but keep overlaps (needed for nested highlights)
     // Sort highlights by start position
     const sortedHighlights = [...textHighlights].sort((a, b) => {
       const aStart = a.textSpan?.start ?? 0
@@ -615,7 +654,7 @@ export function MultiFormatViewer({
       return bEnd - aEnd
     })
     
-    // Deduplicate: remove exact duplicates and merge overlapping highlights
+    // Deduplicate exact duplicates only (allow overlapping highlights to coexist)
     const deduplicatedHighlights: typeof sortedHighlights = []
     for (let i = 0; i < sortedHighlights.length; i++) {
       const current = sortedHighlights[i]
@@ -637,30 +676,7 @@ export function MultiFormatViewer({
         continue // Skip duplicates
       }
       
-      // Check if this highlight overlaps with an existing one
-      const overlappingIndex = deduplicatedHighlights.findIndex(existing => {
-        const existingStart = existing.textSpan?.start ?? 0
-        const existingEnd = existing.textSpan?.end ?? 0
-        // Check if they overlap (one starts before the other ends)
-        return (currentStart < existingEnd && currentEnd > existingStart)
-      })
-      
-      if (overlappingIndex >= 0) {
-        // Merge overlapping highlights by taking the union (min start, max end)
-        const existing = deduplicatedHighlights[overlappingIndex]
-        const existingStart = existing.textSpan?.start ?? 0
-        const existingEnd = existing.textSpan?.end ?? 0
-        const mergedStart = Math.min(existingStart, currentStart)
-        const mergedEnd = Math.max(existingEnd, currentEnd)
-        
-        deduplicatedHighlights[overlappingIndex] = {
-          ...existing,
-          textSpan: { start: mergedStart, end: mergedEnd }
-        }
-      } else {
-        // No overlap, add as new highlight
-        deduplicatedHighlights.push(current)
-      }
+      deduplicatedHighlights.push(current)
     }
     
     // Re-sort after merging (in case merging changed positions)
@@ -672,7 +688,7 @@ export function MultiFormatViewer({
   }, [documentType, textHighlights])
   
   // Helper function to find textSpan with fallback strategies (must be defined before useMemo)
-  const findTextSpanWithFallback = useCallback((expectedTextSpan: { start: number; end: number }, searchText?: string): { start: number; end: number; confidence: 'exact' | 'normalized' | 'fuzzy' | 'approximate' } | null => {
+  const findTextSpanWithFallback = useCallback((expectedTextSpan: { start: number; end: number }, searchText?: string): { start: number; end: number; confidence: 'exact' | 'normalized' | 'approximate' } | null => {
     if (!textContent) return null
     
     const { start: expectedStart, end: expectedEnd } = expectedTextSpan
@@ -687,15 +703,9 @@ export function MultiFormatViewer({
     
     // Strategy 2: If we have search text, try normalized match
     if (searchText && searchText.length > 5) {
-      const normalizedMatch = findTextSpan(textContent, searchText, { useNormalization: true, fuzzy: false })
+      const normalizedMatch = findTextSpan(textContent, searchText)
       if (normalizedMatch) {
         return { ...normalizedMatch, confidence: 'normalized' }
-      }
-      
-      // Strategy 3: Try fuzzy match
-      const fuzzyMatch = findTextSpan(textContent, searchText, { useNormalization: true, fuzzy: true })
-      if (fuzzyMatch) {
-        return { ...fuzzyMatch, confidence: 'fuzzy' }
       }
     }
     
@@ -713,105 +723,139 @@ export function MultiFormatViewer({
   }, [textContent])
   
   // Memoize segment creation to avoid recomputing on every render (must be at top level)
-  const segments = useMemo(() => {
-    // Only process if document type is text
-    if (documentType !== "text" || !textContent || processedHighlights.length === 0) {
+  const textHighlightMeta = useMemo(() => {
+    if (documentType !== "text" || !textContent) return []
+
+    return processedHighlights
+      .map((highlight, index) => {
+        const id = highlight.id || `text-highlight-${index}`
+        const originalStart = highlight.textSpan?.start
+        const originalEnd = highlight.textSpan?.end
+
+        let start = originalStart ?? null
+        let end = originalEnd ?? null
+
+        const isValidRange =
+          start !== null && end !== null && start >= 0 && end <= textContent.length && end > start
+
+        if (!isValidRange) {
+          const fallback = findTextSpanWithFallback(
+            {
+              start: originalStart ?? 0,
+              end: originalEnd ?? 0,
+            },
+            highlight.quote,
+          )
+          if (fallback) {
+            start = fallback.start
+            end = fallback.end
+          }
+        }
+
+        if (start === null || end === null || end <= start) {
+          clientLogger.warn("[MultiFormatViewer] Skipping text highlight with invalid span", {
+            id,
+            originalStart,
+            originalEnd,
+          })
+          return null
+        }
+
+        return {
+          id,
+          index,
+          start,
+          end,
+          highlight,
+        }
+      })
+      .filter(
+        (
+          meta,
+        ): meta is {
+          id: string
+          index: number
+          start: number
+          end: number
+          highlight: ContextHighlight
+        } => Boolean(meta),
+      )
+  }, [documentType, processedHighlights, textContent, findTextSpanWithFallback])
+
+  const textSegments = useMemo(() => {
+    if (documentType !== "text" || !textContent) {
       return []
     }
-    
-    const segmentArray: Array<{ type: 'text' | 'highlight', content: string, highlightIndex?: number, confidence?: string }> = []
-    let lastIndex = 0
-    
-    for (let i = 0; i < processedHighlights.length; i++) {
-      const highlight = processedHighlights[i]
-      const { start: originalStart, end: originalEnd } = highlight.textSpan || {}
-      
-      // Try to find the textSpan with fallback strategies
-      let finalTextSpan: { start: number; end: number; confidence: string } | null = null
-      
-      if (originalStart !== undefined && originalEnd !== undefined) {
-        // Try exact match first
-        if (originalStart >= 0 && originalEnd <= textContent.length && originalEnd > originalStart) {
-          const exactText = textContent.substring(originalStart, originalEnd)
-          if (exactText.length > 0 && exactText.length < 2000 && exactText.trim().length > 0) {
-            finalTextSpan = { start: originalStart, end: originalEnd, confidence: 'exact' }
-          }
-        }
-        
-        // If exact match failed, try fallback strategies
-        if (!finalTextSpan) {
-          const fallbackResult = findTextSpanWithFallback(
-            { start: originalStart, end: originalEnd },
-            undefined
-          )
-          
-          if (fallbackResult) {
-            finalTextSpan = {
-              start: fallbackResult.start,
-              end: fallbackResult.end,
-              confidence: fallbackResult.confidence
-            }
-            
-            if (fallbackResult.confidence !== 'exact') {
-        clientLogger.warn(`[MultiFormatViewer] Highlight ${i} used ${fallbackResult.confidence} match`, {
-                original: { start: originalStart, end: originalEnd },
-                found: { start: fallbackResult.start, end: fallbackResult.end },
-              })
-            }
-          }
-        }
+
+    if (textHighlightMeta.length === 0) {
+      return [
+        {
+          start: 0,
+          end: textContent.length,
+          activeHighlights: [] as typeof textHighlightMeta,
+        },
+      ]
+    }
+
+    type Event = { position: number; type: "start" | "end"; meta: (typeof textHighlightMeta)[number] }
+    const events: Event[] = []
+    textHighlightMeta.forEach((meta) => {
+      events.push({ position: Math.max(0, meta.start), type: "start", meta })
+      events.push({ position: Math.max(0, meta.end), type: "end", meta })
+    })
+
+    events.sort((a, b) => {
+      if (a.position !== b.position) {
+        return a.position - b.position
       }
-      
-      // If we still don't have a valid textSpan, skip this highlight
-      if (!finalTextSpan) {
-        clientLogger.warn("[MultiFormatViewer] Could not find valid textSpan for highlight", i, {
-          originalStart,
-          originalEnd,
-          textContentLength: textContent.length,
-        })
-        continue
+      if (a.type === b.type) {
+        return 0
       }
-      
-      const { start, end, confidence } = finalTextSpan
-      
-      // Add text before this highlight
-      if (start > lastIndex) {
-        segmentArray.push({
-          type: 'text',
-          content: textContent.substring(lastIndex, start),
+      // End events should run before start events at the same position
+      return a.type === "end" ? -1 : 1
+    })
+
+    const segments: Array<{
+      start: number
+      end: number
+      activeHighlights: typeof textHighlightMeta
+    }> = []
+
+    let cursor = 0
+    let active: typeof textHighlightMeta = []
+
+    const pushSegment = (nextCursor: number) => {
+      const clampedStart = Math.max(0, Math.min(cursor, textContent.length))
+      const clampedEnd = Math.max(0, Math.min(nextCursor, textContent.length))
+      if (clampedEnd > clampedStart) {
+        segments.push({
+          start: clampedStart,
+          end: clampedEnd,
+          activeHighlights: [...active],
         })
       }
-      
-      // Add the highlighted text
-      const highlightedText = textContent.substring(start, end)
-      if (highlightedText.length > 0 && highlightedText.length < 2000 && highlightedText.trim().length > 0) {
-        segmentArray.push({
-          type: 'highlight',
-          content: highlightedText,
-          highlightIndex: i,
-          confidence,
-        })
-        lastIndex = end
+      cursor = clampedEnd
+    }
+
+    for (const event of events) {
+      if (event.position > cursor) {
+        pushSegment(event.position)
+      }
+
+      if (event.type === "end") {
+        active = active.filter((meta) => meta.id !== event.meta.id)
       } else {
-        clientLogger.warn("[MultiFormatViewer] Highlight text invalid after fallback for highlight", i, {
-          length: highlightedText.length,
-          trimmed: highlightedText.trim().length,
-          confidence,
-        })
-        lastIndex = start // Skip this highlight but don't advance past it
+        // Maintain order by start position
+        active = [...active, event.meta]
       }
     }
-    
-    // Add remaining text after last highlight
-    if (lastIndex < textContent.length) {
-      segmentArray.push({
-        type: 'text',
-        content: textContent.substring(lastIndex),
-      })
+
+    if (cursor < textContent.length) {
+      pushSegment(textContent.length)
     }
-    
-    return segmentArray
-  }, [documentType, textContent, processedHighlights, findTextSpanWithFallback])
+
+    return segments
+  }, [documentType, textContent, textHighlightMeta])
 
   // Find the highlight for Word documents (page 1 or no page specified)
   const wordHighlight = documentType === "word"
@@ -849,87 +893,65 @@ export function MultiFormatViewer({
   }, [documentType, highlights, textHighlight, textContent, wordHighlight, wordPlainText])
 
   // Helper function to scroll to highlight
-  const scrollToTextHighlight = useCallback(() => {
-    if (documentType !== "text" || !textHighlight || !textContent || !containerRef.current) {
-      clientLogger.debug("[MultiFormatViewer] Scroll skipped", {
-        documentType,
-        hasTextHighlight: !!textHighlight,
-        hasTextContent: !!textContent,
-        hasContainer: !!containerRef.current,
-      })
-      return
-    }
-    
-    clientLogger.debug("[MultiFormatViewer] Attempting to scroll to highlight", {
-      textHighlight,
-      textContentLength: textContent.length,
-    })
-    
-    // Wait for the highlight to be rendered in the DOM
-    const timer = setTimeout(() => {
-      // Try to find the highlight element in the rendered content
-      const highlightElement = containerRef.current?.querySelector(`.${TEXT_HIGHLIGHT_CLASS}`) as HTMLElement
-      
-      clientLogger.debug("[MultiFormatViewer] Looking for highlight element", {
-        found: !!highlightElement,
-        hasRef: !!highlightRef.current,
-        containerExists: !!containerRef.current,
-      })
-      
-      if (highlightElement) {
-        highlightRef.current = highlightElement as HTMLSpanElement
-        
-        // Get the scrollable container
-        const scrollContainer = containerRef.current
-        if (scrollContainer) {
-          // Calculate scroll position relative to container
-          const containerRect = scrollContainer.getBoundingClientRect()
-          const elementRect = highlightElement.getBoundingClientRect()
-          
-          // Calculate the scroll position needed to position element at 10% from top
-          const elementTopRelative = elementRect.top - containerRect.top + scrollContainer.scrollTop
-          const containerHeight = scrollContainer.clientHeight
-          const scrollPosition = elementTopRelative - (containerHeight * 0.10) // 10% from top instead of center
-          
-          clientLogger.debug("[MultiFormatViewer] Scrolling to position", {
-            scrollPosition,
-            elementTopRelative,
-            containerHeight,
-          })
-          
-          scrollContainer.scrollTo({
-            top: Math.max(0, scrollPosition),
-            behavior: "smooth",
-          })
-        }
-      } else if (highlightRef.current) {
-        // Fallback: use the ref if available, but calculate 10% position manually
-        clientLogger.debug("[MultiFormatViewer] Using ref fallback for scrolling")
-        const scrollContainer = containerRef.current
-        if (scrollContainer && highlightRef.current) {
-          const elementRect = highlightRef.current.getBoundingClientRect()
-          const containerRect = scrollContainer.getBoundingClientRect()
-          const elementTopRelative = elementRect.top - containerRect.top + scrollContainer.scrollTop
-          const containerHeight = scrollContainer.clientHeight
-          const scrollPosition = elementTopRelative - (containerHeight * 0.10)
-          
-          scrollContainer.scrollTo({
-            top: Math.max(0, scrollPosition),
-            behavior: "smooth",
-          })
-        } else {
-          highlightRef.current.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          })
-        }
-      } else {
-        clientLogger.warn("[MultiFormatViewer] Could not find highlight element to scroll to")
+  const scrollToTextHighlight = useCallback(
+    (targetHighlightId?: string, targetHighlightIndex?: number) => {
+      if (documentType !== "text" || !textContent || !containerRef.current) {
+        clientLogger.debug("[MultiFormatViewer] Scroll skipped", {
+          documentType,
+          hasTextContent: !!textContent,
+          hasContainer: !!containerRef.current,
+        })
+        return
       }
-    }, 300) // Increased delay to ensure DOM is updated
-    
-    return () => clearTimeout(timer)
-  }, [documentType, textHighlight, textContent])
+
+      const scrollContainer = containerRef.current
+      if (!scrollContainer) {
+        return
+      }
+
+      let targetElement: HTMLElement | undefined
+
+      if (targetHighlightId) {
+        targetElement = textHighlightRefs.current.get(targetHighlightId)
+      }
+
+      if (!targetElement && typeof targetHighlightIndex === "number") {
+        targetElement = textHighlightIndexRefs.current.get(targetHighlightIndex)
+      }
+
+      if (!targetElement) {
+        const firstById = textHighlightRefs.current.values().next()
+        if (!firstById.done) {
+          targetElement = firstById.value
+        }
+      }
+
+      if (!targetElement) {
+        const firstByIndex = textHighlightIndexRefs.current.values().next()
+        if (!firstByIndex.done) {
+          targetElement = firstByIndex.value
+        }
+      }
+
+      if (!targetElement) {
+        clientLogger.warn("[MultiFormatViewer] Could not find highlight element to scroll to")
+        return
+      }
+
+      const containerRect = scrollContainer.getBoundingClientRect()
+      const elementRect = targetElement.getBoundingClientRect()
+
+      const elementTopRelative = elementRect.top - containerRect.top + scrollContainer.scrollTop
+      const containerHeight = scrollContainer.clientHeight
+      const scrollPosition = elementTopRelative - containerHeight * 0.15
+
+      scrollContainer.scrollTo({
+        top: Math.max(0, scrollPosition),
+        behavior: "smooth",
+      })
+    },
+    [documentType, textContent],
+  )
 
   // Track previous autoHighlight state to detect when it's turned on
   const prevAutoHighlightRef = useRef(autoHighlight)
@@ -954,58 +976,22 @@ export function MultiFormatViewer({
     prevAutoHighlightRef.current = autoHighlight
   }, [autoHighlight, documentType, textHighlights.length, scrollToTextHighlight])
 
-  // Listen for scrollToHighlight event for text documents
   useEffect(() => {
     if (documentType !== "text") return
 
     const handleScrollToHighlight = (event: any) => {
-      const { highlight, pageNumber } = event.detail || {}
-      if (!highlight || pageNumber !== 1) return // Text documents are always page 1
+      const { highlight, highlightId, highlightIndex } = event.detail || {}
+      const targetId = highlight?.id || highlightId
+      const targetIndex = typeof highlightIndex === "number" ? highlightIndex : undefined
 
-      clientLogger.debug("[MultiFormatViewer] ScrollToHighlight event received for text document", {
-        highlight,
-        pageNumber,
-      })
-      
-      // If a specific highlight is provided, scroll to that one
-      // Otherwise, scroll to the first highlight
-      if (highlight.textSpan) {
-        // Find the highlight in our list and scroll to it
-        const highlightIndex = textHighlights.findIndex(h => 
-          h.textSpan?.start === highlight.textSpan?.start && 
-          h.textSpan?.end === highlight.textSpan?.end
-        )
-        
-        if (highlightIndex >= 0) {
-          // Update highlightRef to point to this specific highlight
-          // We'll need to find it in the DOM after render
-          setTimeout(() => {
-            const highlightElements = containerRef.current?.querySelectorAll(`.${TEXT_HIGHLIGHT_CLASS}`)
-            if (highlightElements && highlightElements[highlightIndex]) {
-              highlightRef.current = highlightElements[highlightIndex] as HTMLSpanElement
-              scrollToTextHighlight()
-            } else {
-              // Fallback: scroll to first highlight
-              scrollToTextHighlight()
-            }
-          }, 100)
-        } else {
-          // Fallback: scroll to first highlight
-          setTimeout(() => {
-            scrollToTextHighlight()
-          }, 100)
-        }
-      } else {
-        // No specific highlight, scroll to first
-        setTimeout(() => {
-          scrollToTextHighlight()
-        }, 100)
-      }
+      setTimeout(() => {
+        scrollToTextHighlight(targetId, targetIndex)
+      }, 100)
     }
 
     window.addEventListener("scrollToHighlight", handleScrollToHighlight as EventListener)
     return () => window.removeEventListener("scrollToHighlight", handleScrollToHighlight as EventListener)
-  }, [documentType, scrollToTextHighlight, textHighlights])
+  }, [documentType, scrollToTextHighlight])
 
   // Function to render Word document with highlighting
   const highlightedWordContent = useMemo(() => {
@@ -1416,6 +1402,7 @@ export function MultiFormatViewer({
         hideControls={hideControls}
         viewportOffset={viewportOffset}
         onControlsReady={handlePDFControlsReady}
+        hoveredHighlightId={hoveredHighlightId}
       />
     )
   }
@@ -1460,8 +1447,7 @@ export function MultiFormatViewer({
         return null
       }
       
-      // If no highlights, return plain text
-      if (segments.length === 0) {
+      if (textSegments.length === 0) {
         return textContent
       }
       
@@ -1472,53 +1458,69 @@ export function MultiFormatViewer({
       // Render segments with highlights
       return (
         <>
-          {segments.map((segment, index) => {
-            if (segment.type === 'highlight') {
-              // Use highlightRef only for the first highlight (for scrolling)
-              const isFirstHighlight = segment.highlightIndex === 0
-              // Use slightly different styling for approximate matches to indicate uncertainty
-              const isApproximate = segment.confidence === 'approximate'
-              // Get quote from highlight if available
-              const highlight = processedHighlights[segment.highlightIndex ?? 0] as ContextHighlight | undefined
-              const quote = highlight?.quote || segment.content
-              
-              return (
-                <Tooltip key={`highlight-${index}`}>
-                  <TooltipTrigger asChild>
-                    <span
-                      ref={isFirstHighlight ? highlightRef : undefined}
-                      className={cn(
-                        isApproximate 
-                          ? "bg-yellow-200/40 dark:bg-yellow-400/20 rounded px-0.5 border border-yellow-400/50 border-dashed"
-                          : "bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5",
-                        "animate-in fade-in duration-300 transition-colors hover:bg-yellow-400/60 dark:hover:bg-yellow-500/40",
-                        "cursor-pointer",
-                        TEXT_HIGHLIGHT_CLASS,
-                      )}
-                      style={{
-                        scrollMarginTop: "100px",
-                      }}
-                      role="mark"
-                      aria-label={`Highlighted quote: ${quote.substring(0, 50)}${quote.length > 50 ? '...' : ''}`}
-                    >
-                      {segment.content}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-md">
-                    <p className="text-sm font-medium mb-1">Quoted text:</p>
-                    <p className="text-xs text-muted-foreground">"{quote}"</p>
-                    {isApproximate && (
-                      <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
-                        ⚠️ Approximate match - text position may be slightly off
-                      </p>
-                    )}
-                  </TooltipContent>
-                </Tooltip>
-              )
-            } else {
-              return <span key={`text-${index}`}>{segment.content}</span>
-            }
-          })}
+          {textSegments.map((segment, segmentIndex) => {
+             const segmentText = textContent.substring(segment.start, segment.end)
+             if (!segment.activeHighlights.length) {
+               return <span key={`text-segment-${segmentIndex}`}>{segmentText}</span>
+             }
+
+             const renderNestedHighlights = (
+               content: React.ReactNode,
+               stack: typeof textHighlightMeta,
+             ) => {
+               let nested = content
+               for (let i = stack.length - 1; i >= 0; i--) {
+                 const meta = stack[i]
+                 const quote = meta.highlight.quote || segmentText
+                 const isApproximate = meta.highlight.confidence === "approximate"
+                 const isHovered = hoveredHighlightId === meta.id
+                 nested = (
+                   <Tooltip key={`segment-${segmentIndex}-highlight-${meta.id}-${i}`}>
+                     <TooltipTrigger asChild>
+                       <span
+                         ref={registerTextHighlightRef(meta.id, meta.index)}
+                         className={cn(
+                           isApproximate
+                             ? "bg-yellow-200/40 dark:bg-yellow-400/20 rounded px-0.5 border border-yellow-400/50 border-dashed"
+                             : "bg-yellow-300/50 dark:bg-yellow-500/30 rounded px-0.5",
+                           isHovered
+                             ? "bg-yellow-400/80 dark:bg-yellow-500/60 shadow-[0_0_0_1px_rgba(251,191,36,0.8)]"
+                             : "animate-in fade-in duration-300 transition-colors hover:bg-yellow-400/60 dark:hover:bg-yellow-500/40",
+                           "cursor-pointer",
+                           TEXT_HIGHLIGHT_CLASS,
+                         )}
+                         data-highlight-id={meta.id}
+                         data-highlight-index={meta.index}
+                         style={{ scrollMarginTop: "100px" }}
+                         role="mark"
+                         aria-label={`Highlighted quote: ${quote.substring(0, 50)}${
+                           quote.length > 50 ? "..." : ""
+                         }`}
+                       >
+                         {nested}
+                       </span>
+                     </TooltipTrigger>
+                     <TooltipContent side="top" className="max-w-md">
+                       <p className="text-sm font-medium mb-1">Quoted text:</p>
+                       <p className="text-xs text-muted-foreground">"{quote}"</p>
+                       {isApproximate && (
+                         <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                           ⚠️ Approximate match - text position may be slightly off
+                         </p>
+                       )}
+                     </TooltipContent>
+                   </Tooltip>
+                 )
+               }
+               return nested
+             }
+
+             return (
+               <span key={`segment-${segmentIndex}`}>
+                 {renderNestedHighlights(segmentText, segment.activeHighlights)}
+               </span>
+             )
+           })}
         </>
       )
     }
@@ -1552,17 +1554,9 @@ export function MultiFormatViewer({
                 overflow: "hidden", // Prevent horizontal overflow
               }}
             >
-              <div
-                ref={innerContentRef}
-                style={{
-                  transform: `scale(${scale})`,
-                  transformOrigin: "top left",
-                  // Scale width inversely so scaled content fits within container
-                  width: `${100 / scale}%`,
-                }}
-              >
+              <div ref={innerContentRef} style={{ width: "100%" }}>
                 <TooltipProvider>
-                  <div className="font-mono text-sm whitespace-pre-wrap">
+                  <div className="font-mono whitespace-pre-wrap" style={textZoomStyles}>
                     {renderTextWithHighlights()}
                   </div>
                 </TooltipProvider>

@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { SpaceUploadDocumentDialog } from "@/components/space-upload-document-dialog"
-import { Download, FileText, LayoutGrid, List, Loader2, MoreVertical, Trash2, Upload } from "lucide-react"
+import { Download, ExternalLink, FileText, LayoutGrid, List, Loader2, MoreVertical, Trash2, Upload } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -262,7 +262,19 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-40">
-                        {doc.source_url ? (
+                        {doc.payload?.file_url ? (
+                          <DropdownMenuItem asChild className="cursor-pointer">
+                            <Link
+                              href={doc.payload.file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2"
+                            >
+                              <Download className="h-4 w-4" />
+                              Download
+                            </Link>
+                          </DropdownMenuItem>
+                        ) : doc.source_url ? (
                           <DropdownMenuItem asChild className="cursor-pointer">
                             <Link
                               href={doc.source_url}
@@ -270,8 +282,8 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                               rel="noopener noreferrer"
                               className="flex items-center gap-2"
                             >
-                              <Download className="h-4 w-4" />
-                              Download
+                              <ExternalLink className="h-4 w-4" />
+                              Open page
                             </Link>
                           </DropdownMenuItem>
                         ) : (
@@ -349,7 +361,19 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-40">
-                                {doc.source_url ? (
+                                {doc.payload?.file_url ? (
+                                  <DropdownMenuItem asChild className="cursor-pointer">
+                                    <Link
+                                      href={doc.payload.file_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-2"
+                                    >
+                                      <Download className="h-4 w-4" />
+                                      Download
+                                    </Link>
+                                  </DropdownMenuItem>
+                                ) : doc.source_url ? (
                                   <DropdownMenuItem asChild className="cursor-pointer">
                                     <Link
                                       href={doc.source_url}
@@ -357,8 +381,8 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                                       rel="noopener noreferrer"
                                       className="flex items-center gap-2"
                                     >
-                                      <Download className="h-4 w-4" />
-                                      Download
+                                      <ExternalLink className="h-4 w-4" />
+                                      Open page
                                     </Link>
                                   </DropdownMenuItem>
                                 ) : (

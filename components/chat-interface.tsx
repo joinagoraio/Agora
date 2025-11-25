@@ -3,7 +3,7 @@
 import { TextStreamChatTransport } from "ai"
 import { useChat as useAiChat } from "@ai-sdk/react"
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
@@ -26,11 +26,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Send, Loader2, ExternalLink, FileText, X, Plus, CircleStop, Highlighter } from "lucide-react"
-import ReactMarkdown, { type Components } from "react-markdown"
+import ReactMarkdown from "react-markdown"
 import Link from "next/link"
 import { buildDocumentUrlFromSource } from "@/lib/utils/document-linking"
-import { useHighlightContext, type Highlight } from "@/lib/contexts/highlight-context"
-import { parseAllCitations, type ParsedCitation } from "@/lib/utils/citation-parser"
 import { getWorkspaceDocuments } from "@/lib/actions/document"
 import { getWorkspaceNotesForContext } from "@/lib/actions/workspace-notes"
 import type { WorkspaceNoteForContext } from "@/lib/actions/workspace-notes"
@@ -39,18 +37,97 @@ import { getWorkspaceContextDetails } from "@/lib/actions/workspace"
 import { cn } from "@/lib/utils"
 import { EvidenceList } from "@/components/chat/evidence-list"
 import { clientLogger } from "@/lib/utils/client-logger"
+import { useOptionalHighlightContext, type Highlight } from "@/lib/contexts/highlight-context"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
 
 type UseAiChatOptions = Parameters<typeof useAiChat>[0]
 
+type MessageCitation = {
+  id?: string
+  quote: string
+  documentId: string
+  documentTitle?: string | null
+  textSpan?: { start: number; end: number }
+  pageNumber?: number
+}
+
+type MessageSourcesPayload = {
+  documents: any[]
+  citations: MessageCitation[]
+}
+
+const CITATION_MARKER_REGEX = /\[citation:\s*\{[\s\S]*?\}\]/g
+const CITATION_PARTIAL_REGEX = /\[citation:[^\]]*$/i
+const PENDING_HIGHLIGHT_STORAGE_KEY = "agora:pendingHighlight"
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const ADVISORY_SYNC_LOG_KEY = "agora:lastSyncWarning"
+const isGeneratedMessageId = (id: unknown) => typeof id === "string" && id.startsWith("msg-")
+
+const sanitizeMessageContent = (content: string): string => {
+  if (!content) {
+    return ""
+  }
+  return content
+    .replace(CITATION_MARKER_REGEX, "")
+    .replace(CITATION_PARTIAL_REGEX, "")
+    .replace(/\s*\[doc\]\s*/gi, "")
+}
+
+const getMessageSourcesPayload = (message: any): MessageSourcesPayload => {
+  const rawSources = message?.sources
+  if (Array.isArray(rawSources)) {
+    return { documents: rawSources, citations: [] }
+  }
+  if (rawSources && typeof rawSources === "object") {
+    const documents = Array.isArray(rawSources.documents) ? rawSources.documents : []
+    const citations = Array.isArray(rawSources.citations) ? rawSources.citations : []
+    return { documents, citations }
+  }
+  return { documents: [], citations: [] }
+}
+
+
+/**
+ * Search for a single quote in the document
+ * Returns the highlight if found and validated, null otherwise
+ */
+
 function useChatWithInput(options: UseAiChatOptions) {
   const chat = useAiChat(options) as ReturnType<typeof useAiChat>
-  const [input, setInput] = useState("")
+  const [input, setInputState] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const inputHistoryRef = useRef<string[]>([""])
+  const historyIndexRef = useRef(0)
+  const HISTORY_LIMIT = 200
 
-  const handleInputChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(event.target.value)
+  const pushHistory = useCallback((value: string) => {
+    const history = inputHistoryRef.current.slice(0, historyIndexRef.current + 1)
+    if (history[history.length - 1] === value) {
+      return
+    }
+    history.push(value)
+    if (history.length > HISTORY_LIMIT) {
+      history.shift()
+    }
+    inputHistoryRef.current = history
+    historyIndexRef.current = history.length - 1
   }, [])
+
+  const setInput = useCallback(
+    (value: string) => {
+      setInputState(value)
+      pushHistory(value)
+    },
+    [pushHistory],
+  )
+
+  const handleInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setInput(event.target.value)
+    },
+    [setInput],
+  )
 
   const handleSubmit = useCallback(
     async (event?: React.FormEvent<HTMLFormElement>) => {
@@ -60,7 +137,6 @@ function useChatWithInput(options: UseAiChatOptions) {
         return
       }
 
-      // Clear input immediately when message is sent
       setInput("")
       setIsSubmitting(true)
       try {
@@ -69,8 +145,26 @@ function useChatWithInput(options: UseAiChatOptions) {
         setIsSubmitting(false)
       }
     },
-    [chat, input],
+    [chat, input, setInput],
   )
+
+  const undoInput = useCallback(() => {
+    if (historyIndexRef.current <= 0) {
+      return
+    }
+    historyIndexRef.current -= 1
+    const previousValue = inputHistoryRef.current[historyIndexRef.current] ?? ""
+    setInputState(previousValue)
+  }, [])
+
+  const redoInput = useCallback(() => {
+    if (historyIndexRef.current >= inputHistoryRef.current.length - 1) {
+      return
+    }
+    historyIndexRef.current += 1
+    const nextValue = inputHistoryRef.current[historyIndexRef.current] ?? ""
+    setInputState(nextValue)
+  }, [])
 
   const isLoading = chat.status === "submitted" || chat.status === "streaming" || isSubmitting
 
@@ -80,6 +174,8 @@ function useChatWithInput(options: UseAiChatOptions) {
     setInput,
     handleInputChange,
     handleSubmit,
+    undoInput,
+    redoInput,
     isLoading,
   }
 }
@@ -93,9 +189,8 @@ interface ChatInterfaceProps {
 }
 
 export function ChatInterface({ workspaceId, conversationId, initialMessages = [], documentId, canManage = true }: ChatInterfaceProps) {
-  const highlightContext = useHighlightContext()
-  const { setHighlights, setActiveDocument, autoHighlight } = highlightContext
-  
+  const highlightContext = useOptionalHighlightContext()
+  const canUseHighlights = Boolean(highlightContext)
   const [hasLoadedInitial, setHasLoadedInitial] = useState(false)
   const [documents, setDocuments] = useState<any[]>([])
   const [contextNotes, setContextNotes] = useState<WorkspaceNoteForContext[]>([])
@@ -107,6 +202,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   const [excludedDocumentIds, setExcludedDocumentIds] = useState<Set<string>>(new Set())
   const [excludedNoteIds, setExcludedNoteIds] = useState<Set<string>>(new Set())
   const [excludedEvidenceIds, setExcludedEvidenceIds] = useState<Set<string>>(new Set())
+
   const readMessageContent = useCallback((message: unknown): string => {
     if (!message || typeof message !== "object") {
       return ""
@@ -200,7 +296,29 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     excludedNoteIds: Array.from(excludedNoteIds),
     excludedEvidenceIds: Array.from(excludedEvidenceIds),
   })
+  const syncRequestBodyRef = useCallback(
+    (overrides?: {
+      excludedDocumentIds?: Set<string>
+      excludedNoteIds?: Set<string>
+      excludedEvidenceIds?: Set<string>
+    }) => {
+      const nextExcludedDocs = overrides?.excludedDocumentIds ?? excludedDocumentIds
+      const nextExcludedNotes = overrides?.excludedNoteIds ?? excludedNoteIds
+      const nextExcludedEvidence = overrides?.excludedEvidenceIds ?? excludedEvidenceIds
+
+      requestBodyRef.current = {
+        workspaceId,
+        conversationId,
+        excludedDocumentIds: Array.from(nextExcludedDocs),
+        excludedNoteIds: Array.from(nextExcludedNotes),
+        excludedEvidenceIds: Array.from(nextExcludedEvidence),
+      }
+    },
+    [workspaceId, conversationId, excludedDocumentIds, excludedNoteIds, excludedEvidenceIds],
+  )
   const csrfTokenRef = useRef<string | null>(null)
+  const processedAutoHighlightsRef = useRef<Set<string>>(new Set())
+  const syncedAssistantMessagesRef = useRef<Set<string>>(new Set())
 
   // Fetch CSRF token on mount and keep it in ref
   useEffect(() => {
@@ -210,14 +328,12 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   }, [])
 
   useEffect(() => {
-    requestBodyRef.current = {
-      workspaceId,
-      conversationId,
-      excludedDocumentIds: Array.from(excludedDocumentIds),
-      excludedNoteIds: Array.from(excludedNoteIds),
-      excludedEvidenceIds: Array.from(excludedEvidenceIds),
-    }
-  }, [workspaceId, conversationId, excludedDocumentIds, excludedNoteIds, excludedEvidenceIds])
+    processedAutoHighlightsRef.current.clear()
+  }, [conversationId])
+
+  useEffect(() => {
+    syncRequestBodyRef()
+  }, [syncRequestBodyRef])
 
   const chatTransport = useMemo(
     () =>
@@ -246,7 +362,6 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false)
   const [isSwitchingConversation, setIsSwitchingConversation] = useState(false)
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [pendingEvidence, setPendingEvidence] = useState<{
     messageKey: string
     question: string
@@ -259,7 +374,6 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   const [evidenceStatusByMessage, setEvidenceStatusByMessage] = useState<
     Record<string, { status: "idle" | "saving" | "success" | "error"; error?: string }>
   >({})
-
   // Fetch workspace documents or single document
   const loadContextItems = useCallback(async () => {
     setIsLoadingDocuments(true)
@@ -533,7 +647,18 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     })
   }, [evidenceItems])
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages, stop, setInput } = useChatWithInput({
+  const {
+    messages,
+    input,
+    handleInputChange,
+    handleSubmit,
+    undoInput,
+    redoInput,
+    isLoading,
+    setMessages,
+    stop,
+    setInput,
+  } = useChatWithInput({
     transport: chatTransport,
     messages: hasLoadedInitial ? undefined : (normalizedInitialMessages as any),
   })
@@ -541,264 +666,196 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   // useChat may briefly return undefined before hydration; always work with a string
   const safeInput = typeof input === "string" ? input : input != null ? String(input) : ""
 
-  // Define handleHighlight before useEffects that use it
-  const handleHighlight = useCallback(async (message: any) => {
-    if (!documentId) {
-      clientLogger.warn("[handleHighlight] No documentId provided")
-      return
-    }
+  const handleTextareaKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      const key = event.key.toLowerCase()
+      const isModifier = event.metaKey || event.ctrlKey
 
-    const sources = Array.isArray(message?.sources) ? message.sources : []
-    clientLogger.debug("[handleHighlight] Looking for relevant sources:", {
-      documentId,
-      sourcesCount: sources.length,
-      sources: sources.map((s: any) => ({
-        id: s.id,
-        pageNumber: s.pageNumber,
-        textSpan: s.textSpan,
-        matches: s.id === documentId,
-      })),
-    })
-
-    // Find ALL sources that match the current document and have highlight info
-    let relevantSources = sources.filter(
-      (source: any) =>
-        source.id === documentId &&
-        (source.pageNumber !== undefined || source.textSpan !== undefined)
-    )
-
-    // Always try to extract quoted phrases from the AI response to find additional highlights
-    // This ensures we highlight all phrases the AI mentions, not just what's in the sources
-    const messageContent = readMessageContent(message)
-    if (messageContent) {
-      clientLogger.debug("[handleHighlight] Extracting citations from AI response to find highlights")
-      
-      // Parse structured citations and fallback quotes
-      const { structured, quotes, listItems } = parseAllCitations(messageContent)
-      
-      clientLogger.debug("[handleHighlight] Parsed citations:", {
-        structured: structured.length,
-        quotes: quotes.length,
-        listItems: listItems.length,
-      })
-      
-      // Process structured citations first (most accurate)
-      const structuredHighlights: Highlight[] = []
-      for (const citation of structured) {
-        if (citation.structured) {
-          const { quote, documentId: citationDocId, textSpan, pageNumber } = citation.structured
-          
-          // Only process if it matches the current document
-          const targetDocId: string | undefined = citationDocId || documentId
-          if (targetDocId === documentId && textSpan) {
-            structuredHighlights.push({
-              id: `highlight-${documentId}-${pageNumber || 1}-${Date.now()}-${structuredHighlights.length}`,
-              documentId: documentId!,
-              textSpan,
-              pageNumber: pageNumber || 1,
-              quote,
-              source: 'ai_response' as const,
-              color: "rgba(255, 255, 0, 0.3)",
-            })
-          }
-        }
-      }
-      
-      // If we have structured citations, use them directly (most accurate)
-      if (structuredHighlights.length > 0) {
-        clientLogger.debug("[handleHighlight] Using structured citations:", structuredHighlights.length)
-        
-        // Combine with source-based highlights
-        const sourceHighlights = relevantSources.map((source: any, index: number) => {
-          const pageForHighlight = source.pageNumber ?? 1
-          return {
-            id: `highlight-${source.id}-${pageForHighlight}-${index}`,
-            documentId: documentId!,
-            pageNumber: pageForHighlight,
-            textSpan: source.textSpan!,
-            quote: "",
-            source: 'ai_response' as const,
-            color: "rgba(255, 255, 0, 0.3)",
-          }
-        })
-        
-        // Combine and deduplicate
-        const combinedHighlights = [...sourceHighlights, ...structuredHighlights]
-        const uniqueHighlights = combinedHighlights.filter((h, index, self) => 
-          index === self.findIndex((h2) => 
-            h2.pageNumber === h.pageNumber &&
-            h2.textSpan?.start === h.textSpan?.start &&
-            h2.textSpan?.end === h.textSpan?.end
-          )
-        )
-        
-        // Use immediate update for structured citations (they're already accurate)
-        setHighlights(documentId!, uniqueHighlights, true)
-        setActiveDocument(documentId!)
-        
-        // Navigate to document if not already there
-        const currentPath = window.location.pathname
-        const targetPath = `/workspaces/${workspaceId}/documents/${documentId}`
-        if (currentPath !== targetPath) {
-          const url = new URL(targetPath, window.location.origin)
-          const currentConversationId = searchParams.get("conversationId")
-          if (currentConversationId) {
-            url.searchParams.set("conversationId", currentConversationId)
-          }
-          router.push(url.pathname + url.search)
+      if (isModifier && key === "z") {
+        event.preventDefault()
+        if (event.shiftKey) {
+          redoInput()
+        } else {
+          undoInput()
         }
         return
       }
-      
-      // Fallback: Use regex-based extraction if no structured citations
-      clientLogger.debug("[handleHighlight] No structured citations found, using fallback extraction")
-      
-      // Combine all phrases and clean them up
-      // Prioritize quoted phrases as they're most likely to be exact matches
-      const allPhrases = [...new Set([
-        ...quotes, // Quoted phrases first (most reliable)
-        ...listItems, // List items second (common in structured responses)
-      ])]
-      
-        .map((p: string) => p.replace(/^["']|["']$/g, "").trim()) // Remove quotes
-        .filter((p: string) => {
-          // Filter out generic phrases that match section headers but not content
-          const lower = p.toLowerCase()
-          // Skip if it's just a section header pattern (e.g., "Positive Findings", "Summary", etc.)
-          if (lower.length < 30 && /^(positive|negative|findings?|summary|conclusion|introduction|overview|details?|results?)$/i.test(lower)) {
-            return false
-          }
-          return p.length >= 5 && p.length < 300
-        })
-        .slice(0, 15) // Limit to 15 phrases
-      
-      clientLogger.debug("[handleHighlight] All extracted phrases (fallback):", allPhrases)
-      
-      if (allPhrases.length > 0) {
-        // Show loading state (optional - could add a toast notification here)
-        clientLogger.debug("[handleHighlight] Searching for phrases in document...")
-        try {
-          // Search for phrases in the document
-          const response = await fetch(`/api/documents/${documentId}/search-phrases`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ phrases: allPhrases }),
-          })
-          
-          if (response.ok) {
-            const result = await response.json()
-            const foundHighlights = result.highlights || []
-            clientLogger.debug("[handleHighlight] Found highlights from phrase search:", foundHighlights)
-            
-            if (foundHighlights && foundHighlights.length > 0) {
-              // Combine highlights from sources and phrase search
-              // Sources with textSpan take priority, but add phrase-based highlights too
-              const sourceHighlights = relevantSources.map((source: any, index: number) => {
-                const pageForHighlight = source.pageNumber ?? 1
-                const highlightId = source.textSpan 
-                  ? `highlight-${source.id}-${pageForHighlight}-${index}` 
-                  : undefined
-                
-                return {
-                  id: highlightId || `highlight-${index}`,
-                  pageNumber: pageForHighlight,
-                  textSpan: source.textSpan,
-                  color: "rgba(255, 255, 0, 0.3)",
-                }
-              })
-              
-              // Combine and deduplicate highlights (prefer source-based if same textSpan)
-              const combinedHighlights = [...sourceHighlights, ...foundHighlights]
-              const uniqueHighlights = combinedHighlights.filter((h, index, self) => 
-                index === self.findIndex((h2) => 
-                  h2.pageNumber === h.pageNumber &&
-                  h2.textSpan?.start === h.textSpan?.start &&
-                  h2.textSpan?.end === h.textSpan?.end
-                )
-              )
-              
-              // Convert to Highlight format and set via context
-              const contextHighlights: Highlight[] = uniqueHighlights.map((h, index) => ({
-                id: h.id || `highlight-${documentId}-${index}`,
-                documentId: documentId!,
-                textSpan: h.textSpan!,
-                pageNumber: h.pageNumber,
-                quote: "", // Will be filled from message content if available
-                source: 'ai_response' as const,
-                color: h.color || "rgba(255, 255, 0, 0.3)",
-                coordinates: h.coordinates,
-              }))
-              
-              // Set highlights in context (debounced for phrase search results)
-              setHighlights(documentId!, contextHighlights, false)
-              setActiveDocument(documentId!)
-              
-              // Navigate to document if not already there
-              const currentPath = window.location.pathname
-              const targetPath = `/workspaces/${workspaceId}/documents/${documentId}`
-              if (currentPath !== targetPath) {
-                const url = new URL(targetPath, window.location.origin)
-                const currentConversationId = searchParams.get("conversationId")
-                if (currentConversationId) {
-                  url.searchParams.set("conversationId", currentConversationId)
-                }
-                router.push(url.pathname + url.search)
-              }
-              return
-            }
-          }
-        } catch (error) {
-          clientLogger.error("[handleHighlight] Error searching for phrases:", error)
+
+      if (!event.metaKey && event.ctrlKey && key === "y") {
+        event.preventDefault()
+        redoInput()
+        return
+      }
+
+      if (event.key === "Enter" && !event.altKey && !event.shiftKey) {
+        if (isModifier) {
+          event.preventDefault()
+          handleSubmit(event as any)
+          return
+        }
+        if (!isModifier) {
+          event.preventDefault()
+          handleSubmit(event as any)
+          return
         }
       }
+    },
+    [handleSubmit, redoInput, undoInput],
+  )
+
+  const deriveHighlightId = useCallback(
+    (citation: MessageCitation, messageKey: string, citationIndex: number) => {
+      if (citation.id && citation.id.length > 0) {
+        return `${messageKey}-${citation.id}`
+      }
+      return `ai-citation-${messageKey}-${citationIndex}`
+    },
+    [],
+  )
+
+  const focusCitationHighlight = useCallback(
+    (citation: MessageCitation, messageKey: string, citationIndex: number) => {
+      if (!citation.documentId || !citation.textSpan) {
+        clientLogger.warn("[ChatInterface] Citation missing data for focus", citation)
+        return
+      }
+
+      if (highlightContext) {
+        const highlightId = deriveHighlightId(citation, messageKey, citationIndex)
+        const highlight: Highlight = {
+          id: highlightId,
+          documentId: citation.documentId,
+          textSpan: citation.textSpan,
+          pageNumber: citation.pageNumber || 1,
+          quote: citation.quote,
+          source: "ai_response",
+          confidence: "exact",
+          color: "rgba(255, 221, 0, 0.45)",
+        }
+        highlightContext.addHighlight(citation.documentId, highlight)
+        highlightContext.setActiveDocument(citation.documentId)
+      }
+
+      if (typeof window === "undefined") {
+        return
+      }
+
+      const highlightId = deriveHighlightId(citation, messageKey, citationIndex)
+      const pendingPayload = {
+        documentId: citation.documentId,
+        highlightId,
+        pageNumber: citation.pageNumber || 1,
+        textSpan: citation.textSpan,
+        timestamp: Date.now(),
+        quote: citation.quote,
+        source: "ai_response" as const,
+        confidence: "exact" as const,
+        color: "rgba(255, 221, 0, 0.45)",
+      }
+
+      const dispatchScrollEvent = () => {
+        window.dispatchEvent(
+          new CustomEvent("focusDocumentHighlight", {
+            detail: pendingPayload,
+          }),
+        )
+      }
+
+      const targetUrl = new URL(`/workspaces/${workspaceId}/documents/${citation.documentId}`, window.location.origin)
+      if (conversationId) {
+        targetUrl.searchParams.set("conversationId", conversationId)
+      }
+      const targetHref = targetUrl.pathname + targetUrl.search
+      const isSameDocument = window.location.pathname === targetUrl.pathname
+
+      window.sessionStorage.setItem(PENDING_HIGHLIGHT_STORAGE_KEY, JSON.stringify(pendingPayload))
+
+      if (!isSameDocument) {
+        try {
+          router.push(targetHref)
+        } catch (error) {
+          console.error("[ChatInterface] Failed to navigate to document for highlight:", error)
+        }
+      } else {
+        setTimeout(() => {
+          dispatchScrollEvent()
+        }, 120)
+      }
+    },
+    [conversationId, deriveHighlightId, highlightContext, router, workspaceId],
+  )
+
+  const hoverCitationHighlight = useCallback(
+    (citation: MessageCitation, messageKey: string, citationIndex: number, isActive: boolean) => {
+      if (typeof window === "undefined") {
+        return
+      }
+      if (!citation.documentId || !citation.textSpan) {
+        return
+      }
+      const highlightId = deriveHighlightId(citation, messageKey, citationIndex)
+      window.dispatchEvent(
+        new CustomEvent("hoverDocumentHighlight", {
+          detail: {
+            documentId: citation.documentId,
+            highlightId,
+            textSpan: citation.textSpan,
+            active: isActive,
+          },
+        }),
+      )
+    },
+    [deriveHighlightId],
+  )
+
+  useEffect(() => {
+    if (!highlightContext) {
+      return
     }
 
-    // Fallback: if we have sources with textSpan but no phrase matches, use those
-    if (relevantSources.length > 0) {
-      clientLogger.debug("[handleHighlight] Found relevant sources:", relevantSources.length, relevantSources)
-      
-      // Convert sources to Highlight format
-      const contextHighlights: Highlight[] = relevantSources.map((source: any, index: number) => {
-        const pageForHighlight = source.pageNumber ?? 1
-        const highlightId = source.textSpan 
-          ? `highlight-${source.id}-${pageForHighlight}-${index}` 
-          : `highlight-${index}`
-        
-        return {
-          id: highlightId,
-          documentId: documentId!,
-          textSpan: source.textSpan!,
-          pageNumber: pageForHighlight,
-          quote: "", // Source-based highlights don't have quotes
-          source: 'ai_response' as const,
-          color: "rgba(255, 255, 0, 0.3)",
-        }
-      })
-      
-      clientLogger.debug("[handleHighlight] Built highlights array:", contextHighlights)
-      
-      // Set highlights in context (use immediate for source-based highlights)
-      setHighlights(documentId!, contextHighlights, true)
-      setActiveDocument(documentId!)
-      
-      // Navigate to document if not already there
-      const currentPath = window.location.pathname
-      const targetPath = `/workspaces/${workspaceId}/documents/${documentId}`
-      if (currentPath !== targetPath) {
-        const url = new URL(targetPath, window.location.origin)
-        const currentConversationId = searchParams.get("conversationId")
-        if (currentConversationId) {
-          url.searchParams.set("conversationId", currentConversationId)
-        }
-        router.push(url.pathname + url.search)
+    messages.forEach((message: any, index: number) => {
+      if (!message || message.role !== "assistant") {
+        return
       }
-    } else {
-      clientLogger.warn("[handleHighlight] No relevant source found with highlight info")
-    }
-  }, [documentId, workspaceId, searchParams, router, setHighlights, setActiveDocument])
+
+      const messageKey = getMessageKey(message, index)
+      if (processedAutoHighlightsRef.current.has(messageKey)) {
+        return
+      }
+
+      const { citations } = getMessageSourcesPayload(message)
+      if (!Array.isArray(citations) || citations.length === 0) {
+        return
+      }
+
+      let addedAtLeastOne = false
+      citations.forEach((citation, citationIndex) => {
+        if (!citation.documentId || !citation.textSpan) {
+          return
+        }
+
+        const highlightId = deriveHighlightId(citation, messageKey, citationIndex)
+        const highlight: Highlight = {
+          id: highlightId,
+          documentId: citation.documentId,
+          textSpan: citation.textSpan,
+          pageNumber: citation.pageNumber || 1,
+          quote: citation.quote,
+          source: "ai_response",
+          confidence: "exact",
+          color: "rgba(255, 221, 0, 0.45)",
+        }
+        highlightContext.addHighlight(citation.documentId, highlight)
+        addedAtLeastOne = true
+      })
+
+      if (addedAtLeastOne) {
+        processedAutoHighlightsRef.current.add(messageKey)
+      }
+    })
+  }, [messages, highlightContext, deriveHighlightId])
 
   // Fetch sources and thinking_duration for the last assistant message after streaming completes
-  // Also auto-highlight quotes if we're in document view mode
   useEffect(() => {
     if (!isLoading && messages.length > 0) {
       const lastMessage = messages[messages.length - 1] as any
@@ -832,19 +889,6 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                   return updated
                 })
                 
-                // Auto-highlight quotes if we're in document view mode
-                // Check if we're on a document page by checking if documentId is set
-                // Note: We'll trigger this via a custom event to avoid dependency issues
-                if (documentId && dbLastMessage.content) {
-                  // Small delay to ensure message is updated in state
-                  setTimeout(() => {
-                    // Directly call handleHighlight with the message
-                    handleHighlight({
-                      ...dbLastMessage,
-                      sources: dbLastMessage.sources || [],
-                    })
-                  }, 300)
-                }
               }
             }
           } catch (error) {
@@ -853,16 +897,9 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
         }, 500) // Wait 500ms for DB write to complete
 
         return () => clearTimeout(timer)
-      } else if (lastMessage.role === "assistant" && documentId && lastMessage.content) {
-        // If message already has sources, auto-highlight immediately
-        // This handles the case where sources are already available
-        const timer = setTimeout(() => {
-          handleHighlight(lastMessage)
-        }, 500)
-        return () => clearTimeout(timer)
       }
     }
-  }, [isLoading, messages, conversationId, setMessages, documentId, handleHighlight])
+  }, [isLoading, messages, conversationId, setMessages])
 
   // Track previous conversationId to detect changes
   const prevConversationIdRef = useRef<string | undefined>(conversationId)
@@ -872,10 +909,16 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     if (prevConversationIdRef.current !== conversationId) {
       prevConversationIdRef.current = conversationId
       setHasLoadedInitial(false)
-      // Clear input when conversation changes
       setInput("")
+      if (highlightContext) {
+        if (documentId) {
+          highlightContext.setHighlights(documentId, [], true)
+        } else {
+          highlightContext.clearAllHighlights()
+        }
+      }
     }
-  }, [conversationId, setInput])
+  }, [conversationId, setInput, highlightContext, documentId])
 
   // Track previous conversationId to detect changes
   const prevConversationIdForMessagesRef = useRef<string | undefined>(conversationId)
@@ -1052,6 +1095,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     setExcludedDocumentIds((prev) => {
       const newSet = new Set(prev)
       newSet.add(documentId)
+      syncRequestBodyRef({ excludedDocumentIds: newSet })
       return newSet
     })
   }
@@ -1060,6 +1104,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     setExcludedDocumentIds((prev) => {
       const newSet = new Set(prev)
       newSet.delete(documentId)
+      syncRequestBodyRef({ excludedDocumentIds: newSet })
       return newSet
     })
   }
@@ -1068,6 +1113,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     setExcludedNoteIds((prev) => {
       const newSet = new Set(prev)
       newSet.add(noteId)
+      syncRequestBodyRef({ excludedNoteIds: newSet })
       return newSet
     })
   }
@@ -1076,6 +1122,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     setExcludedNoteIds((prev) => {
       const newSet = new Set(prev)
       newSet.delete(noteId)
+      syncRequestBodyRef({ excludedNoteIds: newSet })
       return newSet
     })
   }
@@ -1084,6 +1131,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     setExcludedEvidenceIds((prev) => {
       const newSet = new Set(prev)
       newSet.add(evidenceId)
+      syncRequestBodyRef({ excludedEvidenceIds: newSet })
       return newSet
     })
   }
@@ -1092,6 +1140,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     setExcludedEvidenceIds((prev) => {
       const newSet = new Set(prev)
       newSet.delete(evidenceId)
+      syncRequestBodyRef({ excludedEvidenceIds: newSet })
       return newSet
     })
   }
@@ -1128,6 +1177,27 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     }
     return `index-${index}`
   }
+
+  const pendingAssistantSync = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i]
+      if (!msg || msg.role !== "assistant") {
+        continue
+      }
+      const messageKey = getMessageKey(msg, i)
+      if (syncedAssistantMessagesRef.current.has(messageKey)) {
+        continue
+      }
+      const hasPersistentId = typeof msg.id === "string" && !isGeneratedMessageId(msg.id)
+      const { citations } = getMessageSourcesPayload(msg)
+      const hasCitations = Array.isArray(citations) && citations.length > 0
+      if (!hasPersistentId || !hasCitations) {
+        return { index: i, messageKey }
+      }
+      break
+    }
+    return null
+  }, [messages])
 
   const findPreviousUserQuestion = (messageIndex: number) => {
     for (let i = messageIndex - 1; i >= 0; i--) {
@@ -1166,13 +1236,97 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
 
     setEvidenceConfidence("medium")
     setEvidenceError(null)
+    const { documents: pendingSources } = getMessageSourcesPayload(message)
+
+    const rawAnswer = readMessageContent(message)
+    const cleanedAnswer = sanitizeMessageContent(rawAnswer)
+
     setPendingEvidence({
       messageKey,
       question,
-      answer: readMessageContent(message),
-      sources: Array.isArray((message as any)?.sources) ? (message as any).sources : [],
+      answer: cleanedAnswer,
+      sources: pendingSources,
     })
   }
+
+  /** Retry highlight functionality removed */
+  useEffect(() => {
+    if (!conversationId || !pendingAssistantSync || isLoading) {
+      return
+    }
+
+    if (!UUID_REGEX.test(conversationId)) {
+      return
+    }
+
+    const { index: syncIndex, messageKey } = pendingAssistantSync
+    if (syncedAssistantMessagesRef.current.has(messageKey)) {
+      return
+    }
+    syncedAssistantMessagesRef.current.add(messageKey)
+
+    let aborted = false
+    let retryTimeout: ReturnType<typeof setTimeout> | null = null
+    const MAX_RETRIES = 5
+    const RETRY_DELAY_MS = 800
+
+    const syncLatestAssistantMessage = async (attempt = 0) => {
+      try {
+        const response = await fetch(`/api/conversations/${conversationId}/messages/latest`)
+
+        if (response.status === 404 || response.status === 400) {
+          if (attempt < MAX_RETRIES && !aborted) {
+            retryTimeout = setTimeout(() => {
+              syncLatestAssistantMessage(attempt + 1)
+            }, RETRY_DELAY_MS * (attempt + 1))
+            return
+          }
+          const infoKey = `${ADVISORY_SYNC_LOG_KEY}:${conversationId}:${messageKey}`
+          if (typeof window !== "undefined") {
+            const lastWarning = window.sessionStorage.getItem(infoKey)
+            if (!lastWarning) {
+              clientLogger.info(
+                `[ChatInterface] Assistant message not yet available after ${attempt} attempts. Continuing without auto-sync.`,
+              )
+              window.sessionStorage.setItem(infoKey, "shown")
+            }
+          }
+          syncedAssistantMessagesRef.current.delete(messageKey)
+          return
+        }
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch latest assistant message: ${response.status}`)
+        }
+
+        const data = await response.json()
+        if (aborted || !data?.message) {
+          return
+        }
+
+        const normalized = normalizeMessage(data.message)
+        setMessages((prev: any[]) => {
+          const next = [...prev]
+          next[syncIndex] = normalized
+          return next
+        })
+      } catch (error) {
+        if (!aborted) {
+          clientLogger.error("[ChatInterface] Failed to sync latest assistant message:", error)
+        }
+        syncedAssistantMessagesRef.current.delete(messageKey)
+      }
+    }
+
+    syncLatestAssistantMessage()
+
+    return () => {
+      aborted = true
+      if (retryTimeout) {
+        clearTimeout(retryTimeout)
+      }
+    }
+  }, [conversationId, isLoading, normalizeMessage, pendingAssistantSync, setMessages])
 
   const handleCloseEvidenceDialog = () => {
     if (isSavingEvidence) {
@@ -1362,137 +1516,6 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     : "Ask a question about your documents..."
 
   // Pre-compute badge information for all messages to prevent flash
-  const allBadgeInfo = useMemo(() => {
-    const messageBadgeMaps = new Map<number, Map<string, { type: 'doc' | 'scope', source?: any, hasDocCitation: boolean }>>()
-    
-    messages.forEach((message: any, index: number) => {
-      const sources = Array.isArray(message?.sources) ? message.sources : []
-      const content = readMessageContent(message)
-      
-      // Debug logging for last message
-      if (index === messages.length - 1 && message.role === 'assistant') {
-        clientLogger.debug("[ChatInterface] Pre-computing badges for message:", {
-          index,
-          contentLength: content.length,
-          contentPreview: content.substring(0, 300),
-          sourcesCount: sources.length,
-          hasQuotes: content.includes('"'),
-          hasDocCitations: content.includes('[doc]')
-        })
-      }
-      
-      const quoteRegex = /"([^"]+)"(\s*\[doc\])?/g
-      const badgeMap = new Map<string, { type: 'doc' | 'scope', source?: any, hasDocCitation: boolean }>()
-      let match
-      
-      while ((match = quoteRegex.exec(content)) !== null) {
-        const quotedText = match[1]
-        const hasDocCitation = !!match[2]
-        
-        // Determine badge type - if [doc] is present, it's always 'doc'
-        let badgeType: 'doc' | 'scope' = 'scope'
-        let source: any = undefined
-        
-        if (hasDocCitation) {
-          badgeType = 'doc'
-          // Try to find the source
-          source = sources.find((s: any) => {
-            if (documentId && s.id === documentId) {
-              if (s.preview && s.preview.toLowerCase().includes(quotedText.toLowerCase().substring(0, 20))) {
-                return true
-              }
-              if (s.textSpan || s.pageNumber !== undefined) {
-                return true
-              }
-            }
-            if (s.textSpan || s.pageNumber !== undefined) {
-              if (s.preview && s.preview.toLowerCase().includes(quotedText.toLowerCase().substring(0, 20))) {
-                return true
-              }
-              return true
-            }
-            return false
-          })
-        } else if (documentId) {
-          // Try to find a document source
-          source = sources.find((s: any) => {
-            if (s.id === documentId) {
-              if (s.preview && s.preview.toLowerCase().includes(quotedText.toLowerCase().substring(0, 20))) {
-                return true
-              }
-              if (s.textSpan || s.pageNumber !== undefined) {
-                return true
-              }
-            }
-            if (s.textSpan || s.pageNumber !== undefined) {
-              if (s.preview && s.preview.toLowerCase().includes(quotedText.toLowerCase().substring(0, 20))) {
-                return true
-              }
-              return true
-            }
-            return false
-          })
-          
-          if (source) {
-            badgeType = 'doc'
-          }
-        }
-        
-        badgeMap.set(quotedText, { type: badgeType, source, hasDocCitation })
-      }
-      
-      // Also extract list items that should have highlight icons
-      // Look for list items after phrases like "These include:", "are:", etc.
-      const lines = content.split(/\n/)
-      let inListContext = false
-      const listItems: string[] = []
-      
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim()
-        
-        // Detect list context (after "include:", "are:", "listed:", etc.)
-        if (/^(these|they|it|the document|the text|the context)\s+(include|includes|are|is|lists?|mentions?|refers? to|contains?)/i.test(line)) {
-          inListContext = true
-          continue
-        }
-        
-        // If we're in list context, extract list items
-        if (inListContext) {
-          // Match lines that look like list items (standalone capitalized phrases, or lines starting with -/*)
-          const listItemMatch = line.match(/^[-•*]\s*(.+)$/) || 
-                               (line.length > 3 && line.length < 100 && /^[A-Z][^.!?]*$/.test(line) ? line : null)
-          
-          if (listItemMatch) {
-            const rawItem =
-              typeof listItemMatch === "string"
-                ? listItemMatch
-                : typeof listItemMatch[1] === "string"
-                  ? listItemMatch[1]
-                  : listItemMatch[0]
-            const item = rawItem.trim()
-            // Filter out common non-content words and very short items
-            if (item.length >= 5 && item.length < 200 && 
-                !/^(and|or|each|these|they|it)$/i.test(item)) {
-              listItems.push(item)
-              // Add to badge map as document citation
-              if (!badgeMap.has(item)) {
-                badgeMap.set(item, { type: 'doc', hasDocCitation: true })
-              }
-            }
-          }
-          
-          // Stop list context after empty line or new sentence
-          if (line === "" || /^[A-Z][^.!?]*[.!?]$/.test(line)) {
-            inListContext = false
-          }
-        }
-      }
-      
-      messageBadgeMaps.set(index, badgeMap)
-    })
-    
-    return messageBadgeMaps
-  }, [messages, documentId])
 
   return (
     <div className="flex h-full flex-col">
@@ -1551,166 +1574,17 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           const isUser = message.role === "user"
           const isAssistant = message.role === "assistant"
           const isLastAssistant = isAssistant && index === messages.length - 1
-          const shouldShowThinkingTooltip = isAssistant && (!isLastAssistant || !isLoading)
-          const shouldShowLiveThinking = isLastAssistant && isLoading
+          const isStreamingAssistant = isAssistant && isLastAssistant && isLoading
+          const shouldShowThinkingTooltip = isAssistant && !isStreamingAssistant
+          const shouldShowLiveThinking = isStreamingAssistant
           const messageKey = getMessageKey(message, index)
           const evidenceStatusEntry = evidenceStatusByMessage[messageKey]
           const evidenceStatus = evidenceStatusEntry?.status ?? "idle"
-          
-          // Process message content to add source badges after quoted text
-          const sources = Array.isArray(message?.sources) ? message.sources : []
-          
-          // Get pre-computed badge info for this message
-          const badgeInfoMap = allBadgeInfo.get(index) || new Map()
-          
-          // Function to find the source for a quoted phrase (uses pre-computed map)
-          const findSourceForQuote = (quotedText: string, hasDocCitation: boolean = false): { type: 'doc' | 'scope', source?: any } => {
-            // Use pre-computed badge info if available - this prevents flash
-            const cached = badgeInfoMap.get(quotedText)
-            if (cached) {
-              return { type: cached.type, source: cached.source }
-            }
-            
-            // Fallback: if [doc] citation is present, return doc type immediately
-            if (hasDocCitation) {
-              return { type: 'doc' }
-            }
-            
-            // Otherwise, return scope (shouldn't happen if badgeInfoMap is working correctly)
-            return { type: 'scope' }
-          }
-          
-          // Function to handle badge click - highlight specific reference
-          const handleBadgeClick = async (quotedText: string, sourceInfo: { type: 'doc' | 'scope', source?: any }) => {
-            if (sourceInfo.type === 'doc') {
-              // Get documentId from source if not provided in props
-              const targetDocumentId = documentId || sourceInfo.source?.id
-              if (!targetDocumentId) {
-                clientLogger.warn("[handleBadgeClick] No documentId available")
-                return
-              }
-              // If we have a source with pageNumber and textSpan, use them directly
-              if (sourceInfo.source && sourceInfo.source.pageNumber !== undefined && sourceInfo.source.textSpan) {
-                const source = sourceInfo.source
-                const contextHighlight: Highlight = {
-                  id: `highlight-${targetDocumentId}-${source.pageNumber}-${Date.now()}`,
-                  documentId: targetDocumentId,
-                  pageNumber: source.pageNumber,
-                  textSpan: source.textSpan,
-                  quote: quotedText,
-                  source: 'user_click' as const,
-                  color: "rgba(255, 255, 0, 0.3)",
-                  coordinates: source.coordinates,
-                }
-                
-                // Set single highlight in context (for icon click, only show this one)
-                // Use immediate update for user clicks (better UX)
-                setHighlights(targetDocumentId, [contextHighlight], true)
-                setActiveDocument(targetDocumentId)
-                
-                // Navigate to document if not already there
-                const currentPath = window.location.pathname
-                const targetPath = `/workspaces/${workspaceId}/documents/${targetDocumentId}`
-                if (currentPath !== targetPath) {
-                  const url = new URL(targetPath, window.location.origin)
-                const currentConversationId = searchParams.get("conversationId")
-                if (currentConversationId) {
-                    url.searchParams.set("conversationId", currentConversationId)
-                  }
-                  router.push(url.pathname + url.search)
-                    }
-                return
-              }
-              
-              // Otherwise, search for this specific phrase in the document
-              try {
-                const response = await fetch(`/api/documents/${targetDocumentId}/search-phrases`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ phrases: [quotedText] }),
-                })
-                
-                if (response.ok) {
-                  const result = await response.json()
-                  const highlights = result.highlights || []
-                  
-                  if (highlights.length > 0) {
-                    // Use the first highlight found
-                    const highlight = highlights[0]
-                    const source = sourceInfo.source
-                    
-                    const contextHighlight: Highlight = {
-                      id: highlight.id || `highlight-${targetDocumentId}-${highlight.pageNumber || source?.pageNumber || 1}-${Date.now()}`,
-                      documentId: targetDocumentId,
-                      pageNumber: highlight.pageNumber || source?.pageNumber || 1,
-                      textSpan: highlight.textSpan || source?.textSpan!,
-                      quote: quotedText,
-                      source: 'user_click' as const,
-                      color: highlight.color || "rgba(255, 255, 0, 0.3)",
-                      coordinates: highlight.coordinates,
-                    }
-                    
-                    clientLogger.debug("[handleBadgeClick] Setting highlight in context:", contextHighlight)
-                    
-                    // Set single highlight in context (for icon click, only show this one)
-                    // Use immediate update for user clicks (better UX)
-                    setHighlights(targetDocumentId, [contextHighlight], true)
-                    setActiveDocument(targetDocumentId)
-                    
-                    // Navigate to document if not already there
-                    const currentPath = window.location.pathname
-                    const targetPath = `/workspaces/${workspaceId}/documents/${targetDocumentId}`
-                    if (currentPath !== targetPath) {
-                      const url = new URL(targetPath, window.location.origin)
-                      const currentConversationId = searchParams.get("conversationId")
-                      if (currentConversationId) {
-                        url.searchParams.set("conversationId", currentConversationId)
-                      }
-                      router.push(url.pathname + url.search)
-                    }
-                  } else {
-                    clientLogger.warn("[handleBadgeClick] No highlights found for phrase:", quotedText)
-                    // If no highlights found, still navigate to the document if we have a source
-                    const source = sourceInfo.source
-                    if (source && source.pageNumber) {
-                      const url = new URL(`/workspaces/${workspaceId}/documents/${targetDocumentId}`, window.location.origin)
-                      const currentConversationId = searchParams.get("conversationId")
-                      if (currentConversationId) {
-                        url.searchParams.set("conversationId", currentConversationId)
-                      }
-                      router.push(url.pathname + url.search)
-                    }
-                  }
-                } else {
-                  clientLogger.error("[handleBadgeClick] Search request failed:", response.status)
-                }
-              } catch (error) {
-                clientLogger.error("[handleBadgeClick] Error highlighting phrase:", error)
-              }
-            } else {
-              clientLogger.warn("[handleBadgeClick] Cannot handle badge click:", {
-                type: sourceInfo.type,
-                hasSource: !!sourceInfo.source,
-                hasDocumentId: !!documentId,
-                sourceId: sourceInfo.source?.id,
-              })
-            }
-          }
+          const { citations } = getMessageSourcesPayload(message)
+          const rawContent = readMessageContent(message)
+          const displayContent = sanitizeMessageContent(rawContent)
 
-          return (
-            <div key={index} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-              <div className="space-y-2 group">
-                {shouldShowLiveThinking && (
-                  <div className="flex items-center px-2 mb-1 animate-pulse">
-                    <span className="text-xs italic text-muted-foreground">
-                      Thinking{ellipsis}
-                    </span>
-                  </div>
-                )}
-                {shouldShowThinkingTooltip && (
-                  <span className="text-xs italic text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                    {(() => {
-                      // First check if message has thinking_duration from database (past messages)
+          const thinkingLabel = (() => {
                       if (message.thinking_duration !== null && message.thinking_duration !== undefined) {
                         const duration =
                           typeof message.thinking_duration === "number"
@@ -1720,20 +1594,36 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                           return `Thought for ${formatDuration(duration)} sec`
                         }
                       }
-                      // Then check if we have a stored duration for this index (current session)
+
                       if (thinkingDurations.has(index)) {
                         const duration = thinkingDurations.get(index)!
                         return `Thought for ${formatDuration(duration)} sec`
                       }
-                      // Fallback: if this is the last assistant message and we have a lastThinkingDuration
+
                       if (isLastAssistant && lastThinkingDuration !== null) {
                         return `Thought for ${formatDuration(lastThinkingDuration)} sec`
                       }
-                      // If no duration available, just show "Thought"
+
                       return "Thought"
-                    })()}
+          })()
+
+          const messageAlignment = isUser ? "justify-end" : "justify-start"
+
+          return (
+            <div key={messageKey} className={cn("flex", messageAlignment)}>
+              <div className="space-y-2 group">
+                {shouldShowLiveThinking && (
+                  <div className="flex items-center px-2 mb-1 animate-pulse">
+                    <span className="text-xs italic text-muted-foreground">Thinking{ellipsis}</span>
+                  </div>
+                )}
+
+                {shouldShowThinkingTooltip && (
+                  <span className="text-xs italic text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                    {thinkingLabel}
                   </span>
                 )}
+
                 <div
                   className={cn(
                     "max-w-[80%] sm:max-w-[60ch] rounded-2xl px-3 py-2 text-sm break-words",
@@ -1742,473 +1632,42 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                   )}
                 >
                   <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-0 prose-pre:whitespace-pre-wrap prose-pre:break-words prose-pre:text-sm">
-                    <ReactMarkdown
-                      components={{
-                        li: ({ children, ...props }: any) => {
-                          // Check if this list item contains text that should have a highlight icon
-                          // Extract text from children (handling ReactMarkdown's structure)
-                          const extractText = (node: any): string => {
-                            if (typeof node === 'string') return node
-                            if (Array.isArray(node)) return node.map(extractText).join('')
-                            if (React.isValidElement(node)) {
-                              const props = node.props as any
-                              if (props?.children) {
-                                return extractText(props.children)
-                              }
-                            }
-                            return ''
-                          }
-                          
-                          const itemText = extractText(children).trim()
-                          
-                          // Check if this item is in our badge info map (was extracted as a phrase to highlight)
-                          const cachedBadgeInfo = badgeInfoMap.get(itemText)
-                          const hasDocCitation = cachedBadgeInfo?.hasDocCitation || false
-                          const badgeType = cachedBadgeInfo?.type || (hasDocCitation ? 'doc' : null)
-                          const sourceInfo = cachedBadgeInfo 
-                            ? { type: cachedBadgeInfo.type, source: cachedBadgeInfo.source }
-                            : (hasDocCitation ? findSourceForQuote(itemText, true) : null)
-                          
-                          // If this is a document citation, add highlight icon
-                          if (badgeType === 'doc' && sourceInfo) {
-                            return (
-                              <li {...props} className="flex items-start gap-2">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    e.preventDefault()
-                                    clientLogger.debug("[ChatInterface] List item highlight icon clicked:", {
-                                      itemText: itemText.substring(0, 50),
-                                      sourceInfo,
-                                    })
-                                    handleBadgeClick(itemText, sourceInfo)
-                                  }}
-                                  className="inline-flex items-center justify-center w-4 h-4 mt-0.5 rounded hover:bg-secondary/80 transition-colors cursor-pointer flex-shrink-0"
-                                  title="Scroll to this section in the document"
-                                >
-                                  <Highlighter className="h-3 w-3 text-primary" />
-                                </button>
-                                <span className="flex-1">{children}</span>
-                              </li>
-                            )
-                          }
-                          
-                          return <li {...props}>{children}</li>
-                        },
-                        p: ({ children, ...props }: any) => {
-                          // Debug: log the raw children to see what we're working with
-                          if (index === messages.length - 1 && isAssistant) {
-                            const rawContent = readMessageContent(message)
-                            clientLogger.debug("[ChatInterface] Processing message content:", {
-                              messageIndex: index,
-                              rawContentLength: rawContent.length,
-                              rawContentPreview: rawContent.substring(0, 500),
-                              rawContentHasQuotes: rawContent.includes('"'),
-                              rawContentHasDoc: rawContent.includes('[doc]'),
-                              rawContentHasQuoteDocPattern: /"[^"]+"\s*\[doc\]/.test(rawContent),
-                              childrenType: typeof children,
-                              childrenIsArray: Array.isArray(children),
-                              childrenLength: Array.isArray(children) ? children.length : 'N/A',
-                              childrenPreview: Array.isArray(children) 
-                                ? children.map(c => {
-                                    if (typeof c === 'string') return c.substring(0, 100)
-                                    if (React.isValidElement(c)) return `[${c.type}]`
-                                    return String(c)
-                                  }).join(' | ')
-                                : (typeof children === 'string' ? children.substring(0, 200) : String(children)),
-                              hasSources: sources.length > 0,
-                              sourcesCount: sources.length,
-                              badgeInfoMapSize: badgeInfoMap.size,
-                              badgeInfoMapKeys: Array.from(badgeInfoMap.keys()).slice(0, 5)
-                            })
-                          }
-                          // Process text nodes to add badges after quoted text and [doc] citations
-                          const processTextNode = (text: string): any[] => {
-                            if (!text || typeof text !== 'string') return [text]
-                            
-                            const parts: any[] = []
-                            // Match quoted text, optionally followed by [doc] citation
-                            // Pattern: "quoted text" [doc] or just "quoted text"
-                            // Also handle cases where [doc] might be on the same line but separated
-                            const quoteRegex = /"([^"]+)"(\s*\[doc\])?/g
-                            let lastIndex = 0
-                            let match
-                            let matchCount = 0
-                            
-                            while ((match = quoteRegex.exec(text)) !== null) {
-                              matchCount++
-                              // Add text before the quote
-                              if (match.index > lastIndex) {
-                                parts.push(text.substring(lastIndex, match.index))
-                              }
-                              
-                              // Add quoted text with badge
-                              const quotedText = match[1]
-                              const hasDocCitation = !!match[2] // Check if [doc] was found
-                              
-                              // Use pre-computed badge info to prevent flash
-                              const cachedBadgeInfo = badgeInfoMap.get(quotedText)
-                              const badgeType = cachedBadgeInfo?.type || (hasDocCitation ? 'doc' : 'scope')
-                              const sourceInfo = cachedBadgeInfo 
-                                ? { type: cachedBadgeInfo.type, source: cachedBadgeInfo.source }
-                                : findSourceForQuote(quotedText, hasDocCitation)
-                              
-                              clientLogger.debug("[ChatInterface] Found quote match:", {
-                                quotedText: quotedText.substring(0, 50), 
-                                hasDocCitation, 
-                                badgeType,
-                                hasSource: !!sourceInfo.source,
-                                badgeInfoMapSize: badgeInfoMap.size,
-                                matchIndex: match.index,
-                                fullMatch: match[0]
-                              })
-                              
-                              parts.push(
-                                <span key={`quote-${match.index}-${index}`} className="inline-flex items-center gap-1">
-                                  <span className="font-medium">"{quotedText}"</span>
-                                  {badgeType === 'doc' && (
-                                    <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      e.preventDefault()
-                                        clientLogger.debug("[ChatInterface] Highlight icon clicked:", {
-                                          quotedText: quotedText.substring(0, 50),
-                                          sourceInfo,
-                                        })
-                                        handleBadgeClick(quotedText, sourceInfo)
-                                    }}
-                                      className="inline-flex items-center justify-center w-4 h-4 rounded hover:bg-secondary/80 transition-colors cursor-pointer"
-                                      title="Scroll to this quote in the document"
-                                  >
-                                      <Highlighter className="h-3 w-3 text-primary" />
-                                    </button>
-                                  )}
-                                </span>
-                              )
-                              
-                              // Move past the entire match (quote + optional [doc])
-                              // Skip the [doc] text since we're using icons now
-                              lastIndex = match.index + match[0].length
-                            }
-                            
-                            // Also check for standalone [doc] that might have been separated from quotes
-                            // This handles cases where ReactMarkdown splits the text
-                            if (lastIndex < text.length) {
-                              const remainingText = text.substring(lastIndex)
-                              // Check if there's a [doc] that we might have missed
-                              const docMatch = remainingText.match(/^\s*\[doc\]/)
-                              if (docMatch && parts.length > 0) {
-                                // If we just added a quote part, this [doc] likely belongs to it
-                                const lastPart = parts[parts.length - 1]
-                                if (React.isValidElement(lastPart) && lastPart.type === 'span') {
-                                  // The icon should already be there, just skip the [doc] text
-                                  lastIndex += docMatch[0].length
-                                }
-                              } else {
-                                // Check for standalone [doc] without quotes - try to associate with previous quote
-                                const standaloneDocMatch = remainingText.match(/\s*\[doc\]/)
-                                if (standaloneDocMatch && parts.length > 0) {
-                                  // Look backwards for a quote in the parts
-                                  for (let pIdx = parts.length - 1; pIdx >= 0; pIdx--) {
-                                    const part = parts[pIdx]
-                                    if (React.isValidElement(part) && part.type === 'span') {
-                                      // Found a span, check if it's a quote span
-                                      const partProps = part.props as any
-                                      const spanChildren = partProps?.children
-                                      if (Array.isArray(spanChildren)) {
-                                        const quoteSpan = spanChildren.find((c: any) => {
-                                          if (!React.isValidElement(c) || c.type !== 'span') return false
-                                          const cProps = c.props as any
-                                          return typeof cProps?.children === 'string' && cProps.children.startsWith('"')
-                                        })
-                                        if (quoteSpan) {
-                                        const quoteProps = quoteSpan.props as any
-                                        const quoteText = quoteProps.children.replace(/^"|"$/g, '')
-                                          // Check if icon already exists
-                                          const hasIcon = spanChildren.some((c: any) => 
-                                            React.isValidElement(c) && c.type === 'button'
-                                          )
-                                          if (!hasIcon) {
-                                        // Use pre-computed badge info
-                                        const cachedBadgeInfo = badgeInfoMap.get(quoteText)
-                                        const badgeType = cachedBadgeInfo?.type || 'doc'
-                                        const sourceInfo = cachedBadgeInfo 
-                                          ? { type: cachedBadgeInfo.type, source: cachedBadgeInfo.source }
-                                          : findSourceForQuote(quoteText, true)
-                                        
-                                            // Replace the span with one that has an icon
-                                        parts[pIdx] = (
-                                          <span key={`quote-standalone-${pIdx}-${index}`} className="inline-flex items-center gap-1">
-                                                {spanChildren}
-                                                {badgeType === 'doc' && (
-                                                  <button
-                                              onClick={(e) => {
-                                                e.stopPropagation()
-                                                e.preventDefault()
-                                                  handleBadgeClick(quoteText, sourceInfo)
-                                              }}
-                                                    className="inline-flex items-center justify-center w-4 h-4 rounded hover:bg-secondary/80 transition-colors cursor-pointer"
-                                                    title="Scroll to this quote in the document"
-                                            >
-                                                    <Highlighter className="h-3 w-3 text-primary" />
-                                                  </button>
-                                                )}
-                                          </span>
-                                        )
-                                          }
-                                        // Skip the [doc] text
-                                        lastIndex += standaloneDocMatch[0].length
-                                        break
-                                        }
-                                      }
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                            
-                            // Add remaining text (but skip standalone [doc] if we already processed it)
-                            if (lastIndex < text.length) {
-                              const remaining = text.substring(lastIndex)
-                              // Don't add standalone [doc] text - we use icons now
-                              if (!/^\s*\[doc\]\s*$/.test(remaining)) {
-                                parts.push(remaining)
-                              } else {
-                                // Skip [doc] text entirely
-                                lastIndex += remaining.length
-                              }
-                            }
-                            
-                            // Debug: log processing results
-                            if (index === messages.length - 1 && isAssistant) {
-                              clientLogger.debug("[ChatInterface] processTextNode result:", {
-                                matchCount,
-                                partsCount: parts.length,
-                                hasBadges: parts.some(p => React.isValidElement(p) && p.type === 'span'),
-                                textLength: text.length,
-                                textHasQuotes: text.includes('"'),
-                                textHasDoc: text.includes('[doc]'),
-                                textPreview: text.substring(0, 150)
-                              })
-                            }
-                            
-                            return parts.length > 0 ? parts : [text]
-                          }
-                          
-                          // Convert children to string for processing if needed
-                          // First, try to process the entire children as a string if possible
-                          const processChildren = (children: any): any => {
-                            // If children is a single string, process it directly
-                            if (typeof children === 'string') {
-                              const processed = processTextNode(children)
-                              return processed.length > 1 || (processed.length === 1 && processed[0] !== children) 
-                                ? processed 
-                                : children
-                            }
-                            
-                            // If children is an array, we need to handle it more carefully
-                            // ReactMarkdown might split text nodes, so we need to look for [doc] across nodes
-                            if (Array.isArray(children)) {
-                              // Strategy: Process all consecutive string children together
-                              // This handles cases where ReactMarkdown splits "text" and [doc] into separate text nodes
-                              const result: any[] = []
-                              let i = 0
-                              
-                              while (i < children.length) {
-                                const child = children[i]
-                                
-                                if (typeof child === 'string') {
-                                  // Check if this is a standalone [doc] text - skip it entirely (we use icons now)
-                                  if (/^\s*\[doc\]\s*$/.test(child.trim())) {
-                                    // This is standalone [doc] - try to associate with previous quote
-                                    let associated = false
-                                    for (let rIdx = result.length - 1; rIdx >= 0; rIdx--) {
-                                      const lastItem = result[rIdx]
-                                      if (React.isValidElement(lastItem) && lastItem.type === 'span') {
-                                        const lastItemProps = lastItem.props as any
-                                        const spanChildren = lastItemProps?.children
-                                        if (Array.isArray(spanChildren)) {
-                                          // Check if this span contains a quote
-                                          const quoteSpan = spanChildren.find((c: any) => {
-                                            if (!React.isValidElement(c) || c.type !== 'span') return false
-                                            const cProps = c.props as any
-                                            return typeof cProps?.children === 'string' && cProps.children.startsWith('"')
-                                          })
-                                          if (quoteSpan) {
-                                            const quoteSpanProps = quoteSpan.props as any
-                                            const quoteText = quoteSpanProps.children.replace(/^"|"$/g, '')
-                                            // Check if icon already exists
-                                            const hasIcon = spanChildren.some((c: any) => 
-                                              React.isValidElement(c) && c.type === 'button'
-                                            )
-                                            if (!hasIcon) {
-                                              const cachedBadgeInfo = badgeInfoMap.get(quoteText)
-                                              const badgeType = cachedBadgeInfo?.type || 'doc'
-                                              const sourceInfo = cachedBadgeInfo 
-                                                ? { type: cachedBadgeInfo.type, source: cachedBadgeInfo.source }
-                                                : findSourceForQuote(quoteText, true)
-                                              
-                                              result[rIdx] = (
-                                                <span key={`quote-doc-text-${rIdx}-${index}`} className="inline-flex items-center gap-1">
-                                                  {spanChildren}
-                                                  {badgeType === 'doc' && (
-                                                    <button
-                                                    onClick={(e) => {
-                                                      e.stopPropagation()
-                                                      e.preventDefault()
-                                                        handleBadgeClick(quoteText, sourceInfo)
-                                                    }}
-                                                      className="inline-flex items-center justify-center w-4 h-4 rounded hover:bg-secondary/80 transition-colors cursor-pointer"
-                                                      title="Scroll to this quote in the document"
-                                                  >
-                                                      <Highlighter className="h-3 w-3 text-primary" />
-                                                    </button>
-                                                  )}
-                                                </span>
-                                              )
-                                            }
-                                              associated = true
-                                              i++ // Skip the [doc] text
-                                              break
-                                          }
-                                        }
-                                      }
-                                    }
-                                    if (!associated) {
-                                      // No quote found, skip the [doc] text entirely
-                                      i++
-                                      continue
-                                    }
-                                  } else {
-                                    // Collect all consecutive strings
-                                    const stringGroup: string[] = [child]
-                                    let j = i + 1
-                                    while (j < children.length && typeof children[j] === 'string') {
-                                      stringGroup.push(children[j] as string)
-                                      j++
-                                    }
-                                    
-                                    // Process the group as one text
-                                    const combinedText = stringGroup.join('')
-                                    const processed = processTextNode(combinedText)
-                                    
-                                    // If we found matches, use processed version
-                                    if (processed.length > 1 || (processed.length === 1 && processed[0] !== combinedText)) {
-                                      processed.forEach((p, pIdx) => {
-                                        result.push(React.isValidElement(p) ? p : <React.Fragment key={`${i}-${pIdx}`}>{p}</React.Fragment>)
-                                      })
-                                    } else {
-                                      // No matches, add original strings
-                                      stringGroup.forEach((str, sIdx) => {
-                                        result.push(str)
-                                      })
-                                    }
-                                    
-                                    i = j // Skip all the strings we just processed
-                                  }
-                                } else {
-                                  // Non-string child - check if it's a [doc] link
-                                  if (React.isValidElement(child) && child.type === 'a') {
-                                    const childProps = child.props as any
-                                    const linkText = typeof childProps?.children === 'string' 
-                                      ? childProps.children 
-                                      : (Array.isArray(childProps?.children) 
-                                          ? childProps.children.join('') 
-                                          : String(childProps?.children || ''))
-                                    
-                                    if (linkText === '[doc]' || childProps?.href === '[doc]') {
-                                      // Look backwards for a quote span in the result
-                                      for (let rIdx = result.length - 1; rIdx >= 0; rIdx--) {
-                                        const lastItem = result[rIdx]
-                                        if (React.isValidElement(lastItem) && lastItem.type === 'span') {
-                                          // Check if it's a quote span without a badge
-                                          const lastItemProps = lastItem.props as any
-                                          const spanChildren = lastItemProps?.children
-                                          if (Array.isArray(spanChildren) && spanChildren.length === 1) {
-                                            const quoteSpan = spanChildren[0]
-                                            if (React.isValidElement(quoteSpan) && quoteSpan.type === 'span') {
-                                              const quoteSpanProps = quoteSpan.props as any
-                                              const quoteText = quoteSpanProps?.children
-                                              if (quoteText && typeof quoteText === 'string' && quoteText.startsWith('"')) {
-                                                // Found a quote without badge - add badge and skip the [doc] link
-                                                const cleanQuoteText = quoteText.replace(/^"|"$/g, '')
-                                                const cachedBadgeInfo = badgeInfoMap.get(cleanQuoteText)
-                                                const badgeType = cachedBadgeInfo?.type || 'doc'
-                                                const sourceInfo = cachedBadgeInfo 
-                                                  ? { type: cachedBadgeInfo.type, source: cachedBadgeInfo.source }
-                                                  : findSourceForQuote(cleanQuoteText, true)
-                                                
-                                                result[rIdx] = (
-                                                  <span key={`quote-link-${rIdx}-${index}`} className="inline-flex items-center gap-1">
-                                                    {quoteSpan}
-                                                    <Badge 
-                                                      variant={badgeType === 'doc' ? 'secondary' : 'outline'} 
-                                                      className={cn(
-                                                        "text-[10px] px-1.5 py-0 h-4",
-                                                        badgeType === 'doc' && "cursor-pointer hover:bg-secondary/80 transition-colors"
-                                                      )}
-                                                      onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        e.preventDefault()
-                                                        if (badgeType === 'doc') {
-                                                          handleBadgeClick(cleanQuoteText, sourceInfo)
-                                                        }
-                                                      }}
-                                                    >
-                                                      {badgeType}
-                                                    </Badge>
-                                                  </span>
-                                                )
-                                                i++ // Skip the [doc] link
-                                                continue
-                                              }
-                                            }
-                                          }
-                                        }
-                                      }
-                                    }
-                                  }
-                                  
-                                  // Regular non-string child
-                                  result.push(child)
-                                  i++
-                                }
-                              }
-                              
-                              return result.length > 0 ? result : children
-                            }
-                            
-                            return children
-                          }
-                          
-                          const processedChildren = processChildren(children)
-                          
-                          return <p {...props}>{processedChildren}</p>
-                        },
-                        // Handle links - ReactMarkdown might convert [doc] to a link
-                        a: ({ href, children, ...props }: any) => {
-                          // Check if this is a [doc] citation that was converted to a link
-                          const linkText = typeof children === 'string' ? children : 
-                            (Array.isArray(children) ? children.join('') : String(children))
-                          
-                          if (linkText === '[doc]' || href === '[doc]') {
-                            // This is a [doc] link - don't render it (we use icons now)
-                            // The icon should already be added by the quote processing logic
-                            return null
-                          }
-                          
-                          return <a href={href} {...props}>{children}</a>
-                        },
-                        // Handle text nodes that might contain standalone [doc]
-                        // Note: ReactMarkdown doesn't expose text as a component, so we handle it in the p component
-                      } as Components}
-                    >
-                      {readMessageContent(message)}
-                    </ReactMarkdown>
+                    <ReactMarkdown>{displayContent}</ReactMarkdown>
                   </div>
+
+                  {isAssistant && citations.length > 0 && canUseHighlights && (
+                    <div className="pt-1 flex flex-wrap gap-1">
+                      {citations.map((citation, citationIndex) => {
+                        const key = `${messageKey}-${citation.id || citationIndex}`
+                        const label = citation.pageNumber ? `p.${citation.pageNumber}` : `${citationIndex + 1}`
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => focusCitationHighlight(citation, messageKey, citationIndex)}
+                            onMouseEnter={() => hoverCitationHighlight(citation, messageKey, citationIndex, true)}
+                            onMouseLeave={() => hoverCitationHighlight(citation, messageKey, citationIndex, false)}
+                            className="inline-flex items-center gap-1 rounded-full border border-muted/70 bg-card/80 px-2.5 py-1 text-[11px] font-medium text-foreground/90 transition-colors hover:bg-primary/5 focus:outline-none focus-visible:ring focus-visible:ring-primary/40 cursor-pointer"
+                          >
+                            <Highlighter className="h-3 w-3 text-primary" />
+                            <span>{label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {isAssistant && citations.length === 0 && !isStreamingAssistant && canUseHighlights && (
+                    <div className="pt-2">
+                      <div className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-xs text-amber-900/80">
+                        No verifiable highlights were returned for this answer.
+                      </div>
+                    </div>
+                  )}
+                  </div>
+
                   {isAssistant && canManage && (
                     <div className="flex flex-wrap items-center justify-end gap-2 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -2234,10 +1693,8 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                         {evidenceStatus === "error" && evidenceStatusEntry?.error && (
                           <span className="text-xs text-destructive">{evidenceStatusEntry.error}</span>
                         )}
-                      </>
                     </div>
                   )}
-                </div>
               </div>
             </div>
           )
@@ -2264,12 +1721,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
             onChange={handleInputChange}
             placeholder={inputPlaceholder}
             className={cn("min-h-[60px] flex-1 resize-none shadow", isLoading ? "pr-20" : "pr-10")}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault()
-                handleSubmit(e as any)
-              }
-            }}
+            onKeyDown={handleTextareaKeyDown}
           />
           {isLoading && (
             <Button
@@ -2309,7 +1761,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {documentId
-                        ? "The chat is context-aware to the document you're currently viewing, plus any workspace evidence you keep included below. Space and Workspace Scope are always included automatically."
+                        ? "In document view, the Assistant can only access this document plus Space and Workspace scope (always included). Workspace knowledge is not included in the AI context."
                         : "Select which items to include in this conversation (excluding items does not delete them):"}
                     </p>
                     {documentId ? (
@@ -2335,20 +1787,6 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                             </div>
                           </div>
                         )}
-                        <div className="space-y-2">
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Workspace evidence available to this chat
-                          </p>
-                          <EvidenceList
-                            available={availableEvidence}
-                            excluded={excludedEvidence}
-                            onRemove={handleRemoveEvidence}
-                            onRestore={handleRestoreEvidence}
-                            includedLabelClassName="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground/90"
-                            excludedLabelClassName="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground/70"
-                            emptyMessage="No workspace evidence items yet. Save answers as evidence from the chat above and they’ll appear here."
-                          />
-                        </div>
                       </div>
                     ) : (
                       <Tabs defaultValue="sources" className="w-full">
@@ -2362,10 +1800,6 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                           <TabsTrigger value="evidence" className="text-xs" key={`ev-${availableEvidence.length}-${evidenceVersion}`}>
                             Evidence <span className="font-normal" key={`ev-count-${availableEvidence.length}`}>
                               ({availableEvidence.length})
-                              {(() => {
-                                console.log('[RENDER CHECK] Evidence counter rendering with:', availableEvidence.length);
-                                return null;
-                              })()}
                             </span>
                           </TabsTrigger>
                           <TabsTrigger value="notes" className="text-xs" key={`notes-${availableNotes.length}`}>

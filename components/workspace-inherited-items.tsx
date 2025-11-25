@@ -150,8 +150,35 @@ export function WorkspaceInheritedItems({ items, showEmptyState = true }: Worksp
             title,
           }
           const fileExtension = isDocument ? getDocumentFileExtension(documentLike) : "file"
-          const viewUrl = item.source_doc?.url || item.payload?.file_url || item.payload?.source_url
-          const isInternalLink = typeof viewUrl === "string" && viewUrl.startsWith("/")
+          const payloadMimeTypeRaw =
+            typeof item.payload?.mime_type === "string"
+              ? item.payload.mime_type
+              : typeof item.payload?.type === "string"
+                ? item.payload.type
+                : typeof item.payload?.content_type === "string"
+                  ? item.payload.content_type
+                  : typeof item.payload?.metadata?.type === "string"
+                    ? item.payload.metadata.type
+                    : ""
+          const payloadMimeType = payloadMimeTypeRaw.toLowerCase()
+          const sourcePageUrl =
+            typeof item.payload?.source_url === "string"
+              ? item.payload.source_url
+              : typeof item.payload?.sourceUrl === "string"
+                ? item.payload.sourceUrl
+                : typeof item.source_url === "string"
+                  ? item.source_url
+                  : typeof (item as any).sourceUrl === "string"
+                    ? ((item as any).sourceUrl as string)
+                    : undefined
+          const workspaceViewerUrl = item.source_doc?.url || item.payload?.file_url || null
+          const isExternalHtmlDocument =
+            payloadMimeType.includes("html") || (!!sourcePageUrl && !item.payload?.file_url)
+          const iconExtension = isExternalHtmlDocument ? "html" : fileExtension
+          const preferredUrl = isExternalHtmlDocument && sourcePageUrl ? sourcePageUrl : workspaceViewerUrl || sourcePageUrl
+          const hasPreferredUrl = typeof preferredUrl === "string" && preferredUrl.length > 0
+          const shouldOpenExternally =
+            (hasPreferredUrl && !preferredUrl!.startsWith("/")) || (isExternalHtmlDocument && !!sourcePageUrl)
 
           return (
             <Card key={item.id} className="shadow">
@@ -167,8 +194,8 @@ export function WorkspaceInheritedItems({ items, showEmptyState = true }: Worksp
                     <div className="w-10 h-10 shrink-0 mt-0.5 flex items-center justify-center rounded-md border bg-muted">
                       {isDocument ? (
                         <FileIcon
-                          extension={fileExtension}
-                          {...(defaultStyles[fileExtension as keyof typeof defaultStyles] || {})}
+                          extension={iconExtension}
+                          {...(defaultStyles[iconExtension as keyof typeof defaultStyles] || {})}
                           label={false}
                           glyphColor="#fff"
                           color="#6b7280"
@@ -191,14 +218,14 @@ export function WorkspaceInheritedItems({ items, showEmptyState = true }: Worksp
                       )}
                     </div>
                   </div>
-                  {viewUrl && (
+                  {hasPreferredUrl && (
                     <Button variant="outline" size="sm" asChild>
-                      {isInternalLink ? (
-                        <Link href={viewUrl}>View document</Link>
-                      ) : (
-                        <a href={viewUrl} target="_blank" rel="noopener noreferrer">
-                          View document
+                      {shouldOpenExternally ? (
+                        <a href={preferredUrl!} target="_blank" rel="noopener noreferrer">
+                          Open page
                         </a>
+                      ) : (
+                        <Link href={preferredUrl!}>View document</Link>
                       )}
                     </Button>
                   )}

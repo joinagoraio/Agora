@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   email TEXT NOT NULL,
   full_name TEXT,
   avatar_url TEXT,
+  language TEXT NOT NULL DEFAULT 'en' CHECK (language IN ('en','nl')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -829,11 +830,17 @@ CREATE TRIGGER update_conversations_updated_at BEFORE UPDATE ON conversations
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, email, full_name)
+  INSERT INTO public.profiles (id, email, full_name, avatar_url, language)
   VALUES (
     NEW.id,
     NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', '')
+    COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
+    COALESCE(NEW.raw_user_meta_data->>'avatar_url', NULL),
+    CASE
+      WHEN LOWER(COALESCE(NEW.raw_user_meta_data->>'language', NEW.raw_user_meta_data->>'preferred_language')) IN ('en', 'nl')
+        THEN LOWER(COALESCE(NEW.raw_user_meta_data->>'language', NEW.raw_user_meta_data->>'preferred_language'))
+      ELSE 'en'
+    END
   );
   RETURN NEW;
 END;

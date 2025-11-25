@@ -4,7 +4,6 @@ import { useState, useEffect, createContext, useContext } from "react"
 import { useSearchParams } from "next/navigation"
 import { ChatSidebar } from "@/components/chat-sidebar"
 import { ChatToggleButton } from "@/components/chat-toggle-button"
-import { HighlightProvider } from "@/lib/contexts/highlight-context"
 
 interface WorkspaceChatWrapperProps {
   workspaceId: string
@@ -82,7 +81,6 @@ export function WorkspaceChatWrapper({
   const toggleOffsetBottom = isMobile ? 16 : 24
 
   return (
-    <HighlightProvider>
     <ChatContext.Provider
       value={{ isChatOpen, setIsChatOpen, sidebarWidth, setSidebarWidth, isSidebarResizing, setIsSidebarResizing }}
     >
@@ -108,6 +106,5 @@ export function WorkspaceChatWrapper({
         />
       </div>
     </ChatContext.Provider>
-    </HighlightProvider>
   )
 }

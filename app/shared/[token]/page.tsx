@@ -68,11 +68,17 @@ export default async function SharedConversationPage({
                       <div className="prose prose-sm dark:prose-invert max-w-none">
                         <ReactMarkdown>{message.content}</ReactMarkdown>
                       </div>
-                      {message.role === "assistant" && message.sources && message.sources.length > 0 && (
+                      {message.role === "assistant" && (() => {
+                        const docs = Array.isArray(message.sources)
+                          ? message.sources
+                          : Array.isArray(message.sources?.documents)
+                            ? message.sources.documents
+                            : []
+                        return docs.length > 0 ? (
                         <div className="mt-3 space-y-2 border-t pt-3">
                           <p className="text-xs font-medium">Sources:</p>
                           <div className="flex flex-wrap gap-2">
-                            {message.sources.map((source: any, idx: number) => (
+                            {docs.map((source: any, idx: number) => (
                               <a
                                 key={idx}
                                 href={source.url || "#"}
@@ -88,7 +94,8 @@ export default async function SharedConversationPage({
                             ))}
                           </div>
                         </div>
-                      )}
+                        ) : null
+                      })()}
                     </CardContent>
                   </Card>
                 </div>

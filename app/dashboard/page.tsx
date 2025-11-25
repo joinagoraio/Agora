@@ -1,14 +1,17 @@
+import Link from "next/link"
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
-import { getUserSpaces } from "@/lib/actions/space"
+import { Layers2, FolderKanban } from "lucide-react"
+
 import { CreateSpaceDialog } from "@/components/create-space-dialog"
 import { UserMenu } from "@/components/user-menu"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import Link from "next/link"
-import { Layers2, FolderKanban } from "lucide-react"
+import { getUserSpaces } from "@/lib/actions/space"
+import { createClient } from "@/lib/supabase/server"
 import { WelcomeUserDialog } from "@/components/welcome-user-dialog"
+import { getServerTranslator } from "@/lib/i18n/server"
 
 export default async function DashboardPage() {
+  const { t } = await getServerTranslator()
   const supabase = await createClient()
   const {
     data: { user },
@@ -78,8 +81,8 @@ export default async function DashboardPage() {
         <div className="container mx-auto py-8 px-8">
           <div className="mb-8 flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-semibold">Spaces</h2>
-              <p className="text-sm text-muted-foreground">Define the initiative that your workspaces execute within</p>
+              <h2 className="text-2xl font-semibold">{t("dashboard.spaces.title")}</h2>
+              <p className="text-sm text-muted-foreground">{t("dashboard.spaces.subtitle")}</p>
             </div>
             <CreateSpaceDialog />
           </div>
@@ -117,9 +120,9 @@ export default async function DashboardPage() {
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Layers2 className="mb-4 h-12 w-12 text-muted-foreground" />
-                <h3 className="mb-2 text-lg font-semibold">No spaces yet</h3>
+                <h3 className="mb-2 text-lg font-semibold">{t("dashboard.spaces.emptyTitle")}</h3>
                 <p className="mb-4 text-center text-sm text-muted-foreground">
-                Create your first space to define and organize the scope of your initiative.
+                  {t("dashboard.spaces.emptyDescription")}
                 </p>
                 <CreateSpaceDialog />
               </CardContent>
@@ -130,10 +133,8 @@ export default async function DashboardPage() {
           {hasDirectWorkspaces && (
             <div className="mt-12">
               <div className="mb-8">
-                <h2 className="text-2xl font-semibold">My Workspaces</h2>
-                <p className="text-sm text-muted-foreground">
-                  Workspaces you've been invited to directly
-                </p>
+                <h2 className="text-2xl font-semibold">{t("dashboard.workspaces.title")}</h2>
+                <p className="text-sm text-muted-foreground">{t("dashboard.workspaces.subtitle")}</p>
               </div>
               
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

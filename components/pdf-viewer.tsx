@@ -74,6 +74,7 @@ interface PDFViewerProps {
   hideControls?: boolean
   viewportOffset?: number
   onControlsReady?: (controls: ViewerControls) => void
+  hoveredHighlightId?: string | null
 }
 
 export function PDFViewer({
@@ -86,6 +87,7 @@ export function PDFViewer({
   hideControls = false,
   onControlsReady,
   viewportOffset = 0,
+  hoveredHighlightId = null,
 }: PDFViewerProps) {
   const [numPages, setNumPages] = useState<number | null>(null)
   const [documentReady, setDocumentReady] = useState(false)
@@ -663,12 +665,13 @@ export function PDFViewer({
                         {/* Highlight Overlay */}
                         {highlights
                           .filter((h) => h.pageNumber === pageNum)
-                          .map((highlight) => (
+                          .map((highlight, highlightIndex) => (
                             <PDFHighlightOverlay
-                              key={highlight.id}
+                              key={`${highlight.id || "highlight"}-${pageNum}-${highlightIndex}`}
                               highlights={[highlight]}
                               scale={scale}
                               rotation={rotation}
+                              hoveredHighlightId={hoveredHighlightId}
                             />
                           ))}
                       </div>
@@ -689,9 +692,10 @@ interface PDFHighlightOverlayProps {
   highlights: Highlight[]
   scale: number
   rotation: number
+  hoveredHighlightId?: string | null
 }
 
-function PDFHighlightOverlay({ highlights, scale, rotation }: PDFHighlightOverlayProps) {
+function PDFHighlightOverlay({ highlights, scale, rotation, hoveredHighlightId }: PDFHighlightOverlayProps) {
   return (
     <svg
       className="absolute left-0 top-0 pointer-events-none"
@@ -705,6 +709,7 @@ function PDFHighlightOverlay({ highlights, scale, rotation }: PDFHighlightOverla
 
         const { x, y, width, height } = highlight.coordinates
         const color = highlight.color || "rgba(255, 255, 0, 0.3)"
+        const isHovered = hoveredHighlightId && highlight.id && highlight.id === hoveredHighlightId
 
         return (
           <rect
@@ -713,9 +718,9 @@ function PDFHighlightOverlay({ highlights, scale, rotation }: PDFHighlightOverla
             y={y * scale}
             width={width * scale}
             height={height * scale}
-            fill={color}
-            stroke="rgba(255, 200, 0, 0.6)"
-            strokeWidth={1}
+            fill={isHovered ? "rgba(251, 191, 36, 0.65)" : color}
+            stroke={isHovered ? "rgba(251, 191, 36, 0.9)" : "rgba(255, 200, 0, 0.6)"}
+            strokeWidth={isHovered ? 2 : 1}
           />
         )
       })}

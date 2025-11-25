@@ -30,3 +30,39 @@ BEGIN
       CHECK (type IN ('google_drive', 'notion', 'confluence', 'sharepoint', 'dropbox', 'direct_upload', 'overheid_nl'));
   END IF;
 END $$;
+
+-- If the connectors table has already been migrated to sources but still uses the old CHECK constraint, update it
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'sources'
+      AND column_name = 'type'
+      AND data_type IN ('text', 'character varying')
+  ) THEN
+    IF EXISTS (
+      SELECT 1
+      FROM information_schema.table_constraints 
+      WHERE constraint_schema = 'public'
+        AND table_name = 'sources'
+        AND constraint_name = 'connectors_type_check'
+    ) THEN
+      ALTER TABLE public.sources DROP CONSTRAINT connectors_type_check;
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM information_schema.table_constraints 
+      WHERE constraint_schema = 'public'
+        AND table_name = 'sources'
+        AND constraint_name = 'sources_type_check'
+    ) THEN
+      ALTER TABLE public.sources DROP CONSTRAINT sources_type_check;
+    END IF;
+
+    ALTER TABLE public.sources ADD CONSTRAINT sources_type_check 
+      CHECK (type IN ('google_drive', 'notion', 'confluence', 'sharepoint', 'dropbox', 'direct_upload', 'overheid_nl', 'workspace_generated'));
+  END IF;
+END $$;

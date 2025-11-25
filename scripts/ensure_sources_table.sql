@@ -137,6 +137,51 @@ BEGIN
       FOR EACH ROW
       EXECUTE FUNCTION update_updated_at_column();
   END IF;
+
+  -- Remove stale connector constraint name that may have stayed behind after renaming
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.table_constraints
+    WHERE constraint_schema = 'public'
+      AND table_name = 'sources'
+      AND constraint_name = 'connectors_type_check'
+  ) THEN
+    ALTER TABLE public.sources DROP CONSTRAINT connectors_type_check;
+  END IF;
+
+  -- If the column still uses a text-based type, recreate the CHECK constraint with every supported source
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'sources'
+      AND column_name = 'type'
+      AND data_type IN ('text', 'character varying')
+  ) THEN
+    IF EXISTS (
+      SELECT 1
+      FROM information_schema.table_constraints
+      WHERE constraint_schema = 'public'
+        AND table_name = 'sources'
+        AND constraint_name = 'sources_type_check'
+    ) THEN
+      ALTER TABLE public.sources DROP CONSTRAINT sources_type_check;
+    END IF;
+
+    ALTER TABLE public.sources
+      ADD CONSTRAINT sources_type_check CHECK (
+        type IN (
+          'google_drive',
+          'notion',
+          'confluence',
+          'sharepoint',
+          'dropbox',
+          'direct_upload',
+          'overheid_nl',
+          'workspace_generated'
+        )
+      );
+  END IF;
   
   -- Ensure RLS is enabled
   ALTER TABLE sources ENABLE ROW LEVEL SECURITY;

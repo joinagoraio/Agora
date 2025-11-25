@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { MessageSquare, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface ChatToggleButtonProps {
   onClick: () => void
@@ -19,6 +20,8 @@ export function ChatToggleButton({
   offsetRight = 24,
   offsetBottom = 24,
 }: ChatToggleButtonProps) {
+  const { t } = useI18n()
+
   return (
     <Button
       onClick={onClick}
@@ -30,7 +33,9 @@ export function ChatToggleButton({
       )}
     >
       {isOpen ? <X className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
-      <span className="sr-only">{isOpen ? "Close chat" : "Open chat"}</span>
+      <span className="sr-only">
+        {isOpen ? t("workspace.chat.toggle.close") : t("workspace.chat.toggle.open")}
+      </span>
     </Button>
   )
 }

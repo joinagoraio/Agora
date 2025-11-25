@@ -6,12 +6,17 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, email, full_name, avatar_url)
+  insert into public.profiles (id, email, full_name, avatar_url, language)
   values (
     new.id,
     new.email,
     coalesce(new.raw_user_meta_data->>'full_name', null),
-    coalesce(new.raw_user_meta_data->>'avatar_url', null)
+    coalesce(new.raw_user_meta_data->>'avatar_url', null),
+    case
+      when lower(coalesce(new.raw_user_meta_data->>'language', new.raw_user_meta_data->>'preferred_language')) in ('en', 'nl')
+        then lower(coalesce(new.raw_user_meta_data->>'language', new.raw_user_meta_data->>'preferred_language'))
+      else 'en'
+    end
   )
   on conflict (id) do nothing;
 

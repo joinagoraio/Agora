@@ -1,9 +1,11 @@
-import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
-import { ErrorBoundary } from '@/components/error-boundary'
-import { Toaster } from 'sonner'
-import './globals.css'
+import type { Metadata } from "next"
+import { Geist, Geist_Mono } from "next/font/google"
+import { Analytics } from "@vercel/analytics/next"
+import { ErrorBoundary } from "@/components/error-boundary"
+import { Toaster } from "sonner"
+import { getServerDictionary } from "@/lib/i18n/server"
+import { I18nClientProvider } from "@/components/providers/i18n-client-provider"
+import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
@@ -23,19 +25,21 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const { language, messages } = await getServerDictionary()
+
   return (
-    <html lang="en">
+    <html lang={language}>
       <body className={`font-sans antialiased bg-white`}>
-        <ErrorBoundary>
-          {children}
-        </ErrorBoundary>
-        <Toaster position="bottom-center" richColors closeButton />
-        <Analytics />
+        <I18nClientProvider initialLanguage={language} initialMessages={messages}>
+          <ErrorBoundary>{children}</ErrorBoundary>
+          <Toaster position="bottom-center" richColors closeButton />
+          <Analytics />
+        </I18nClientProvider>
       </body>
     </html>
   )

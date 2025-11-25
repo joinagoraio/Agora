@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { PencilLine, Save, X, Loader2, Wand2, MoreVertical, Settings, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -19,7 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { enhanceContextText, updateWorkspace } from "@/lib/actions/workspace"
+import { enhanceContextText, enhanceWorkspaceText, updateWorkspace } from "@/lib/actions/workspace"
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
@@ -34,6 +34,7 @@ interface WorkspaceOverviewProps {
   workspaceId: string
   initialName: string
   initialDescription?: string | null
+  initialSummary?: string | null
   initialContext?: string | null
   initialLocation?: string | null
   parentSpaces: ParentSpace[]
@@ -45,6 +46,7 @@ export function WorkspaceOverview({
   workspaceId,
   initialName,
   initialDescription,
+  initialSummary,
   initialContext,
   initialLocation,
   parentSpaces,
@@ -53,6 +55,7 @@ export function WorkspaceOverview({
 }: WorkspaceOverviewProps) {
   const router = useRouter()
   const [name, setName] = useState(initialName)
+  const [summary, setSummary] = useState(initialSummary ?? "")
   const [description, setDescription] = useState(initialDescription ?? "")
   const [context, setContext] = useState(initialContext ?? "")
   const [location, setLocation] = useState(initialLocation ?? "")
@@ -60,19 +63,38 @@ export function WorkspaceOverview({
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isEnhancing, setIsEnhancing] = useState(false)
-  const [enhancingField, setEnhancingField] = useState<"description" | "context" | null>(null)
-  const [activeField, setActiveField] = useState<"description" | "context" | null>(null)
+  const [enhancingField, setEnhancingField] = useState<"summary" | "description" | "context" | null>(null)
+  const [activeField, setActiveField] = useState<"summary" | "description" | "context" | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [summaryPrevious, setSummaryPrevious] = useState<string | null>(null)
   const [descriptionPrevious, setDescriptionPrevious] = useState<string | null>(null)
   const [contextPrevious, setContextPrevious] = useState<string | null>(null)
 
   const [draftName, setDraftName] = useState(initialName)
+  const [draftSummary, setDraftSummary] = useState(initialSummary ?? "")
   const [draftDescription, setDraftDescription] = useState(initialDescription ?? "")
   const [draftContext, setDraftContext] = useState(initialContext ?? "")
   const [draftLocation, setDraftLocation] = useState(initialLocation ?? "")
 
+  useEffect(() => {
+    if (isEditing) return
+
+    setName(initialName)
+    setSummary(initialSummary ?? "")
+    setDescription(initialDescription ?? "")
+    setContext(initialContext ?? "")
+    setLocation(initialLocation ?? "")
+
+    setDraftName(initialName)
+    setDraftSummary(initialSummary ?? "")
+    setDraftDescription(initialDescription ?? "")
+    setDraftContext(initialContext ?? "")
+    setDraftLocation(initialLocation ?? "")
+  }, [initialName, initialSummary, initialDescription, initialContext, initialLocation, isEditing])
+
   const handleStartEditing = () => {
     setDraftName(name)
+    setDraftSummary(summary)
     setDraftDescription(description)
     setDraftContext(context)
     setDraftLocation(location)
@@ -83,18 +105,21 @@ export function WorkspaceOverview({
 
   const handleCancel = () => {
     setDraftName(name)
+    setDraftSummary(summary)
     setDraftDescription(description)
     setDraftContext(context)
     setDraftLocation(location)
     setError(null)
     setActiveField(null)
+    setSummaryPrevious(null)
     setDescriptionPrevious(null)
     setContextPrevious(null)
     setIsEditing(false)
   }
 
-  const handleEnhance = async (field: "description" | "context") => {
-    const targetText = field === "description" ? draftDescription : draftContext
+  const handleEnhance = async (field: "summary" | "description" | "context") => {
+    const targetText =
+      field === "summary" ? draftSummary : field === "description" ? draftDescription : draftContext
     if (!targetText || targetText.trim().length === 0) {
       return
     }
@@ -104,18 +129,34 @@ export function WorkspaceOverview({
 
     setIsEnhancing(true)
     try {
-      const result = await enhanceContextText(targetText.trim())
-      if (result.error) {
-        setError(result.error)
-        return
-      }
-      if (result.enhanced) {
-        if (field === "description") {
-          setDescriptionPrevious(draftDescription)
-          setDraftDescription(result.enhanced)
-        } else {
+      if (field === "context") {
+        const result = await enhanceContextText(targetText.trim())
+        if (result.error) {
+          setError(result.error)
+          return
+        }
+        if (result.enhanced) {
           setContextPrevious(draftContext)
           setDraftContext(result.enhanced)
+        }
+      } else {
+        const result = await enhanceWorkspaceText(targetText.trim(), {
+          field,
+          workspaceName: draftName,
+          summary: field === "description" ? draftSummary : undefined,
+        })
+        if (result.error) {
+          setError(result.error)
+          return
+        }
+        if (result.enhanced) {
+          if (field === "summary") {
+            setSummaryPrevious(draftSummary)
+            setDraftSummary(result.enhanced)
+          } else {
+            setDescriptionPrevious(draftDescription)
+            setDraftDescription(result.enhanced)
+          }
         }
       }
     } finally {
@@ -124,7 +165,11 @@ export function WorkspaceOverview({
     }
   }
 
-  const handleUndoEnhance = (field: "description" | "context") => {
+  const handleUndoEnhance = (field: "summary" | "description" | "context") => {
+    if (field === "summary" && summaryPrevious !== null) {
+      setDraftSummary(summaryPrevious)
+      setSummaryPrevious(null)
+    }
     if (field === "description" && descriptionPrevious !== null) {
       setDraftDescription(descriptionPrevious)
       setDescriptionPrevious(null)
@@ -145,6 +190,7 @@ export function WorkspaceOverview({
     setIsSaving(true)
     setError(null)
 
+    const normalizedSummary = draftSummary.trim().length > 0 ? draftSummary.trim() : null
     const normalizedDescription = draftDescription.trim().length > 0 ? draftDescription.trim() : null
     const normalizedContext = draftContext.trim().length > 0 ? draftContext.trim() : null
     const normalizedLocation = draftLocation.trim().length > 0 ? draftLocation.trim() : null
@@ -155,6 +201,7 @@ export function WorkspaceOverview({
       normalizedDescription,
       normalizedContext,
       normalizedLocation,
+      normalizedSummary,
     )
 
     if (result.error) {
@@ -164,11 +211,13 @@ export function WorkspaceOverview({
     }
 
     setName(trimmedName)
+    setSummary(normalizedSummary ?? "")
     setDescription(normalizedDescription ?? "")
     setContext(normalizedContext ?? "")
     setLocation(normalizedLocation ?? "")
     setIsSaving(false)
     setActiveField(null)
+    setSummaryPrevious(null)
     setDescriptionPrevious(null)
     setContextPrevious(null)
     setIsEditing(false)
@@ -203,7 +252,7 @@ export function WorkspaceOverview({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="workspace-location">Location</Label>
+              <Label htmlFor="workspace-location">Jurisdiction</Label>
               <Input
                 id="workspace-location"
                 value={draftLocation}
@@ -214,7 +263,65 @@ export function WorkspaceOverview({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="workspace-description">Summary</Label>
+            <Label htmlFor="workspace-summary">Workspace summary</Label>
+            <div className="relative">
+              <Textarea
+                id="workspace-summary"
+                value={draftSummary}
+                onChange={(event) => setDraftSummary(event.target.value)}
+                onFocus={() => setActiveField("summary")}
+                onBlur={() => setActiveField((current) => (current === "summary" ? null : current))}
+                placeholder="Give a quick summary of this workspace…"
+                rows={4}
+                className="pb-10"
+              />
+              {activeField === "summary" && (
+                <div className="absolute bottom-2 right-2 flex items-center gap-2">
+                  {summaryPrevious !== null && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleUndoEnhance("summary")}
+                      className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      <span className="sr-only">Undo summary enhancement</span>
+                    </Button>
+                  )}
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => handleEnhance("summary")}
+                          disabled={isEnhancing || !draftSummary || draftSummary.trim().length === 0}
+                          className="h-8 w-8 p-0 hover:bg-transparent group"
+                        >
+                          {isEnhancing && enhancingField === "summary" ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
+                          ) : (
+                            <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
+                          )}
+                          <span className="sr-only">Enhance summary with AI</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" align="center">
+                        Generate an improved summary with AI.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="workspace-description">Workspace description</Label>
             <div className="relative">
               <Textarea
                 id="workspace-description"
@@ -222,8 +329,8 @@ export function WorkspaceOverview({
                 onChange={(event) => setDraftDescription(event.target.value)}
                 onFocus={() => setActiveField("description")}
                 onBlur={() => setActiveField((current) => (current === "description" ? null : current))}
-                placeholder="Give a quick summary of this workspace…"
-                rows={4}
+                placeholder="Describe the focus, document types, and key themes for this workspace…"
+                rows={6}
                 className="pb-10"
               />
               {activeField === "description" && (
@@ -238,7 +345,7 @@ export function WorkspaceOverview({
                       className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
                     >
                       <RotateCcw className="h-4 w-4" />
-                      <span className="sr-only">Undo summary enhancement</span>
+                      <span className="sr-only">Undo description enhancement</span>
                     </Button>
                   )}
                   <TooltipProvider>
@@ -258,11 +365,11 @@ export function WorkspaceOverview({
                           ) : (
                             <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
                           )}
-                          <span className="sr-only">Enhance summary with AI</span>
+                          <span className="sr-only">Enhance description with AI</span>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="left" align="center">
-                        Generate an improved summary with AI.
+                        Generate an improved description with AI.
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -272,7 +379,7 @@ export function WorkspaceOverview({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="workspace-context">Description</Label>
+            <Label htmlFor="workspace-context">Additional AI context (optional)</Label>
             <div className="relative">
               <Textarea
                 id="workspace-context"
@@ -280,7 +387,7 @@ export function WorkspaceOverview({
                 onChange={(event) => setDraftContext(event.target.value)}
                 onFocus={() => setActiveField("context")}
                 onBlur={() => setActiveField((current) => (current === "context" ? null : current))}
-                placeholder="Describe the focus, document types, and key themes for this workspace…"
+                placeholder="Add any extra guidance for AI assistants (datasets, special instructions, etc.)"
                 rows={8}
                 className="pb-10"
               />
@@ -328,7 +435,7 @@ export function WorkspaceOverview({
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Describe the focus, document types, and key themes for this workspace. This helps the AI understand and search your documents.
+              Optional: include extra notes you want AI assistants to consider beyond the summary &amp; description.
             </p>
           </div>
 
@@ -389,11 +496,11 @@ export function WorkspaceOverview({
             )}
           </div>
           <div className="space-y-2">
-            {description.trim().length > 0 && (
-              <p className="whitespace-pre-line text-sm font-bold text-foreground">{description}</p>
-            )}
+            <p className="whitespace-pre-line text-sm font-semibold text-foreground">
+              {summary.trim().length > 0 ? summary : "No summary provided yet."}
+            </p>
             <p className="whitespace-pre-line text-sm text-muted-foreground">
-              {context.trim().length > 0 ? context : "No workspace context provided yet."}
+              {description.trim().length > 0 ? description : "No description provided yet."}
             </p>
           </div>
         </div>

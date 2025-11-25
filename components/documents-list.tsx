@@ -484,8 +484,10 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <CardTitle className="text-base truncate">{doc.title}</CardTitle>
+                      <div className="flex items-start gap-2 min-w-0">
+                        <CardTitle className="text-base font-semibold leading-tight line-clamp-2 break-words">
+                          {doc.title}
+                        </CardTitle>
                         {isArchived && (
                           <Badge variant="secondary" className="text-xs">
                             <Archive className="mr-1 h-3 w-3" />

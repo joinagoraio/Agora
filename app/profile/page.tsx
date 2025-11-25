@@ -1,12 +1,15 @@
-import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
-import { UserMenu } from "@/components/user-menu"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import { ArrowLeft, User, Mail, Calendar } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
+import { UserMenu } from "@/components/user-menu"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { createClient } from "@/lib/supabase/server"
+import { getServerTranslator } from "@/lib/i18n/server"
+
 export default async function ProfilePage() {
+  const { t, language } = await getServerTranslator()
   const supabase = await createClient()
   const {
     data: { user },
@@ -22,14 +25,14 @@ export default async function ProfilePage() {
                    user.email?.split("@")[0] || 
                    "User"
 
-  // Format created date
-  const createdDate = user.created_at 
-    ? new Date(user.created_at).toLocaleDateString("en-US", {
+  const dateLocale = language === "nl" ? "nl-NL" : "en-US"
+  const localizedCreatedDate = user.created_at
+    ? new Date(user.created_at).toLocaleDateString(dateLocale, {
         year: "numeric",
         month: "long",
         day: "numeric",
       })
-    : "Unknown"
+    : "—"
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -39,7 +42,7 @@ export default async function ProfilePage() {
             <Button variant="ghost" asChild>
               <Link href="/dashboard">
                 <ArrowLeft className="mr-2 h-3 w-3" />
-                <span className="text-xs font-normal">Back to Dashboard</span>
+                <span className="text-xs font-normal">{t("profile.backToDashboard")}</span>
               </Link>
             </Button>
           </div>
@@ -52,21 +55,21 @@ export default async function ProfilePage() {
       <main className="flex-1 bg-white">
         <div className="container mx-auto max-w-4xl py-8 px-8">
           <div className="mb-6">
-            <h1 className="text-2xl font-semibold">Profile</h1>
-            <p className="text-sm text-muted-foreground">View and manage your account information</p>
+            <h1 className="text-2xl font-semibold">{t("profile.title")}</h1>
+            <p className="text-sm text-muted-foreground">{t("profile.subtitle")}</p>
           </div>
 
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Account Information</CardTitle>
-                <CardDescription>Your personal account details</CardDescription>
+                <CardTitle>{t("profile.account.title")}</CardTitle>
+                <CardDescription>{t("profile.account.description")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-3">
                   <User className="h-5 w-5 text-muted-foreground" />
                   <div>
-                    <p className="text-sm font-medium">Name</p>
+                    <p className="text-sm font-medium">{t("profile.account.nameLabel")}</p>
                     <p className="text-sm text-muted-foreground">{userName}</p>
                   </div>
                 </div>
@@ -74,7 +77,7 @@ export default async function ProfilePage() {
                   <div className="flex items-center gap-3">
                     <Mail className="h-5 w-5 text-muted-foreground" />
                     <div>
-                      <p className="text-sm font-medium">Email</p>
+                      <p className="text-sm font-medium">{t("profile.account.emailLabel")}</p>
                       <p className="text-sm text-muted-foreground">{user.email}</p>
                     </div>
                   </div>
@@ -82,8 +85,8 @@ export default async function ProfilePage() {
                 <div className="flex items-center gap-3">
                   <Calendar className="h-5 w-5 text-muted-foreground" />
                   <div>
-                    <p className="text-sm font-medium">Member since</p>
-                    <p className="text-sm text-muted-foreground">{createdDate}</p>
+                    <p className="text-sm font-medium">{t("profile.account.memberSinceLabel")}</p>
+                    <p className="text-sm text-muted-foreground">{localizedCreatedDate}</p>
                   </div>
                 </div>
               </CardContent>
@@ -91,8 +94,8 @@ export default async function ProfilePage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Account ID</CardTitle>
-                <CardDescription>Your unique account identifier</CardDescription>
+                <CardTitle>{t("profile.accountId.title")}</CardTitle>
+                <CardDescription>{t("profile.accountId.description")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-sm font-mono text-muted-foreground break-all">{user.id}</p>

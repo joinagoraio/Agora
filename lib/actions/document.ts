@@ -10,6 +10,7 @@ import { revalidatePath } from "next/cache"
 import { logger } from "@/lib/utils/logger"
 // PDF extraction now handled by pdf2json directly
 import { getRelevantContext, getAllWorkspaceKnowledge } from "@/lib/rag/search"
+import { extractPdfPages } from "@/lib/utils/pdf-extraction"
 import OpenAI from "openai"
 import { env } from "@/lib/env"
 import MarkdownIt from "markdown-it"
@@ -468,85 +469,113 @@ export async function uploadDocument(
       const buffer = Buffer.from(arrayBuffer)
       logger.debug("[Upload] Converted PDF to buffer", { size: buffer.length })
       
-      // Use pdf2json - a pure Node.js library with no worker dependencies
-      logger.debug("[Upload] Extracting PDF content with pdf2json...")
-      const PDFParser = (await import("pdf2json")).default
-      
-      // pdf2json is event-based, so we need to wrap it in a promise
-      const pdfData = await new Promise<string>((resolve, reject) => {
-        const pdfParser = new PDFParser(null, true) // true = verbose mode
-        
-        pdfParser.on("pdfParser_dataError", (errData: any) => {
-          reject(new Error(errData.parserError))
-        })
-        
-        pdfParser.on("pdfParser_dataReady", () => {
-          try {
-            const text = pdfParser.getRawTextContent() || ""
-            resolve(text)
-          } catch (err) {
-            reject(err)
-          }
-        })
-        
-        // Parse the buffer
-        pdfParser.parseBuffer(buffer)
-      })
-      
-      content = pdfData || ""
-      
-      // Sanitize content to remove invalid Unicode escape sequences
-      // PostgreSQL doesn't like certain escape sequences in text fields
-      // Remove invalid \u escape sequences (must be followed by exactly 4 hex digits)
-      content = content.replace(/\\u(?![\da-fA-F]{4})/g, 'u')
-      
-      // Remove other invalid escape sequences (keep only valid ones: \n, \r, \t, \\, etc.)
-      content = content.replace(/\\(?![nrtbf\\'"xu0-7])/g, '')
-      
-      // Fix any remaining invalid \u sequences that might have partial hex
-      content = content.replace(/\\u([0-9a-fA-F]{0,3})(?![0-9a-fA-F])/g, (match, hex) => {
-        // If we have a partial hex sequence, try to convert it or remove it
-        if (hex.length === 0) return 'u'
-        if (hex.length < 4) return hex // Just return the hex digits without the \u
-        return match // Keep valid 4-digit sequences
-      })
-      
-      logger.debug("[Upload] pdf2json extraction complete", { contentLength: content.length })
-      
-      // Extract page data for document_pages table
-      // pdf2json doesn't provide page-by-page text easily, so we'll create a single page entry
-      // or split by form feeds if present
       try {
-        const pages = content.split(/\f/) // Form feed character separates pages
+        logger.debug("[Upload] Extracting structured PDF data with pdfjs", { name: file.name })
+        const extractedPages = await extractPdfPages(arrayBuffer)
+        if (extractedPages && extractedPages.length > 0) {
+          pdfPages = extractedPages.map((page) => ({
+            pageNumber: page.pageNumber,
+            textContent: sanitizeContentForDatabase(page.textContent || ""),
+            textItems: page.textItems,
+            characterOffsets: page.characterOffsets,
+          }))
+          if (!content?.trim()) {
+            content = pdfPages.map((page) => page.textContent).join("\n\n")
+          }
+          logger.debug("[Upload] Structured PDF extraction complete", {
+            pages: pdfPages.length,
+          })
+        }
+      } catch (structuredError) {
+        logger.warn(
+          "[Upload] Structured PDF extraction failed (falling back to pdf2json)",
+          structuredError instanceof Error ? { message: structuredError.message } : { structuredError },
+        )
+      }
+      
+      if (pdfPages.length === 0) {
+        // Use pdf2json - a pure Node.js library with no worker dependencies
+        logger.debug("[Upload] Extracting PDF content with pdf2json...")
+        const PDFParser = (await import("pdf2json")).default
         
-        pdfPages = pages.map((pageText: string, index: number) => ({
-          page_number: index + 1,
-          text_content: pageText.trim(),
-          // pdf2json doesn't provide coordinates, but we have the text
-          coordinates: null
-        }))
+        // pdf2json is event-based, so we need to wrap it in a promise
+        const pdfData = await new Promise<string>((resolve, reject) => {
+          const pdfParser = new PDFParser(null, true) // true = verbose mode
+          
+          pdfParser.on("pdfParser_dataError", (errData: any) => {
+            reject(new Error(errData.parserError))
+          })
+          
+          pdfParser.on("pdfParser_dataReady", () => {
+            try {
+              const text = pdfParser.getRawTextContent() || ""
+              resolve(text)
+            } catch (err) {
+              reject(err)
+            }
+          })
+          
+          // Parse the buffer
+          pdfParser.parseBuffer(buffer)
+        })
         
-        // If no form feeds, create a single page
-        if (pdfPages.length === 1 && !content.includes('\f')) {
+        content = pdfData || ""
+        
+        // Sanitize content to remove invalid Unicode escape sequences
+        // PostgreSQL doesn't like certain escape sequences in text fields
+        // Remove invalid \u escape sequences (must be followed by exactly 4 hex digits)
+        content = content.replace(/\\u(?![\da-fA-F]{4})/g, 'u')
+        
+        // Remove other invalid escape sequences (keep only valid ones: \n, \r, \t, \\, etc.)
+        content = content.replace(/\\(?![nrtbf\\'"xu0-7])/g, '')
+        
+        // Fix any remaining invalid \u sequences that might have partial hex
+        content = content.replace(/\\u([0-9a-fA-F]{0,3})(?![0-9a-fA-F])/g, (match, hex) => {
+          // If we have a partial hex sequence, try to convert it or remove it
+          if (hex.length === 0) return 'u'
+          if (hex.length < 4) return hex // Just return the hex digits without the \u
+          return match // Keep valid 4-digit sequences
+        })
+        
+        logger.debug("[Upload] pdf2json extraction complete", { contentLength: content.length })
+        
+        // Extract page data for document_pages table
+        // pdf2json doesn't provide page-by-page text easily, so we'll create a single page entry
+        // or split by form feeds if present
+        try {
+          const pages = content.split(/\f/) // Form feed character separates pages
+          
+          pdfPages = pages.map((pageText: string, index: number) => ({
+            pageNumber: index + 1,
+            textContent: sanitizeContentForDatabase(pageText.trim()),
+            textItems: [],
+            characterOffsets: {},
+          }))
+          
+          // If no form feeds, create a single page
+          if (pdfPages.length === 1 && !content.includes('\f')) {
+            pdfPages = [{
+              pageNumber: 1,
+              textContent: sanitizeContentForDatabase(content),
+              textItems: [],
+              characterOffsets: {},
+            }]
+          }
+          
+          logger.debug("[Upload] Extracted pages from PDF", { pages: pdfPages.length })
+        } catch (pageError) {
+          logger.warn(
+            "[Upload] Could not extract page data (non-critical)",
+            pageError instanceof Error ? { message: pageError.message } : { message: String(pageError) },
+          )
+          // Create a single page entry as fallback
           pdfPages = [{
-            page_number: 1,
-            text_content: sanitizeContentForDatabase(content),
-            coordinates: null
+            pageNumber: 1,
+            textContent: sanitizeContentForDatabase(content),
+            textItems: [],
+            characterOffsets: {},
           }]
         }
-        
-        logger.debug("[Upload] Extracted pages from PDF", { pages: pdfPages.length })
-      } catch (pageError) {
-        logger.warn(
-          "[Upload] Could not extract page data (non-critical)",
-          pageError instanceof Error ? { message: pageError.message } : { message: String(pageError) },
-        )
-        // Create a single page entry as fallback
-        pdfPages = [{
-          page_number: 1,
-          text_content: sanitizeContentForDatabase(content),
-          coordinates: null
-        }]
       }
       
       // If no text was extracted, it's likely a scanned/image-based PDF - use OCR
@@ -766,10 +795,10 @@ export async function uploadDocument(
         })
         const pageInserts = pdfPages.map((page) => ({
           document_id: document.id,
-          page_number: page.pageNumber,
-          text_content: page.textContent,
-          text_items: page.textItems,
-          character_offsets: page.characterOffsets,
+          page_number: page.pageNumber ?? page.page_number,
+          text_content: sanitizeContentForDatabase(page.textContent ?? page.text_content ?? ""),
+          text_items: page.textItems ?? page.text_items ?? [],
+          character_offsets: page.characterOffsets ?? page.character_offsets ?? {},
         }))
 
         logger.debug("[Upload] Inserting page records", { count: pageInserts.length, documentId: document.id })

@@ -21,6 +21,7 @@ interface HighlightContextValue {
   setHighlights: (documentId: string, highlights: Highlight[], immediate?: boolean) => void
   addHighlight: (documentId: string, highlight: Highlight) => void
   clearHighlights: (documentId: string) => void
+  clearAllHighlights: () => void
   setAutoHighlight: (enabled: boolean) => void
   setActiveDocument: (documentId: string | null) => void
   getHighlights: (documentId: string) => Highlight[]
@@ -88,6 +89,15 @@ export function HighlightProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const clearAllHighlights = useCallback(() => {
+    // Clear any pending timers
+    debounceTimersRef.current.forEach(timer => clearTimeout(timer))
+    debounceTimersRef.current.clear()
+
+    setHighlightsMap(new Map())
+    setActiveDocumentId(null)
+  }, [])
+
   const setAutoHighlight = useCallback((enabled: boolean) => {
     setAutoHighlightState(enabled)
   }, [])
@@ -116,6 +126,7 @@ export function HighlightProvider({ children }: { children: ReactNode }) {
     setActiveDocument,
     getHighlights,
     getHighlightsForDocument,
+    clearAllHighlights,
   }), [
     highlightsMap,
     activeDocumentId,
@@ -123,6 +134,7 @@ export function HighlightProvider({ children }: { children: ReactNode }) {
     setHighlights,
     addHighlight,
     clearHighlights,
+    clearAllHighlights,
     setAutoHighlight,
     setActiveDocument,
     getHighlights,
@@ -150,5 +162,9 @@ export function useHighlightContext() {
     throw new Error("useHighlightContext must be used within a HighlightProvider")
   }
   return context
+}
+
+export function useOptionalHighlightContext() {
+  return useContext(HighlightContext)
 }
 

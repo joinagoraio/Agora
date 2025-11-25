@@ -16,16 +16,19 @@ import { Loader2, CheckCircle2, FileText, ExternalLink, Sparkles, Edit2, Search 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ensureOverheidNLSource, addDocumentsFromSource } from "@/lib/actions/document"
+import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 interface AddOverheidDocumentsDialogProps {
-  workspaceId: string
+  workspaceId?: string
+  spaceId?: string
   workspaceLocation?: string | null
   workspaceContext?: string | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: () => void
+  onDocumentsAdded?: (documents: any[]) => void
 }
 
 interface SearchResult {
@@ -41,12 +44,15 @@ interface SearchResult {
 
 export function AddOverheidDocumentsDialog({
   workspaceId,
+  spaceId,
   workspaceLocation,
   workspaceContext,
   open,
   onOpenChange,
   onSuccess,
+  onDocumentsAdded,
 }: AddOverheidDocumentsDialogProps) {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   const router = useRouter()
   const [searching, setSearching] = useState(false)
   const [results, setResults] = useState<SearchResult[]>([])
@@ -65,7 +71,7 @@ export function AddOverheidDocumentsDialog({
 
   const handleIntelligentSearch = useCallback(async () => {
     if (!workspaceContext || !workspaceContext.trim()) {
-      setError("Workspace scope is required for intelligent search")
+      setError("Scope is required for intelligent search")
       return
     }
 
@@ -78,10 +84,19 @@ export function AddOverheidDocumentsDialog({
     setSearchQueries([])
 
     try {
+      const csrfToken = await fetchCsrfToken()
+      if (!csrfToken) {
+        setError("Could not verify your session. Refresh and try again.")
+        setSearching(false)
+        return
+      }
+
       const response = await fetch("/api/overheid-intelligent-search", {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
         },
         body: JSON.stringify({
           context: workspaceContext,
@@ -146,54 +161,73 @@ export function AddOverheidDocumentsDialog({
       return
     }
 
+    if (!workspaceId && !spaceId) {
+      setError("Select a destination before adding documents.")
+      return
+    }
+
     setAdding(true)
     setError(null)
     setSuccess(null)
 
     try {
-      // Ensure overheid_nl source exists
-      const sourceResult = await ensureOverheidNLSource(workspaceId)
-      if (sourceResult.error || !sourceResult.data) {
-        const description = sourceResult.error || "Failed to create Overheid.nl source"
-        setError(description)
-        toast.error("Cannot add documents", { description })
-        setAdding(false)
-        return
-      }
-
-      // Add documents using the source
-      const result = await addDocumentsFromSource(
-        workspaceId,
-        sourceResult.data.id,
-        documents,
-        "public" // Overheid.nl documents are public by default
-      )
-
-      if (result.error) {
-        setError(result.error)
-        toast.error("Failed to add documents", { description: result.error })
-      } else if (result.addedCount === 0 && documents.length > 0) {
-        const message = "Failed to add documents. Please check the console for details or try again."
-        setError(message)
-        toast.error("No documents added", { description: message })
-      } else {
-        setSuccess(`Successfully added ${result.addedCount || 0} document(s)`)
+      if (spaceId && !workspaceId) {
+        const { addedCount, addedItems } = await addDocumentsToSpace(spaceId, documents)
+        setSuccess(`Successfully added ${addedCount} document(s)`)
         toast.success("Overheid.nl documents added", {
-          description: `${result.addedCount || documents.length} publication(s) imported.`,
+          description: `${addedCount} publication${addedCount === 1 ? "" : "s"} imported into this space.`,
         })
         router.refresh()
+        if (addedItems.length > 0) {
+          onDocumentsAdded?.(addedItems)
+        }
         onSuccess?.()
-        
-        // Dispatch custom event to notify chat interface and other components
-        window.dispatchEvent(new CustomEvent("documentUploaded", { 
-          detail: { workspaceId } 
-        }))
-        
-        setTimeout(() => {
-          onOpenChange(false)
-          setSuccess(null)
-        }, 2000)
+      } else if (workspaceId) {
+        // Ensure overheid_nl source exists
+        const sourceResult = await ensureOverheidNLSource(workspaceId)
+        if (sourceResult.error || !sourceResult.data) {
+          const description = sourceResult.error || "Failed to create Overheid.nl source"
+          setError(description)
+          toast.error("Cannot add documents", { description })
+          setAdding(false)
+          return
+        }
+
+        // Add documents using the source
+        const result = await addDocumentsFromSource(
+          workspaceId,
+          sourceResult.data.id,
+          documents,
+          "public" // Overheid.nl documents are public by default
+        )
+
+        if (result.error) {
+          setError(result.error)
+          toast.error("Failed to add documents", { description: result.error })
+        } else if (result.addedCount === 0 && documents.length > 0) {
+          const message = "Failed to add documents. Please check the console for details or try again."
+          setError(message)
+          toast.error("No documents added", { description: message })
+        } else {
+          const addedCount = result.addedCount || documents.length
+          setSuccess(`Successfully added ${addedCount} document(s)`)
+          toast.success("Overheid.nl documents added", {
+            description: `${addedCount} publication${addedCount === 1 ? "" : "s"} imported.`,
+          })
+          router.refresh()
+          onSuccess?.()
+          
+          // Dispatch custom event to notify chat interface and other components
+          window.dispatchEvent(new CustomEvent("documentUploaded", { 
+            detail: { workspaceId } 
+          }))
+        }
       }
+
+      setTimeout(() => {
+        onOpenChange(false)
+        setSuccess(null)
+      }, 2000)
     } catch (err) {
       const description = err instanceof Error ? err.message : "Failed to add documents"
       setError(description)
@@ -201,6 +235,59 @@ export function AddOverheidDocumentsDialog({
     } finally {
       setAdding(false)
     }
+  }
+
+  const addDocumentsToSpace = async (targetSpaceId: string, documents: SearchResult[]) => {
+    const csrfToken = await fetchCsrfToken()
+    if (!csrfToken) {
+      throw new Error("Could not verify your session. Refresh and try again.")
+    }
+
+    let addedCount = 0
+    const addedItems: any[] = []
+
+    for (const document of documents) {
+      const response = await fetch(`/api/spaces/${targetSpaceId}/import-overheid`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          title: document.title,
+          identifier: document.identifier,
+          type: document.type,
+          date: document.date,
+          description: document.description,
+          url: document.url,
+          classification: "public",
+        }),
+      })
+
+      const responseText = await response.text()
+      let payload: any = null
+      if (responseText) {
+        try {
+          payload = JSON.parse(responseText)
+        } catch {
+          payload = { raw: responseText }
+        }
+      }
+
+      if (!response.ok || payload?.error) {
+        const message = payload?.error || payload?.raw || "Failed to add document to the space."
+        throw new Error(message)
+      }
+
+      if (payload?.data) {
+        addedItems.push(payload.data)
+      }
+
+      addedCount += 1
+    }
+
+    return { addedCount, addedItems }
   }
 
   const handleClose = (open: boolean) => {
@@ -233,10 +320,19 @@ export function AddOverheidDocumentsDialog({
     setSearchQueries(validQueries)
 
     try {
+      const csrfToken = await fetchCsrfToken()
+      if (!csrfToken) {
+        setError("Could not verify your session. Refresh and try again.")
+        setSearching(false)
+        return
+      }
+
       const response = await fetch("/api/overheid-intelligent-search", {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
         },
         body: JSON.stringify({
           context: workspaceContext,

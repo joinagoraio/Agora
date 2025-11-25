@@ -37,6 +37,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "sonner"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface ChatSidebarProps {
   workspaceId: string
@@ -51,6 +52,7 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { sidebarWidth, setSidebarWidth, setIsSidebarResizing, setIsChatOpen } = useChatContext()
+  const { t } = useI18n()
 
   const chatContext = useMemo(() => {
     if (!pathname) {
@@ -72,11 +74,25 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
     return { type: "workspace" as ConversationContextType, contextId: null, documentId: undefined }
   }, [pathname])
 
-  const { type: contextType, contextId } = chatContext
-  const activeDocumentId = chatContext.documentId
+  const { type: contextType, contextId, documentId: activeDocumentId } = chatContext
+  const isDocumentView = Boolean(activeDocumentId)
   const contextKey = useMemo(() => `${contextType}:${contextId ?? ""}`, [contextType, contextId])
   const previousContextKeyRef = useRef(contextKey)
 
+  const storageKey = useMemo(() => `workspace:${workspaceId}:activeConversation`, [workspaceId])
+  const initialConversationId = searchParams.get("conversationId")
+  const [conversationIdParam, setConversationIdParam] = useState<string | null>(() => {
+    if (initialConversationId) {
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(storageKey, initialConversationId)
+      }
+      return initialConversationId
+    }
+    if (typeof window !== "undefined") {
+      return window.sessionStorage.getItem(storageKey)
+    }
+    return null
+  })
   const [conversations, setConversations] = useState<any[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<any[]>([])
@@ -95,10 +111,47 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
   const [isMounted, setIsMounted] = useState(false)
   const isCreatingConversationRef = useRef(false)
   const isUpdatingUrlRef = useRef(false)
+  const wasDocumentViewRef = useRef(isDocumentView)
+
+  useEffect(() => {
+    const fromUrl = searchParams.get("conversationId")
+    if (fromUrl) {
+      if (fromUrl !== conversationIdParam) {
+        setConversationIdParam(fromUrl)
+      }
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(storageKey, fromUrl)
+      }
+    } else if (!isDocumentView && conversationIdParam !== null) {
+      setConversationIdParam(null)
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(storageKey)
+      }
+    } else if (isDocumentView && !fromUrl && conversationIdParam === null && typeof window !== "undefined") {
+      const stored = window.sessionStorage.getItem(storageKey)
+      if (stored) {
+        setConversationIdParam(stored)
+      }
+    }
+  }, [searchParams, storageKey, isDocumentView, conversationIdParam])
 
   // Helper function to update URL with conversationId while preserving current path
   const updateConversationId = useCallback(
-    (conversationId: string | null) => {
+    (conversationId: string | null, options?: { forceUrlSync?: boolean }) => {
+      setConversationIdParam(conversationId)
+      if (typeof window !== "undefined") {
+        if (conversationId) {
+          window.sessionStorage.setItem(storageKey, conversationId)
+        } else {
+          window.sessionStorage.removeItem(storageKey)
+        }
+      }
+
+      const shouldSyncUrl = !isDocumentView || options?.forceUrlSync
+      if (!shouldSyncUrl) {
+        return
+      }
+
       const params = new URLSearchParams(searchParams.toString())
       const existingConversationId = params.get("conversationId")
 
@@ -124,8 +177,15 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
         isUpdatingUrlRef.current = false
       }, 100)
     },
-    [router, pathname, searchParams],
+    [router, pathname, searchParams, isDocumentView, storageKey],
   )
+
+  useEffect(() => {
+    if (wasDocumentViewRef.current && !isDocumentView && currentConversationId) {
+      updateConversationId(currentConversationId, { forceUrlSync: true })
+    }
+    wasDocumentViewRef.current = isDocumentView
+  }, [isDocumentView, currentConversationId, updateConversationId])
 
   const loadMessages = useCallback(async (conversationId: string) => {
     setIsLoading(true)
@@ -158,7 +218,6 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
     return []
   }, [workspaceId, contextType, contextId])
 
-  const conversationIdParam = useMemo(() => searchParams.get("conversationId"), [searchParams])
   const lastCreatedConversationRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -307,30 +366,46 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
   }, [conversations.length])
 
   const handleNewChat = async () => {
-    const result = await createConversation(workspaceId, {
-      contextType,
-      contextId,
-    })
-    if (result.error || !result.data) {
-      toast.error("Could not start chat", { description: result.error || "Something went wrong." })
+    if (isCreatingConversationRef.current) {
       return
     }
+    isCreatingConversationRef.current = true
+    try {
+      const result = await createConversation(workspaceId, {
+        contextType,
+        contextId,
+      })
+      if (result.error || !result.data) {
+        toast.error(t("workspace.chat.toast.createError"), {
+          description: result.error || t("workspace.chat.toast.genericError"),
+        })
+        return
+      }
 
-    toast.success("New chat started", { description: "Say hello to Agora AI." })
+      toast.success(t("workspace.chat.toast.createSuccess"), {
+        description: t("workspace.chat.toast.createSuccessDescription"),
+      })
 
-    // Reset state for new conversation
-    setHasLoadedInitial(false)
-    setMessages([])
-    setCurrentConversationId(result.data.id)
-    updateConversationId(result.data.id)
-    await loadConversations()
-    // Load messages (will be empty for new conversation)
-    await loadMessages(result.data.id)
-    setHasLoadedInitial(true)
-    // Expand list when conversation is created
-    setIsListExpanded(true)
-    // Ensure chat sidebar is open
-    setIsChatOpen(true)
+      const newConversationId = result.data.id
+      lastCreatedConversationRef.current = newConversationId
+
+      // Reset state for new conversation
+      setHasLoadedInitial(false)
+      setMessages([])
+      setCurrentConversationId(newConversationId)
+      updateConversationId(newConversationId)
+
+      await loadConversations()
+      // Load messages (will be empty for new conversation)
+      await loadMessages(newConversationId)
+      setHasLoadedInitial(true)
+      // Expand list when conversation is created
+      setIsListExpanded(true)
+      // Ensure chat sidebar is open
+      setIsChatOpen(true)
+    } finally {
+      isCreatingConversationRef.current = false
+    }
   }
 
   const handleConversationSelect = async (conversationId: string) => {
@@ -389,9 +464,11 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
     
     const result = await deleteConversation(conversationToDelete)
     if (result?.error) {
-      toast.error("Failed to delete chat", { description: result.error })
+      toast.error(t("workspace.chat.toast.deleteError"), {
+        description: result.error || t("workspace.chat.toast.genericError"),
+      })
     } else if (result?.success) {
-      toast.success("Chat deleted")
+      toast.success(t("workspace.chat.toast.deleteSuccess"))
     }
     if (result?.success) {
       // Reload conversations to get updated list
@@ -464,7 +541,7 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
 
     const cleanedTitle = renameValue.replace(/\s+/g, " ").trim()
     if (!cleanedTitle) {
-      setRenameError("Title cannot be empty")
+      setRenameError(t("workspace.chat.rename.validation"))
       return
     }
 
@@ -475,7 +552,9 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
 
     if (result.error) {
       setRenameError(result.error)
-      toast.error("Failed to rename chat", { description: result.error })
+      toast.error(t("workspace.chat.toast.renameError"), {
+        description: result.error || t("workspace.chat.toast.genericError"),
+      })
       setIsRenaming(false)
       return
     }
@@ -487,7 +566,7 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
     }
 
     setIsRenaming(false)
-    toast.success("Chat renamed")
+    toast.success(t("workspace.chat.toast.renameSuccess"))
     setRenameDialogOpen(false)
     setConversationToRename(null)
     setRenameValue("")
@@ -520,11 +599,13 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
     
     const result = await archiveConversation(conversationId)
     if (result?.error) {
-      toast.error("Failed to archive chat", { description: result.error })
+      toast.error(t("workspace.chat.toast.archiveError"), {
+        description: result.error || t("workspace.chat.toast.genericError"),
+      })
       return
     }
 
-    toast.success("Chat archived")
+    toast.success(t("workspace.chat.toast.archiveSuccess"))
     if (result?.success) {
       // Reload conversations to get updated list
       const updated = await loadConversations()
@@ -774,11 +855,12 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
         <div className="flex h-16 items-center justify-between px-4">
           <div>
             <h2 className="text-sm">
-              <span className="font-semibold">{workspaceName}</span> <span className="text-muted-foreground">·</span> AI Assistant
+              <span className="font-semibold">{workspaceName}</span> <span className="text-muted-foreground">·</span>{" "}
+              {t("workspace.chat.header")}
             </h2>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={handleNewChat} title="New Chat">
+            <Button variant="ghost" size="icon" onClick={handleNewChat} title={t("workspace.chat.actions.newChat")}>
               <Plus className="h-5 w-5" />
             </Button>
             <Button 
@@ -811,7 +893,9 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
                 // Mark as manually adjusted so auto-update doesn't override
                 hasManuallyResizedRef.current = true
               }} 
-              title={isListExpanded ? "Collapse list" : "Expand list"}
+              title={
+                isListExpanded ? t("workspace.chat.actions.collapseList") : t("workspace.chat.actions.expandList")
+              }
             >
               <List className="h-5 w-5" />
             </Button>
@@ -837,10 +921,10 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
             <div className="flex h-full items-center justify-center">
               <Card className="border-0 shadow-none">
                 <CardContent className="p-8">
-                  <h3 className="mb-2 text-lg font-semibold">No conversation selected</h3>
-                  <p className="mb-4 text-sm text-muted-foreground">Start a new conversation to begin chatting</p>
+                  <h3 className="mb-2 text-lg font-semibold">{t("workspace.chat.empty.title")}</h3>
+                  <p className="mb-4 text-sm text-muted-foreground">{t("workspace.chat.empty.description")}</p>
                   <Button onClick={handleNewChat} className="w-full">
-                    New Chat
+                    {t("workspace.chat.actions.newChat")}
                   </Button>
                 </CardContent>
               </Card>
@@ -902,20 +986,20 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
                             }}
                           >
                             <Pencil className="mr-2 h-4 w-4" />
-                            Rename
+                            {t("workspace.chat.actions.rename")}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={(e) => handleArchive(conv.id, e)}
                           >
                             <Archive className="mr-2 h-4 w-4" />
-                            Archive
+                            {t("workspace.chat.actions.archive")}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={(e) => handleDelete(conv.id, e)}
                             className="hover:!bg-destructive/10 hover:!text-destructive focus:!bg-destructive/10 focus:!text-destructive [&:hover_svg]:!text-destructive [&:focus_svg]:!text-destructive [&:hover_span]:!text-destructive [&:focus_span]:!text-destructive"
                           >
                             <Trash2 className="mr-2 h-3.5 w-3.5" />
-                            <span>Delete</span>
+                            <span>{t("common.actions.delete")}</span>
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -923,7 +1007,7 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
                     )
                     })
                   ) : (
-                  <p className="text-center text-sm text-muted-foreground py-8">No conversations yet</p>
+                  <p className="text-center text-sm text-muted-foreground py-8">{t("workspace.chat.list.empty")}</p>
                 )}
                 </div>
               </TooltipProvider>
@@ -936,31 +1020,33 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
         <AlertDialog open={true} onOpenChange={handleDeleteDialogClose}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+            <AlertDialogTitle>{t("workspace.chat.dialog.deleteTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the conversation and all its messages.
+              {t("workspace.chat.dialog.deleteDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {needsConfirmation && (
             <p className="text-sm text-destructive font-medium">
-              This action cannot be undone.
+              {t("workspace.chat.dialog.deleteWarning")}
             </p>
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setNeedsConfirmation(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setNeedsConfirmation(false)}>
+              {t("common.actions.cancel")}
+            </AlertDialogCancel>
             {needsConfirmation ? (
               <AlertDialogAction 
                 onClick={confirmDelete} 
                 className="bg-destructive text-white hover:bg-destructive/90"
               >
-                Confirm?
+                {t("workspace.chat.dialog.confirmDelete")}
               </AlertDialogAction>
             ) : (
               <Button 
                 onClick={() => setNeedsConfirmation(true)} 
                 className="bg-destructive text-white hover:bg-destructive/90"
               >
-                Delete
+                {t("common.actions.delete")}
               </Button>
             )}
           </AlertDialogFooter>
@@ -976,8 +1062,8 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
         <DialogContent>
           <form onSubmit={handleRenameSubmit} className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Rename conversation</DialogTitle>
-              <DialogDescription>Give this conversation a clearer title.</DialogDescription>
+              <DialogTitle>{t("workspace.chat.rename.title")}</DialogTitle>
+              <DialogDescription>{t("workspace.chat.rename.description")}</DialogDescription>
             </DialogHeader>
             <Input
               value={renameValue}
@@ -987,23 +1073,23 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
                   setRenameError(null)
                 }
               }}
-              placeholder="Conversation title"
+              placeholder={t("workspace.chat.rename.placeholder")}
               autoFocus
               disabled={isRenaming}
             />
             {renameError && <p className="text-sm text-destructive">{renameError}</p>}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={closeRenameDialog} disabled={isRenaming}>
-                Cancel
+                {t("common.actions.cancel")}
               </Button>
               <Button type="submit" disabled={isRenaming || renameValue.trim().length === 0}>
                 {isRenaming ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving
+                    {t("workspace.chat.rename.saving")}
                   </>
                 ) : (
-                  "Save"
+                  t("common.actions.save")
                 )}
               </Button>
             </DialogFooter>

@@ -23,6 +23,7 @@ create table if not exists public.profiles (
   email text not null,
   full_name text,
   avatar_url text,
+  language text not null default 'en' check (language in ('en','nl')),
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
 );

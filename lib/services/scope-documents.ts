@@ -19,6 +19,7 @@ export type SpaceDocumentItem = {
   space_id?: string
   classification?: "public" | "internal" | "confidential" | null
   visibility?: "public" | "internal" | "confidential" | null
+  source_url?: string | null
   payload: SpaceDocumentPayload
 }
 
@@ -164,6 +165,7 @@ async function upsertWorkspaceDocumentForScope(
     sourceSpaceItemId: spaceItem.id,
     sourceSpaceId: spaceId,
     sourceFileUrl: payload.file_url || null,
+    sourceUrl: spaceItem.source_url || payload.file_url || null,
     type: payload.mime_type || null,
     origin: "space_scope",
     hasLimitedContent,
@@ -403,7 +405,7 @@ export async function syncAllScopeDocumentsToWorkspace(
 ): Promise<{ syncedCount: number }> {
   const { data: scopeItems, error } = await adminClient
     .from("space_items")
-    .select("id, classification, visibility, payload")
+    .select("id, classification, visibility, source_url, payload")
     .eq("space_id", spaceId)
     .eq("item_type", "document")
 
