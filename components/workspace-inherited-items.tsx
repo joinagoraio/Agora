@@ -168,8 +168,8 @@ export function WorkspaceInheritedItems({ items, showEmptyState = true }: Worksp
               ? item.payload.source_url
               : typeof item.payload?.sourceUrl === "string"
                 ? item.payload.sourceUrl
-                : typeof item.source_url === "string"
-                  ? item.source_url
+                : typeof (item as any).source_url === "string"
+                  ? ((item as any).source_url as string)
                   : typeof (item as any).sourceUrl === "string"
                     ? ((item as any).sourceUrl as string)
                     : undefined
