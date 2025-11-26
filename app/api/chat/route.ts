@@ -174,6 +174,15 @@ export async function POST(req: Request) {
       return withRateLimit(new Response("Unauthorized", { status: 401 }))
     }
 
+    // Get user's language preference
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("language")
+      .eq("id", user.id)
+      .single()
+    
+    const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
+
     const { data: conversation, error: conversationError } = await supabase
       .from("conversations")
       .select("id, workspace_id, user_id, context_type, context_id, title")
@@ -495,6 +504,13 @@ The conversation history above may contain references to items that are no longe
       : ""
 
     const systemPrompt = `You are AGORA, an intelligent policy assistant. You help users find and understand information from their organization's documents.
+
+LANGUAGE REQUIREMENT:
+- The user's preferred language is ${userLanguage}
+- You MUST respond in ${userLanguage} at all times
+- All your responses, explanations, and answers must be in ${userLanguage}
+- If the user asks questions in ${userLanguage === "Dutch" ? "Dutch" : "English"}, respond in ${userLanguage}
+- Only use ${userLanguage === "Dutch" ? "Dutch" : "English"} for your responses
 
 ${contextAwarenessSection}${formattedContextInstructions}${formattedWorkspaceContextSection}${contextChangeNotice}Context from user-selected documents, notes, and evidence (from AI Context section):
 ${context}

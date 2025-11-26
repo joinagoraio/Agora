@@ -1765,11 +1765,26 @@ export async function generateWorkspaceDocumentDraft(
     return { error: "Workspace not found" }
   }
 
+  // Get user's language preference
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("language")
+    .eq("id", user.id)
+    .single()
+  
+  const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
+
   // Use all workspace knowledge for initial document generation
   // This ensures the AI has access to all available workspace knowledge
   const { context, sources } = await getAllWorkspaceKnowledge(workspaceId, [documentId])
 
-  const systemPrompt = `You are AGORA, an expert municipal policy assistant. Write precise, well-structured documents that synthesize the provided context. Emphasize clarity, actionable insights, and relevance to policy stakeholders. Always use Markdown headings, bullet points, and tables when appropriate.`
+  const systemPrompt = `You are AGORA, an expert municipal policy assistant. Write precise, well-structured documents that synthesize the provided context. Emphasize clarity, actionable insights, and relevance to policy stakeholders. Always use Markdown headings, bullet points, and tables when appropriate.
+
+LANGUAGE REQUIREMENT:
+- The user's preferred language is ${userLanguage}
+- You MUST write the entire document in ${userLanguage}
+- All content, including headings, summaries, and explanations, must be in ${userLanguage}
+- Only use ${userLanguage === "Dutch" ? "Dutch" : "English"} for all output`
 
   const workspaceDetails = [
     `Workspace: ${workspace.name}`,
