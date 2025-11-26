@@ -87,9 +87,9 @@ export function MyDocumentEditor({
   const handleSave = async () => {
     if (isSaving || !isDirty) return
     if (!title.trim()) {
-      const message = "Title cannot be empty"
+      const message = t("workspace.documents.editor.titleEmpty")
       setError(message)
-      toast.error("Missing title", { description: message })
+      toast.error(t("workspace.documents.editor.titleEmptyToast"), { description: message })
       setSaveState("error")
       return
     }
@@ -106,7 +106,7 @@ export function MyDocumentEditor({
 
     if (result.error) {
       setError(result.error)
-      toast.error("Failed to save document", { description: result.error })
+      toast.error(t("workspace.documents.editor.saveError"), { description: result.error })
       setSaveState("error")
       setIsSaving(false)
       return
@@ -121,8 +121,8 @@ export function MyDocumentEditor({
     const savedAt = new Date()
     setLastSavedAt(savedAt)
     setIsSaving(false)
-    toast.success("Document saved", {
-      description: "Your changes are stored.",
+    toast.success(t("workspace.documents.editor.saveSuccess"), {
+      description: t("workspace.documents.editor.saveSuccessDescription"),
     })
     router.refresh()
   }
@@ -131,9 +131,9 @@ export function MyDocumentEditor({
     if (isGenerating) return
 
     if (!instructions.trim()) {
-      const message = "Add drafting instructions before generating a document"
+      const message = t("workspace.documents.editor.instructionsRequired")
       setGenerateError(message)
-      toast.error("Instructions required", { description: message })
+      toast.error(t("workspace.documents.editor.instructionsRequiredToast"), { description: message })
       return
     }
 
@@ -150,14 +150,14 @@ export function MyDocumentEditor({
     // Check if generation was cancelled
     if (isCancelledRef.current) {
       setIsGenerating(false)
-      toast.info("Generation cancelled")
+      toast.info(t("workspace.documents.editor.generationCancelled"))
       return
     }
 
     if (result.error || !result.data) {
-      const description = result.error || "Failed to generate a draft"
+      const description = result.error || t("workspace.documents.editor.generationFailedDescription")
       setGenerateError(description)
-      toast.error("Draft generation failed", { description })
+      toast.error(t("workspace.documents.editor.generationFailed"), { description })
       setIsGenerating(false)
       return
     }
@@ -175,8 +175,8 @@ export function MyDocumentEditor({
     setLastSavedAt(savedAt)
     setIsSaving(false)
     setIsGenerating(false)
-    toast.success("Draft updated", {
-      description: "AI generated a fresh version.",
+    toast.success(t("workspace.documents.editor.draftUpdated"), {
+      description: t("workspace.documents.editor.draftUpdatedDescription"),
     })
     router.refresh()
   }
@@ -185,7 +185,7 @@ export function MyDocumentEditor({
     if (isGenerating) {
       isCancelledRef.current = true
       setIsGenerating(false)
-      toast.info("Stopping generation...")
+      toast.info(t("workspace.documents.editor.stoppingGeneration"))
     }
   }
 
@@ -209,23 +209,23 @@ export function MyDocumentEditor({
 
     if (result.error) {
       setDeleteError(result.error)
-      toast.error("Failed to delete document", { description: result.error })
+      toast.error(t("workspace.documents.editor.deleteError"), { description: result.error })
       setIsDeleting(false)
       return
     }
 
     setIsDeleting(false)
     setIsDeleteDialogOpen(false)
-    toast.success("Document deleted", {
-      description: `${title || "Document"} was removed.`,
+    toast.success(t("workspace.documents.editor.deleteSuccess"), {
+      description: t("workspace.documents.editor.deleteSuccessDescription", undefined, { title: title || t("workspace.documents.editor.untitled") }),
     })
     router.push(`/workspaces/${workspaceId}`)
     router.refresh()
   }
 
   const classificationLabel = classification
-    ? classification.charAt(0).toUpperCase() + classification.slice(1)
-    : "Internal"
+    ? t(`workspace.common.classification.${classification}`)
+    : t("workspace.common.classification.internal")
 
   return (
     <div className="space-y-6">
@@ -233,27 +233,27 @@ export function MyDocumentEditor({
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold">
             {t("common.labels.editing")}{" "}
-            <span className="text-primary">{title || "Untitled document"}</span>
+            <span className="text-primary">{title || t("workspace.documents.editor.untitled")}</span>
           </h1>
           <p className="text-sm text-muted-foreground">
-            Edit your draft in place. Use AI instructions to describe what you want the next draft to focus on.
+            {t("workspace.documents.editor.description")}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="secondary">{classificationLabel}</Badge>
           <Button variant="outline" onClick={handleReset} disabled={!isDirty || isSaving}>
-            Reset
+            {t("workspace.documents.editor.reset")}
           </Button>
           <Button onClick={handleSave} disabled={!isDirty || isSaving}>
             {isSaving ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
+                {t("workspace.documents.editor.saving")}
               </>
             ) : (
               <>
                 <Save className="mr-2 h-4 w-4" />
-                Save changes
+                {t("workspace.documents.editor.save")}
               </>
             )}
           </Button>
@@ -269,7 +269,7 @@ export function MyDocumentEditor({
                 onClick={() => setIsDeleteDialogOpen(true)}
               >
                 <Trash2 className="mr-2 h-4 w-4 group-data-[highlighted]:text-destructive" />
-                Delete
+                {t("workspace.documents.editor.delete")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -279,18 +279,18 @@ export function MyDocumentEditor({
       <Card>
         <CardContent className="space-y-6 py-6">
           <div className="grid gap-2">
-            <Label htmlFor="document-title">Title</Label>
+            <Label htmlFor="document-title">{t("workspace.documents.editor.titleLabel")}</Label>
             <Input
               id="document-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="Untitled document"
+              placeholder={t("workspace.documents.editor.titlePlaceholder")}
             />
           </div>
 
           <div className="grid gap-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Label htmlFor="document-instructions">AI instructions</Label>
+              <Label htmlFor="document-instructions">{t("workspace.documents.editor.instructionsLabel")}</Label>
               <div className="flex items-center gap-2">
                 {isGenerating && (
                   <Button
@@ -299,6 +299,7 @@ export function MyDocumentEditor({
                     size="icon"
                     onClick={handleStopGeneration}
                     className="h-6 w-6 p-0"
+                    title={t("workspace.documents.editor.stopGeneration")}
                   >
                     <CircleStop className="h-3 w-3" />
                   </Button>
@@ -314,7 +315,7 @@ export function MyDocumentEditor({
                   {isGenerating ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin text-purple-400" />
-                      Generating...
+                      {t("workspace.documents.editor.generating")}
                     </>
                   ) : (
                     <Sparkles className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
@@ -326,42 +327,41 @@ export function MyDocumentEditor({
               id="document-instructions"
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
-              placeholder="Add context, tone, or goals for AI-assisted drafting. These notes will be saved with your document."
+              placeholder={t("workspace.documents.editor.instructionsPlaceholder")}
               rows={6}
             />
             <p className="text-xs text-muted-foreground">
-              Keep your instructions up to date. They can be used to generate a new draft from the workspace context and
-              uploaded documents.
+              {t("workspace.documents.editor.instructionsHint")}
             </p>
             {generateError && <div className="text-sm text-destructive">{generateError}</div>}
             {shouldShowMissingDraftNotice && (
               <Alert className="border-amber-200 bg-amber-50 text-amber-900">
-                <AlertTitle>No AI draft yet</AlertTitle>
+                <AlertTitle>{t("workspace.documents.editor.noDraftTitle")}</AlertTitle>
                 <AlertDescription>
-                  The workspace AI couldn&apos;t produce an initial draft automatically. Click <strong>Draft with AI</strong> to try again using your instructions, or start writing manually.
+                  {t("workspace.documents.editor.noDraftDescription")}
                 </AlertDescription>
               </Alert>
             )}
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="document-content">Document content</Label>
+            <Label htmlFor="document-content">{t("workspace.documents.editor.contentLabel")}</Label>
             <RichTextEditor
               content={content}
               onChange={setContent}
-              placeholder="Start writing your document or paste content generated by the AI assistant."
+              placeholder={t("workspace.documents.editor.contentPlaceholder")}
             />
           </div>
 
           <div className="flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <div>
               {lastSavedAt ? (
-                <span>Last saved {lastSavedAt.toLocaleString()}</span>
+                <span>{t("workspace.documents.editor.lastSaved", undefined, { date: lastSavedAt.toLocaleString() })}</span>
               ) : (
-                <span>Not saved yet</span>
+                <span>{t("workspace.documents.editor.notSavedYet")}</span>
               )}
             </div>
-            {saveState === "success" && <span className="text-emerald-600">Changes saved</span>}
+            {saveState === "success" && <span className="text-emerald-600">{t("workspace.documents.editor.changesSaved")}</span>}
             {saveState === "error" && error && <span className="text-destructive">{error}</span>}
           </div>
 
@@ -371,12 +371,12 @@ export function MyDocumentEditor({
 
           {generationSources && generationSources.length > 0 && (
             <div className="rounded-md border border-dashed p-4 text-xs text-muted-foreground space-y-2">
-              <p className="font-medium text-foreground">Sources referenced by the latest draft:</p>
+              <p className="font-medium text-foreground">{t("workspace.documents.editor.sourcesTitle")}</p>
               <ul className="list-disc pl-5 space-y-1">
                 {generationSources.map((source, index) => (
                   <li key={source.id ?? index}>
-                    {source.title || "Workspace document"}
-                    {source.pageNumber ? ` (page ${source.pageNumber})` : ""}
+                    {source.title || t("workspace.documents.editor.sourceWorkspaceDocument")}
+                    {source.pageNumber ? ` (${t("workspace.documents.editor.sourcePage", undefined, { page: source.pageNumber })})` : ""}
                   </li>
                 ))}
               </ul>
@@ -398,15 +398,14 @@ export function MyDocumentEditor({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete document</AlertDialogTitle>
+            <AlertDialogTitle>{t("workspace.documents.editor.deleteTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the document from the workspace. You can re-create it later, but the current content will be
-              lost.
+              {t("workspace.documents.editor.deleteDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {deleteError && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{deleteError}</div>}
           {isConfirmingDelete && (
-            <p className="text-sm font-medium text-destructive">This action cannot be undone.</p>
+            <p className="text-sm font-medium text-destructive">{t("workspace.documents.editor.deleteWarning")}</p>
           )}
           <AlertDialogFooter>
             <AlertDialogCancel
@@ -415,7 +414,7 @@ export function MyDocumentEditor({
                 setIsConfirmingDelete(false)
               }}
             >
-              Cancel
+              {t("workspace.documents.editor.deleteCancel")}
             </AlertDialogCancel>
             {isConfirmingDelete ? (
               <AlertDialogAction
@@ -426,7 +425,7 @@ export function MyDocumentEditor({
                 }}
                 disabled={isDeleting}
               >
-                {isDeleting ? "Deleting..." : "Confirm delete"}
+                {isDeleting ? t("workspace.documents.editor.deleteDeleting") : t("workspace.documents.editor.deleteConfirm")}
               </AlertDialogAction>
             ) : (
               <Button
@@ -437,7 +436,7 @@ export function MyDocumentEditor({
                   setIsConfirmingDelete(true)
                 }}
               >
-                Delete
+                {t("workspace.documents.editor.delete")}
               </Button>
             )}
           </AlertDialogFooter>
