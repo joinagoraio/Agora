@@ -62,6 +62,7 @@ export interface Highlight {
   textSpan: { start: number; end: number }
   coordinates?: { x: number; y: number; width: number; height: number }
   color?: string
+  quote?: string
 }
 
 interface PDFViewerProps {
