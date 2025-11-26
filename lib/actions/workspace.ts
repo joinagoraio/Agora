@@ -43,7 +43,7 @@ export async function createWorkspace(spaceId: string, name: string, description
     // Handle unique constraint violations with user-friendly messages
     if (error.code === "23505" || error.message.includes("unique") || error.message.includes("duplicate")) {
       return { 
-        error: `A workspace with the name "${name}" already exists in this space. Please choose a different name.` 
+        error: t("space.workspaces.dialog.duplicate", undefined, { name })
       }
     }
     
