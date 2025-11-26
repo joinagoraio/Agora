@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface DocumentViewerClientProps {
   workspaceId: string
@@ -44,6 +45,7 @@ interface DocumentViewerClientProps {
   initialPage: number
   documentMetadata?: Record<string, any>
   pages?: any[] // Pass pages data for client-side highlight computation
+  workspaceName?: string
 }
 
 const DOCUMENT_VIEWER_HEADER_HEIGHT = 64
@@ -77,7 +79,12 @@ export function DocumentViewerClient({
   initialPage,
   documentMetadata,
   pages,
+  workspaceName,
 }: DocumentViewerClientProps) {
+  const { t } = useI18n()
+  const backToWorkspaceLabel = workspaceName
+    ? t("workspace.navigation.backToWorkspace", undefined, { name: workspaceName })
+    : t("workspace.navigation.backToDashboard")
   const highlightContext = useHighlightContext()
   const { 
     highlights: highlightsMap,
@@ -744,7 +751,7 @@ export function DocumentViewerClient({
             <Link href={`/workspaces/${workspaceId}`}>
               <Button variant="ghost" size="sm">
                 <ArrowLeft className="mr-2 h-3 w-3" />
-                <span className="text-xs">Back to Workspace</span>
+                <span className="text-xs">{backToWorkspaceLabel}</span>
               </Button>
             </Link>
           </div>

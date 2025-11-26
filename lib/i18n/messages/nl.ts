@@ -157,6 +157,7 @@ export const nlMessages = {
     navigation: {
       backToSpace: "Terug naar",
       backToDashboard: "Terug naar dashboard",
+      backToWorkspace: "Terug naar {{name}}",
     },
     metrics: {
       documents: {
@@ -266,6 +267,52 @@ export const nlMessages = {
         contextRestore: "Notitie terugzetten in AI-context",
       },
     },
+    welcomeDialog: {
+      title: "Welkom bij {{name}}",
+      description:
+        "Leg een korte samenvatting en uitgebreidere beschrijving vast zodat teamleden en AI-assistenten direct begrijpen wat deze workspace omvat.",
+      jurisdiction: {
+        label: "Jurisdictie",
+        placeholder: "bijv. Amsterdam, Nederland",
+        helper: "Het geografische of juridische domein waarin deze workspace actief is.",
+      },
+      summary: {
+        label: "Workspace Samenvatting (1-2 zinnen)",
+        placeholder: "Vat de missie van deze workspace samen in 1-2 zinnen...",
+        helper:
+          "Geef een korte samenvatting. Dit is de eerste scope die teamleden en AI-assistenten te zien krijgen.",
+        undoSr: "Samenvatting terugzetten",
+        undoTooltip: "Verbetering ongedaan maken",
+        enhanceSr: "Samenvatting verbeteren met AI",
+        enhanceTooltip: "Samenvatting verbeteren met AI",
+      },
+      details: {
+        label: "Workspace Beschrijving (scope-details)",
+        placeholder: "Beschrijf de documenten, verantwoordelijkheden en resultaten van deze workspace...",
+        helper:
+          "Schrijf 4-6 zinnen over hoofdthema's, documenttypes en verantwoordelijkheden. Dit vormt de uitgebreide scope voor AI-zoekopdrachten.",
+        undoSr: "Beschrijving terugzetten",
+        undoTooltip: "Verbetering ongedaan maken",
+        enhanceSr: "Beschrijving verbeteren met AI",
+        enhanceTooltip: "Beschrijving verbeteren met AI",
+      },
+      context: {
+        label: "Extra context voor AI (optioneel)",
+        placeholder: "Voeg extra aanwijzingen, datasets of instructies toe voor AI-assistenten.",
+        helper: "Optioneel: voeg vaktermen, lopende initiatieven of andere aandachtspunten toe.",
+      },
+      knowledge: {
+        label: "Workspace Kennis",
+        helper:
+          "Voeg relevante Nederlandse overheidspublicaties en regelgeving toe. Documenten worden gefilterd op jurisdictie en workspace-scope.",
+        requirements: "Voeg eerst Jurisdictie plus zowel Samenvatting als Beschrijving toe om deze functie te gebruiken.",
+      },
+      buttons: {
+        skip: "Later instellen",
+        save: "Workspace reikwijdte opslaan",
+        saving: "Bezig met opslaan...",
+      },
+    },
     documents: {
       list: {
         searchPlaceholder: "Documenten zoeken…",
@@ -339,6 +386,84 @@ export const nlMessages = {
         contextHelper:
           "Optioneel: voeg extra notities toe die AI-assistenten moeten meenemen naast de samenvatting en beschrijving.",
         saving: "Bezig met opslaan…",
+      },
+    },
+    settings: {
+      tabs: {
+        members: "Leden",
+        invitations: "Uitnodigingen",
+        danger: "Gevarenzone",
+      },
+      members: {
+        title: "Workspaceleden",
+        description: "Alle gebruikers met toegang tot deze workspace, inclusief ruimteleden en directe uitnodigingen.",
+        table: {
+          name: "Naam",
+          email: "E-mail",
+          role: "Rol",
+          joined: "Toegetreden",
+          actions: "Acties",
+        },
+        selectPlaceholder: "Rol",
+        selectOptions: {
+          viewer: "Lezer",
+          member: "Lid",
+          admin: "Beheerder",
+        },
+        managedInSpace: "Beheerd via ruimte",
+        remove: {
+          button: "Verwijderen",
+          success: "Lid verwijderd",
+          successDescription: "Deze gebruiker heeft geen toegang meer tot deze workspace.",
+          error: "Lid verwijderen mislukt",
+        },
+        updateRole: {
+          error: "Rol bijwerken mislukt",
+          success: "Rol bijgewerkt",
+          successDescription: "De rol is gewijzigd naar {{role}}.",
+        },
+      },
+      invitations: {
+        title: "Workspaceleden uitnodigen",
+        description: "Verstuur uitnodigingen voor deze workspace.",
+        emailPlaceholder: "email@voorbeeld.com",
+        inviteButton: "Uitnodigen",
+        pendingTitle: "Openstaande uitnodigingen",
+        table: {
+          email: "E-mail",
+          role: "Rol",
+          status: "Status",
+          expires: "Verloopt",
+          actions: "Acties",
+        },
+        resend: "Uitnodiging opnieuw sturen",
+        revoke: "Uitnodiging intrekken",
+        toastResend: "Uitnodiging opnieuw verstuurd",
+        toastRevoke: "Uitnodiging ingetrokken",
+        toastSent: "Uitnodiging verzonden",
+        toastError: "Uitnodiging mislukt",
+        toastResendError: "Opnieuw versturen mislukt",
+        toastRevokeError: "Intrekken mislukt",
+        toastEmailRequired: "E-mail verplicht",
+        toastEmailDescription: "Vul in wie je wilt uitnodigen.",
+      },
+      danger: {
+        title: "Gevarenzone",
+        description: "Onomkeerbare acties die deze workspace beïnvloeden.",
+        deleteTitle: "Workspace verwijderen",
+        deleteDescription: "Verwijder deze workspace en alle gegevens permanent.",
+        deleteButton: "Workspace verwijderen",
+        deleteConfirm: "Bevestigen?",
+        deleting: "Wordt verwijderd...",
+        dialogTitle: "{{name}} verwijderen?",
+        dialogDescription: "Hiermee verwijder je alle documenten en gesprekken in deze workspace.",
+        cannotUndo: "Deze actie kan niet ongedaan worden gemaakt.",
+        toastError: "Workspace verwijderen mislukt",
+        toastSuccess: "Workspace verwijderd",
+        toastSuccessDescription: "{{name}} is verwijderd.",
+      },
+      actions: {
+        cancel: "Annuleren",
       },
     },
     sources: {

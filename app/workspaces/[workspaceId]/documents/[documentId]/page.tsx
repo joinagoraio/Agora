@@ -254,6 +254,7 @@ export default async function DocumentViewerPage({ params, searchParams }: Docum
           initialPage={initialPage}
           documentMetadata={document.metadata}
           pages={hydratedPages || []}
+          workspaceName={workspace.name}
         />
       </WorkspaceChatWrapper>
     </HighlightProvider>

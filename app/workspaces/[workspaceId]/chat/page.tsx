@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
+import { getServerTranslator } from "@/lib/i18n/server"
 
 export default async function ChatPage({
   params,
@@ -113,6 +114,7 @@ export default async function ChatPage({
       content: msg.content,
       sources: msg.sources,
     })) || []
+  const { t } = await getServerTranslator()
 
   return (
     <div className="flex h-screen flex-col">
@@ -123,7 +125,9 @@ export default async function ChatPage({
               <Button variant="ghost" asChild>
                 <Link href={`/spaces/${workspaceWithSpace.spaces.id}`}>
                   <ArrowLeft className="mr-2 h-3 w-3" />
-                  <span className="text-xs font-normal">Back to {workspaceWithSpace.spaces.name}</span>
+                  <span className="text-xs font-normal">
+                    {t("workspace.navigation.backToSpace")} {workspaceWithSpace.spaces.name}
+                  </span>
                 </Link>
               </Button>
             )}
@@ -131,7 +135,9 @@ export default async function ChatPage({
               <Button variant="ghost" asChild>
                 <Link href={`/workspaces/${workspaceId}`}>
                   <ArrowLeft className="mr-2 h-3 w-3" />
-                  <span className="text-xs font-normal">Back to Workspace</span>
+                  <span className="text-xs font-normal">
+                    {t("workspace.navigation.backToWorkspace", undefined, { name: workspace.name })}
+                  </span>
                 </Link>
               </Button>
             )}

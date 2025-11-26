@@ -6,6 +6,7 @@ import { MyDocumentEditor } from "@/components/my-document-editor"
 import { Button } from "@/components/ui/button"
 import { UserMenu } from "@/components/user-menu"
 import { ArrowLeft } from "lucide-react"
+import { getServerTranslator } from "@/lib/i18n/server"
 
 interface WorkspaceDocumentEditorPageProps {
   params: Promise<{
@@ -57,6 +58,7 @@ export default async function WorkspaceDocumentEditorPage({ params }: WorkspaceD
   const metadata = (document.metadata as Record<string, any> | null) ?? null
   const instructions = (metadata?.instructions as string | undefined) ?? ""
   const lastEditedAt = (metadata?.lastEditedAt as string | undefined) ?? (document.updated_at as string | undefined)
+  const { t } = await getServerTranslator()
 
   return (
     <WorkspaceChatWrapper workspaceId={workspaceId} workspaceName={workspace.name}>
@@ -67,7 +69,9 @@ export default async function WorkspaceDocumentEditorPage({ params }: WorkspaceD
               <Button variant="ghost" asChild>
                 <Link href={`/workspaces/${workspaceId}`}>
                   <ArrowLeft className="mr-2 h-3 w-3" />
-                  <span className="text-xs font-normal">Back to {workspace.name}</span>
+                  <span className="text-xs font-normal">
+                    {t("workspace.navigation.backToWorkspace", undefined, { name: workspace.name })}
+                  </span>
                 </Link>
               </Button>
             </div>

@@ -157,6 +157,7 @@ export const enMessages = {
     navigation: {
       backToSpace: "Back to",
       backToDashboard: "Back to Dashboard",
+      backToWorkspace: "Back to {{name}}",
     },
     metrics: {
       documents: {
@@ -265,6 +266,51 @@ export const enMessages = {
         contextRestore: "Restore note to AI context",
       },
     },
+    welcomeDialog: {
+      title: "Welcome to {{name}}",
+      description:
+        "Capture a short summary plus a fuller description so teammates and AI assistants immediately understand what this workspace covers.",
+      jurisdiction: {
+        label: "Jurisdiction",
+        placeholder: "e.g., Amsterdam, Netherlands",
+        helper: "The geographic or legal jurisdiction this workspace operates within.",
+      },
+      summary: {
+        label: "Workspace Summary (1-2 sentences)",
+        placeholder: "Capture the mission of this workspace in 1-2 sentences...",
+        helper: "Provide a crisp overview. This is the headline scope teammates and AI assistants will see first.",
+        undoSr: "Undo summary enhancement",
+        undoTooltip: "Undo enhancement",
+        enhanceSr: "Enhance summary with AI",
+        enhanceTooltip: "Enhance summary with AI",
+      },
+      details: {
+        label: "Workspace Description (Scope details)",
+        placeholder: "Describe the documents, responsibilities, and outcomes this workspace covers...",
+        helper:
+          "Share 4-6 sentences covering key themes, document types, and responsibilities. This becomes the detailed scope AI search relies on.",
+        undoSr: "Undo description enhancement",
+        undoTooltip: "Undo enhancement",
+        enhanceSr: "Enhance description with AI",
+        enhanceTooltip: "Enhance description with AI",
+      },
+      context: {
+        label: "Additional AI Context (optional)",
+        placeholder: "Add any extra guidance, datasets, or instructions you want AI assistants to consider.",
+        helper: "Optional: include specialized terms, initiatives, or anything else the AI should keep in mind.",
+      },
+      knowledge: {
+        label: "Workspace Knowledge",
+        helper:
+          "Add relevant Dutch government publications and regulations to your workspace knowledge base. Documents will be filtered by your jurisdiction and workspace scope.",
+        requirements: "Please add Jurisdiction plus both Summary and Description to enable this feature.",
+      },
+      buttons: {
+        skip: "Skip for now",
+        save: "Save workspace scope",
+        saving: "Saving...",
+      },
+    },
     documents: {
       list: {
         searchPlaceholder: "Search documents…",
@@ -338,6 +384,84 @@ export const enMessages = {
         contextHelper:
           "Optional: include extra notes you want AI assistants to consider beyond the summary and description.",
         saving: "Saving…",
+      },
+    },
+    settings: {
+      tabs: {
+        members: "Members",
+        invitations: "Invitations",
+        danger: "Danger Zone",
+      },
+      members: {
+        title: "Workspace Members",
+        description: "All users with access to this workspace, including inherited space members.",
+        table: {
+          name: "Name",
+          email: "Email",
+          role: "Role",
+          joined: "Joined",
+          actions: "Actions",
+        },
+        selectPlaceholder: "Role",
+        selectOptions: {
+          viewer: "Viewer",
+          member: "Member",
+          admin: "Admin",
+        },
+        managedInSpace: "Managed in space",
+        remove: {
+          button: "Remove",
+          success: "Member removed",
+          successDescription: "They no longer have access to this workspace.",
+          error: "Failed to remove member",
+        },
+        updateRole: {
+          error: "Failed to update role",
+          success: "Role updated",
+          successDescription: "Member role changed to {{role}}.",
+        },
+      },
+      invitations: {
+        title: "Invite Workspace Members",
+        description: "Send invitations to join this workspace.",
+        emailPlaceholder: "email@example.com",
+        inviteButton: "Invite",
+        pendingTitle: "Pending Invitations",
+        table: {
+          email: "Email",
+          role: "Role",
+          status: "Status",
+          expires: "Expires",
+          actions: "Actions",
+        },
+        resend: "Resend invitation",
+        revoke: "Revoke invitation",
+        toastResend: "Invitation resent",
+        toastRevoke: "Invitation revoked",
+        toastSent: "Invitation sent",
+        toastError: "Invitation failed",
+        toastResendError: "Failed to resend invitation",
+        toastRevokeError: "Failed to revoke invitation",
+        toastEmailRequired: "Email required",
+        toastEmailDescription: "Please enter who you want to invite.",
+      },
+      danger: {
+        title: "Danger Zone",
+        description: "Irreversible actions that affect this workspace.",
+        deleteTitle: "Delete Workspace",
+        deleteDescription: "Permanently delete this workspace and all its data.",
+        deleteButton: "Delete Workspace",
+        deleteConfirm: "Confirm?",
+        deleting: "Deleting...",
+        dialogTitle: "Delete {{name}}?",
+        dialogDescription: "This will delete all documents and conversations in this workspace.",
+        cannotUndo: "This action cannot be undone.",
+        toastError: "Failed to delete workspace",
+        toastSuccess: "Workspace deleted",
+        toastSuccessDescription: "{{name}} has been removed.",
+      },
+      actions: {
+        cancel: "Cancel",
       },
     },
     sources: {

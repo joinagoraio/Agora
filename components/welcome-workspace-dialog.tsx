@@ -176,11 +176,10 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle className="text-2xl">Welcome to {workspace.name}</DialogTitle>
-          <DialogDescription className="text-sm">
-            Help us understand your workspace by adding a concise summary and detailed description. This scope improves AI search
-            and understanding of your documents.
-          </DialogDescription>
+          <DialogTitle className="text-2xl">
+            {t("workspace.welcomeDialog.title", undefined, { name: workspace.name })}
+          </DialogTitle>
+          <DialogDescription className="text-sm">{t("workspace.welcomeDialog.description")}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSave} className="space-y-6 py-4">
@@ -188,33 +187,31 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
             <div className="space-y-2">
               <Label htmlFor="welcome-location" className="flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
-                Jurisdiction
+                {t("workspace.welcomeDialog.jurisdiction.label")}
               </Label>
               <div className="w-fit">
                 <Input
                   id="welcome-location"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
-                  placeholder="e.g., Amsterdam, Netherlands"
+                  placeholder={t("workspace.welcomeDialog.jurisdiction.placeholder")}
                   className="w-[300px]"
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
-                The geographic or legal jurisdiction this workspace operates within.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("workspace.welcomeDialog.jurisdiction.helper")}</p>
             </div>
 
             <div className="space-y-2 mt-6">
               <Label htmlFor="welcome-summary" className="flex items-center gap-2">
                 <FileText className="h-4 w-4" />
-                Workspace Summary (1-2 sentences)
+                {t("workspace.welcomeDialog.summary.label")}
               </Label>
               <div className="relative">
                 <Textarea
                   id="welcome-summary"
                   value={summary}
                   onChange={(e) => setSummary(e.target.value)}
-                  placeholder="Capture the mission of this workspace in 1-2 sentences..."
+                  placeholder={t("workspace.welcomeDialog.summary.placeholder")}
                   rows={4}
                   className="pb-10"
                   onFocus={() => setFocusedField("summary")}
@@ -235,11 +232,11 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
                               className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
                             >
                               <RotateCcw className="h-4 w-4" />
-                              <span className="sr-only">Undo summary enhancement</span>
+                            <span className="sr-only">{t("workspace.welcomeDialog.summary.undoSr")}</span>
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Undo enhancement</p>
+                          <p>{t("workspace.welcomeDialog.summary.undoTooltip")}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -261,33 +258,31 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
                             ) : (
                               <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
                             )}
-                            <span className="sr-only">Enhance summary with AI</span>
+                            <span className="sr-only">{t("workspace.welcomeDialog.summary.enhanceSr")}</span>
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>Enhance summary with AI</p>
+                          <p>{t("workspace.welcomeDialog.summary.enhanceTooltip")}</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Provide a crisp overview. This is the headline scope teammates and AI assistants will see first.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("workspace.welcomeDialog.summary.helper")}</p>
             </div>
 
             <div className="space-y-2 mt-6">
               <Label htmlFor="welcome-description" className="flex items-center gap-2">
                 <BookOpen className="h-4 w-4" />
-                Workspace Description (Scope details)
+                {t("workspace.welcomeDialog.details.label")}
               </Label>
               <div className="relative">
                 <Textarea
                   id="welcome-description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Describe the documents, responsibilities, and outcomes this workspace covers..."
+                  placeholder={t("workspace.welcomeDialog.details.placeholder")}
                   rows={8}
                   className="pb-10"
                   onFocus={() => setFocusedField("description")}
@@ -308,11 +303,11 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
                               className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
                             >
                               <RotateCcw className="h-4 w-4" />
-                              <span className="sr-only">Undo description enhancement</span>
+                            <span className="sr-only">{t("workspace.welcomeDialog.details.undoSr")}</span>
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Undo enhancement</p>
+                          <p>{t("workspace.welcomeDialog.details.undoTooltip")}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -334,44 +329,39 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
                             ) : (
                               <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
                             )}
-                            <span className="sr-only">Enhance description with AI</span>
+                            <span className="sr-only">{t("workspace.welcomeDialog.details.enhanceSr")}</span>
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>Enhance description with AI</p>
+                          <p>{t("workspace.welcomeDialog.details.enhanceTooltip")}</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Share 4-6 sentences covering key themes, document types, and responsibilities. This becomes the detailed scope
-                AI search relies on.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("workspace.welcomeDialog.details.helper")}</p>
             </div>
 
             <div className="space-y-2 mt-6">
               <Label htmlFor="welcome-context" className="flex items-center gap-2">
                 <BookOpen className="h-4 w-4" />
-                Additional AI Context (optional)
+                {t("workspace.welcomeDialog.context.label")}
               </Label>
               <Textarea
                 id="welcome-context"
                 value={context}
                 onChange={(e) => setContext(e.target.value)}
-                placeholder="Add any extra guidance, datasets, or instructions you want AI assistants to consider."
+                placeholder={t("workspace.welcomeDialog.context.placeholder")}
                 rows={5}
               />
-              <p className="text-xs text-muted-foreground">
-                Optional: include specialized terms, ongoing initiatives, or anything else the AI should keep in mind.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("workspace.welcomeDialog.context.helper")}</p>
             </div>
 
             <div className="space-y-2 mt-6">
               <Label className="flex items-center gap-2">
                 <BookOpen className="h-4 w-4" />
-                Workspace Knowledge
+                {t("workspace.welcomeDialog.knowledge.label")}
               </Label>
               <div className="w-fit">
                 <TooltipProvider>
@@ -392,15 +382,13 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
                     </TooltipTrigger>
                       {(!hasLocation || !scopeIsComplete) && (
                         <TooltipContent>
-                          <p>Please add Jurisdiction plus both Summary and Description to enable this feature</p>
+                          <p>{t("workspace.welcomeDialog.knowledge.requirements")}</p>
                         </TooltipContent>
                       )}
                   </Tooltip>
                 </TooltipProvider>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Add relevant Dutch government publications and regulations to your workspace knowledge base. Documents will be filtered by your jurisdiction and workspace scope.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("workspace.welcomeDialog.knowledge.helper")}</p>
             </div>
 
             {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
@@ -408,10 +396,10 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
 
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button type="button" variant="ghost" onClick={handleSkip} disabled={isSaving}>
-              Skip for now
+              {t("workspace.welcomeDialog.buttons.skip")}
             </Button>
             <Button type="submit" disabled={isSaving}>
-              {isSaving ? "Saving..." : "Save Properties"}
+              {isSaving ? t("workspace.welcomeDialog.buttons.saving") : t("workspace.welcomeDialog.buttons.save")}
             </Button>
           </DialogFooter>
         </form>
