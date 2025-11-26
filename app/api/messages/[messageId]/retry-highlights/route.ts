@@ -1,13 +1,13 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { resolveCitations } from "@/lib/chat/resolve-citations"
 
 export async function POST(
-  _req: Request,
-  { params }: { params: { messageId: string } },
+  _req: NextRequest,
+  context: { params: Promise<{ messageId: string }> },
 ) {
-  const messageId = params?.messageId
+  const { messageId } = await context.params
   if (!messageId) {
     return NextResponse.json({ error: "Message ID is required" }, { status: 400 })
   }
