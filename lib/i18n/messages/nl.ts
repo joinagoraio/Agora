@@ -958,6 +958,7 @@ export const nlMessages = {
         toastError: "Workspace maken mislukt",
         toastSuccess: "Workspace gemaakt",
         toastSuccessDescription: "{{name}} is actief.",
+        duplicate: `Er bestaat al een workspace met de naam "{{name}}" in deze ruimte. Kies een andere naam.`,
       },
     },
     overview: {

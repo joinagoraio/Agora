@@ -8,9 +8,11 @@ import { env } from "@/lib/env"
 import { syncAllScopeDocumentsToWorkspace } from "@/lib/services/scope-documents"
 import { withCache, workspaceCacheKey } from "@/lib/cache/api-cache"
 import { requireAuthAndPermission } from "@/lib/middleware/authorization"
+import { getServerTranslator } from "@/lib/i18n/server"
 
 export async function createWorkspace(spaceId: string, name: string, description?: string) {
   const supabase = await createClient()
+  const { t } = await getServerTranslator()
 
   // Verify user has permission to create workspaces in this space
   try {

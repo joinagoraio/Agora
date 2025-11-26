@@ -957,6 +957,7 @@ export const enMessages = {
         toastError: "Could not create workspace",
         toastSuccess: "Workspace created",
         toastSuccessDescription: "{{name}} is live.",
+        duplicate: `A workspace with the name "{{name}}" already exists in this space. Please choose a different name.`,
       },
     },
     overview: {
