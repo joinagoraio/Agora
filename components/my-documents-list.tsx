@@ -90,12 +90,12 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
     setIsDeleting(true)
     setDeleteError(null)
 
-    const targetTitle = documentToDelete.title || "Document"
+    const targetTitle = documentToDelete.title || t("workspace.sections.myDocuments.card.untitled")
     const result = await deleteDocument(documentToDelete.id, workspaceId)
 
     if (result.error) {
       setDeleteError(result.error)
-      toast.error("Failed to delete document", { description: result.error })
+      toast.error(t("workspace.sections.myDocuments.card.deleteError"), { description: result.error })
       setIsDeleting(false)
       return
     }
@@ -109,8 +109,8 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
     setIsDeleting(false)
     // Close dialog and refresh after animation completes
     setDocumentToDelete(null)
-    toast.success("Document deleted", {
-      description: `${targetTitle} was removed.`,
+    toast.success(t("workspace.sections.myDocuments.card.deleteSuccess"), {
+      description: t("workspace.sections.myDocuments.card.deleteSuccessDescription", undefined, { title: targetTitle }),
     })
     setTimeout(() => {
       router.refresh()
@@ -213,21 +213,23 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex-1 min-w-0 space-y-1">
                         <div className="flex items-center gap-2">
-                          <CardTitle className="text-base truncate">{doc.title || "Untitled document"}</CardTitle>
+                          <CardTitle className="text-base truncate">{doc.title || t("workspace.sections.myDocuments.card.untitled")}</CardTitle>
                           <Badge variant="secondary" className="shrink-0">
-                            {doc.classification ? doc.classification.charAt(0).toUpperCase() + doc.classification.slice(1) : "Internal"}
+                            {doc.classification
+                              ? t(`workspace.common.classification.${doc.classification}`)
+                              : t("workspace.common.classification.internal")}
                           </Badge>
                         </div>
                         <CardDescription className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                           {lastEditedAt && (
                             <span className="inline-flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
-                              Last edited {new Date(lastEditedAt).toLocaleString()}
+                              {t("workspace.sections.myDocuments.card.lastEdited", undefined, { date: new Date(lastEditedAt).toLocaleString() })}
                             </span>
                           )}
                           <span className="inline-flex items-center gap-1">
                             <FileText className="h-3 w-3" />
-                            Editable draft
+                            {t("workspace.sections.myDocuments.card.editableDraft")}
                           </span>
                         </CardDescription>
                       </div>
@@ -243,7 +245,7 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
                               <DropdownMenuItem asChild>
                                 <Link href={`/workspaces/${workspaceId}/my-documents/${doc.id}`}>
                                   <Edit3 className="mr-2 h-4 w-4" />
-                                  Edit
+                                  {t("workspace.sections.myDocuments.card.edit")}
                                 </Link>
                               </DropdownMenuItem>
                               <DropdownMenuItem
@@ -251,7 +253,7 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
                                 onClick={() => setDocumentToDelete(doc)}
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
+                                {t("workspace.sections.myDocuments.card.delete")}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -262,7 +264,7 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
                   {instructions && (
                     <CardContent>
                       <div className="rounded-md bg-muted/60 p-3 text-xs text-muted-foreground">
-                        <span className="font-medium text-foreground">Instructions:</span> {instructions}
+                        <span className="font-medium text-foreground">{t("workspace.sections.myDocuments.card.instructionsLabel")}</span> {instructions}
                       </div>
                     </CardContent>
                   )}
@@ -276,21 +278,20 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
       <AlertDialog open={Boolean(documentToDelete)} onOpenChange={handleDeleteDialogClose}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete document</AlertDialogTitle>
+            <AlertDialogTitle>{t("workspace.sections.myDocuments.card.deleteTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the document from the workspace. You can re-create it later, but the current content will be
-              lost.
+              {t("workspace.sections.myDocuments.card.deleteDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {deleteError && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{deleteError}</div>}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>{t("workspace.sections.myDocuments.card.deleteCancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-white hover:bg-destructive/90"
               onClick={handleDelete}
               disabled={isDeleting}
             >
-              {isDeleting ? "Deleting..." : "Delete"}
+              {isDeleting ? t("workspace.sections.myDocuments.card.deleteDeleting") : t("workspace.sections.myDocuments.card.deleteConfirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
