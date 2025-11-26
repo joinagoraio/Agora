@@ -7,14 +7,14 @@ const nextConfig = {
   async headers() {
     const isDev = process.env.NODE_ENV !== "production"
     
-    const scriptSources = ["'self'", "https://va.vercel-scripts.com"]
+    const scriptSources = ["'self'", "https://va.vercel-scripts.com", "'unsafe-inline'"]
     if (isDev) {
-      scriptSources.push("'unsafe-eval'", "'unsafe-inline'", "https://vercel.live")
+      scriptSources.push("'unsafe-eval'", "https://vercel.live")
     }
     
-    const styleSources = ["'self'"]
+    const styleSources = ["'self'", "'unsafe-inline'"]
     if (isDev) {
-      styleSources.push("'unsafe-inline'")
+      styleSources.push("https://vercel.live")
     }
     
     const connectSources = [
@@ -65,7 +65,7 @@ const nextConfig = {
           },
           {
             key: "Permissions-Policy",
-            value: "geolocation=(), microphone=(), camera=()",
+            value: "geolocation=(), microphone=(), camera=(), browsing-topics=()",
           },
           {
             key: "Strict-Transport-Security",
