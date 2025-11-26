@@ -128,8 +128,19 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
   const isUpdatingUrlRef = useRef(false)
   const wasDocumentViewRef = useRef(isDocumentView)
 
+  // Get conversationId from URL as a stable value for dependency array
+  const conversationIdFromUrl = searchParams.get("conversationId")
+
   useEffect(() => {
-    const fromUrl = searchParams.get("conversationId")
+    // If sidebar is closed, clear conversationIdParam to prevent auto-reopening
+    if (!isOpen) {
+      if (conversationIdParam !== null) {
+        setConversationIdParam(null)
+      }
+      return
+    }
+
+    const fromUrl = conversationIdFromUrl
     if (fromUrl) {
       if (fromUrl !== conversationIdParam) {
         setConversationIdParam(fromUrl)
@@ -148,7 +159,7 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
         setConversationIdParam(stored)
       }
     }
-  }, [searchParams, storageKey, isDocumentView, conversationIdParam])
+  }, [conversationIdFromUrl, storageKey, isDocumentView, conversationIdParam, isOpen])
 
   // Helper function to update URL with conversationId while preserving current path
   const updateConversationId = useCallback(
