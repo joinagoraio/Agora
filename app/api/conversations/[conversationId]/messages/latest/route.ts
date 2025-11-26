@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
 export async function GET(
-  _req: Request,
-  { params }: { params: { conversationId: string } },
+  _req: NextRequest,
+  context: { params: Promise<{ conversationId: string }> },
 ) {
-  const conversationId = params?.conversationId
+  const { conversationId } = await context.params
   if (!conversationId) {
     return NextResponse.json({ error: "conversationId is required" }, { status: 400 })
   }
