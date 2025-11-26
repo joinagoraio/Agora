@@ -249,6 +249,15 @@ export async function enhanceScopeText(
     return { error: "Unauthorized" }
   }
 
+  // Get user's language preference
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("language")
+    .eq("id", user.id)
+    .single()
+  
+  const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
+
   if (!env.OPENAI_API_KEY) {
     return { error: "OpenAI API key not configured" }
   }
