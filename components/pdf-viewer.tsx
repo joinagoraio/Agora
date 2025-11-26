@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { Document, Page, pdfjs } from "react-pdf"
+import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -28,9 +29,10 @@ import {
 import "react-pdf/dist/Page/AnnotationLayer.css"
 import "react-pdf/dist/Page/TextLayer.css"
 
-// Configure PDF.js worker to use local file from public directory
-// This avoids CSP and CORS issues
-pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+// Configure PDF.js worker using bundled worker asset (works with Turbopack/Next.js 16)
+if (typeof window !== "undefined" && pdfjs.GlobalWorkerOptions.workerSrc !== pdfWorkerSrc) {
+  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerSrc
+}
 
 export type ViewerFitMode = "width" | "height"
 
