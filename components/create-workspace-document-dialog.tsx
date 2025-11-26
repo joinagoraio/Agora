@@ -151,10 +151,10 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
               onValueChange={(value: "public" | "internal" | "confidential") => setClassification(value)}
               disabled={isCreating}
             >
-              <SelectTrigger id="document-classification" className="w-full">
+              <SelectTrigger id="document-classification" className="w-fit">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="w-fit min-w-[var(--radix-select-trigger-width)]">
                 {classificationOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
