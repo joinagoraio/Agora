@@ -124,7 +124,7 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent className="sm:max-w-[520px] max-w-[calc(100vw-2rem)]">
         <DialogHeader>
           <DialogTitle>{t("workspace.documents.create.title")}</DialogTitle>
           <DialogDescription>{t("workspace.documents.create.description")}</DialogDescription>
@@ -140,6 +140,7 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
               placeholder={t("workspace.documents.create.titlePlaceholder")}
               autoFocus
               disabled={isCreating}
+              className="w-full"
             />
           </div>
 
@@ -150,7 +151,7 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
               onValueChange={(value: "public" | "internal" | "confidential") => setClassification(value)}
               disabled={isCreating}
             >
-              <SelectTrigger id="document-classification">
+              <SelectTrigger id="document-classification" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -172,6 +173,7 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
               placeholder={t("workspace.documents.create.instructionsPlaceholder")}
               rows={6}
               disabled={isCreating}
+              className="w-full resize-none"
             />
             <p className="text-xs text-muted-foreground">
               {t("workspace.documents.create.instructionsHint")}
@@ -181,11 +183,22 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
           {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
         </div>
 
-        <DialogFooter className="space-x-2">
-          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isCreating}>
+        <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0 sm:justify-end">
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={() => handleOpenChange(false)} 
+            disabled={isCreating}
+            className="w-full sm:w-auto"
+          >
             {t("workspace.documents.create.buttonCancel")}
           </Button>
-          <Button type="button" onClick={handleCreate} disabled={isCreating}>
+          <Button 
+            type="button" 
+            onClick={handleCreate} 
+            disabled={isCreating}
+            className="w-full sm:w-auto"
+          >
             {isCreating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
