@@ -28,10 +28,11 @@ import {
 import "react-pdf/dist/Page/AnnotationLayer.css"
 import "react-pdf/dist/Page/TextLayer.css"
 
-// Configure PDF.js worker using bundled worker asset (works with Turbopack/Next.js 16)
-if (typeof window !== "undefined" && typeof pdfjs.GlobalWorkerOptions.workerSrc !== "string") {
-  const workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString()
-  pdfjs.GlobalWorkerOptions.workerSrc = workerSrc
+// Configure PDF.js worker - must be set before any PDF.js operations
+// Use the worker file from the public folder (served at /pdf.worker.min.mjs)
+// Set it immediately and also in useEffect to ensure it's set on client
+if (typeof window !== "undefined") {
+  pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs"
 }
 
 export type ViewerFitMode = "width" | "height"
@@ -106,6 +107,13 @@ export function PDFViewer({
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const pageNumberRef = useRef(pageNumber)
   const pageDimensionsRef = useRef<{ width: number; height: number } | null>(null)
+
+  // Ensure PDF.js worker is configured on mount
+  useEffect(() => {
+    if (typeof window !== "undefined" && !pdfjs.GlobalWorkerOptions.workerSrc) {
+      pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs"
+    }
+  }, [])
 
   const clampScale = useCallback((value: number) => {
     return Math.min(Math.max(value, MIN_SCALE), MAX_SCALE)

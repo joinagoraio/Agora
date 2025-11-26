@@ -74,8 +74,15 @@ export function WorkspaceChatWrapper({
   }
 
   // Get responsive default width for margin calculation
+  // Use a consistent default on server to avoid hydration mismatch
+  const [mounted, setMounted] = useState(false)
+  
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   const getDefaultWidth = () => {
-    if (typeof window === "undefined") return 800
+    if (!mounted) return 800 // Consistent default for SSR
     if (window.innerWidth >= 1280) return 800 // xl
     if (window.innerWidth >= 1024) return 600 // lg
     if (window.innerWidth >= 768) return 500 // md
@@ -84,7 +91,7 @@ export function WorkspaceChatWrapper({
   }
 
   const currentMargin = sidebarWidth ?? getDefaultWidth()
-  const isMobile = typeof window !== "undefined" && window.innerWidth < 640
+  const isMobile = mounted && window.innerWidth < 640
   const effectiveMargin = !isMobile && isChatOpen ? currentMargin : 0
   const toggleOffsetRight = (isMobile ? 16 : 24) + effectiveMargin
   const toggleOffsetBottom = isMobile ? 16 : 24
