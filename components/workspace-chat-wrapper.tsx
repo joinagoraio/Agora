@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, createContext, useContext } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import { ChatSidebar } from "@/components/chat-sidebar"
 import { ChatToggleButton } from "@/components/chat-toggle-button"
 
@@ -40,6 +40,8 @@ export function WorkspaceChatWrapper({
   defaultOpen = false,
   canManage = true,
 }: WorkspaceChatWrapperProps) {
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const [isChatOpen, setIsChatOpen] = useState(defaultOpen)
   const [sidebarWidth, setSidebarWidth] = useState<number | null>(null)
@@ -56,8 +58,15 @@ export function WorkspaceChatWrapper({
 
   const handleClose = () => {
     setIsChatOpen(false)
-    // Optionally clear conversationId from URL when closing
-    // This is handled by the sidebar component if needed
+    // Clear conversationId from URL when closing to prevent auto-reopening
+    const conversationId = searchParams.get("conversationId")
+    if (conversationId) {
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete("conversationId")
+      const queryString = params.toString()
+      const targetUrl = queryString ? `${pathname}?${queryString}` : pathname
+      router.replace(targetUrl)
+    }
   }
 
   const handleToggle = () => {
