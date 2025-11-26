@@ -64,7 +64,7 @@ export function WorkspaceInheritedItems({ items, showEmptyState = true }: Worksp
       document: t("workspace.sections.inherited.itemTypes.document"),
       answer: t("workspace.sections.inherited.itemTypes.answer"),
       note: t("workspace.sections.inherited.itemTypes.note"),
-    }),
+    } as Record<string, string>),
     [t],
   )
 
