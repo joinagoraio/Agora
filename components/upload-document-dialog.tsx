@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef } from "react"
+import { useMemo, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -20,6 +20,13 @@ import { AlertTriangle, Upload, FileText, X, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
+import { useI18n } from "@/lib/i18n/use-i18n"
+
+type UploadError = Error & {
+  code?: string
+  fileName?: string
+  fileId?: string
+}
 
 interface UploadDocumentDialogProps {
   workspaceId: string
@@ -33,32 +40,67 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
   const [classification, setClassification] = useState<"public" | "internal" | "confidential">("internal")
   const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [failedFileId, setFailedFileId] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
+  const { t } = useI18n()
+
+  const classificationOptions = useMemo(
+    () => [
+      { value: "public" as const, label: t("workspace.common.classification.public") },
+      { value: "internal" as const, label: t("workspace.common.classification.internal") },
+      { value: "confidential" as const, label: t("workspace.common.classification.confidential") },
+    ],
+    [t],
+  )
+
+  const getFileId = (file: File) => `${file.name}-${file.size}`
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const selectedFiles = Array.from(e.target.files)
       setFiles((prev) => [...prev, ...selectedFiles])
       setError(null)
+      setFailedFileId(null)
     }
   }
 
   const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index))
+    setFiles((prev) => {
+      const removedFile = prev[index]
+      const updated = prev.filter((_, i) => i !== index)
+      if (removedFile && getFileId(removedFile) === failedFileId) {
+        setFailedFileId(null)
+        setError(null)
+      }
+      if (updated.length === 0 && fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
+      return updated
+    })
   }
 
   const uploadFileWithProgress = async (file: File): Promise<any> => {
     const csrfToken = await fetchCsrfToken()
     if (!csrfToken) {
-      throw new Error("Unable to upload right now. Please refresh and try again.")
+      throw new Error(t("workspace.sources.upload.errorGeneral"))
     }
 
     return new Promise((resolve, reject) => {
-      const fileId = `${file.name}-${file.size}`
+      const fileId = getFileId(file)
       const xhr = new XMLHttpRequest()
       const formData = new FormData()
+
+      const buildError = (message: string, code?: string): UploadError => {
+        const errorInstance = new Error(message) as UploadError
+        if (code) {
+          errorInstance.code = code
+        }
+        errorInstance.fileName = file.name
+        errorInstance.fileId = fileId
+        return errorInstance
+      }
       
       formData.append("file", file)
       formData.append("workspaceId", workspaceId)
@@ -94,7 +136,7 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
           try {
             const response = JSON.parse(xhr.responseText)
             if (response.error) {
-              reject(new Error(response.error))
+              reject(buildError(response.error, response.errorCode))
             } else {
               // Only set to 100% when we get the final successful response
               setUploadProgress((prev) => ({
@@ -105,26 +147,31 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
               setTimeout(() => resolve(response.data), 100)
             }
           } catch (err) {
-            reject(new Error("Failed to parse response"))
+            reject(new Error(t("workspace.sources.upload.errorParse")))
           }
         } else {
           try {
             const error = JSON.parse(xhr.responseText)
-            reject(new Error(error.error || `Upload failed with status ${xhr.status}`))
+            reject(
+              buildError(
+                error.error || t("workspace.sources.upload.errorUpload", undefined, { status: xhr.status }),
+                error.errorCode,
+              ),
+            )
           } catch {
-            reject(new Error(`Upload failed with status ${xhr.status}`))
+            reject(buildError(t("workspace.sources.upload.errorUpload", undefined, { status: xhr.status })))
           }
         }
       })
 
       // Handle errors
       xhr.addEventListener("error", () => {
-        reject(new Error("Network error during upload"))
+        reject(buildError(t("workspace.sources.upload.errorNetwork")))
       })
 
       // Handle abort
       xhr.addEventListener("abort", () => {
-        reject(new Error("Upload was cancelled"))
+        reject(buildError(t("workspace.sources.upload.errorCancelled")))
       })
 
       // Start upload
@@ -136,9 +183,9 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
 
   const handleUpload = async () => {
     if (files.length === 0) {
-      const message = "Please select at least one file"
+      const message = t("workspace.sources.upload.errorNoFiles")
       setError(message)
-      toast.error("No files selected", { description: message })
+      toast.error(t("workspace.sources.upload.toastNoFiles"), { description: message })
       return
     }
 
@@ -146,9 +193,10 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
 
     setIsUploading(true)
     setError(null)
+    setFailedFileId(null)
     const initialProgress: Record<string, number> = {}
     files.forEach((file) => {
-      const fileId = `${file.name}-${file.size}`
+      const fileId = getFileId(file)
       initialProgress[fileId] = 0
     })
     setUploadProgress(initialProgress)
@@ -167,22 +215,72 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
       setOpen(false) // Close dialog on success
       onSuccess?.()
       router.refresh()
-      toast.success(uploadedCount === 1 ? "Document uploaded" : "Documents uploaded", {
-        description: uploadedCount === 1 ? fileNames[0] || "Upload complete" : `${uploadedCount} files added.`,
-      })
+      toast.success(
+        uploadedCount === 1
+          ? t("workspace.sources.upload.toastUploadOne")
+          : t("workspace.sources.upload.toastUploadMany"),
+        {
+          description:
+            uploadedCount === 1
+              ? t("workspace.sources.upload.toastUploadDescOne", undefined, {
+                  name: fileNames[0] || t("workspace.sources.upload.supportedFormats"),
+                })
+              : t("workspace.sources.upload.toastUploadDescMany", undefined, { count: uploadedCount }),
+        },
+      )
       
       // Dispatch custom event to notify chat interface and other components
       window.dispatchEvent(new CustomEvent("documentUploaded", { 
         detail: { workspaceId } 
       }))
     } catch (err) {
-      const description = err instanceof Error ? err.message : "An error occurred during upload"
+      const uploadError = err as UploadError
+      const { fileName, fileId } = uploadError || {}
+      const description = (() => {
+        if (uploadError?.code === "FILE_TYPE_MISMATCH") {
+          if (fileName) {
+            return t(
+              "workspace.sources.upload.errorFileTypeWithName",
+              `"${fileName}" couldn't be verified. Remove it to continue.`,
+              { name: fileName },
+            )
+          }
+          return t("workspace.sources.upload.errorFileType")
+        }
+        if (uploadError?.message) {
+          const maybeKey = uploadError.message.trim()
+          if (maybeKey.startsWith("workspace.")) {
+            const translated = t(maybeKey, maybeKey)
+            if (translated) {
+              return translated
+            }
+          }
+          return uploadError.message
+        }
+        return t("workspace.sources.upload.errorGeneral")
+      })()
+      if (fileId) {
+        setFailedFileId(fileId)
+      } else {
+        setFailedFileId(null)
+      }
       setError(description)
-      toast.error("Upload failed", { description })
+      toast.error(t("workspace.sources.upload.toastUploadError"), { description })
     } finally {
       setIsUploading(false)
       setUploadProgress({})
     }
+  }
+
+  const failedFile = failedFileId ? files.find((file) => getFileId(file) === failedFileId) : null
+
+  const handleRemoveFailedFile = () => {
+    if (!failedFileId) return
+    const index = files.findIndex((file) => getFileId(file) === failedFileId)
+    if (index >= 0) {
+      removeFile(index)
+    }
+    setFailedFileId(null)
   }
 
   const formatFileSize = (bytes: number) => {
@@ -199,68 +297,82 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
         {trigger || (
           <Button>
             <Upload className="mr-2 h-4 w-4" />
-            Upload Documents
+            {t("workspace.sources.upload.trigger")}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Upload Documents</DialogTitle>
-          <DialogDescription>Upload files directly to this workspace</DialogDescription>
+          <DialogTitle>{t("workspace.sources.upload.title")}</DialogTitle>
+          <DialogDescription>{t("workspace.sources.upload.description")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
         <div className="space-y-2">
-          <Label htmlFor="classification">Classification</Label>
+          <Label htmlFor="classification">{t("workspace.common.classification.label")}</Label>
           <Select value={classification} onValueChange={(value: any) => setClassification(value)}>
             <SelectTrigger id="classification">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="public">Public</SelectItem>
-              <SelectItem value="internal">Internal</SelectItem>
-              <SelectItem value="confidential">Confidential</SelectItem>
+              {classificationOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           {classification === "confidential" && (
             <Alert>
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription className="text-xs">
-                Confidential documents cannot be shared externally or exported.
+                {t("workspace.common.classification.confidentialNotice")}
               </AlertDescription>
             </Alert>
           )}
         </div>
         <div className="space-y-2">
-          <Label htmlFor="file-upload">Select Files</Label>
-          <div className="flex items-center gap-2">
-            <Input
-              id="file-upload"
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileSelect}
-              multiple
-              accept=".pdf,.doc,.docx,.txt,.md"
-              className="cursor-pointer"
-              disabled={isUploading}
-            />
+          <Label htmlFor="file-upload">{t("workspace.sources.upload.selectFiles")}</Label>
+          <Input
+            id="file-upload"
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            multiple
+            accept=".pdf,.doc,.docx,.txt,.md"
+            className="sr-only"
+            disabled={isUploading}
+          />
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
+              className="gap-2"
             >
-              <Upload className="mr-2 h-4 w-4" />
-              Browse
+              <Upload className="h-4 w-4" />
+              {files.length > 0
+                ? t("workspace.sources.upload.changeFile")
+                : t("workspace.sources.upload.fileButton")}
             </Button>
+            <span className="text-sm text-muted-foreground">
+              {files.length === 0
+                ? t("workspace.sources.upload.noFileSelected")
+                : files.length === 1
+                  ? t("workspace.sources.upload.fileSelectedSingle", undefined, { name: files[0].name })
+                  : t("workspace.sources.upload.fileSelectedMultiple", undefined, { count: files.length })}
+            </span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Supported formats: PDF, Word (.doc, .docx), Text (.txt), Markdown (.md)
+            {t("workspace.sources.upload.supportedFormats")}
           </p>
         </div>
 
         {files.length > 0 && (
           <div className="space-y-2">
-            <Label>Selected Files ({files.length})</Label>
+            <Label>
+              {t("workspace.sources.upload.selectedFiles")} ({files.length})
+            </Label>
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {files.map((file, index) => {
                 const fileId = `${file.name}-${file.size}`
@@ -300,7 +412,25 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
           </div>
         )}
 
-        {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+        {error && (
+          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive space-y-2">
+            <p>{error}</p>
+            {failedFile && (
+              <div className="flex flex-wrap items-center gap-2 text-xs text-destructive">
+                <span className="font-medium">&ldquo;{failedFile.name}&rdquo;</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-destructive hover:text-destructive"
+                  onClick={handleRemoveFailedFile}
+                >
+                  {t("workspace.sources.upload.removeFailedFile", "Remove from upload")}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
         </div>
         <DialogFooter>
           <Button
@@ -309,24 +439,27 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
             onClick={() => {
               setFiles([])
               setError(null)
+              setFailedFileId(null)
               if (fileInputRef.current) {
                 fileInputRef.current.value = ""
               }
             }}
             disabled={isUploading}
           >
-            Clear
+            {t("workspace.sources.upload.clear")}
           </Button>
           <Button type="button" onClick={handleUpload} disabled={isUploading || files.length === 0}>
             {isUploading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Uploading...
+                {t("workspace.sources.upload.uploadingStatus")}
               </>
             ) : (
               <>
                 <Upload className="mr-2 h-4 w-4" />
-                Upload {files.length > 0 && `(${files.length})`}
+                {files.length > 0
+                  ? t("workspace.sources.upload.uploadCount", undefined, { count: files.length })
+                  : t("workspace.sources.upload.upload")}
               </>
             )}
           </Button>

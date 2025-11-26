@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label"
 import { createWorkspace } from "@/lib/actions/workspace"
 import { Plus } from "lucide-react"
 import { toast } from "sonner"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface CreateWorkspaceDialogProps {
   spaceId: string
@@ -31,12 +32,13 @@ export function CreateWorkspaceDialog({ spaceId, trigger }: CreateWorkspaceDialo
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  const { t } = useI18n()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const trimmedName = name.trim()
     if (!trimmedName) {
-      setError("Please provide a workspace name")
+      setError(t("space.workspaces.dialog.errorRequired"))
       return
     }
 
@@ -47,7 +49,7 @@ export function CreateWorkspaceDialog({ spaceId, trigger }: CreateWorkspaceDialo
 
     if (result.error) {
       setError(result.error)
-      toast.error("Could not create workspace", {
+      toast.error(t("space.workspaces.dialog.toastError"), {
         description: result.error,
       })
       setIsLoading(false)
@@ -55,8 +57,10 @@ export function CreateWorkspaceDialog({ spaceId, trigger }: CreateWorkspaceDialo
       setOpen(false)
       setName("")
       setIsLoading(false)
-      toast.success("Workspace created", {
-        description: `${result.data?.name || trimmedName} is live.`,
+      toast.success(t("space.workspaces.dialog.toastSuccess"), {
+        description: t("space.workspaces.dialog.toastSuccessDescription", undefined, {
+          name: result.data?.name || trimmedName,
+        }),
       })
       router.push(`/workspaces/${result.data?.id}?new=true`)
     }
@@ -68,24 +72,22 @@ export function CreateWorkspaceDialog({ spaceId, trigger }: CreateWorkspaceDialo
         {trigger ?? (
           <Button>
             <Plus className="mr-2 h-4 w-4" />
-            New Workspace
+            {t("space.workspaces.dialog.trigger")}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Create a new workspace</DialogTitle>
-            <DialogDescription>
-              Workspaces help organize documents and conversations by topic or project.
-            </DialogDescription>
+            <DialogTitle>{t("space.workspaces.dialog.title")}</DialogTitle>
+            <DialogDescription>{t("space.workspaces.dialog.description")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="workspace-name">Workspace Name</Label>
+              <Label htmlFor="workspace-name">{t("space.workspaces.dialog.nameLabel")}</Label>
               <Input
                 id="workspace-name"
-                placeholder="Policy Documents"
+                placeholder={t("space.workspaces.dialog.namePlaceholder")}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -95,10 +97,10 @@ export function CreateWorkspaceDialog({ spaceId, trigger }: CreateWorkspaceDialo
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isLoading}>
-              Cancel
+              {t("space.workspaces.dialog.cancel")}
             </Button>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Creating..." : "Create Workspace"}
+              {isLoading ? t("space.workspaces.dialog.submitting") : t("space.workspaces.dialog.submit")}
             </Button>
           </DialogFooter>
         </form>

@@ -1,6 +1,6 @@
 "use client"
 
-import { type ReactNode, useState } from "react"
+import { type ReactNode, useMemo, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Loader2, Upload, X } from "lucide-react"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { toast } from "sonner"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 type SpaceDocument = any
 
@@ -43,12 +44,35 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
   const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [syncWarning, setSyncWarning] = useState<string | null>(null)
+  const { t } = useI18n()
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const resetFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
+  const clearSelectedFile = () => {
+    setFile(null)
+    setTitle("")
+    resetFileInput()
+  }
+
+  const classificationOptions = useMemo(
+    () => [
+      { value: "public" as const, label: t("workspace.common.classification.public") },
+      { value: "internal" as const, label: t("workspace.common.classification.internal") },
+      { value: "confidential" as const, label: t("workspace.common.classification.confidential") },
+    ],
+    [t],
+  )
 
   const handleUpload = async () => {
     if (!file) {
-      const message = "Choose a file to upload."
+      const message = t("space.documents.upload.errorNoFile")
       setError(message)
-      toast.error("No file selected", { description: message })
+      toast.error(t("space.documents.upload.toastNoFile"), { description: message })
       return
     }
 
@@ -68,9 +92,9 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
 
     const csrfToken = await fetchCsrfToken()
     if (!csrfToken) {
-      const message = "Could not verify your session. Refresh and try again."
+      const message = t("space.documents.upload.toastUploadBlocked")
       setError(message)
-      toast.error("Upload blocked", { description: message })
+      toast.error(t("space.documents.upload.toastUploadBlocked"), { description: message })
       setIsUploading(false)
       return
     }
@@ -88,17 +112,17 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
       payload = await response.json()
     } catch (parseError) {
       console.error("[SpaceUpload] Failed to parse response payload:", parseError)
-      const message = "Upload failed: received an unexpected response from the server."
+      const message = t("space.documents.upload.errorParse")
       setError(message)
-      toast.error("Upload failed", { description: message })
+      toast.error(t("space.documents.upload.toastUploadFailed"), { description: message })
       setIsUploading(false)
       return
     }
 
     if (!response.ok) {
-      const message = payload.error || "Upload failed."
+      const message = payload.error || t("space.documents.upload.toastUploadFailed")
       setError(message)
-      toast.error("Upload failed", { description: message })
+      toast.error(t("space.documents.upload.toastUploadFailed"), { description: message })
       setIsUploading(false)
       return
     }
@@ -111,7 +135,7 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
       setFile(null)
       setTitle("")
       setNotes("")
-      toast.warning("Document uploaded with warnings", {
+      toast.warning(t("space.documents.upload.warningToast"), {
         description: payload.warnings.join(" "),
       })
       return
@@ -123,7 +147,7 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
       payload?.data?.title ||
       title.trim() ||
       file?.name ||
-      "Space document"
+      t("space.documents.upload.trigger")
 
     setIsUploading(false)
     setIsOpen(false)
@@ -131,8 +155,9 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
     setTitle("")
     setNotes("")
     setClassification("public")
-    toast.success("Document uploaded", {
-      description: `${uploadedName} is now available.`,
+    resetFileInput()
+    toast.success(t("space.documents.upload.successToast"), {
+      description: t("space.documents.upload.successDescription", undefined, { name: uploadedName }),
     })
   }
 
@@ -146,95 +171,102 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
       setClassification("public")
       setError(null)
       setSyncWarning(null)
+      resetFileInput()
     }
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>{trigger ?? <Button>Upload document</Button>}</DialogTrigger>
+      <DialogTrigger asChild>{trigger ?? <Button>{t("space.documents.upload.trigger")}</Button>}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Upload scope document</DialogTitle>
-          <DialogDescription>
-            Add policy PDFs, memos, or supporting research. These files stay with the space and can be inherited by every workspace.
-          </DialogDescription>
+          <DialogTitle>{t("space.documents.upload.title")}</DialogTitle>
+          <DialogDescription>{t("space.documents.upload.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="space-document-file">File</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="space-document-file"
-                type="file"
-                accept=".pdf,.doc,.docx,.txt,.md,.markdown"
-                onChange={(event) => {
-                  const selectedFile = event.target.files?.[0] ?? null
-                  setFile(selectedFile)
-                  if (selectedFile) {
-                    // Extract filename without extension and set as title
-                    const fileName = selectedFile.name
-                    const nameWithoutExt = fileName.replace(/\.[^/.]+$/, "")
-                    setTitle(nameWithoutExt)
-                  }
-                }}
-                className="flex-1"
-              />
+            <Label htmlFor="space-document-file">{t("space.documents.upload.fileLabel")}</Label>
+            <Input
+              ref={fileInputRef}
+              id="space-document-file"
+              type="file"
+              accept=".pdf,.doc,.docx,.txt,.md,.markdown"
+              onChange={(event) => {
+                const selectedFile = event.target.files?.[0] ?? null
+                setFile(selectedFile)
+                if (selectedFile) {
+                  const fileName = selectedFile.name
+                  const nameWithoutExt = fileName.replace(/\.[^/.]+$/, "")
+                  setTitle(nameWithoutExt)
+                }
+              }}
+              className="sr-only"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                className="gap-2"
+              >
+                <Upload className="h-4 w-4" />
+                {file ? t("space.documents.upload.changeFile") : t("space.documents.upload.fileButton")}
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {file
+                  ? t("space.documents.upload.fileSelected", undefined, { name: file.name })
+                  : t("space.documents.upload.noFileSelected")}
+              </span>
               {file && (
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  onClick={() => {
-                    setFile(null)
-                    setTitle("")
-                    // Reset the file input
-                    const fileInput = document.getElementById("space-document-file") as HTMLInputElement
-                    if (fileInput) {
-                      fileInput.value = ""
-                    }
-                  }}
+                  onClick={clearSelectedFile}
                   className="h-10 w-10 hover:bg-red-500 group"
                 >
                   <X className="h-4 w-4 group-hover:text-red-500" />
-                  <span className="sr-only">Remove file</span>
+                  <span className="sr-only">{t("space.documents.upload.removeFile")}</span>
                 </Button>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">PDF, Word, or text files up to the limits of your Supabase project.</p>
+            <p className="text-xs text-muted-foreground">{t("space.documents.upload.fileHint")}</p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="space-document-title">Title</Label>
+            <Label htmlFor="space-document-title">{t("space.documents.upload.titleLabel")}</Label>
             <Input
               id="space-document-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="e.g., Sustainability Directive Briefing"
+              placeholder={t("space.documents.upload.titlePlaceholder")}
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Classification</Label>
+            <Label>{t("workspace.common.classification.label")}</Label>
             <Select value={classification} onValueChange={(value) => setClassification(value as typeof classification)}>
               <SelectTrigger>
-                <SelectValue placeholder="Select classification" />
+                <SelectValue placeholder={t("space.documents.upload.classificationPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="public">Public</SelectItem>
-                <SelectItem value="internal">Internal</SelectItem>
-                <SelectItem value="confidential">Confidential</SelectItem>
+                {classificationOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="space-document-notes">Notes (optional)</Label>
+            <Label htmlFor="space-document-notes">{t("space.documents.upload.notesLabel")}</Label>
             <Textarea
               id="space-document-notes"
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
-              placeholder="Add a short description to help teammates understand why this document matters."
+              placeholder={t("space.documents.upload.notesPlaceholder")}
               rows={3}
             />
           </div>
@@ -249,18 +281,18 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
 
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => setIsOpen(false)} disabled={isUploading}>
-            Cancel
+            {t("space.documents.upload.buttonCancel")}
           </Button>
           <Button onClick={handleUpload} disabled={isUploading}>
             {isUploading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Uploading…
+                {t("space.documents.upload.uploading")}
               </>
             ) : (
               <>
                 <Upload className="mr-2 h-4 w-4" />
-                Upload
+                {t("space.documents.upload.buttonUpload")}
               </>
             )}
           </Button>

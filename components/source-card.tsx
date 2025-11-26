@@ -18,6 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface SourceCardProps {
   source: {
@@ -37,6 +38,16 @@ export function SourceCard({ source }: SourceCardProps) {
   const [isTesting, setIsTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const isWorkspaceSource = source.type === "workspace_generated"
+  const { t } = useI18n()
+  const sourceTypeLabel = t(
+    `workspace.sources.card.type.${source.type}`,
+    formatSourceType(source.type),
+  )
+  const normalizedStatus = (source.status || "default").toLowerCase()
+  const sourceStatusLabel = t(
+    `workspace.sources.card.status.${normalizedStatus}`,
+    (source.status || "").replaceAll("_", " ") || t("workspace.sources.card.status.default"),
+  )
 
   const handleDelete = async () => {
     if (!needsConfirmation) {
@@ -49,7 +60,7 @@ export function SourceCard({ source }: SourceCardProps) {
       const result = await deleteSource(source.id)
       
       if (result.error) {
-        alert(`Failed to delete source: ${result.error}`)
+        window.alert(`${t("workspace.sources.card.deleteError")}: ${result.error}`)
         setIsDeleting(false)
         return
       }
@@ -80,7 +91,7 @@ export function SourceCard({ source }: SourceCardProps) {
       }, 100)
     } catch (error) {
       console.error("Error deleting source:", error)
-      alert("Failed to delete source")
+      window.alert(t("workspace.sources.card.deleteError"))
       setIsDeleting(false)
     }
   }
@@ -94,7 +105,7 @@ export function SourceCard({ source }: SourceCardProps) {
       if (!csrfToken) {
         setTestResult({
           success: false,
-          message: "Could not verify your session. Refresh and try again.",
+          message: t("workspace.sources.card.testErrorSession"),
         })
         return
       }
@@ -119,7 +130,7 @@ export function SourceCard({ source }: SourceCardProps) {
       if (!response.ok || !payload) {
         setTestResult({
           success: false,
-          message: payload?.message || payload?.error || "Connection test failed. Please try again.",
+          message: payload?.message || payload?.error || t("workspace.sources.card.testFailure"),
         })
         return
       }
@@ -128,7 +139,7 @@ export function SourceCard({ source }: SourceCardProps) {
     } catch (error) {
       setTestResult({
         success: false,
-        message: error instanceof Error ? error.message : "Test failed",
+        message: error instanceof Error ? error.message : t("workspace.sources.card.testGenericError"),
       })
     } finally {
       setIsTesting(false)
@@ -158,17 +169,17 @@ export function SourceCard({ source }: SourceCardProps) {
           </div>
           <div className="space-y-0.5">
             <p className="text-sm font-medium leading-tight">{source.name}</p>
-            <p className="text-xs text-muted-foreground leading-tight">{formatSourceType(source.type)}</p>
+            <p className="text-xs text-muted-foreground leading-tight">{sourceTypeLabel}</p>
             {source.last_sync_at && (
               <p className="text-xs text-muted-foreground leading-tight">
-                Last sync: {new Date(source.last_sync_at).toLocaleString()}
+                {t("workspace.sources.card.lastSync")}: {new Date(source.last_sync_at).toLocaleString()}
               </p>
             )}
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center rounded-full border border-muted px-2 py-0.5 text-xs font-medium capitalize text-muted-foreground">
-            {source.status.replaceAll("_", " ")}
+          <span className="inline-flex items-center rounded-full border border-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+            {sourceStatusLabel}
           </span>
           {!isWorkspaceSource && (
             <DropdownMenu>
@@ -182,12 +193,12 @@ export function SourceCard({ source }: SourceCardProps) {
                   {isTesting ? (
                     <>
                       <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                      <span>Testing...</span>
+                      <span>{t("workspace.sources.card.testing")}</span>
                     </>
                   ) : (
                     <>
                       <TestTube className="mr-2 h-3.5 w-3.5" />
-                      <span>Test Connection</span>
+                      <span>{t("workspace.sources.card.test")}</span>
                     </>
                   )}
                 </DropdownMenuItem>
@@ -196,7 +207,7 @@ export function SourceCard({ source }: SourceCardProps) {
                   className="hover:!bg-destructive/10 hover:!text-destructive focus:!bg-destructive/10 focus:!text-destructive [&:hover_svg]:!text-destructive [&:focus_svg]:!text-destructive [&:hover_span]:!text-destructive [&:focus_span]:!text-destructive"
                 >
                   <Trash2 className="mr-2 h-3.5 w-3.5" />
-                  <span>Delete</span>
+                  <span>{t("workspace.sources.card.delete")}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -225,25 +236,25 @@ export function SourceCard({ source }: SourceCardProps) {
         <AlertDialog open={deleteDialogOpen} onOpenChange={handleDeleteDialogClose}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete Source?</AlertDialogTitle>
+              <AlertDialogTitle>{t("workspace.sources.card.deleteTitle")}</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete this source? All associated documents will be removed.
+                {t("workspace.sources.card.deleteDescription")}
               </AlertDialogDescription>
             </AlertDialogHeader>
             {needsConfirmation && (
               <p className="text-sm font-medium text-destructive">
-                This action cannot be undone.
+                {t("workspace.sources.card.deleteWarning")}
               </p>
             )}
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>{t("workspace.sources.manage.cancel")}</AlertDialogCancel>
               {needsConfirmation ? (
                 <AlertDialogAction
                   onClick={handleDelete}
                   className="bg-destructive text-white hover:bg-destructive/90"
                   disabled={isDeleting}
                 >
-                  {isDeleting ? "Deleting..." : "Confirm?"}
+                  {isDeleting ? t("workspace.sources.card.deleteSubmitting") : t("workspace.sources.card.deleteConfirm")}
                 </AlertDialogAction>
               ) : (
                 <Button
@@ -251,7 +262,7 @@ export function SourceCard({ source }: SourceCardProps) {
                   className="bg-destructive text-white hover:bg-destructive/90"
                   disabled={isDeleting}
                 >
-                  Delete
+                  {t("workspace.sources.card.delete")}
                 </Button>
               )}
             </AlertDialogFooter>

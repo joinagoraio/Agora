@@ -19,6 +19,7 @@ import { ensureOverheidNLSource, addDocumentsFromSource } from "@/lib/actions/do
 import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface AddOverheidDocumentsDialogProps {
   workspaceId?: string
@@ -68,10 +69,23 @@ export function AddOverheidDocumentsDialog({
   const queryInputRefs = useRef<(HTMLInputElement | null)[]>([])
   const hasResults = results.length > 0
   const dialogWidthClass = hasResults ? "sm:!max-w-[1400px]" : "sm:!max-w-[700px]"
+  const { t } = useI18n()
+  const documentSuffix =
+    results.length === 1 ? "" : t("workspace.sources.overheidDialog.results.pluralSuffix")
+  const resultsSummary = t("workspace.sources.overheidDialog.results.summary", undefined, {
+    count: results.length,
+    suffix: documentSuffix,
+  })
+  const addSelectedLabel =
+    selectedResults.size > 0
+      ? t("workspace.sources.overheidDialog.results.addSelectedCount", undefined, {
+          count: selectedResults.size,
+        })
+      : t("workspace.sources.overheidDialog.results.addSelectedDefault")
 
   const handleIntelligentSearch = useCallback(async () => {
     if (!workspaceContext || !workspaceContext.trim()) {
-      setError("Scope is required for intelligent search")
+      setError(t("workspace.sources.overheidDialog.errors.scopeRequired"))
       return
     }
 
@@ -86,7 +100,7 @@ export function AddOverheidDocumentsDialog({
     try {
       const csrfToken = await fetchCsrfToken()
       if (!csrfToken) {
-        setError("Could not verify your session. Refresh and try again.")
+        setError(t("workspace.sources.overheidDialog.errors.session"))
         setSearching(false)
         return
       }
@@ -107,7 +121,7 @@ export function AddOverheidDocumentsDialog({
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || "Search failed")
+        throw new Error(data.error || t("workspace.sources.overheidDialog.errors.searchFailed"))
       }
 
       setResults(data.results || [])
@@ -115,11 +129,11 @@ export function AddOverheidDocumentsDialog({
       setSearchQueries(queries)
       setEditableQueries(queries)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to search documents")
+      setError(err instanceof Error ? err.message : t("workspace.sources.overheidDialog.errors.searchFailed"))
     } finally {
       setSearching(false)
     }
-  }, [workspaceContext, workspaceLocation])
+  }, [workspaceContext, workspaceLocation, t])
 
   // Auto-search when dialog opens
   useEffect(() => {
@@ -162,7 +176,7 @@ export function AddOverheidDocumentsDialog({
     }
 
     if (!workspaceId && !spaceId) {
-      setError("Select a destination before adding documents.")
+      setError(t("workspace.sources.overheidDialog.errors.destinationRequired"))
       return
     }
 
@@ -173,9 +187,15 @@ export function AddOverheidDocumentsDialog({
     try {
       if (spaceId && !workspaceId) {
         const { addedCount, addedItems } = await addDocumentsToSpace(spaceId, documents)
-        setSuccess(`Successfully added ${addedCount} document(s)`)
-        toast.success("Overheid.nl documents added", {
-          description: `${addedCount} publication${addedCount === 1 ? "" : "s"} imported into this space.`,
+        const publicationSuffix =
+          addedCount === 1 ? "" : t("workspace.sources.overheidDialog.publicationsPluralSuffix")
+        const successDescription = t("workspace.sources.overheidDialog.toast.successDescriptionSpace", undefined, {
+          count: addedCount,
+          suffix: publicationSuffix,
+        })
+        setSuccess(successDescription)
+        toast.success(t("workspace.sources.overheidDialog.toast.successTitle"), {
+          description: successDescription,
         })
         router.refresh()
         if (addedItems.length > 0) {
@@ -185,13 +205,13 @@ export function AddOverheidDocumentsDialog({
       } else if (workspaceId) {
         // Ensure overheid_nl source exists
         const sourceResult = await ensureOverheidNLSource(workspaceId)
-        if (sourceResult.error || !sourceResult.data) {
-          const description = sourceResult.error || "Failed to create Overheid.nl source"
-          setError(description)
-          toast.error("Cannot add documents", { description })
-          setAdding(false)
-          return
-        }
+    if (sourceResult.error || !sourceResult.data) {
+      const description = sourceResult.error || t("workspace.sources.overheidDialog.errors.createSource")
+      setError(description)
+      toast.error(t("workspace.sources.overheidDialog.toast.createSourceTitle"), { description })
+      setAdding(false)
+      return
+    }
 
         // Add documents using the source
         const result = await addDocumentsFromSource(
@@ -201,19 +221,25 @@ export function AddOverheidDocumentsDialog({
           "public" // Overheid.nl documents are public by default
         )
 
-        if (result.error) {
-          setError(result.error)
-          toast.error("Failed to add documents", { description: result.error })
-        } else if (result.addedCount === 0 && documents.length > 0) {
-          const message = "Failed to add documents. Please check the console for details or try again."
-          setError(message)
-          toast.error("No documents added", { description: message })
-        } else {
-          const addedCount = result.addedCount || documents.length
-          setSuccess(`Successfully added ${addedCount} document(s)`)
-          toast.success("Overheid.nl documents added", {
-            description: `${addedCount} publication${addedCount === 1 ? "" : "s"} imported.`,
-          })
+    if (result.error) {
+      setError(result.error)
+      toast.error(t("workspace.sources.overheidDialog.toast.failureTitle"), { description: result.error })
+    } else if (result.addedCount === 0 && documents.length > 0) {
+      const message = t("workspace.sources.overheidDialog.errors.genericDetailed")
+      setError(message)
+      toast.error(t("workspace.sources.overheidDialog.toast.noDocumentsTitle"), { description: message })
+    } else {
+      const addedCount = result.addedCount || documents.length
+      const publicationSuffix =
+        addedCount === 1 ? "" : t("workspace.sources.overheidDialog.publicationsPluralSuffix")
+      const successDescription = t("workspace.sources.overheidDialog.toast.successDescription", undefined, {
+        count: addedCount,
+        suffix: publicationSuffix,
+      })
+      setSuccess(successDescription)
+      toast.success(t("workspace.sources.overheidDialog.toast.successTitle"), {
+        description: successDescription,
+      })
           router.refresh()
           onSuccess?.()
           
@@ -228,11 +254,12 @@ export function AddOverheidDocumentsDialog({
         onOpenChange(false)
         setSuccess(null)
       }, 2000)
-    } catch (err) {
-      const description = err instanceof Error ? err.message : "Failed to add documents"
-      setError(description)
-      toast.error("Failed to add documents", { description })
-    } finally {
+  } catch (err) {
+    const description =
+      err instanceof Error ? err.message : t("workspace.sources.overheidDialog.errors.addDocuments")
+    setError(description)
+    toast.error(t("workspace.sources.overheidDialog.toast.failureTitle"), { description })
+  } finally {
       setAdding(false)
     }
   }
@@ -240,7 +267,7 @@ export function AddOverheidDocumentsDialog({
   const addDocumentsToSpace = async (targetSpaceId: string, documents: SearchResult[]) => {
     const csrfToken = await fetchCsrfToken()
     if (!csrfToken) {
-      throw new Error("Could not verify your session. Refresh and try again.")
+      throw new Error(t("workspace.sources.overheidDialog.errors.session"))
     }
 
     let addedCount = 0
@@ -308,7 +335,7 @@ export function AddOverheidDocumentsDialog({
   const handleSearchWithCustomQueries = async () => {
     const validQueries = editableQueries.filter(q => q.trim())
     if (validQueries.length === 0) {
-      setError("Please enter at least one search query")
+      setError(t("workspace.sources.overheidDialog.errors.queriesRequired"))
       return
     }
 
@@ -322,7 +349,7 @@ export function AddOverheidDocumentsDialog({
     try {
       const csrfToken = await fetchCsrfToken()
       if (!csrfToken) {
-        setError("Could not verify your session. Refresh and try again.")
+        setError(t("workspace.sources.overheidDialog.errors.session"))
         setSearching(false)
         return
       }
@@ -344,7 +371,7 @@ export function AddOverheidDocumentsDialog({
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || "Search failed")
+        throw new Error(data.error || t("workspace.sources.overheidDialog.errors.searchFailed"))
       }
 
       setResults(data.results || [])
@@ -353,7 +380,7 @@ export function AddOverheidDocumentsDialog({
       setEditableQueries(queries)
       setShowQueryEditor(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to search documents")
+      setError(err instanceof Error ? err.message : t("workspace.sources.overheidDialog.errors.searchFailed"))
     } finally {
       setSearching(false)
     }
@@ -365,13 +392,13 @@ export function AddOverheidDocumentsDialog({
         <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
-            Add Documents from Overheid.nl
+            {t("workspace.sources.overheidDialog.title")}
           </DialogTitle>
           <DialogDescription>
-            AI-powered search finds relevant Dutch government publications based on your workspace scope.
+            {t("workspace.sources.overheidDialog.description")}
             {workspaceLocation && (
               <span className="block mt-1 text-xs">
-                Location: {workspaceLocation}
+                {t("workspace.sources.overheidDialog.location", undefined, { location: workspaceLocation })}
               </span>
             )}
           </DialogDescription>
@@ -383,10 +410,14 @@ export function AddOverheidDocumentsDialog({
               <div className="flex flex-col items-center justify-center py-12 space-y-4">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <div className="text-center space-y-2">
-                  <p className="text-sm font-medium">Searching multiple endpoints and ranking results by relevance...</p>
+                  <p className="text-sm font-medium">
+                    {t("workspace.sources.overheidDialog.searching.message")}
+                  </p>
                   {searchQueries.length > 0 && (
                     <div className="mt-4 space-y-2">
-                      <p className="text-xs text-muted-foreground font-medium">Search queries being used:</p>
+                      <p className="text-xs text-muted-foreground font-medium">
+                        {t("workspace.sources.overheidDialog.searching.queriesLabel")}
+                      </p>
                       <div className="flex flex-wrap gap-2 justify-center">
                         {searchQueries.map((query, idx) => (
                           <Badge key={idx} variant="outline" className="text-xs">
@@ -404,12 +435,12 @@ export function AddOverheidDocumentsDialog({
               <div className="space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">
-                      Found {results.length} relevant document{results.length !== 1 ? "s" : ""} (ordered by relevance)
-                    </p>
+                    <p className="text-sm text-muted-foreground">{resultsSummary}</p>
                     {searchQueries.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 items-center">
-                        <span className="text-xs text-muted-foreground">Queries:</span>
+                        <span className="text-xs text-muted-foreground">
+                          {t("workspace.sources.overheidDialog.results.queriesLabel")}
+                        </span>
                         {searchQueries.map((query, idx) => (
                           <Badge key={idx} variant="outline" className="text-xs">
                             {query}
@@ -423,12 +454,10 @@ export function AddOverheidDocumentsDialog({
                       {adding ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Adding...
+                          {t("workspace.sources.overheidDialog.progress.adding")}
                         </>
                       ) : (
-                        <>
-                          Add {selectedResults.size} Selected
-                        </>
+                        addSelectedLabel
                       )}
                     </Button>
                   )}
@@ -463,7 +492,9 @@ export function AddOverheidDocumentsDialog({
                                 )}
                                 {result.relevanceScore !== undefined && (
                                   <Badge variant="outline" className="text-xs">
-                                    {(result.relevanceScore * 100).toFixed(0)}% match
+                                    {t("workspace.sources.overheidDialog.results.match", undefined, {
+                                      percent: (result.relevanceScore * 100).toFixed(0),
+                                    })}
                                   </Badge>
                                 )}
                                 {result.date && (
@@ -473,7 +504,9 @@ export function AddOverheidDocumentsDialog({
                               <CardTitle className="text-base leading-tight">{result.title}</CardTitle>
                               {result.identifier && (
                                 <CardDescription className="mt-1 text-xs">
-                                  ID: {result.identifier}
+                                  {t("workspace.sources.overheidDialog.results.idLabel", undefined, {
+                                    id: result.identifier,
+                                  })}
                                 </CardDescription>
                               )}
                               {result.description && (
@@ -486,7 +519,7 @@ export function AddOverheidDocumentsDialog({
                         </CardHeader>
                         {result.url && (
                           <CardContent className="pt-0">
-                            <a
+                              <a
                               href={result.url}
                               target="_blank"
                               rel="noopener noreferrer"
@@ -494,7 +527,7 @@ export function AddOverheidDocumentsDialog({
                               className="text-xs text-primary hover:underline flex items-center gap-1"
                             >
                               <ExternalLink className="h-3 w-3" />
-                              View source
+                                {t("workspace.sources.overheidDialog.results.viewSource")}
                             </a>
                           </CardContent>
                         )}
@@ -509,11 +542,13 @@ export function AddOverheidDocumentsDialog({
               <div className="space-y-4 py-8">
                 <div className="text-center space-y-2">
                   <p className="text-sm text-muted-foreground">
-                    No relevant documents found with the current search queries.
+                    {t("workspace.sources.overheidDialog.noResults.title")}
                   </p>
                   {searchQueries.length > 0 && (
                     <div className="mt-4 space-y-2">
-                      <p className="text-xs text-muted-foreground font-medium">Queries used:</p>
+                      <p className="text-xs text-muted-foreground font-medium">
+                        {t("workspace.sources.overheidDialog.noResults.queriesLabel")}
+                      </p>
                       <div className="flex flex-wrap gap-2 justify-center">
                         {searchQueries.map((query, idx) => (
                           <Badge key={idx} variant="outline" className="text-xs">
@@ -534,15 +569,17 @@ export function AddOverheidDocumentsDialog({
                       className="text-xs"
                     >
                       <Edit2 className="mr-2 h-3 w-3" />
-                      Adjust Search Queries
+                      {t("workspace.sources.overheidDialog.noResults.adjustButton")}
                     </Button>
                   </div>
                 ) : (
                   <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
                     <div className="space-y-2">
-                      <Label className="text-sm font-medium">Edit Search Queries</Label>
+                      <Label className="text-sm font-medium">
+                        {t("workspace.sources.overheidDialog.queryEditor.label")}
+                      </Label>
                       <p className="text-xs text-muted-foreground">
-                        Modify the search queries to find different documents. Each query will be searched across all endpoints.
+                        {t("workspace.sources.overheidDialog.queryEditor.description")}
                       </p>
                     </div>
                     <div className="space-y-2">
@@ -586,7 +623,7 @@ export function AddOverheidDocumentsDialog({
                         }}
                         className="w-full text-xs"
                       >
-                        + Add Query
+                        + {t("workspace.sources.overheidDialog.queryEditor.addQuery")}
                       </Button>
                     </div>
                     <div className="flex gap-2">
@@ -596,7 +633,7 @@ export function AddOverheidDocumentsDialog({
                         className="flex-1"
                       >
                         <Search className="mr-2 h-4 w-4" />
-                        Search with These Queries
+                        {t("workspace.sources.overheidDialog.queryEditor.searchButton")}
                       </Button>
                       <Button
                         variant="outline"
@@ -605,7 +642,7 @@ export function AddOverheidDocumentsDialog({
                           setEditableQueries(searchQueries)
                         }}
                       >
-                        Cancel
+                        {t("common.actions.cancel")}
                       </Button>
                     </div>
                   </div>
@@ -629,7 +666,9 @@ export function AddOverheidDocumentsDialog({
                 {adding && (
                   <div className="flex items-center py-2">
                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mr-2" />
-                    <span className="text-sm text-muted-foreground">Adding documents...</span>
+                    <span className="text-sm text-muted-foreground">
+                      {t("workspace.sources.overheidDialog.progress.adding")}
+                    </span>
                   </div>
                 )}
               </div>

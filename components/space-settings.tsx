@@ -26,6 +26,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface SpaceSettingsProps {
   space: any
@@ -51,6 +52,19 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
   }>({ isOpen: false, member: null, newRole: null })
   const [isChangingRole, setIsChangingRole] = useState(false)
   const router = useRouter()
+  const { t } = useI18n()
+
+  const translateRole = (role?: string | null) => {
+    if (!role) return "—"
+    const normalized = role.toLowerCase()
+    return t(`space.common.roles.${normalized}`, role)
+  }
+
+  const translateStatus = (status?: string | null) => {
+    if (!status) return t("space.common.status.pending")
+    const normalized = status.trim().toLowerCase()
+    return t(`space.common.status.${normalized}`, status)
+  }
   
   const handleRemoveMember = async () => {
     if (!memberToRemove) return
@@ -67,11 +81,13 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
     setNeedsRemoveConfirmation(false)
 
     if (result?.error) {
-      toast.error("Failed to remove member", { description: result.error })
+      toast.error(t("space.settings.members.remove.error"), { description: result.error })
       return
     }
 
-    toast.success("Member removed", { description: "They no longer have access to this space." })
+    toast.success(t("space.settings.members.remove.success"), {
+      description: t("space.settings.members.remove.successDescription"),
+    })
     router.refresh()
   }
 
@@ -94,11 +110,13 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
     setIsDeletingSpace(false)
 
     if (result?.error) {
-      toast.error("Failed to delete space", { description: result.error })
+      toast.error(t("space.settings.danger.toastError"), { description: result.error })
       return
     }
 
-    toast.success("Space deleted", { description: `${space.name} and all related workspaces were removed.` })
+    toast.success(t("space.settings.danger.toastSuccess"), {
+      description: t("space.settings.danger.toastSuccessDescription", undefined, { name: space.name }),
+    })
     router.push("/dashboard")
   }
 
@@ -111,7 +129,9 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
     const email = inviteEmail.trim()
 
     if (!email) {
-      toast.error("Email required", { description: "Please enter who you want to invite." })
+      toast.error(t("space.settings.invitations.toastEmailRequired"), {
+        description: t("space.settings.invitations.toastEmailDescription"),
+      })
       return
     }
 
@@ -120,12 +140,12 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
     setIsInviting(false)
 
     if (result.error) {
-      toast.error("Invitation failed", { description: result.error })
+      toast.error(t("space.settings.invitations.toastError"), { description: result.error })
       return
     }
 
     setInviteEmail("")
-    toast.success("Invitation sent", { description: `Sent to ${email}.` })
+    toast.success(t("space.settings.invitations.toastSent"), { description: email })
     router.refresh()
   }
 
@@ -137,16 +157,20 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
     setInvitationAction(null)
 
     if (result?.error) {
-      toast.error(`Failed to ${type === "resend" ? "resend" : "revoke"} invitation`, {
-        description: result.error,
-      })
+      toast.error(
+        type === "resend"
+          ? t("space.settings.invitations.toastResendError")
+          : t("space.settings.invitations.toastRevokeError"),
+        {
+          description: result.error,
+        },
+      )
       return
     }
 
-    toast.success(
-      type === "resend" ? "Invitation resent" : "Invitation revoked",
-      { description: `${invitation.email}` },
-    )
+    toast.success(type === "resend" ? t("space.settings.invitations.toastResend") : t("space.settings.invitations.toastRevoke"), {
+      description: invitation.email,
+    })
     router.refresh()
   }
 
@@ -174,48 +198,47 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
     setIsChangingRole(false)
 
     if (result?.error) {
-      toast.error("Failed to change role", { description: result.error })
+      toast.error(t("space.settings.roleDialog.toastError"), { description: result.error })
       return
     }
 
-    toast.success("Role updated", {
-      description: `${roleChangeDialog.member.name} is now a ${roleChangeDialog.newRole}.`,
+    toast.success(t("space.settings.roleDialog.toastSuccess"), {
+      description: t("space.settings.roleDialog.toastSuccessDescription", undefined, {
+        name: roleChangeDialog.member.name,
+        role: translateRole(roleChangeDialog.newRole),
+      }),
     })
     setRoleChangeDialog({ isOpen: false, member: null, newRole: null })
     router.refresh()
   }
 
-  const formatStatusLabel = (status?: string | null) => {
-    const normalized = status?.trim()
-    if (!normalized) return "Pending"
-    return normalized.charAt(0).toUpperCase() + normalized.slice(1)
-  }
+  const formatStatusLabel = (status?: string | null) => translateStatus(status)
 
   return (
     <>
     <Tabs defaultValue="members" className="space-y-6">
       <TabsList>
-        <TabsTrigger value="members">Members</TabsTrigger>
-        <TabsTrigger value="invitations">Invitations</TabsTrigger>
-        <TabsTrigger value="danger">Danger Zone</TabsTrigger>
+        <TabsTrigger value="members">{t("space.settings.tabs.members")}</TabsTrigger>
+        <TabsTrigger value="invitations">{t("space.settings.tabs.invitations")}</TabsTrigger>
+        <TabsTrigger value="danger">{t("space.settings.tabs.danger")}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="members">
         <Card className="shadow">
           <CardHeader>
-            <CardTitle>Space Members</CardTitle>
-            <CardDescription>Manage who has access to this space</CardDescription>
+            <CardTitle>{t("space.settings.members.title")}</CardTitle>
+            <CardDescription>{t("space.settings.members.description")}</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Joined</TableHead>
+                  <TableHead>{t("space.settings.members.table.name")}</TableHead>
+                  <TableHead>{t("space.settings.members.table.email")}</TableHead>
+                  <TableHead>{t("space.settings.members.table.role")}</TableHead>
+                  <TableHead>{t("space.settings.members.table.joined")}</TableHead>
                   <TableHead className="text-right">
-                    <span className="sr-only">Actions</span>
+                    <span className="sr-only">{t("space.settings.members.table.actions")}</span>
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -226,19 +249,19 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                     <TableCell>{member.profiles?.email}</TableCell>
                     <TableCell>
                       {member.role === "owner" || member.user_id === currentUserId ? (
-                        <Badge>{member.role}</Badge>
+                        <Badge>{translateRole(member.role)}</Badge>
                       ) : (
                         <Select
                           value={member.role}
                           onValueChange={(value) => handleRoleChangeRequest(member, value as "admin" | "member" | "viewer")}
                         >
                           <SelectTrigger className="w-32">
-                            <SelectValue />
+                            <SelectValue placeholder={t("space.settings.members.selectPlaceholder")} />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="viewer">Viewer</SelectItem>
-                            <SelectItem value="member">Member</SelectItem>
-                            <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="viewer">{t("space.settings.members.selectOptions.viewer")}</SelectItem>
+                            <SelectItem value="member">{t("space.settings.members.selectOptions.member")}</SelectItem>
+                            <SelectItem value="admin">{t("space.settings.members.selectOptions.admin")}</SelectItem>
                           </SelectContent>
                         </Select>
                       )}
@@ -262,19 +285,25 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                               disabled={removingMemberId === member.user_id}
                             >
                               <UserMinus className="mr-1 h-4 w-4" />
-                              Remove
+                              {t("space.settings.members.remove.button")}
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Remove {memberToRemove?.name || "this member"}?</AlertDialogTitle>
+                              <AlertDialogTitle>
+                                {t("space.settings.members.remove.dialogTitle", undefined, {
+                                  name: memberToRemove?.name || t("space.settings.members.remove.button"),
+                                })}
+                              </AlertDialogTitle>
                               <AlertDialogDescription>
-                                {memberToRemove?.email} will no longer have access to this space.
+                                {t("space.settings.members.remove.dialogDescription", undefined, {
+                                  email: memberToRemove?.email || "",
+                                })}
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             {needsRemoveConfirmation && (
                               <p className="text-sm text-destructive font-medium">
-                                This action cannot be undone.
+                                {t("space.settings.members.remove.cannotUndo")}
                               </p>
                             )}
                             <AlertDialogFooter>
@@ -282,7 +311,7 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                                 setMemberToRemove(null)
                                 setNeedsRemoveConfirmation(false)
                               }} disabled={removingMemberId === memberToRemove?.id}>
-                                Cancel
+                                {t("space.dashboard.createSpace.cancel")}
                               </AlertDialogCancel>
                               {needsRemoveConfirmation ? (
                                 <AlertDialogAction
@@ -290,7 +319,9 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                                   className="bg-destructive text-white hover:bg-destructive/90"
                                   disabled={removingMemberId === memberToRemove?.id}
                                 >
-                                  {removingMemberId === memberToRemove?.id ? "Removing..." : "Confirm?"}
+                                  {removingMemberId === memberToRemove?.id
+                                    ? t("space.settings.members.remove.removing")
+                                    : t("space.settings.members.remove.confirm")}
                                 </AlertDialogAction>
                               ) : (
                                 <Button
@@ -298,7 +329,7 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                                   className="bg-destructive text-white hover:bg-destructive/90"
                                   disabled={removingMemberId === memberToRemove?.id}
                                 >
-                                  Remove Member
+                                  {t("space.settings.members.remove.label")}
                                 </Button>
                               )}
                             </AlertDialogFooter>
@@ -317,15 +348,15 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
       <TabsContent value="invitations">
         <Card className="shadow">
           <CardHeader>
-            <CardTitle>Invite Members</CardTitle>
-            <CardDescription>Send invitations to join this space</CardDescription>
+            <CardTitle>{t("space.settings.invitations.title")}</CardTitle>
+            <CardDescription>{t("space.settings.invitations.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <form onSubmit={handleInvite} className="space-y-4">
               <div className="flex gap-2">
                 <input
                   type="email"
-                  placeholder="email@example.com"
+                  placeholder={t("space.settings.invitations.emailPlaceholder")}
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   required
@@ -333,33 +364,33 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                 />
                 <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as "member" | "admin" | "viewer")}>
                   <SelectTrigger className="min-w-28">
-                    <SelectValue placeholder="Role" />
+                    <SelectValue placeholder={t("space.settings.members.selectPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="viewer">Viewer</SelectItem>
-                    <SelectItem value="member">Member</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="viewer">{t("space.settings.members.selectOptions.viewer")}</SelectItem>
+                    <SelectItem value="member">{t("space.settings.members.selectOptions.member")}</SelectItem>
+                    <SelectItem value="admin">{t("space.settings.members.selectOptions.admin")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Button type="submit" disabled={isInviting}>
                   <Send className="mr-2 h-4 w-4" />
-                  Invite
+                  {t("space.settings.invitations.inviteButton")}
                 </Button>
               </div>
             </form>
 
             {invitations.length > 0 && (
               <div>
-                <h3 className="mb-4 font-semibold">Pending Invitations</h3>
+                <h3 className="mb-4 font-semibold">{t("space.settings.invitations.title")}</h3>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Expires</TableHead>
+                      <TableHead>{t("space.settings.invitations.table.email")}</TableHead>
+                      <TableHead>{t("space.settings.invitations.table.role")}</TableHead>
+                      <TableHead>{t("space.settings.invitations.table.status")}</TableHead>
+                      <TableHead>{t("space.settings.invitations.table.expires")}</TableHead>
                       <TableHead className="text-right">
-                        <span className="sr-only">Actions</span>
+                        <span className="sr-only">{t("space.settings.invitations.table.actions")}</span>
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -368,7 +399,7 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                       <TableRow key={invite.id}>
                         <TableCell>{invite.email}</TableCell>
                         <TableCell>
-                          <Badge variant="secondary">{invite.role}</Badge>
+                          <Badge variant="secondary">{translateRole(invite.role)}</Badge>
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary">{formatStatusLabel(invite.status)}</Badge>
@@ -377,7 +408,7 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                         <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Invitation actions">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t("space.settings.invitations.table.actions")}>
                                 <MoreVertical className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -388,7 +419,7 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                                   invitationAction?.id === invite.id && invitationAction?.type === "resend"
                                 }
                               >
-                                Resend invitation
+                                {t("space.settings.invitations.resend")}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
@@ -398,7 +429,7 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                                   invitationAction?.id === invite.id && invitationAction?.type === "revoke"
                                 }
                               >
-                                Revoke invitation
+                                {t("space.settings.invitations.revoke")}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -416,38 +447,40 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
       <TabsContent value="danger">
         <div className="space-y-4">
           <div>
-            <h3 className="text-lg font-semibold text-destructive">Danger Zone</h3>
-            <p className="text-sm text-muted-foreground">Irreversible actions that affect this space</p>
+            <h3 className="text-lg font-semibold text-destructive">{t("space.settings.danger.title")}</h3>
+            <p className="text-sm text-muted-foreground">{t("space.settings.danger.description")}</p>
           </div>
           <Card className="border-destructive bg-destructive/10">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="font-semibold">Delete Space</h4>
-                  <p className="text-sm text-muted-foreground">Permanently delete this space and all its data</p>
+                  <h4 className="font-semibold">{t("space.settings.danger.deleteTitle")}</h4>
+                  <p className="text-sm text-muted-foreground">{t("space.settings.danger.deleteDescription")}</p>
                 </div>
                 <AlertDialog onOpenChange={handleDeleteDialogClose}>
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive" disabled={isDeletingSpace}>
                       <Trash2 className="mr-2 h-4 w-4" />
-                      Delete Space
+                      {t("space.settings.danger.deleteButton")}
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Delete {space.name}?</AlertDialogTitle>
+                      <AlertDialogTitle>
+                        {t("space.settings.danger.dialogTitle", undefined, { name: space.name })}
+                      </AlertDialogTitle>
                       <AlertDialogDescription>
-                        This will delete all workspaces, documents, and conversations in this space.
+                        {t("space.settings.danger.dialogDescription")}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     {needsConfirmation && (
                       <p className="text-sm text-destructive font-medium">
-                        This action cannot be undone.
+                        {t("space.settings.members.remove.cannotUndo")}
                       </p>
                     )}
                     <AlertDialogFooter>
                       <AlertDialogCancel onClick={() => setNeedsConfirmation(false)} disabled={isDeletingSpace}>
-                        Cancel
+                        {t("space.dashboard.createSpace.cancel")}
                       </AlertDialogCancel>
                       {needsConfirmation ? (
                         <AlertDialogAction
@@ -455,7 +488,9 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                           className="bg-destructive text-white hover:bg-destructive/90"
                           disabled={isDeletingSpace}
                         >
-                          {isDeletingSpace ? "Deleting..." : "Confirm?"}
+                          {isDeletingSpace
+                            ? t("space.settings.danger.deleting")
+                            : t("space.settings.danger.deleteConfirm")}
                         </AlertDialogAction>
                       ) : (
                         <Button
@@ -463,7 +498,7 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                           className="bg-destructive text-white hover:bg-destructive/90"
                           disabled={isDeletingSpace}
                         >
-                          Delete Space
+                          {t("space.settings.danger.deleteButton")}
                         </Button>
                       )}
                     </AlertDialogFooter>
@@ -486,28 +521,31 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Change member role?</AlertDialogTitle>
+          <AlertDialogTitle>{t("space.settings.roleDialog.title")}</AlertDialogTitle>
           <AlertDialogDescription>
-            Change {roleChangeDialog.member?.name} ({roleChangeDialog.member?.email}) from{" "}
-            <strong>{roleChangeDialog.member?.currentRole}</strong> to{" "}
-            <strong>{roleChangeDialog.newRole}</strong>?
+            {t("space.settings.roleDialog.description", undefined, {
+              name: roleChangeDialog.member?.name ?? "",
+              email: roleChangeDialog.member?.email ?? "",
+            })}{" "}
+            <strong>{translateRole(roleChangeDialog.member?.currentRole)}</strong> →{" "}
+            <strong>{translateRole(roleChangeDialog.newRole)}</strong>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="text-sm text-muted-foreground space-y-2">
           {roleChangeDialog.newRole === "viewer" && (
-            <p>Viewers have read-only access and cannot create or modify content.</p>
+            <p>{t("space.settings.roleDialog.viewer")}</p>
           )}
           {roleChangeDialog.newRole === "member" && (
-            <p>Members can manage workspaces and documents but cannot access space Settings.</p>
+            <p>{t("space.settings.roleDialog.member")}</p>
           )}
           {roleChangeDialog.newRole === "admin" && (
-            <p>Admins have full access including space Settings and member management.</p>
+            <p>{t("space.settings.roleDialog.admin")}</p>
           )}
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isChangingRole}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isChangingRole}>{t("space.settings.roleDialog.cancel")}</AlertDialogCancel>
           <AlertDialogAction onClick={handleRoleChangeConfirm} disabled={isChangingRole}>
-            {isChangingRole ? "Changing..." : "Changing Role"}
+            {isChangingRole ? t("space.settings.roleDialog.confirming") : t("space.settings.roleDialog.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

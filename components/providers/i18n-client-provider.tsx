@@ -35,7 +35,8 @@ export function I18nClientProvider({ children, initialLanguage, initialMessages 
     () => ({
       language,
       messages,
-      t: (key: string, fallback?: string) => translate(messages, key, fallback),
+      t: (key: string, fallback?: string, replacements?: Record<string, string | number>) =>
+        translate(messages, key, fallback, replacements),
       setLanguage,
     }),
     [language, messages, setLanguage],

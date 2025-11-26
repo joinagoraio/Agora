@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache"
 import OpenAI from "openai"
 import { env } from "@/lib/env"
 import { requireAuth, requireAuthAndPermission } from "@/lib/middleware/authorization"
+import { getServerTranslator } from "@/lib/i18n/server"
 
 export async function createSpace(
   name: string,
@@ -17,6 +18,7 @@ export async function createSpace(
   },
 ) {
   const supabase = await createClient()
+  const { t } = await getServerTranslator()
 
   const {
     data: { user },
@@ -105,8 +107,8 @@ export async function createSpace(
     
     // Handle duplicate slug error with user-friendly message
     if (spaceError.code === "23505" || spaceError.message.includes("spaces_slug_unique")) {
-      return { 
-        error: `A space with the name "${name}" already exists. Please choose a different name.` 
+      return {
+        error: t("space.dashboard.createSpace.duplicate", undefined, { name }),
       }
     }
     
@@ -142,6 +144,7 @@ export async function updateSpace(
   },
 ) {
   const supabase = await createClient()
+  const { t } = await getServerTranslator()
 
   const {
     data: { user },
@@ -156,8 +159,8 @@ export async function updateSpace(
     // Handle duplicate slug error with user-friendly message
     if (error.code === "23505" || error.message.includes("spaces_slug_unique")) {
       const spaceName = updates.name || "this space"
-      return { 
-        error: `A space with the name "${spaceName}" already exists. Please choose a different name.` 
+      return {
+        error: t("space.dashboard.createSpace.duplicate", undefined, { name: spaceName }),
       }
     }
     

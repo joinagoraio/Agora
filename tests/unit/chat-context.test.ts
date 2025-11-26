@@ -43,8 +43,8 @@ describe("buildWorkspaceContext", () => {
     const result = buildWorkspaceContext({ workspace: baseWorkspace })
 
     expect(result.workspaceContextSection).toContain("Workspace name: Climate Taskforce")
-    expect(result.workspaceContextSection).toContain("Workspace context:\nFocus on energy transition policies.")
-    expect(result.workspaceContextSection).toContain("Workspace location: Amsterdam")
+    expect(result.workspaceContextSection).toContain("Workspace additional AI context:\nFocus on energy transition policies.")
+    expect(result.workspaceContextSection).toContain("Workspace jurisdiction: Amsterdam")
     expect(result.workspaceContextSection).toContain("Workspace summary:\nImproving sustainability across the organization.")
     expect(result.workspaceContextSection).toContain(
       "Workspace description:\nA detailed workspace focused on implementing climate policies",

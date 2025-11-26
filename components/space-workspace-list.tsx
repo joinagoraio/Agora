@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Layers, Plus } from "lucide-react"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 export type SpaceWorkspace = {
   id: string
@@ -23,13 +24,15 @@ interface SpaceWorkspaceListProps {
 }
 
 export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }: SpaceWorkspaceListProps) {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-xl font-semibold text-foreground">Workspaces</h3>
+          <h3 className="text-xl font-semibold text-foreground">{t("space.workspaces.title")}</h3>
           <p className="text-sm text-muted-foreground">
-            Each workspace inherits the {spaceName} summary, description, and any public documents maintained below.
+            {t("space.workspaces.subtitle", undefined, { space: spaceName })}
           </p>
         </div>
         {canCreate && (
@@ -38,7 +41,7 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
             trigger={
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
-                New workspace
+                {t("space.workspaces.newWorkspace")}
               </Button>
             }
           />
@@ -50,9 +53,9 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
           <CardContent className="flex flex-col items-center justify-center gap-3 py-12 text-center">
             <Layers className="h-10 w-10 text-muted-foreground" />
             <div>
-              <h4 className="text-base font-semibold text-foreground">No workspaces yet</h4>
+              <h4 className="text-base font-semibold text-foreground">{t("space.workspaces.emptyTitle")}</h4>
               <p className="text-sm text-muted-foreground">
-                Create a workspace to start analysing documents and chatting with the assistant.
+                {t("space.workspaces.emptyDescription")}
               </p>
             </div>
             {canCreate && (
@@ -61,7 +64,7 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
                 trigger={
                   <Button variant="outline">
                     <Plus className="mr-2 h-4 w-4" />
-                    New workspace
+                    {t("space.workspaces.newWorkspace")}
                   </Button>
                 }
               />
@@ -79,17 +82,19 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
                   </Link>
                 </CardTitle>
                 <CardDescription className="text-sm text-muted-foreground">
-                  Created {new Date(workspace.created_at).toLocaleDateString()}
+                  {t("space.workspaces.createdLabel", undefined, {
+                    date: new Date(workspace.created_at).toLocaleDateString(),
+                  })}
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-1 flex-col justify-between gap-4">
                 <p className="text-sm text-muted-foreground line-clamp-4">
-                  {workspace.description || "No additional description provided yet."}
+                  {workspace.description || t("space.workspaces.descriptionFallback")}
                 </p>
                 <div className="flex items-center justify-between">
-                  <Badge variant="secondary">Inherits scope</Badge>
+                  <Badge variant="secondary">{t("space.workspaces.inheritsScope")}</Badge>
                   <Button variant="ghost" size="sm" asChild className="px-2 text-primary hover:text-primary">
-                    <Link href={`/workspaces/${workspace.id}`}>Go to Workspace</Link>
+                    <Link href={`/workspaces/${workspace.id}`}>{t("space.workspaces.goToWorkspace")}</Link>
                   </Button>
                 </div>
               </CardContent>

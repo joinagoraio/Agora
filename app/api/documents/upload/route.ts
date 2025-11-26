@@ -226,7 +226,10 @@ export async function POST(req: NextRequest) {
     if (!isValidFileType) {
       return respondWithRateLimit(
         NextResponse.json(
-          { error: "File type validation failed. File content does not match declared type." },
+          {
+            error: "File type validation failed. File content does not match declared type.",
+            errorCode: "FILE_TYPE_MISMATCH",
+          },
           { status: 400 },
         ),
       )

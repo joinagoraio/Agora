@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label"
 import { createSpace } from "@/lib/actions/space"
 import { Plus } from "lucide-react"
 import { toast } from "sonner"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 export function CreateSpaceDialog() {
   const [open, setOpen] = useState(false)
@@ -26,12 +27,13 @@ export function CreateSpaceDialog() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  const { t } = useI18n()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const trimmedName = name.trim()
     if (!trimmedName) {
-      setError("Please provide a space name")
+      setError(t("space.dashboard.createSpace.errorRequired"))
       return
     }
 
@@ -42,7 +44,7 @@ export function CreateSpaceDialog() {
 
     if (result.error) {
       setError(result.error)
-      toast.error("Could not create space", {
+      toast.error(t("space.dashboard.createSpace.toastError"), {
         description: result.error,
       })
       setIsLoading(false)
@@ -50,8 +52,10 @@ export function CreateSpaceDialog() {
       setOpen(false)
       setName("")
       setIsLoading(false)
-      toast.success("Space created", {
-        description: `${result.data?.name || trimmedName} is ready.`,
+      toast.success(t("space.dashboard.createSpace.toastSuccess"), {
+        description: t("space.dashboard.createSpace.toastSuccessDescription", undefined, {
+          name: result.data?.name || trimmedName,
+        }),
       })
       router.push(`/spaces/${result.data?.id}`)
     }
@@ -62,23 +66,21 @@ export function CreateSpaceDialog() {
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
-          Create Space
+          {t("space.dashboard.createSpace.trigger")}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Create a new space</DialogTitle>
-            <DialogDescription>
-              Spaces are separate environments for different teams or organizations.
-            </DialogDescription>
+            <DialogTitle>{t("space.dashboard.createSpace.title")}</DialogTitle>
+            <DialogDescription>{t("space.dashboard.createSpace.description")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Space Name</Label>
+              <Label htmlFor="name">{t("space.dashboard.createSpace.nameLabel")}</Label>
               <Input
                 id="name"
-                placeholder="My Organization"
+                placeholder={t("space.dashboard.createSpace.namePlaceholder")}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -88,10 +90,10 @@ export function CreateSpaceDialog() {
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isLoading}>
-              Cancel
+              {t("space.dashboard.createSpace.cancel")}
             </Button>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Creating..." : "Create Space"}
+              {isLoading ? t("space.dashboard.createSpace.submitting") : t("space.dashboard.createSpace.submit")}
             </Button>
           </DialogFooter>
         </form>

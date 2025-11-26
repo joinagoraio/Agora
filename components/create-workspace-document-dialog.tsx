@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { createWorkspaceDocument } from "@/lib/actions/document"
 import { Loader2, Plus } from "lucide-react"
 import { toast } from "sonner"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface CreateWorkspaceDocumentDialogProps {
   workspaceId: string
@@ -36,6 +37,16 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const { t } = useI18n()
+
+  const classificationOptions = useMemo(
+    () => [
+      { value: "public" as const, label: t("workspace.common.classification.public") },
+      { value: "internal" as const, label: t("workspace.common.classification.internal") },
+      { value: "confidential" as const, label: t("workspace.common.classification.confidential") },
+    ],
+    [t],
+  )
 
   const handleOpenChange = (value: boolean) => {
     if (!value) {
@@ -54,9 +65,9 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
     const hasInstructions = trimmedInstructions.length > 0
 
     if (!trimmedTitle) {
-      const message = "Please provide a title"
+      const message = t("workspace.documents.create.errorTitleRequired")
       setError(message)
-      toast.error("Title required", { description: message })
+      toast.error(t("workspace.documents.create.toastTitleRequired"), { description: message })
       return
     }
 
@@ -73,9 +84,9 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
       })
 
       if (result.error || !result.data) {
-        setError(result.error || "Failed to create document")
-        toast.error("Could not create document", {
-          description: result.error || "Something went wrong",
+        setError(result.error || t("workspace.documents.create.toastErrorDescription"))
+        toast.error(t("workspace.documents.create.toastErrorTitle"), {
+          description: result.error || t("workspace.documents.create.toastErrorDescription"),
         })
         setIsCreating(false)
         setIsGeneratingDraft(false)
@@ -84,17 +95,17 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
 
       const createdTitle = result.data?.title || trimmedTitle
       setOpen(false)
-      toast.success("Document created", {
+      toast.success(t("workspace.documents.create.toastSuccess"), {
         description: hasInstructions
-          ? `${createdTitle} is being drafted.`
-          : `${createdTitle} is ready for editing.`,
+          ? t("workspace.documents.create.toastSuccessDraft", undefined, { title: createdTitle })
+          : t("workspace.documents.create.toastSuccessReady", undefined, { title: createdTitle }),
       })
       router.push(`/workspaces/${workspaceId}/my-documents/${result.data.id}`)
     } catch (err) {
       console.error("[CreateWorkspaceDocumentDialog] Failed to create document:", err)
-      const description = err instanceof Error ? err.message : "Failed to create document"
+      const description = err instanceof Error ? err.message : t("workspace.documents.create.toastErrorDescription")
       setError(description)
-      toast.error("Could not create document", {
+      toast.error(t("workspace.documents.create.toastErrorTitle"), {
         description,
       })
     } finally {
@@ -109,33 +120,31 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
         {trigger || (
           <Button size="sm">
             <Plus className="mr-2 h-4 w-4" />
-            New Document
+            {t("workspace.documents.create.trigger")}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
-          <DialogTitle>Create workspace document</DialogTitle>
-          <DialogDescription>
-            Create a new document. Provide optional AI drafting instructions to generate a first version automatically, or leave blank to start from scratch.
-          </DialogDescription>
+          <DialogTitle>{t("workspace.documents.create.title")}</DialogTitle>
+          <DialogDescription>{t("workspace.documents.create.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="document-title">Title</Label>
+            <Label htmlFor="document-title">{t("workspace.documents.create.titleLabel")}</Label>
             <Input
               id="document-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="e.g. Policy summary for Q2 review"
+              placeholder={t("workspace.documents.create.titlePlaceholder")}
               autoFocus
               disabled={isCreating}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="document-classification">Classification</Label>
+            <Label htmlFor="document-classification">{t("workspace.common.classification.label")}</Label>
             <Select
               value={classification}
               onValueChange={(value: "public" | "internal" | "confidential") => setClassification(value)}
@@ -145,25 +154,27 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="public">Public</SelectItem>
-                <SelectItem value="internal">Internal</SelectItem>
-                <SelectItem value="confidential">Confidential</SelectItem>
+                {classificationOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="document-instructions">Instructions for the document (optional)</Label>
+            <Label htmlFor="document-instructions">{t("workspace.documents.create.instructionsLabel")}</Label>
             <Textarea
               id="document-instructions"
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
-              placeholder="Describe what this document is for, its purpose, audience, tone, and any key points to include. Leave blank to draft manually."
+              placeholder={t("workspace.documents.create.instructionsPlaceholder")}
               rows={6}
               disabled={isCreating}
             />
             <p className="text-xs text-muted-foreground">
-              When instructions are provided, the AI will automatically generate a first draft using all available workspace knowledge. You can always edit or draft manually.
+              {t("workspace.documents.create.instructionsHint")}
             </p>
           </div>
 
@@ -172,18 +183,20 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
 
         <DialogFooter className="space-x-2">
           <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isCreating}>
-            Cancel
+            {t("workspace.documents.create.buttonCancel")}
           </Button>
           <Button type="button" onClick={handleCreate} disabled={isCreating}>
             {isCreating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {isGeneratingDraft ? "Generating draft..." : "Creating..."}
+                {isGeneratingDraft
+                  ? t("workspace.documents.create.generatingDraft")
+                  : t("workspace.documents.create.creating")}
               </>
             ) : (
               instructions.trim()
-                ? "Create & Generate Draft"
-                : "Create"
+                ? t("workspace.documents.create.buttonCreateDraft")
+                : t("workspace.documents.create.buttonCreate")
             )}
           </Button>
         </DialogFooter>

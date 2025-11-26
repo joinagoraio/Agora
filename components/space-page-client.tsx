@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import Link from "next/link"
 
 import { updateSpaceScope, updateSpace, enhanceScopeText } from "@/lib/actions/space"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 type SpaceScope = {
   summary?: string | null
@@ -63,6 +64,7 @@ export function SpacePageClient({
   canAccessSettings,
   wizardState,
 }: SpacePageClientProps) {
+  const { t } = useI18n()
   const [spaceTitle, setSpaceTitle] = useState(spaceName)
   const [spaceTitleDraft, setSpaceTitleDraft] = useState(spaceName)
   const [spaceDetails, setSpaceDetails] = useState({
@@ -91,6 +93,16 @@ export function SpacePageClient({
     if (!str) return ""
     return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
   }
+
+const translateScopeBadge = (value: string | null | undefined, t: ReturnType<typeof useI18n>["t"]) => {
+  if (!value) return ""
+  return t(`space.wizard.basics.scopeOptions.${value}`, capitalizeFirst(value))
+}
+
+const translateVisibilityBadge = (value: string | null | undefined, t: ReturnType<typeof useI18n>["t"]) => {
+  if (!value) return ""
+  return t(`space.wizard.basics.visibilityOptions.${value}`, capitalizeFirst(value))
+}
   const [summaryDraft, setSummaryDraft] = useState(initialScope.summary ?? "")
   const [descriptionDraft, setDescriptionDraft] = useState(initialScope.description ?? "")
   const [spaceTypeDraft, setSpaceTypeDraft] = useState(initialSpaceType ?? "municipal")
@@ -163,8 +175,12 @@ export function SpacePageClient({
           <div>
             <h2 className="text-2xl font-semibold text-foreground">{spaceTitle}</h2>
             <div className="flex flex-wrap items-center gap-2 pt-2 text-xs text-muted-foreground">
-              {spaceDetails.spaceType && <Badge variant="outline">{capitalizeFirst(spaceDetails.spaceType)}</Badge>}
-              {spaceDetails.visibility && <Badge variant="outline">{capitalizeFirst(spaceDetails.visibility)}</Badge>}
+              {spaceDetails.spaceType && (
+                <Badge variant="outline">{translateScopeBadge(spaceDetails.spaceType, t)}</Badge>
+              )}
+              {spaceDetails.visibility && (
+                <Badge variant="outline">{translateVisibilityBadge(spaceDetails.visibility, t)}</Badge>
+              )}
               {timeframeText && <Badge variant="secondary">{timeframeText}</Badge>}
               {jurisdictionText && jurisdictionText.length > 0 && (
                 <span className="text-muted-foreground">{jurisdictionText}</span>
@@ -174,21 +190,26 @@ export function SpacePageClient({
           {canManage && !isEditingScope && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" title="More options">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  title={t("space.overview.menu.more")}
+                >
                   <MoreVertical className="h-4 w-4" />
-                  <span className="sr-only">More options</span>
+                  <span className="sr-only">{t("space.overview.menu.more")}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={handleEditClick}>
                   <PencilLine className="h-4 w-4" />
-                  Edit
+                  {t("space.overview.menu.edit")}
                 </DropdownMenuItem>
                 {canAccessSettings && (
                   <DropdownMenuItem asChild>
                     <Link href={`/spaces/${spaceId}/settings`}>
                       <Settings className="h-4 w-4" />
-                      Settings
+                      {t("space.overview.menu.settings")}
                     </Link>
                   </DropdownMenuItem>
                 )}
@@ -199,10 +220,10 @@ export function SpacePageClient({
 
         <div className="space-y-5">
           <p className="whitespace-pre-line text-base font-semibold text-foreground">
-            {summaryText ?? "No summary provided yet."}
+            {summaryText ?? t("space.overview.summaryEmpty")}
           </p>
           <p className="whitespace-pre-line text-sm text-muted-foreground">
-            {descriptionText ?? "No description provided yet."}
+            {descriptionText ?? t("space.overview.descriptionEmpty")}
           </p>
         </div>
 
@@ -221,7 +242,7 @@ export function SpacePageClient({
     const pattern = /^\d{4}(?:\s?[–-]\s?\d{4})?$/
 
     if (!pattern.test(trimmed)) {
-      setTimeframeError("Enter a 4-digit year or a range like 2024 – 2027.")
+      setTimeframeError(t("space.overview.timeframeError"))
       return false
     }
 
@@ -453,62 +474,69 @@ export function SpacePageClient({
       {isEditingScope ? (
         <div className="space-y-4 rounded-lg border border-border bg-card/50 p-4 shadow-lg">
           <h2 className="text-lg font-semibold text-foreground">
-            Editing: <span className="text-primary">{spaceTitle}</span>
+            {t("common.labels.editing")}{" "}
+            <span className="text-primary">{spaceTitle}</span>
           </h2>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="space-title">Space title</Label>
+              <Label htmlFor="space-title">{t("space.overview.edit.spaceTitleLabel")}</Label>
               <Input
                 id="space-title"
                 value={spaceTitleDraft}
                 onChange={(event) => setSpaceTitleDraft(event.target.value)}
-                placeholder="Space name"
+                placeholder={t("space.overview.edit.spaceTitlePlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="space-jurisdiction">Jurisdiction</Label>
+              <Label htmlFor="space-jurisdiction">{t("space.overview.edit.jurisdictionLabel")}</Label>
               <Input
                 id="space-jurisdiction"
                 value={jurisdictionDraft}
                 onChange={(event) => setJurisdictionDraft(event.target.value)}
-                placeholder="e.g., Amsterdam"
+                placeholder={t("space.overview.edit.jurisdictionPlaceholder")}
               />
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="space-scope">Scope</Label>
+              <Label htmlFor="space-scope">{t("space.wizard.basics.scopeLabel")}</Label>
               <Select value={spaceTypeDraft} onValueChange={setSpaceTypeDraft}>
                 <SelectTrigger id="space-scope">
-                  <SelectValue aria-label="Scope" placeholder="Select scope" />
+                  <SelectValue
+                    aria-label={t("space.wizard.basics.scopeLabel")}
+                    placeholder={t("space.wizard.basics.scopePlaceholder")}
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="national">National</SelectItem>
-                  <SelectItem value="regional">Regional</SelectItem>
-                  <SelectItem value="municipal">Municipal</SelectItem>
-                  <SelectItem value="party">Party</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                  <SelectItem value="national">{t("space.wizard.basics.scopeOptions.national")}</SelectItem>
+                  <SelectItem value="regional">{t("space.wizard.basics.scopeOptions.regional")}</SelectItem>
+                  <SelectItem value="municipal">{t("space.wizard.basics.scopeOptions.municipal")}</SelectItem>
+                  <SelectItem value="party">{t("space.wizard.basics.scopeOptions.party")}</SelectItem>
+                  <SelectItem value="other">{t("space.wizard.basics.scopeOptions.other")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="space-visibility">Visibility</Label>
+              <Label htmlFor="space-visibility">{t("space.wizard.basics.visibilityLabel")}</Label>
               <Select value={visibilityDraft} onValueChange={setVisibilityDraft}>
                 <SelectTrigger id="space-visibility">
-                  <SelectValue aria-label="Visibility" placeholder="Select" />
+                  <SelectValue
+                    aria-label={t("space.wizard.basics.visibilityLabel")}
+                    placeholder={t("space.wizard.basics.visibilityPlaceholder")}
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="public">Public</SelectItem>
-                  <SelectItem value="internal">Internal</SelectItem>
-                  <SelectItem value="confidential">Confidential</SelectItem>
+                  <SelectItem value="public">{t("space.wizard.basics.visibilityOptions.public")}</SelectItem>
+                  <SelectItem value="internal">{t("space.wizard.basics.visibilityOptions.internal")}</SelectItem>
+                  <SelectItem value="confidential">{t("space.wizard.basics.visibilityOptions.confidential")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="space-timeframe">Timeframe</Label>
+            <Label htmlFor="space-timeframe">{t("space.overview.edit.timeframeLabel")}</Label>
             <Input
               id="space-timeframe"
               value={timeframeDraft}
@@ -519,7 +547,7 @@ export function SpacePageClient({
                 )
               }
               onBlur={validateTimeframe}
-              placeholder="e.g. 2024 – 2027"
+              placeholder={t("space.overview.edit.timeframePlaceholder")}
               inputMode="numeric"
               pattern="\d{4}(?:\s?–\s?\d{4})?"
             />
@@ -527,13 +555,13 @@ export function SpacePageClient({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="space-summary">Mission Statement</Label>
+            <Label htmlFor="space-summary">{t("space.overview.edit.summaryLabel")}</Label>
             <div className="relative">
               <Textarea
                 id="space-summary"
                 value={summaryDraft}
                 onChange={(event) => setSummaryDraft(event.target.value)}
-                placeholder="Add summary"
+                placeholder={t("space.overview.edit.summaryPlaceholder")}
                 rows={4}
                 className="pb-10"
                 onFocus={() => setActiveField("summary")}
@@ -551,7 +579,7 @@ export function SpacePageClient({
                       className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
                     >
                       <RotateCcw className="h-4 w-4" />
-                      <span className="sr-only">Undo mission statement enhancement</span>
+                      <span className="sr-only">{t("space.overview.edit.undoSummary")}</span>
                     </Button>
                   )}
                   <TooltipProvider>
@@ -571,11 +599,11 @@ export function SpacePageClient({
                           ) : (
                             <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
                           )}
-                          <span className="sr-only">Enhance mission statement with AI</span>
+                          <span className="sr-only">{t("space.overview.edit.enhanceSummary")}</span>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="left" align="center">
-                        Generate an improved mission statement with AI.
+                        {t("space.overview.edit.enhanceSummaryHelp")}
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -585,13 +613,13 @@ export function SpacePageClient({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="space-description">Description</Label>
+            <Label htmlFor="space-description">{t("space.overview.edit.descriptionLabel")}</Label>
             <div className="relative">
               <Textarea
                 id="space-description"
                 value={descriptionDraft}
                 onChange={(event) => setDescriptionDraft(event.target.value)}
-                placeholder="Add description"
+                placeholder={t("space.overview.edit.descriptionPlaceholder")}
                 rows={8}
                 className="pb-10"
                 onFocus={() => setActiveField("description")}
@@ -609,7 +637,7 @@ export function SpacePageClient({
                       className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
                     >
                       <RotateCcw className="h-4 w-4" />
-                      <span className="sr-only">Undo description enhancement</span>
+                      <span className="sr-only">{t("space.overview.edit.undoDescription")}</span>
                     </Button>
                   )}
                   <TooltipProvider>
@@ -629,11 +657,11 @@ export function SpacePageClient({
                           ) : (
                             <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
                           )}
-                          <span className="sr-only">Enhance description with AI</span>
+                          <span className="sr-only">{t("space.overview.edit.enhanceDescription")}</span>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="left" align="center">
-                        Ask AI to develop the description for you.
+                        {t("space.overview.edit.enhanceDescriptionHelp")}
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -647,18 +675,18 @@ export function SpacePageClient({
           <div className="flex items-center justify-end gap-2">
             <Button type="button" variant="ghost" onClick={handleCancelEdit} disabled={isSavingScope}>
               <X className="mr-2 h-4 w-4" />
-              Cancel
+              {t("space.overview.edit.cancel")}
             </Button>
             <Button type="button" onClick={handleSaveScope} disabled={isSavingScope}>
               {isSavingScope ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving…
+                  {t("space.overview.edit.saving")}
                 </>
               ) : (
                 <>
                   <Save className="mr-2 h-4 w-4" />
-                  Save
+                  {t("space.overview.edit.save")}
                 </>
               )}
             </Button>

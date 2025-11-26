@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,7 @@ import { GoogleDriveSearch } from "@/components/google-drive-search"
 import { formatSourceType } from "@/lib/utils"
 import { getGoogleTokens } from "@/lib/actions/auth"
 import { toast } from "sonner"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface AddFromSourceDialogProps {
   workspaceId: string
@@ -58,6 +59,16 @@ export function AddFromSourceDialog({
   const [success, setSuccess] = useState<string | null>(null)
   const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null)
   const router = useRouter()
+  const { t } = useI18n()
+
+  const classificationOptions = useMemo(
+    () => [
+      { value: "public" as const, label: t("workspace.common.classification.public") },
+      { value: "internal" as const, label: t("workspace.common.classification.internal") },
+      { value: "confidential" as const, label: t("workspace.common.classification.confidential") },
+    ],
+    [t],
+  )
 
   // Filter out direct_upload sources since they have their own upload button
   // Filter out workspace_generated sources since they're for internal workspace documents, not external sources
@@ -109,18 +120,23 @@ export function AddFromSourceDialog({
 
       if (result.error) {
         setError(result.error)
-        toast.error("Failed to add documents", { description: result.error })
-      } else if (result.addedCount === 0 && documents.length > 0) {
-        // No documents were added even though documents were selected
-        const message = "Failed to add documents. Please check the console for details or try again."
+        toast.error(t("workspace.sources.addFrom.toastFailure"), { description: result.error })
+      } else if ((result.addedCount ?? 0) === 0 && documents.length > 0) {
+        const message = t("workspace.sources.addFrom.toastFailureDescription")
         setError(message)
-        toast.error("No documents added", { description: message })
+        toast.error(t("workspace.sources.addFrom.toastNoDocuments"), { description: message })
       } else {
-        setSuccess(`Successfully added ${result.addedCount || 0} document(s)`)
-        toast.success("Documents added", {
-          description: `${result.addedCount || documents.length} file(s) imported${
-            selectedSource ? ` from ${selectedSource.name}` : ""
-          }.`,
+        const count = result.addedCount ?? documents.length
+        const sourceSuffix = selectedSource
+          ? t("workspace.sources.addFrom.sourceSuffix", undefined, { name: selectedSource.name })
+          : ""
+        const successMessage = t("workspace.sources.addFrom.toastSuccessDescription", undefined, {
+          count,
+          source: sourceSuffix,
+        })
+        setSuccess(successMessage)
+        toast.success(t("workspace.sources.addFrom.toastSuccess"), {
+          description: successMessage,
         })
         router.refresh()
         onSuccess?.()
@@ -136,9 +152,9 @@ export function AddFromSourceDialog({
         }, 2000)
       }
     } catch (err) {
-      const description = err instanceof Error ? err.message : "Failed to add documents"
+      const description = err instanceof Error ? err.message : t("workspace.sources.addFrom.toastFailure")
       setError(description)
-      toast.error("Failed to add documents", { description })
+      toast.error(t("workspace.sources.addFrom.toastFailure"), { description })
     } finally {
       setAdding(false)
     }
@@ -160,14 +176,14 @@ export function AddFromSourceDialog({
         {trigger || (
           <Button variant="outline" size="sm">
             <Plus className="mr-2 h-4 w-4" />
-            Add from Source
+            {t("workspace.sources.addFrom.trigger")}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="!max-w-[95vw] sm:!max-w-[1400px] w-full max-h-[90vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0">
-          <DialogTitle>Add Documents from Source</DialogTitle>
-          <DialogDescription>Search and add documents from your connected sources</DialogDescription>
+          <DialogTitle>{t("workspace.sources.addFrom.title")}</DialogTitle>
+          <DialogDescription>{t("workspace.sources.addFrom.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-6">
@@ -175,17 +191,15 @@ export function AddFromSourceDialog({
             {/* Source Selection */}
             {availableSources.length === 0 ? (
               <Alert>
-                <AlertDescription>
-                  No sources available. Please add a source first in the Sources tab.
-                </AlertDescription>
+                <AlertDescription>{t("workspace.sources.addFrom.noSources")}</AlertDescription>
               </Alert>
             ) : (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="source-select">Select Source</Label>
+                  <Label htmlFor="source-select">{t("workspace.sources.addFrom.selectLabel")}</Label>
                   <Select value={selectedSourceId} onValueChange={setSelectedSourceId}>
                     <SelectTrigger id="source-select">
-                      <SelectValue placeholder="Choose a source" />
+                      <SelectValue placeholder={t("workspace.sources.addFrom.selectPlaceholder")} />
                     </SelectTrigger>
                     <SelectContent>
                       {availableSources.map((source) => (
@@ -198,21 +212,23 @@ export function AddFromSourceDialog({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="classification">Classification</Label>
+                  <Label htmlFor="classification">{t("workspace.common.classification.label")}</Label>
                   <Select value={classification} onValueChange={(value: any) => setClassification(value)}>
                     <SelectTrigger id="classification">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="public">Public</SelectItem>
-                      <SelectItem value="internal">Internal</SelectItem>
-                      <SelectItem value="confidential">Confidential</SelectItem>
+                      {classificationOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   {classification === "confidential" && (
                     <Alert>
                       <AlertDescription className="text-xs">
-                        Confidential documents cannot be shared externally or exported.
+                        {t("workspace.common.classification.confidentialNotice")}
                       </AlertDescription>
                     </Alert>
                   )}
@@ -222,7 +238,7 @@ export function AddFromSourceDialog({
                 {!selectedSourceId && (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <p className="text-sm text-muted-foreground">
-                      Please select a source to search and add documents.
+                      {t("workspace.sources.addFrom.selectSourcePrompt")}
                     </p>
                   </div>
                 )}
@@ -247,7 +263,7 @@ export function AddFromSourceDialog({
                     ) : (
                       <Alert variant="destructive">
                         <AlertDescription>
-                          Google Drive source is missing access token. Please reconnect your Google account in the Sources settings.
+                          {t("workspace.sources.addFrom.missingToken")}
                         </AlertDescription>
                       </Alert>
                     )}
@@ -258,7 +274,7 @@ export function AddFromSourceDialog({
                 {selectedSource && selectedSource.type !== "overheid_nl" && selectedSource.type !== "google_drive" && (
                   <Alert>
                     <AlertDescription>
-                      Search functionality for {selectedSource.type} source is not yet implemented.
+                      {t("workspace.sources.addFrom.otherPlaceholder", undefined, { type: selectedSource.type })}
                     </AlertDescription>
                   </Alert>
                 )}
@@ -285,7 +301,7 @@ export function AddFromSourceDialog({
             {adding && (
               <div className="flex items-center py-2">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mr-2" />
-                <span className="text-sm text-muted-foreground">Adding documents...</span>
+                <span className="text-sm text-muted-foreground">{t("workspace.sources.addFrom.adding")}</span>
               </div>
             )}
           </div>

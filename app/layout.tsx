@@ -37,8 +37,8 @@ export default async function RootLayout({
       <body className={`font-sans antialiased bg-white`}>
         <I18nClientProvider initialLanguage={language} initialMessages={messages}>
           <ErrorBoundary>{children}</ErrorBoundary>
-          <Toaster position="bottom-center" richColors closeButton />
-          <Analytics />
+        <Toaster position="bottom-center" richColors closeButton />
+        <Analytics />
         </I18nClientProvider>
       </body>
     </html>

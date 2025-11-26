@@ -267,7 +267,7 @@ export default async function WorkspacePage({
         : null,
       source_doc: {
         id: doc.id,
-        title: doc.title || "View document",
+        title: doc.title || t("workspace.documents.list.viewDocument"),
         url: viewerUrl,
       },
     }

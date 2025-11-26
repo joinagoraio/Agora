@@ -25,6 +25,7 @@ import {
 import { updateWorkspace, enhanceWorkspaceText } from "@/lib/actions/workspace"
 import { MapPin, FileText, Wand2, RotateCcw, Loader2, BookOpen } from "lucide-react"
 import { AddOverheidDocumentsDialog } from "@/components/add-overheid-documents-dialog"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface WelcomeWorkspaceDialogProps {
   workspace: {
@@ -41,6 +42,7 @@ interface WelcomeWorkspaceDialogProps {
 
 export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: WelcomeWorkspaceDialogProps) {
   const router = useRouter()
+  const { t } = useI18n()
   const [location, setLocation] = useState(workspace.location || "")
   const [summary, setSummary] = useState(workspace.summary || "")
   const [description, setDescription] = useState(workspace.description || "")
@@ -384,7 +386,7 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
                           className="w-fit justify-start text-xs"
                         >
                           <FileText className="mr-2 h-3 w-3" />
-                          Add Documents from Overheid.nl
+                          {t("workspace.sources.overheidDialog.title")}
                         </Button>
                       </span>
                     </TooltipTrigger>

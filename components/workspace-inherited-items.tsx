@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { FileIcon, defaultStyles } from "react-file-icon"
 import { FileText, Search } from "lucide-react"
 import { getDocumentFileExtension } from "@/lib/utils/document-files"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 type ParentSpace = {
   id: string
@@ -39,13 +40,6 @@ interface WorkspaceInheritedItemsProps {
   showEmptyState?: boolean
 }
 
-const itemTypeLabels: Record<string, string> = {
-  policy: "Policy",
-  document: "Document",
-  answer: "Answer",
-  note: "Note",
-}
-
 function getItemTitle(item: InheritedItem) {
   return (
     item.payload?.title ??
@@ -62,6 +56,17 @@ function getItemDescription(item: InheritedItem) {
 
 export function WorkspaceInheritedItems({ items, showEmptyState = true }: WorkspaceInheritedItemsProps) {
   const [searchQuery, setSearchQuery] = useState("")
+  const { t } = useI18n()
+
+  const itemTypeLabels = useMemo(
+    () => ({
+      policy: t("workspace.sections.inherited.itemTypes.policy"),
+      document: t("workspace.sections.inherited.itemTypes.document"),
+      answer: t("workspace.sections.inherited.itemTypes.answer"),
+      note: t("workspace.sections.inherited.itemTypes.note"),
+    }),
+    [t],
+  )
 
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -101,11 +106,8 @@ export function WorkspaceInheritedItems({ items, showEmptyState = true }: Worksp
     return (
       <Card className="shadow">
         <CardHeader>
-          <CardTitle>No inherited items yet</CardTitle>
-          <CardDescription>
-            Link this workspace to a parent space to automatically inherit public policies, answers, and reference
-            material.
-          </CardDescription>
+          <CardTitle>{t("workspace.sections.inherited.emptyTitle")}</CardTitle>
+          <CardDescription>{t("workspace.sections.inherited.emptyDescription")}</CardDescription>
         </CardHeader>
       </Card>
     )
@@ -121,7 +123,7 @@ export function WorkspaceInheritedItems({ items, showEmptyState = true }: Worksp
           <Input
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search inherited items..."
+            placeholder={t("workspace.sections.inherited.searchPlaceholder")}
             className="pl-10 w-full"
           />
         </div>
@@ -130,9 +132,9 @@ export function WorkspaceInheritedItems({ items, showEmptyState = true }: Worksp
       {itemsToRender.length === 0 ? (
         <Card className="shadow">
           <CardContent className="py-10 text-center space-y-2">
-            <CardTitle className="text-base">No inherited items found</CardTitle>
+            <CardTitle className="text-base">{t("workspace.sections.inherited.noResultsTitle")}</CardTitle>
             <CardDescription>
-              No documents or policies match &ldquo;{searchQuery}&rdquo;. Try different keywords.
+              {t("workspace.sections.inherited.noResultsDescription", undefined, { query: searchQuery })}
             </CardDescription>
           </CardContent>
         </Card>
@@ -185,8 +187,15 @@ export function WorkspaceInheritedItems({ items, showEmptyState = true }: Worksp
               <CardHeader className="space-y-4">
                 {item.spaces && (
                   <div className="text-xs text-muted-foreground">
-                    From {item.spaces.name}
-                    {item.spaces.space_type ? ` · ${item.spaces.space_type}` : ""}
+                    {t("workspace.sections.inherited.fromSpace", undefined, { space: item.spaces.name })}
+                    {item.spaces.space_type
+                      ? t("workspace.sections.inherited.fromSpaceType", undefined, {
+                          type: t(
+                            `space.wizard.basics.scopeOptions.${item.spaces.space_type}`,
+                            item.spaces.space_type,
+                          ),
+                        })
+                      : ""}
                   </div>
                 )}
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -208,8 +217,18 @@ export function WorkspaceInheritedItems({ items, showEmptyState = true }: Worksp
                       <CardTitle className="text-lg break-words">{title}</CardTitle>
                       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <Badge variant="outline">{itemTypeLabels[item.item_type] ?? item.item_type}</Badge>
-                        {item.classification && <Badge variant="outline">{item.classification}</Badge>}
-                        {item.created_at && <span>Published {new Date(item.created_at).toLocaleDateString()}</span>}
+                        {item.classification && (
+                          <Badge variant="outline">
+                            {t(`workspace.common.classification.${item.classification}`, item.classification)}
+                          </Badge>
+                        )}
+                        {item.created_at && (
+                          <span>
+                            {t("workspace.sections.inherited.published", undefined, {
+                              date: new Date(item.created_at).toLocaleDateString(),
+                            })}
+                          </span>
+                        )}
                       </div>
                       {description && (
                         <CardDescription className="prose prose-sm dark:prose-invert max-w-none line-clamp-3">
@@ -222,10 +241,10 @@ export function WorkspaceInheritedItems({ items, showEmptyState = true }: Worksp
                     <Button variant="outline" size="sm" asChild>
                       {shouldOpenExternally ? (
                         <a href={preferredUrl!} target="_blank" rel="noopener noreferrer">
-                          Open page
+                          {t("space.documents.panel.dropdownOpenPage")}
                         </a>
                       ) : (
-                        <Link href={preferredUrl!}>View document</Link>
+                        <Link href={preferredUrl!}>{t("workspace.documents.list.viewDocument")}</Link>
                       )}
                     </Button>
                   )}
@@ -236,12 +255,15 @@ export function WorkspaceInheritedItems({ items, showEmptyState = true }: Worksp
                   <Separator />
                   <CardContent className="space-y-3">
                     <div className="space-y-2 text-sm">
-                      <div className="font-medium">Citations</div>
+                      <div className="font-medium">{t("workspace.sections.inherited.citationsTitle")}</div>
                       <ul className="space-y-1">
                         {item.payload?.citations?.map((citation: any, index: number) => (
                           <li key={citation.url ?? citation.title ?? index} className="text-muted-foreground">
-                            {citation.title ?? "Reference"}
-                            {citation.page && ` · Page ${citation.page}`}
+                            {citation.title ?? t("workspace.sections.inherited.citationReference")}
+                            {citation.page &&
+                              ` · ${t("workspace.sections.inherited.citationPage", undefined, {
+                                page: citation.page,
+                              })}`}
                           </li>
                         ))}
                       </ul>

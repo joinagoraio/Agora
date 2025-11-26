@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 type EvidencePayload = {
   type?: string
@@ -482,6 +483,7 @@ export function WorkspaceEvidenceBoard({
   initialComments = {},
   parentSpaces = [],
 }: WorkspaceEvidenceBoardProps) {
+  const { t } = useI18n()
   const evidenceItems = useMemo(
     () => initialItems.filter((item) => item.payload?.type === "evidence"),
     [initialItems],
@@ -491,10 +493,8 @@ export function WorkspaceEvidenceBoard({
     return (
       <Card className="shadow">
         <CardHeader>
-          <CardTitle>No workspace evidence yet</CardTitle>
-          <CardDescription>
-            Save answers from the assistant or upload supporting material to build an evidence trail for this workspace.
-          </CardDescription>
+          <CardTitle>{t("workspace.sections.evidence.emptyTitle")}</CardTitle>
+          <CardDescription>{t("workspace.sections.evidence.emptyDescription")}</CardDescription>
         </CardHeader>
       </Card>
     )

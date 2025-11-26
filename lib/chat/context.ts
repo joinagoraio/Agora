@@ -54,17 +54,17 @@ export function buildWorkspaceContext({
   const workspaceScopeDescription = (scopeMetadata?.description as string | undefined) ?? undefined
   const workspaceScopeTimeframe = (scopeMetadata?.timeframe as string | undefined) ?? undefined
 
-  if (workspace?.context) {
-    appendWorkspaceContextSection(`Workspace context:\n${workspace.context}`)
-  }
-  if (workspace?.location) {
-    appendWorkspaceContextSection(`Workspace location: ${workspace.location}`)
-  }
   if (workspaceSummary) {
     appendWorkspaceContextSection(`Workspace summary:\n${workspaceSummary}`)
   }
   if (workspaceDescription) {
     appendWorkspaceContextSection(`Workspace description:\n${workspaceDescription}`)
+  }
+  if (workspace?.context) {
+    appendWorkspaceContextSection(`Workspace additional AI context:\n${workspace.context}`)
+  }
+  if (workspace?.location) {
+    appendWorkspaceContextSection(`Workspace jurisdiction: ${workspace.location}`)
   }
   if (workspaceScopeDescription) {
     appendWorkspaceContextSection(`Workspace scope details:\n${workspaceScopeDescription}`)

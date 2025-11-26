@@ -27,7 +27,8 @@ export function UserMenu() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
   const [isUpdatingLanguage, setIsUpdatingLanguage] = useState(false)
-  const { language, setLanguage, t } = useI18n()
+  const { language, setLanguage: setLanguageFn, t } = useI18n()
+  const setLanguage = setLanguageFn!
 
   useEffect(() => {
     setMounted(true)
@@ -109,6 +110,7 @@ export function UserMenu() {
         setLanguage(payload.language)
       }
 
+      router.refresh()
       toast.success(t("common.language.success"))
     } catch (error) {
       toast.error(t("common.language.error"))

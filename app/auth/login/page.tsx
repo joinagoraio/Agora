@@ -12,6 +12,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useState } from "react"
 import { ArrowLeft } from "lucide-react"
 import Image from "next/image"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -22,6 +23,7 @@ export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get("redirect")
+  const { t } = useI18n()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,7 +42,7 @@ export default function LoginPage() {
       router.push(redirectTo || "/dashboard")
       router.refresh()
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
+      setError(error instanceof Error ? error.message : t("auth.login.errorGeneric"))
     } finally {
       setIsLoading(false)
     }
@@ -70,7 +72,7 @@ export default function LoginPage() {
       })
       if (error) throw error
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
+      setError(error instanceof Error ? error.message : t("auth.login.errorGeneric"))
       setIsGoogleLoading(false)
     }
   }
@@ -81,8 +83,8 @@ export default function LoginPage() {
         <div className="flex flex-col items-center space-y-4">
           <Image src="/logo.svg" alt="AGORA Logo" width={200} height={200} className="mb-8" />
           <div className="text-center space-y-2">
-            <h1 className="text-2xl font-semibold">Welcome back</h1>
-            <p className="text-sm text-muted-foreground mb-4">Sign in to your Agora spaces</p>
+            <h1 className="text-2xl font-semibold">{t("auth.login.title")}</h1>
+            <p className="text-sm text-muted-foreground mb-4">{t("auth.login.subtitle")}</p>
           </div>
         </div>
         <Card>
@@ -90,18 +92,18 @@ export default function LoginPage() {
             <div className="space-y-4">
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">{t("auth.login.emailLabel")}</Label>
                   <Input
                     id="email"
                     type="email"
-                    placeholder="you@example.com"
+                    placeholder={t("auth.login.emailPlaceholder")}
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">{t("auth.login.passwordLabel")}</Label>
                   <Input
                     id="password"
                     type="password"
@@ -112,7 +114,7 @@ export default function LoginPage() {
                 </div>
                 {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
                 <Button type="submit" className="w-full" disabled={isLoading || isGoogleLoading}>
-                  {isLoading ? "Signing in..." : "Sign in"}
+                  {isLoading ? t("auth.login.submitting") : t("auth.login.submit")}
                 </Button>
               </form>
 
@@ -121,7 +123,7 @@ export default function LoginPage() {
                   <span className="w-full border-t" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+                  <span className="bg-background px-2 text-muted-foreground">{t("auth.login.divider")}</span>
                 </div>
               </div>
 
@@ -133,7 +135,7 @@ export default function LoginPage() {
                 disabled={isGoogleLoading || isLoading}
               >
                 {isGoogleLoading ? (
-                  "Signing in with Google..."
+                  t("auth.login.googleSubmitting")
                 ) : (
                   <>
                     <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
@@ -154,18 +156,18 @@ export default function LoginPage() {
                         fill="#EA4335"
                       />
                     </svg>
-                    Continue with Google
+                    {t("auth.login.googleCta")}
                   </>
                 )}
               </Button>
             </div>
             <div className="mt-4 text-center text-sm text-muted-foreground">
-              Don&apos;t have an account?{" "}
+              {t("auth.login.noAccount")}{" "}
               <Link 
                 href={redirectTo ? `/auth/sign-up?redirect=${encodeURIComponent(redirectTo)}` : "/auth/sign-up"} 
                 className="font-medium text-primary underline-offset-4 hover:underline"
               >
-                Sign up
+                {t("auth.login.signUpLink")}
               </Link>
             </div>
           </CardContent>
@@ -173,7 +175,7 @@ export default function LoginPage() {
         <Button variant="ghost" asChild className="w-full font-normal text-muted-foreground hover:text-foreground hover:bg-transparent">
           <Link href="/">
             <ArrowLeft className="mr-2 h-3 w-3" />
-            <span className="text-xs">Back to home</span>
+            <span className="text-xs">{t("auth.login.backHome")}</span>
           </Link>
         </Button>
       </div>

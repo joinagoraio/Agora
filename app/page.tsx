@@ -128,7 +128,7 @@ export default async function HomePage() {
             <div key={stat.label} className="flex flex-col items-center gap-2">
               <div className="text-4xl font-bold">{stat.value}</div>
               <div className="text-sm text-muted-foreground">{stat.label}</div>
-            </div>
+          </div>
           ))}
         </div>
       </section>
@@ -150,9 +150,9 @@ export default async function HomePage() {
               key={feature.title}
               className="flex flex-col gap-4 rounded-xl border bg-card p-8 transition-colors hover:border-foreground/40"
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-foreground">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-foreground">
                 <feature.icon className="h-6 w-6" />
-              </div>
+            </div>
               <h3 className="text-2xl font-semibold">{feature.title}</h3>
               <p className="text-muted-foreground leading-relaxed">{feature.description}</p>
             </div>
@@ -174,9 +174,9 @@ export default async function HomePage() {
         <div className="grid gap-12 lg:grid-cols-3">
           {steps.map((step) => (
             <div key={step.label} className="flex flex-col items-center gap-4 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground text-background text-2xl font-bold">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground text-background text-2xl font-bold">
                 {step.label}
-              </div>
+            </div>
               <h3 className="text-2xl font-semibold">{step.title}</h3>
               <p className="text-muted-foreground leading-relaxed">{step.description}</p>
             </div>

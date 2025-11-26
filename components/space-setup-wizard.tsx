@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, RotateCcw, Sparkles, Upload, Wand2, X, Search } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 type SetupWizardState = {
   current_step?: number
@@ -57,39 +58,6 @@ interface SpaceSetupWizardProps {
   onSpaceDetailsChange: (details: SpaceDetailsUpdate) => void
 }
 
-const steps = [
-  {
-    key: "welcome",
-    title: "Welcome",
-    description: "See what you can do with a space",
-  },
-  {
-    key: "basics",
-    title: "Space basics",
-    description: "Set how Agora labels and shares this space",
-  },
-  {
-    key: "scope",
-    title: "Scope",
-    description: "Write the summary everyone will inherit",
-  },
-  {
-    key: "overheid",
-    title: "Official sources",
-    description: "Let Agora pull Overheid.nl publications",
-  },
-  {
-    key: "documents",
-    title: "Documents",
-    description: "Attach the references that define this scope",
-  },
-  {
-    key: "workspace",
-    title: "Workspace",
-    description: "Spin up your first workspace",
-  },
-] as const
-
 export function SpaceSetupWizard({
   open,
   spaceId,
@@ -108,6 +76,7 @@ export function SpaceSetupWizard({
   onScopeUpdated,
   onSpaceDetailsChange,
 }: SpaceSetupWizardProps) {
+  const { t } = useI18n()
   const normalizedInitialWizardState = useMemo<SetupWizardState>(() => {
     if (!initialWizardState) return {}
     return {
@@ -116,6 +85,86 @@ export function SpaceSetupWizard({
       dismissed: initialWizardState.dismissed ?? false,
     }
   }, [initialWizardState])
+
+  const steps = useMemo(
+    () => [
+      {
+        key: "welcome",
+        title: t("space.wizard.steps.welcome.title"),
+        description: t("space.wizard.steps.welcome.description"),
+      },
+      {
+        key: "basics",
+        title: t("space.wizard.steps.basics.title"),
+        description: t("space.wizard.steps.basics.description"),
+      },
+      {
+        key: "scope",
+        title: t("space.wizard.steps.scope.title"),
+        description: t("space.wizard.steps.scope.description"),
+      },
+      {
+        key: "overheid",
+        title: t("space.wizard.steps.overheid.title"),
+        description: t("space.wizard.steps.overheid.description"),
+      },
+      {
+        key: "documents",
+        title: t("space.wizard.steps.documents.title"),
+        description: t("space.wizard.steps.documents.description"),
+      },
+      {
+        key: "workspace",
+        title: t("space.wizard.steps.workspace.title"),
+        description: t("space.wizard.steps.workspace.description"),
+      },
+    ],
+    [t],
+  )
+
+  const welcomeCoverItems = useMemo(
+    () => [
+      {
+        title: t("space.wizard.welcome.coverItems.basics.title"),
+        description: t("space.wizard.welcome.coverItems.basics.description"),
+      },
+      {
+        title: t("space.wizard.welcome.coverItems.scope.title"),
+        description: t("space.wizard.welcome.coverItems.scope.description"),
+      },
+      {
+        title: t("space.wizard.welcome.coverItems.official.title"),
+        description: t("space.wizard.welcome.coverItems.official.description"),
+      },
+      {
+        title: t("space.wizard.welcome.coverItems.documents.title"),
+        description: t("space.wizard.welcome.coverItems.documents.description"),
+      },
+      {
+        title: t("space.wizard.welcome.coverItems.workspace.title"),
+        description: t("space.wizard.welcome.coverItems.workspace.description"),
+      },
+    ],
+    [t],
+  )
+
+  const welcomeBenefitItems = useMemo(
+    () => [
+      {
+        title: t("space.wizard.welcome.benefitsItems.structured.title"),
+        description: t("space.wizard.welcome.benefitsItems.structured.description"),
+      },
+      {
+        title: t("space.wizard.welcome.benefitsItems.sharedDocs.title"),
+        description: t("space.wizard.welcome.benefitsItems.sharedDocs.description"),
+      },
+      {
+        title: t("space.wizard.welcome.benefitsItems.workspace.title"),
+        description: t("space.wizard.welcome.benefitsItems.workspace.description"),
+      },
+    ],
+    [t],
+  )
 
   const [currentStep, setCurrentStep] = useState(() => {
     const stored = normalizedInitialWizardState.current_step ?? 0
@@ -150,7 +199,14 @@ export function SpaceSetupWizard({
   const [enhancingField, setEnhancingField] = useState<"summary" | "description" | null>(null)
   const [isEnhancing, startEnhancing] = useTransition()
 
-  const [workspaceName, setWorkspaceName] = useState(`${spaceName} workspace`)
+  const defaultWorkspaceName = useMemo(
+    () => t("space.wizard.workspace.defaultName", undefined, { space: spaceName }),
+    [spaceName, t],
+  )
+  const [workspaceName, setWorkspaceName] = useState(defaultWorkspaceName)
+  useEffect(() => {
+    setWorkspaceName((current) => (current === defaultWorkspaceName ? defaultWorkspaceName : current))
+  }, [defaultWorkspaceName])
   const [workspaceError, setWorkspaceError] = useState<string | null>(null)
   const [createdWorkspace, setCreatedWorkspace] = useState<{ id: string; name: string } | null>(null)
   const [workspaceIsCreating, setWorkspaceIsCreating] = useState(false)
@@ -197,7 +253,7 @@ export function SpaceSetupWizard({
     const targetText = field === "summary" ? summary : description
     if (!targetText || targetText.trim().length === 0) {
       setStepError(
-        field === "summary" ? "Add a mission statement before enhancing with AI." : "Add a description before enhancing with AI.",
+        field === "summary" ? t("space.wizard.errors.summaryMissing") : t("space.wizard.errors.descriptionMissing"),
       )
       return
     }
@@ -308,7 +364,7 @@ export function SpaceSetupWizard({
     const pattern = /^\d{4}(?:\s?[–-]\s?\d{4})?$/
 
     if (!pattern.test(trimmed)) {
-      setTimeframeError("Enter a 4-digit year or a range like 2024 – 2027.")
+      setTimeframeError(t("space.overview.timeframeError"))
       return false
     }
 
@@ -441,7 +497,7 @@ export function SpaceSetupWizard({
     const payload = await response.json()
 
     if (!response.ok) {
-      setStepError(payload.error || "Failed to delete document.")
+      setStepError(payload.error || t("space.wizard.errors.deleteDocument"))
       setDeletingDocumentId(null)
       return
     }
@@ -452,7 +508,7 @@ export function SpaceSetupWizard({
 
   const handleCreateWorkspace = async () => {
     if (!workspaceName || workspaceName.trim().length === 0) {
-      setWorkspaceError("Enter a workspace name.")
+      setWorkspaceError(t("space.wizard.errors.workspaceName"))
       return
     }
 
@@ -510,29 +566,29 @@ export function SpaceSetupWizard({
             <div className="flex items-start gap-3 rounded-md border border-border bg-muted p-4 text-sm text-muted-foreground">
               <Sparkles className="mt-0.5 h-4 w-4 text-muted-foreground" />
               <div className="space-y-1">
-                <p className="font-medium text-foreground">Spaces set the mandate for every workspace underneath.</p>
-                <p className="text-muted-foreground">
-                  We&apos;ll capture the essentials so your team and AI assistant share the same context from the start.
-                </p>
+                <p className="font-medium text-foreground">{t("space.wizard.welcome.highlightTitle")}</p>
+                <p className="text-muted-foreground">{t("space.wizard.welcome.highlightDescription")}</p>
               </div>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-lg border border-border p-4">
-                <h4 className="text-sm font-semibold text-foreground">What we&apos;ll cover</h4>
+                <h4 className="text-sm font-semibold text-foreground">{t("space.wizard.welcome.coverTitle")}</h4>
                 <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-                  <li>• Label and visibility of the space</li>
-                  <li>• Mission statement and description</li>
-                  <li>• Key documents everyone should see</li>
-                  <li>• Your first workspace to start collaborating</li>
+                  {welcomeCoverItems.map((item) => (
+                    <li key={item.title}>
+                      <span className="font-semibold text-foreground">{item.title}</span> {item.description}
+                    </li>
+                  ))}
                 </ul>
               </div>
               <div className="rounded-lg border border-border p-4">
-                <h4 className="text-sm font-semibold text-foreground">What you&apos;ll get</h4>
+                <h4 className="text-sm font-semibold text-foreground">{t("space.wizard.welcome.benefitsTitle")}</h4>
                 <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-                  <li>• Consistent context for AI assistance</li>
-                  <li>• Shared document library for the space</li>
-                  <li>• Workspace templates ready to launch</li>
-                  <li>• A repeatable onboarding checklist</li>
+                  {welcomeBenefitItems.map((item) => (
+                    <li key={item.title}>
+                      <span className="font-semibold text-foreground">{item.title}</span> {item.description}
+                    </li>
+                  ))}
                 </ul>
               </div>
             </div>
@@ -542,54 +598,52 @@ export function SpaceSetupWizard({
         return (
           <div className="space-y-6">
             <div>
-              <h3 className="text-base font-semibold text-foreground">Set the basics for this space</h3>
-              <p className="text-sm text-muted-foreground">
-                Choose the scope, visibility, and jurisdiction of your space.
-              </p>
+              <h3 className="text-base font-semibold text-foreground">{t("space.wizard.basics.title")}</h3>
+              <p className="text-sm text-muted-foreground">{t("space.wizard.basics.description")}</p>
             </div>
             <div className="space-y-6">
               <div className="space-y-2">
-              <Label htmlFor="wizard-space-scope">Scope</Label>
-              <Select value={spaceTypeValue} onValueChange={setSpaceTypeValue}>
-                <SelectTrigger id="wizard-space-scope">
-                  <SelectValue placeholder="Select scope" />
+                <Label htmlFor="wizard-space-scope">{t("space.wizard.basics.scopeLabel")}</Label>
+                <Select value={spaceTypeValue} onValueChange={setSpaceTypeValue}>
+                  <SelectTrigger id="wizard-space-scope">
+                    <SelectValue placeholder={t("space.wizard.basics.scopePlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="national">National</SelectItem>
-                    <SelectItem value="regional">Regional</SelectItem>
-                    <SelectItem value="municipal">Municipal</SelectItem>
-                    <SelectItem value="party">Party</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="national">{t("space.wizard.basics.scopeOptions.national")}</SelectItem>
+                    <SelectItem value="regional">{t("space.wizard.basics.scopeOptions.regional")}</SelectItem>
+                    <SelectItem value="municipal">{t("space.wizard.basics.scopeOptions.municipal")}</SelectItem>
+                    <SelectItem value="party">{t("space.wizard.basics.scopeOptions.party")}</SelectItem>
+                    <SelectItem value="other">{t("space.wizard.basics.scopeOptions.other")}</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">The administrative level or type of this space.</p>
+                <p className="text-xs text-muted-foreground">{t("space.wizard.basics.scopeHelp")}</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="wizard-visibility">Visibility</Label>
+                <Label htmlFor="wizard-visibility">{t("space.wizard.basics.visibilityLabel")}</Label>
                 <Select value={visibilityValue} onValueChange={setVisibilityValue}>
                   <SelectTrigger id="wizard-visibility">
-                    <SelectValue placeholder="Select visibility" />
+                    <SelectValue placeholder={t("space.wizard.basics.visibilityPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="public">Public – discoverable by all tenants</SelectItem>
-                    <SelectItem value="internal">Internal – visible to your organisation</SelectItem>
-                    <SelectItem value="confidential">Confidential – invite-only</SelectItem>
+                    <SelectItem value="public">{t("space.wizard.basics.visibilityOptions.public")}</SelectItem>
+                    <SelectItem value="internal">{t("space.wizard.basics.visibilityOptions.internal")}</SelectItem>
+                    <SelectItem value="confidential">{t("space.wizard.basics.visibilityOptions.confidential")}</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">Control who can discover and access this space.</p>
+                <p className="text-xs text-muted-foreground">{t("space.wizard.basics.visibilityHelp")}</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="wizard-jurisdiction">Jurisdiction (optional)</Label>
+                <Label htmlFor="wizard-jurisdiction">{t("space.wizard.basics.jurisdictionLabel")}</Label>
                 <div className="w-fit">
                   <Input
                     id="wizard-jurisdiction"
                     value={jurisdictionLabel}
                     onChange={(event) => setJurisdictionLabel(event.target.value)}
-                    placeholder="e.g., City of Amsterdam"
+                    placeholder={t("space.wizard.basics.jurisdictionPlaceholder")}
                     className="w-[300px]"
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">The geographic or legal jurisdiction this space operates within.</p>
+                <p className="text-xs text-muted-foreground">{t("space.wizard.basics.jurisdictionHelp")}</p>
               </div>
             </div>
           </div>
@@ -598,20 +652,18 @@ export function SpaceSetupWizard({
         return (
           <div className="space-y-6">
             <div>
-              <h3 className="text-base font-semibold text-foreground">Summarise the mandate</h3>
-              <p className="text-sm text-muted-foreground">
-                This mandate is inherited by every workspace in the space and feeds the AI assistant automatically.
-              </p>
+              <h3 className="text-base font-semibold text-foreground">{t("space.wizard.scopeStep.title")}</h3>
+              <p className="text-sm text-muted-foreground">{t("space.wizard.scopeStep.description")}</p>
             </div>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="wizard-summary">Mission Statement</Label>
+                <Label htmlFor="wizard-summary">{t("space.wizard.scopeStep.missionLabel")}</Label>
                 <div className="relative">
                   <Textarea
                     id="wizard-summary"
                     value={summary}
                     onChange={(event) => setSummary(event.target.value)}
-                    placeholder="High-level statement to align everyone on the mission."
+                    placeholder={t("space.wizard.scopeStep.missionPlaceholder")}
                     rows={3}
                     className={cn("pb-10")}
                     onFocus={() => setFocusedField("summary")}
@@ -635,11 +687,11 @@ export function SpaceSetupWizard({
                                 className="h-8 w-8 p-0 text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
                               >
                                 <RotateCcw className="h-4 w-4" />
-                                <span className="sr-only">Undo enhancement</span>
+                                <span className="sr-only">{t("space.wizard.scopeStep.missionUndo")}</span>
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p>Undo enhancement</p>
+                              <p>{t("space.wizard.scopeStep.missionUndo")}</p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -661,11 +713,11 @@ export function SpaceSetupWizard({
                               ) : (
                                 <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
                               )}
-                              <span className="sr-only">Enhance mission statement with AI</span>
+                              <span className="sr-only">{t("space.wizard.scopeStep.missionEnhance")}</span>
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Enhance with AI</p>
+                            <p>{t("space.wizard.scopeStep.missionEnhanceHelp")}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -674,13 +726,13 @@ export function SpaceSetupWizard({
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="wizard-description">Description</Label>
+                <Label htmlFor="wizard-description">{t("space.wizard.scopeStep.descriptionLabel")}</Label>
                 <div className="relative">
                   <Textarea
                     id="wizard-description"
                     value={description}
                     onChange={(event) => setDescription(event.target.value)}
-                    placeholder="Describe the policy remit, stakeholders, and success criteria driving this programme."
+                    placeholder={t("space.wizard.scopeStep.descriptionPlaceholder")}
                     rows={8}
                     className={cn("pb-10")}
                     onFocus={() => setFocusedField("description")}
@@ -704,11 +756,11 @@ export function SpaceSetupWizard({
                                 className="h-8 w-8 p-0 text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
                               >
                                 <RotateCcw className="h-4 w-4" />
-                                <span className="sr-only">Undo enhancement</span>
+                                <span className="sr-only">{t("space.wizard.scopeStep.descriptionUndo")}</span>
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p>Undo enhancement</p>
+                              <p>{t("space.wizard.scopeStep.descriptionUndo")}</p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -730,11 +782,11 @@ export function SpaceSetupWizard({
                               ) : (
                                 <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
                               )}
-                              <span className="sr-only">Enhance description with AI</span>
+                              <span className="sr-only">{t("space.wizard.scopeStep.descriptionEnhance")}</span>
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Enhance with AI</p>
+                            <p>{t("space.wizard.scopeStep.descriptionEnhanceHelp")}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -742,11 +794,11 @@ export function SpaceSetupWizard({
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Keep it concise but rich enough for colleagues and the assistant to act accurately.
+                  {t("space.wizard.scopeStep.descriptionHelp")}
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="wizard-timeframe">Timeframe</Label>
+                <Label htmlFor="wizard-timeframe">{t("space.overview.edit.timeframeLabel")}</Label>
                 <Input
                   id="wizard-timeframe"
                   value={timeframe}
@@ -757,7 +809,7 @@ export function SpaceSetupWizard({
                     )
                   }
                   onBlur={validateTimeframe}
-                  placeholder="e.g., 2024 – 2027"
+                  placeholder={t("space.overview.edit.timeframePlaceholder")}
                   inputMode="numeric"
                   pattern="\d{4}(?:\s?–\s?\d{4})?"
                 />
@@ -768,34 +820,30 @@ export function SpaceSetupWizard({
         )
       case "overheid": {
         const missingOverheidContextMessage = !trimmedJurisdiction
-          ? "Add a jurisdiction under Space basics to unlock the Overheid search."
+          ? t("space.wizard.overheid.missingJurisdiction")
           : scopeContextSegments.length === 0
-            ? "Add a mission statement or description in the previous step so we know what to search for."
+            ? t("space.wizard.overheid.missingScope")
             : null
 
         return (
           <div className="space-y-6">
             <div className="flex flex-col gap-2">
-              <h3 className="text-base font-semibold text-foreground">Import official references</h3>
-              <p className="text-sm text-muted-foreground">
-                Agora will query Overheid.nl using your mission statement and jurisdiction to recommend foundational documents.
-              </p>
+              <h3 className="text-base font-semibold text-foreground">{t("space.wizard.overheid.title")}</h3>
+              <p className="text-sm text-muted-foreground">{t("space.wizard.overheid.description")}</p>
             </div>
             <div className="space-y-4 rounded-lg border border-dashed bg-muted/30 p-4">
               <div className="flex items-start gap-3">
                 <Sparkles className="h-5 w-5 text-purple-500" />
                 <div className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">AI-powered document search</p>
-                  <p className="text-xs text-muted-foreground">
-                    When this step opens we automatically search Overheid.nl and rank the matching publications.
-                  </p>
+                  <p className="text-sm font-medium text-foreground">{t("space.wizard.overheid.aiTitle")}</p>
+                  <p className="text-xs text-muted-foreground">{t("space.wizard.overheid.aiDescription")}</p>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 {trimmedJurisdiction && <Badge variant="secondary">{trimmedJurisdiction}</Badge>}
                 {scopeContextSegments.length > 0 && (
                   <span>
-                    {scopeContextSegments.length === 1 ? "1 scope input" : `${scopeContextSegments.length} scope inputs`} included in the search.
+                    {t("space.wizard.overheid.scopeInputs", undefined, { count: scopeContextSegments.length })}
                   </span>
                 )}
               </div>
@@ -807,37 +855,39 @@ export function SpaceSetupWizard({
                   className="w-fit gap-2 bg-black text-white hover:bg-black/90"
                 >
                   <Search className="h-4 w-4" />
-                  Search Overheid.nl
+                  {t("space.wizard.overheid.searchButton")}
                 </Button>
                 {missingOverheidContextMessage ? (
                   <p className="text-xs text-muted-foreground">{missingOverheidContextMessage}</p>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    You can reopen the dialog anytime if you want to refine the suggested publications.
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t("space.wizard.overheid.reopenTip")}</p>
                 )}
               </div>
             </div>
           </div>
         )
       }
-      case "documents":
+      case "documents": {
+        const documentPluralSuffix =
+          localDocuments.length === 1 ? "" : t("space.wizard.documents.stats.pluralSuffix")
+        const documentCountText =
+          localDocuments.length > 0
+            ? t("space.wizard.documents.stats.count", undefined, {
+                count: localDocuments.length,
+                suffix: documentPluralSuffix,
+              })
+            : t("space.wizard.documents.stats.none")
+
         return (
           <div className="space-y-6">
             <div className="flex flex-col gap-2">
-              <h3 className="text-base font-semibold text-foreground">Add supporting documents</h3>
-              <p className="text-sm text-muted-foreground">
-                Upload policies, briefing notes, or supporting research. Public documents are inherited by every workspace.
-              </p>
+              <h3 className="text-base font-semibold text-foreground">{t("space.wizard.documents.title")}</h3>
+              <p className="text-sm text-muted-foreground">{t("space.wizard.documents.description")}</p>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed p-4">
               <div>
-                <p className="text-sm font-medium text-foreground">
-                  {localDocuments.length > 0 ? `${localDocuments.length} document${localDocuments.length === 1 ? "" : "s"} uploaded` : "No documents yet"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  You can add more later from the Documents section.
-                </p>
+                <p className="text-sm font-medium text-foreground">{documentCountText}</p>
+                <p className="text-xs text-muted-foreground">{t("space.wizard.documents.addMore")}</p>
               </div>
               <SpaceUploadDocumentDialog
                 spaceId={spaceId}
@@ -845,7 +895,7 @@ export function SpaceSetupWizard({
                 trigger={
                   <Button className="bg-black text-white hover:bg-black/90 gap-2">
                     <Upload className="h-4 w-4" />
-                    Upload document
+                    {t("space.documents.panel.emptyUploadTrigger")}
                   </Button>
                 }
               />
@@ -853,24 +903,35 @@ export function SpaceSetupWizard({
             {localDocuments.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border p-6 text-center text-sm text-muted-foreground">
                 <FileText className="h-8 w-8 text-muted-foreground/70" />
-                <p>add the policies or directives that define this scope.</p>
+                <p>{t("space.wizard.documents.emptyCallout")}</p>
               </div>
             ) : (
               <div className="space-y-3">
-                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Recently added</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  {t("space.wizard.documents.recentlyAdded")}
+                </p>
                 <div className="space-y-2">
                   {localDocuments.slice(0, 3).map((doc) => {
-                    const title = doc.payload?.title || doc.payload?.file_name || "Untitled document"
+                    const title = doc.payload?.title || doc.payload?.file_name || t("space.documents.panel.untitled")
                     return (
                       <div key={doc.id} className="flex items-center justify-between rounded-md border border-border/80 px-3 py-2">
                         <div className="flex flex-col">
                           <span className="text-sm font-medium text-foreground">{title}</span>
                           <span className="text-xs text-muted-foreground">
-                            Added {new Date(doc.created_at).toLocaleDateString()}
+                            {t("space.wizard.documents.addedOn", undefined, {
+                              date: new Date(doc.created_at).toLocaleDateString(),
+                            })}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          {doc.classification && <Badge variant="outline">{doc.classification}</Badge>}
+                          {doc.classification && (
+                            <Badge variant="outline">
+                              {t(
+                                `workspace.common.classification.${doc.classification}`,
+                                doc.classification,
+                              )}
+                            </Badge>
+                          )}
                           <Button
                             type="button"
                             variant="ghost"
@@ -884,7 +945,7 @@ export function SpaceSetupWizard({
                             ) : (
                               <X className="h-4 w-4 group-hover:text-red-500" />
                             )}
-                            <span className="sr-only">Remove document</span>
+                            <span className="sr-only">{t("space.wizard.documents.remove")}</span>
                           </Button>
                         </div>
                       </div>
@@ -892,7 +953,9 @@ export function SpaceSetupWizard({
                   })}
                   {localDocuments.length > 3 && (
                     <p className="text-xs text-muted-foreground">
-                      +{localDocuments.length - 3} more documents will appear in the panel below.
+                      {t("space.wizard.documents.moreCount", undefined, {
+                        count: localDocuments.length - 3,
+                      })}
                     </p>
                   )}
                 </div>
@@ -900,54 +963,58 @@ export function SpaceSetupWizard({
             )}
           </div>
         )
-      case "workspace":
+      }
+      case "workspace": {
+        const workspacePluralSuffix = workspaces.length === 1 ? "" : t("space.wizard.workspace.stats.pluralSuffix")
+        const workspaceStatsLabel = t("space.wizard.workspace.stats.label", undefined, {
+          count: workspaces.length,
+          suffix: workspacePluralSuffix,
+        })
+
         return (
           <div className="space-y-6">
             <div className="flex flex-col gap-2">
-              <h3 className="text-base font-semibold text-foreground">Create your first workspace</h3>
-              <p className="text-sm text-muted-foreground">
-                Workspaces inherit this scope and give your team a sandbox to chat, analyse documents, and launch tasks.
-              </p>
+              <h3 className="text-base font-semibold text-foreground">{t("space.wizard.workspace.title")}</h3>
+              <p className="text-sm text-muted-foreground">{t("space.wizard.workspace.description")}</p>
             </div>
             <div className="rounded-lg border border-border p-4">
               <div className="space-y-3">
                 <div className="space-y-2">
-                  <Label htmlFor="wizard-workspace-name">Workspace name</Label>
+                  <Label htmlFor="wizard-workspace-name">{t("space.wizard.workspace.nameLabel")}</Label>
                   <Input
                     id="wizard-workspace-name"
                     value={workspaceName}
                     onChange={(event) => setWorkspaceName(event.target.value)}
-                    placeholder="e.g., Climate Action Dossier"
+                    placeholder={t("space.wizard.workspace.namePlaceholder")}
                   />
                 </div>
                 <Button onClick={handleCreateWorkspace} disabled={workspaceIsCreating} className="w-fit">
                   {workspaceIsCreating ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creating…
+                      {t("space.wizard.workspace.creating")}
                     </>
                   ) : (
-                    "Create workspace"
+                    t("space.wizard.workspace.create")
                   )}
                 </Button>
                 {workspaceError && <p className="text-sm text-destructive">{workspaceError}</p>}
                 {createdWorkspace && (
                   <div className="flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm text-foreground">
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    <span>
-                      Workspace <span className="font-medium">{createdWorkspace.name}</span> is ready. You can open it after finishing the setup.
-                    </span>
+                    <span>{t("space.wizard.workspace.success", undefined, { name: createdWorkspace.name })}</span>
                   </div>
                 )}
               </div>
             </div>
             <Separator />
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="secondary">{workspaces.length} workspace{workspaces.length === 1 ? "" : "s"} in this space</Badge>
-              <span>You can add more later from the Workspaces section.</span>
+              <Badge variant="secondary">{workspaceStatsLabel}</Badge>
+              <span>{t("space.wizard.workspace.stats.addMore")}</span>
             </div>
           </div>
         )
+      }
       default:
         return null
     }
@@ -960,9 +1027,15 @@ export function SpaceSetupWizard({
         <DialogHeader className="space-y-4 border-b border-border px-6 pt-6 pb-4">
           <div className="flex flex-col items-start gap-1">
             <div className="space-y-1">
-              <DialogTitle className="text-xl font-semibold">Set up your {spaceName} space</DialogTitle>
+              <DialogTitle className="text-xl font-semibold">
+                {t("space.wizard.header.title", undefined, { space: spaceName })}
+              </DialogTitle>
               <DialogDescription>
-                Step {currentStep + 1} of {steps.length} · {steps[currentStep]?.description}
+                {t("space.wizard.header.progress", undefined, {
+                  current: currentStep + 1,
+                  total: steps.length,
+                  description: steps[currentStep]?.description ?? "",
+                })}
               </DialogDescription>
             </div>
           </div>
@@ -1033,13 +1106,13 @@ export function SpaceSetupWizard({
             disabled={isSubmitting}
             className="justify-start px-0 text-muted-foreground hover:text-foreground sm:px-3"
           >
-            Skip setup
+            {t("space.wizard.actions.skip")}
           </Button>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
             {!isFirstStep && (
               <Button variant="outline" onClick={handleBack} disabled={isSubmitting}>
                 <ChevronLeft className="mr-2 h-4 w-4" />
-                Back
+                {t("space.wizard.actions.back")}
               </Button>
             )}
             {isLastStep ? (
@@ -1047,11 +1120,11 @@ export function SpaceSetupWizard({
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Finishing…
+                    {t("space.wizard.actions.finishing")}
                   </>
                 ) : (
                   <>
-                    Finish setup
+                    {t("space.wizard.actions.finish")}
                     <ChevronRight className="ml-2 h-4 w-4" />
                   </>
                 )}
@@ -1061,11 +1134,11 @@ export function SpaceSetupWizard({
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving…
+                    {t("space.wizard.actions.saving")}
                   </>
                 ) : (
                   <>
-                    Continue
+                    {t("space.wizard.actions.continue")}
                     <ChevronRight className="ml-2 h-4 w-4" />
                   </>
                 )}

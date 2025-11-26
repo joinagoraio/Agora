@@ -27,6 +27,7 @@ import { CreateWorkspaceDocumentDialog } from "@/components/create-workspace-doc
 import { deleteDocument } from "@/lib/actions/document"
 import { Calendar, Edit3, FileText, MoreVertical, Search, Trash2 } from "lucide-react"
 import { toast } from "sonner"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface MyDocumentsListProps {
   workspaceId: string
@@ -44,6 +45,7 @@ function extractMetadataValue<T>(metadata: any, key: string, fallback: T | null 
 
 export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = true, canManage = true }: MyDocumentsListProps) {
   const router = useRouter()
+  const { t } = useI18n()
   const [searchQuery, setSearchQuery] = useState("")
   const [documentToDelete, setDocumentToDelete] = useState<any | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -132,11 +134,11 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
     <Card className="shadow">
       <CardContent className="flex flex-col items-center justify-center py-12 text-center space-y-4">
         <FileText className="mb-4 h-12 w-12 text-muted-foreground" />
-        <h3 className="mb-2 text-lg font-semibold">No documents yet</h3>
+        <h3 className="mb-2 text-lg font-semibold">{t("workspace.sections.myDocuments.emptyTitle")}</h3>
         <p className="text-center text-sm text-muted-foreground">
-          {canManage 
-            ? "Create a document to capture your AI-assisted analysis and share it with your team."
-            : "No documents have been shared with you yet."}
+          {canManage
+            ? t("workspace.sections.myDocuments.emptyDescriptionManage")
+            : t("workspace.sections.myDocuments.emptyDescriptionReadOnly")}
         </p>
         {canManage && (
           <CreateWorkspaceDocumentDialog
@@ -144,7 +146,7 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
             trigger={
               <Button variant="outline">
                 <Edit3 className="mr-2 h-4 w-4" />
-                Create your first document
+                {t("workspace.sections.myDocuments.emptyButton")}
               </Button>
             }
           />
@@ -161,7 +163,7 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
       <Input
         value={searchQuery}
         onChange={(event) => setSearchQuery(event.target.value)}
-        placeholder="Search documents..."
+        placeholder={t("workspace.sections.myDocuments.searchPlaceholder")}
         className="pl-10"
         disabled={isSearchDisabled}
       />
@@ -175,15 +177,15 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-baseline gap-2">
-                <h2 className="text-xl font-semibold">My Documents</h2>
+                <h2 className="text-xl font-semibold">{t("workspace.sections.myDocuments.title")}</h2>
                 <span className="text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
                   ({filteredDocuments.length})
                 </span>
               </div>
               <p className="text-sm text-muted-foreground">
-                {canManage 
-                  ? "Draft new documents with AI support and keep editable versions tied to this workspace."
-                  : "Documents that have been shared with you."}
+                {canManage
+                  ? t("workspace.sections.myDocuments.descriptionManage")
+                  : t("workspace.sections.myDocuments.descriptionReadOnly")}
               </p>
             </div>
             {canManage && <CreateWorkspaceDocumentDialog workspaceId={workspaceId} />}

@@ -23,6 +23,7 @@ import { enhanceContextText, enhanceWorkspaceText, updateWorkspace } from "@/lib
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 type ParentSpace = {
   id: string
@@ -54,6 +55,7 @@ export function WorkspaceOverview({
   canAccessSettings = true,
 }: WorkspaceOverviewProps) {
   const router = useRouter()
+  const { t } = useI18n()
   const [name, setName] = useState(initialName)
   const [summary, setSummary] = useState(initialSummary ?? "")
   const [description, setDescription] = useState(initialDescription ?? "")
@@ -239,31 +241,32 @@ export function WorkspaceOverview({
       {isEditing ? (
         <div className="space-y-4 rounded-lg border border-border bg-card/50 p-4 shadow-lg">
           <h2 className="text-lg font-semibold text-foreground">
-            Editing: <span className="text-primary">{name}</span>
+            {t("common.labels.editing")}{" "}
+            <span className="text-primary">{name}</span>
           </h2>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="workspace-title">Workspace title</Label>
+              <Label htmlFor="workspace-title">{t("workspace.overview.edit.titleLabel")}</Label>
               <Input
                 id="workspace-title"
                 value={draftName}
                 onChange={(event) => setDraftName(event.target.value)}
-                placeholder="Workspace name"
+                placeholder={t("workspace.overview.edit.titlePlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="workspace-location">Jurisdiction</Label>
+              <Label htmlFor="workspace-location">{t("workspace.overview.edit.jurisdictionLabel")}</Label>
               <Input
                 id="workspace-location"
                 value={draftLocation}
                 onChange={(event) => setDraftLocation(event.target.value)}
-                placeholder="e.g., Amsterdam, Netherlands"
+                placeholder={t("workspace.overview.edit.jurisdictionPlaceholder")}
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="workspace-summary">Workspace summary</Label>
+            <Label htmlFor="workspace-summary">{t("workspace.overview.edit.summaryLabel")}</Label>
             <div className="relative">
               <Textarea
                 id="workspace-summary"
@@ -271,7 +274,7 @@ export function WorkspaceOverview({
                 onChange={(event) => setDraftSummary(event.target.value)}
                 onFocus={() => setActiveField("summary")}
                 onBlur={() => setActiveField((current) => (current === "summary" ? null : current))}
-                placeholder="Give a quick summary of this workspace…"
+                placeholder={t("workspace.overview.edit.summaryPlaceholder")}
                 rows={4}
                 className="pb-10"
               />
@@ -287,7 +290,7 @@ export function WorkspaceOverview({
                       className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
                     >
                       <RotateCcw className="h-4 w-4" />
-                      <span className="sr-only">Undo summary enhancement</span>
+                      <span className="sr-only">{t("workspace.overview.edit.summaryUndo")}</span>
                     </Button>
                   )}
                   <TooltipProvider>
@@ -307,11 +310,11 @@ export function WorkspaceOverview({
                           ) : (
                             <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
                           )}
-                          <span className="sr-only">Enhance summary with AI</span>
+                          <span className="sr-only">{t("workspace.overview.edit.summaryEnhance")}</span>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="left" align="center">
-                        Generate an improved summary with AI.
+                        {t("workspace.overview.edit.summaryEnhanceHelp")}
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -321,7 +324,7 @@ export function WorkspaceOverview({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="workspace-description">Workspace description</Label>
+            <Label htmlFor="workspace-description">{t("workspace.overview.edit.descriptionLabel")}</Label>
             <div className="relative">
               <Textarea
                 id="workspace-description"
@@ -329,7 +332,7 @@ export function WorkspaceOverview({
                 onChange={(event) => setDraftDescription(event.target.value)}
                 onFocus={() => setActiveField("description")}
                 onBlur={() => setActiveField((current) => (current === "description" ? null : current))}
-                placeholder="Describe the focus, document types, and key themes for this workspace…"
+                placeholder={t("workspace.overview.edit.descriptionPlaceholder")}
                 rows={6}
                 className="pb-10"
               />
@@ -345,7 +348,7 @@ export function WorkspaceOverview({
                       className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
                     >
                       <RotateCcw className="h-4 w-4" />
-                      <span className="sr-only">Undo description enhancement</span>
+                      <span className="sr-only">{t("workspace.overview.edit.descriptionUndo")}</span>
                     </Button>
                   )}
                   <TooltipProvider>
@@ -365,11 +368,11 @@ export function WorkspaceOverview({
                           ) : (
                             <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
                           )}
-                          <span className="sr-only">Enhance description with AI</span>
+                          <span className="sr-only">{t("workspace.overview.edit.descriptionEnhance")}</span>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="left" align="center">
-                        Generate an improved description with AI.
+                        {t("workspace.overview.edit.descriptionEnhanceHelp")}
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -379,7 +382,7 @@ export function WorkspaceOverview({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="workspace-context">Additional AI context (optional)</Label>
+            <Label htmlFor="workspace-context">{t("workspace.overview.edit.contextLabel")}</Label>
             <div className="relative">
               <Textarea
                 id="workspace-context"
@@ -387,7 +390,7 @@ export function WorkspaceOverview({
                 onChange={(event) => setDraftContext(event.target.value)}
                 onFocus={() => setActiveField("context")}
                 onBlur={() => setActiveField((current) => (current === "context" ? null : current))}
-                placeholder="Add any extra guidance for AI assistants (datasets, special instructions, etc.)"
+                placeholder={t("workspace.overview.edit.contextPlaceholder")}
                 rows={8}
                 className="pb-10"
               />
@@ -403,7 +406,7 @@ export function WorkspaceOverview({
                       className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
                     >
                       <RotateCcw className="h-4 w-4" />
-                      <span className="sr-only">Undo description enhancement</span>
+                      <span className="sr-only">{t("workspace.overview.edit.contextUndo")}</span>
                     </Button>
                   )}
                   <TooltipProvider>
@@ -423,20 +426,18 @@ export function WorkspaceOverview({
                           ) : (
                             <Wand2 className="h-4 w-4 text-purple-400 transition-colors group-hover:text-purple-600" />
                           )}
-                          <span className="sr-only">Enhance description with AI</span>
+                          <span className="sr-only">{t("workspace.overview.edit.contextEnhance")}</span>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="left" align="center">
-                        Ask AI to develop the description for you.
+                        {t("workspace.overview.edit.contextEnhanceHelp")}
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 </div>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Optional: include extra notes you want AI assistants to consider beyond the summary &amp; description.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("workspace.overview.edit.contextHelper")}</p>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -444,18 +445,18 @@ export function WorkspaceOverview({
           <div className="flex items-center justify-end gap-2">
             <Button type="button" variant="ghost" onClick={handleCancel} disabled={isSaving}>
               <X className="mr-2 h-4 w-4" />
-              Cancel
+              {t("common.actions.cancel")}
             </Button>
             <Button type="button" onClick={handleSave} disabled={isSaving}>
               {isSaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving…
+                  {t("workspace.overview.edit.saving")}
                 </>
               ) : (
                 <>
                   <Save className="mr-2 h-4 w-4" />
-                  Save
+                  {t("common.actions.save")}
                 </>
               )}
             </Button>
@@ -473,34 +474,39 @@ export function WorkspaceOverview({
             {canManage && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" title="More options">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    title={t("workspace.overview.menu.more")}
+                  >
                     <MoreVertical className="h-4 w-4" />
-                    <span className="sr-only">More options</span>
+                    <span className="sr-only">{t("workspace.overview.menu.more")}</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleStartEditing}>
-                  <PencilLine className="h-4 w-4" />
-                  Edit
-                </DropdownMenuItem>
-                {canAccessSettings && (
-                  <DropdownMenuItem asChild>
-                    <Link href={`/workspaces/${workspaceId}/settings`}>
-                      <Settings className="h-4 w-4" />
-                      Settings
-                    </Link>
+                  <DropdownMenuItem onClick={handleStartEditing}>
+                    <PencilLine className="h-4 w-4" />
+                    {t("workspace.overview.menu.edit")}
                   </DropdownMenuItem>
-                )}
+                  {canAccessSettings && (
+                    <DropdownMenuItem asChild>
+                      <Link href={`/workspaces/${workspaceId}/settings`}>
+                        <Settings className="h-4 w-4" />
+                        {t("workspace.overview.menu.settings")}
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
           </div>
           <div className="space-y-2">
             <p className="whitespace-pre-line text-sm font-semibold text-foreground">
-              {summary.trim().length > 0 ? summary : "No summary provided yet."}
+              {summary.trim().length > 0 ? summary : t("space.overview.summaryEmpty")}
             </p>
             <p className="whitespace-pre-line text-sm text-muted-foreground">
-              {description.trim().length > 0 ? description : "No description provided yet."}
+              {description.trim().length > 0 ? description : t("space.overview.descriptionEmpty")}
             </p>
           </div>
         </div>

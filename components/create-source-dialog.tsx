@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -21,6 +21,7 @@ import { getGoogleTokens } from "@/lib/actions/auth"
 import { createClient } from "@/lib/supabase/client"
 import { Plus, CheckCircle2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface CreateSourceDialogProps {
   workspaceId: string
@@ -33,13 +34,17 @@ interface CreateSourceDialogProps {
 }
 
 const SOURCE_TYPE_DEFINITIONS = [
-  { value: "google_drive", label: "Google Drive", description: "Sync documents from Google Drive" },
-  { value: "overheid_nl", label: "Overheid.nl", description: "Search Dutch government publications and regulations" },
+  {
+    value: "google_drive",
+    labelKey: "workspace.sources.manage.typeOptions.googleDrive.label",
+    descriptionKey: "workspace.sources.manage.typeOptions.googleDrive.description",
+  },
+  {
+    value: "overheid_nl",
+    labelKey: "workspace.sources.manage.typeOptions.overheid.label",
+    descriptionKey: "workspace.sources.manage.typeOptions.overheid.description",
+  },
 ] as const
-
-type SourceTypeDefinition = (typeof SOURCE_TYPE_DEFINITIONS)[number]
-
-const SOURCE_TYPES: SourceTypeDefinition[] = [...SOURCE_TYPE_DEFINITIONS].sort((a, b) => a.label.localeCompare(b.label))
 
 export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [], trigger }: CreateSourceDialogProps) {
   const [open, setOpen] = useState(false)
@@ -50,6 +55,18 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
   const [isLoading, setIsLoading] = useState(false)
   const [hasGoogleToken, setHasGoogleToken] = useState(false)
   const [checkingToken, setCheckingToken] = useState(false)
+  const { t } = useI18n()
+  const sourceTypes = useMemo(
+    () =>
+      [...SOURCE_TYPE_DEFINITIONS]
+        .map((item) => ({
+          value: item.value,
+          label: t(item.labelKey),
+          description: t(item.descriptionKey),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [t],
+  )
 
   const checkGoogleTokens = useCallback(async () => {
     setCheckingToken(true)
@@ -97,10 +114,15 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
               message: testData.message,
             })
             
-            if (testResponse.status === 401 || testData.code === "AUTH_ERROR" || testData.error?.includes("authentication") || testData.error?.includes("token")) {
+            if (
+              testResponse.status === 401 ||
+              testData.code === "AUTH_ERROR" ||
+              testData.error?.includes("authentication") ||
+              testData.error?.includes("token")
+            ) {
               setHasGoogleToken(false)
               setApiKey("")
-              setError("Google token expired. Please reconnect your Google account.")
+              setError(t("workspace.sources.manage.errorTokenExpired"))
             } else {
               // Other error, but token might still be valid
               console.warn("[CreateSource] Non-auth error, assuming token is valid")
@@ -127,7 +149,7 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
     } finally {
       setCheckingToken(false)
     }
-  }, [])
+  }, [t])
 
   // Check for Google tokens when Google Drive is selected or dialog opens
   useEffect(() => {
@@ -162,16 +184,15 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
       }
     } catch (err) {
       console.error("[CreateSource] Failed to connect with Google:", err)
-      setError(err instanceof Error ? err.message : "Failed to connect with Google")
+      setError(err instanceof Error ? err.message : t("workspace.sources.manage.errorGoogleConnect"))
     }
   }
 
   const handleTypeChange = (newType: string) => {
     setType(newType)
-    if (newType === "overheid_nl") {
-      setName("Overheid.nl")
-    } else if (newType === "google_drive") {
-      setName("Google Drive")
+    const selected = sourceTypes.find((source) => source.value === newType)
+    if (newType === "overheid_nl" || newType === "google_drive") {
+      setName(selected?.label ?? "")
     } else {
       setName("")
     }
@@ -185,7 +206,7 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
     // Check if source type is already added
     const isAlreadyAdded = existingSources.some((s) => s.type === type)
     if (isAlreadyAdded) {
-      setError("This source type has already been added")
+      setError(t("workspace.sources.manage.errorDuplicate"))
       setIsLoading(false)
       return
     }
@@ -198,7 +219,7 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
     } else if (type === "google_drive") {
       // Validate Google Drive token before creating source
       if (!apiKey) {
-        setError("Google Drive access token is required. Please connect your Google account.")
+        setError(t("workspace.sources.manage.errorTokenMissing"))
         setIsLoading(false)
         return
       }
@@ -215,14 +236,16 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
 
         if (!testResponse.ok) {
           if (testResponse.status === 401 || testData.code === "AUTH_ERROR") {
-            setError("Invalid or expired access token. Please reconnect your Google account or refresh your token.")
+            setError(t("workspace.sources.manage.errorTokenExpired"))
             setIsLoading(false)
             return
           }
-          throw new Error(testData.error || "Failed to validate Google Drive connection")
+          throw new Error(testData.error || t("workspace.sources.manage.errorGoogleValidate"))
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to validate Google Drive connection. Please check your token.")
+        setError(
+          err instanceof Error ? err.message : t("workspace.sources.manage.errorGoogleValidate"),
+        )
         setIsLoading(false)
         return
       }
@@ -236,7 +259,11 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
       }
     }
 
-    const sourceName = type === "overheid_nl" ? "Overheid.nl" : name
+    const sourceDefinition = sourceTypes.find((source) => source.value === type)
+    const sourceName =
+      type === "overheid_nl" || type === "google_drive"
+        ? sourceDefinition?.label ?? name
+        : name
     const result = await createSource(workspaceId, sourceName, type as any, config)
 
     if (result.error) {
@@ -252,7 +279,7 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
     }
   }
 
-  const selectedSource = SOURCE_TYPES.find((c) => c.value === type)
+  const selectedSource = sourceTypes.find((c) => c.value === type)
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen)
@@ -273,30 +300,30 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
         <DialogTrigger asChild>
           <Button>
             <Plus className="mr-2 h-4 w-4" />
-            Add Source
+            {t("workspace.sources.manage.trigger")}
           </Button>
         </DialogTrigger>
       )}
       <DialogContent className="max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Add a new source</DialogTitle>
-            <DialogDescription>Connect external document sources to your workspace</DialogDescription>
+            <DialogTitle>{t("workspace.sources.manage.titleAdd")}</DialogTitle>
+            <DialogDescription>{t("workspace.sources.manage.descriptionAdd")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="source-type">Source Type</Label>
+              <Label htmlFor="source-type">{t("workspace.sources.manage.labelType")}</Label>
               <Select value={type} onValueChange={handleTypeChange} required>
                 <SelectTrigger id="source-type" className="[&_[data-slot=select-value]_span[aria-hidden='true']]:hidden">
-                  <SelectValue placeholder="Select Source" />
+                  <SelectValue placeholder={t("workspace.sources.manage.placeholderType")} />
                 </SelectTrigger>
                 <SelectContent className="min-w-[var(--radix-select-trigger-width)]">
-                  {SOURCE_TYPES.map((source) => {
+                  {sourceTypes.map((source) => {
                     const isDisabled = existingSources.some((s) => s.type === source.value)
                     return (
-                      <SelectItem 
-                        key={source.value} 
-                        value={source.value} 
+                      <SelectItem
+                        key={source.value}
+                        value={source.value}
                         className="py-2.5 items-start"
                         textValue={source.label}
                         disabled={isDisabled}
@@ -304,7 +331,7 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
                         <div className="flex flex-col gap-0.5 text-left w-full pr-6">
                           <span className="font-medium leading-tight">{source.label}</span>
                           <span className="text-xs text-muted-foreground leading-tight" aria-hidden="true">
-                            {isDisabled ? "Already added" : source.description}
+                            {isDisabled ? t("workspace.sources.manage.alreadyAdded") : source.description}
                           </span>
                         </div>
                       </SelectItem>
@@ -318,10 +345,12 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
               <>
                 {type !== "overheid_nl" && (
                 <div className="space-y-2">
-                  <Label htmlFor="source-name">Source Name</Label>
+                  <Label htmlFor="source-name">{t("workspace.sources.manage.labelName")}</Label>
                   <Input
                     id="source-name"
-                    placeholder={`My ${selectedSource?.label} Source`}
+                    placeholder={t("workspace.sources.manage.placeholderName", undefined, {
+                      label: selectedSource?.label ?? "",
+                    })}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     required
@@ -330,29 +359,23 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
                 )}
                 {type === "overheid_nl" ? (
                   <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                      Overheid.nl source allows you to search and add Dutch government publications on demand.
-                      No configuration needed - you'll search when adding documents.
-                    </p>
+                    <p className="text-sm text-muted-foreground">{t("workspace.sources.manage.overheidInfo")}</p>
                   </div>
                 ) : type === "google_drive" ? (
                   <div className="space-y-3">
                     {checkingToken ? (
-                      <div className="text-sm text-muted-foreground">Checking for Google account...</div>
+                      <div className="text-sm text-muted-foreground">
+                        {t("workspace.sources.manage.googleChecking")}
+                      </div>
                     ) : hasGoogleToken ? (
                       <Alert className="border-0 bg-green-50">
                         <CheckCircle2 className="h-4 w-4 text-green-600" />
                         <AlertDescription>
-                          Google account connected
+                          {t("workspace.sources.manage.googleConnected")}
                         </AlertDescription>
                       </Alert>
                     ) : (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full"
-                        onClick={handleGoogleConnect}
-                      >
+                      <Button type="button" variant="outline" className="w-full" onClick={handleGoogleConnect}>
                         <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
                           <path
                             d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -371,22 +394,22 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
                             fill="#EA4335"
                           />
                         </svg>
-                        Connect with Google
+                        {t("workspace.sources.manage.googleButton")}
                       </Button>
                     )}
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <Label htmlFor="api-key">API Key / Token</Label>
+                    <Label htmlFor="api-key">{t("workspace.sources.manage.labelApiKey")}</Label>
                     <Input
                       id="api-key"
                       type="password"
-                      placeholder="Enter your API key or access token"
+                      placeholder={t("workspace.sources.manage.placeholderApiKey")}
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
                       required
                     />
-                    <p className="text-xs text-muted-foreground">This will be encrypted and stored securely</p>
+                    <p className="text-xs text-muted-foreground">{t("workspace.sources.manage.apiKeyNote")}</p>
                   </div>
                 )}
               </>
@@ -396,13 +419,13 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isLoading}>
-              Cancel
+              {t("workspace.sources.manage.cancel")}
             </Button>
             <Button
               type="submit"
               disabled={isLoading || !type || (type !== "overheid_nl" && (!name || (!hasGoogleToken && !apiKey)))}
             >
-              {isLoading ? "Connecting..." : "Add Source"}
+              {isLoading ? t("workspace.sources.manage.submitting") : t("workspace.sources.manage.submit")}
             </Button>
           </DialogFooter>
         </form>

@@ -65,6 +65,14 @@ export default async function DashboardPage() {
     user.email?.split("@")[0] ??
     null
 
+  const translateRole = (role?: string | null) => {
+    if (!role) {
+      return ""
+    }
+    const normalized = role.toLowerCase()
+    return t(`space.common.roles.${normalized}`, role)
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <WelcomeUserDialog userId={user.id} userName={displayName} hasSpaces={hasSpaces} hasWorkspaces={hasDirectWorkspaces} />
@@ -101,7 +109,7 @@ export default async function DashboardPage() {
                           </div>
                         </div>
                         <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                          {space.role}
+                          {translateRole(space.role)}
                         </span>
                       </div>
                     </CardHeader>
@@ -157,7 +165,7 @@ export default async function DashboardPage() {
                               </div>
                             </div>
                             <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                              {membership.role}
+                              {translateRole(membership.role)}
                             </span>
                           </div>
                         </CardHeader>

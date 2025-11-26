@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { toast } from "sonner"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 export type SpaceDocumentItem = {
   id: string
@@ -43,13 +44,12 @@ interface SpaceDocumentsPanelProps {
   canManage?: boolean
 }
 
-const CSRF_ERROR_MESSAGE = "Could not verify your session. Refresh and try again."
-
 export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spaceName, canUpload = true, canManage = true }: SpaceDocumentsPanelProps) {
   const router = useRouter()
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<"grid" | "list">("list")
+  const { t } = useI18n()
   // Internal state for when onDocumentsChange is not provided (server component usage)
   const [internalDocuments, setInternalDocuments] = useState<SpaceDocumentItem[]>(documents ?? [])
   
@@ -74,7 +74,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
 
   const handleDelete = async (doc: SpaceDocumentItem) => {
     const itemId = doc.id
-    const docTitle = doc.payload?.title || doc.payload?.file_name || "Space document"
+    const docTitle = doc.payload?.title || doc.payload?.file_name || t("space.documents.panel.untitled")
 
     setError(null)
     setIsDeleting(itemId)
@@ -83,8 +83,9 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
       console.log(`[SpaceDocumentsPanel] Deleting item ${itemId} from space ${spaceId}`)
       const csrfToken = await fetchCsrfToken()
       if (!csrfToken) {
-        setError(CSRF_ERROR_MESSAGE)
-        toast.error("Failed to delete document", { description: CSRF_ERROR_MESSAGE })
+        const sessionMessage = t("space.documents.panel.csrfError")
+        setError(sessionMessage)
+        toast.error(t("space.documents.panel.toastDeleteError"), { description: sessionMessage })
         setIsDeleting(null)
         return
       }
@@ -110,17 +111,18 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
       }
 
       if (!response.ok) {
-        const errorMessage = payload?.error || payload?.message || "Failed to delete document."
+        const errorMessage =
+          payload?.error || payload?.message || t("space.documents.panel.toastDeleteError")
         console.error(`[SpaceDocumentsPanel] Delete error payload:`, payload)
         setError(errorMessage)
-        toast.error("Failed to delete document", { description: errorMessage })
+        toast.error(t("space.documents.panel.toastDeleteError"), { description: errorMessage })
         setIsDeleting(null)
         return
       }
 
       if (payload?.error) {
         setError(payload.error)
-        toast.error("Failed to delete document", { description: payload.error })
+        toast.error(t("space.documents.panel.toastDeleteError"), { description: payload.error })
         setIsDeleting(null)
         return
       }
@@ -133,8 +135,8 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
         setInternalDocuments(updatedDocuments)
       }
       setIsDeleting(null)
-      toast.success("Document deleted", {
-        description: `${docTitle} removed from ${spaceName}.`,
+      toast.success(t("space.documents.panel.dropdownDelete"), {
+        description: t("space.documents.panel.toastDeleteSuccess", undefined, { title: docTitle, space: spaceName }),
       })
       
       // Refresh the page to ensure server component data is updated
@@ -143,9 +145,9 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
       }, 200)
     } catch (error) {
       console.error("[SpaceDocumentsPanel] Error deleting document:", error)
-      const message = error instanceof Error ? error.message : "An unexpected error occurred"
+      const message = error instanceof Error ? error.message : t("space.documents.panel.toastDeleteError")
       setError(message)
-      toast.error("Failed to delete document", { description: message })
+      toast.error(t("space.documents.panel.toastDeleteError"), { description: message })
       setIsDeleting(null)
     }
   }
@@ -154,9 +156,9 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h3 className="text-xl font-semibold text-foreground">Documents</h3>
+          <h3 className="text-xl font-semibold text-foreground">{t("space.documents.panel.title")}</h3>
           <p className="text-sm text-muted-foreground">
-            Upload strategic plans, legislation, or research that define {spaceName}. Public documents are inherited by every workspace.
+            {t("space.documents.panel.description", undefined, { space: spaceName })}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -170,7 +172,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
               aria-pressed={viewMode === "list"}
             >
               <List className="h-4 w-4" />
-              <span className="sr-only">Show as list</span>
+              <span className="sr-only">{t("space.documents.panel.viewList")}</span>
             </Button>
             <Button
               type="button"
@@ -181,7 +183,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
               aria-pressed={viewMode === "grid"}
             >
               <LayoutGrid className="h-4 w-4" />
-              <span className="sr-only">Show as cards</span>
+              <span className="sr-only">{t("space.documents.panel.viewGrid")}</span>
             </Button>
           </div>
           {canUpload && (
@@ -191,7 +193,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
               trigger={
                 <Button className="gap-2">
                   <Upload className="h-4 w-4" />
-                  Upload document
+                  {t("space.documents.upload.trigger")}
                 </Button>
               }
             />
@@ -206,10 +208,8 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
           <CardContent className="flex flex-col items-center justify-center gap-3 py-12 text-center">
             <FileText className="h-10 w-10 text-muted-foreground" />
             <div>
-              <h4 className="text-base font-semibold text-foreground">No scope documents yet</h4>
-              <p className="text-sm text-muted-foreground">
-                Upload policies, directives, or briefing notes so every workspace starts with the same foundation.
-              </p>
+              <h4 className="text-base font-semibold text-foreground">{t("space.documents.panel.emptyTitle")}</h4>
+              <p className="text-sm text-muted-foreground">{t("space.documents.panel.emptyDescription")}</p>
             </div>
             {canUpload && (
               <SpaceUploadDocumentDialog
@@ -217,7 +217,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                 onUploaded={handleUploaded}
                 trigger={
                   <Button variant="outline">
-                    Upload a document
+                    {t("space.documents.panel.emptyUploadTrigger")}
                   </Button>
                 }
               />
@@ -227,24 +227,34 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
       ) : (
         (() => {
           const docCards = safeDocuments.map((doc) => {
-            const docTitle = doc.payload?.title || doc.payload?.file_name || "Untitled document"
+            const docTitle = doc.payload?.title || doc.payload?.file_name || t("space.documents.panel.untitled")
 
             return (
               <Card key={doc.id} className="flex h-full flex-col shadow">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-2">
                     <CardTitle className="text-base font-semibold">{docTitle}</CardTitle>
-                    {doc.classification && <Badge variant="outline">{doc.classification}</Badge>}
+                    {doc.classification && (
+                      <Badge variant="outline">
+                        {t(`workspace.common.classification.${doc.classification}` as const)}
+                      </Badge>
+                    )}
                   </div>
                   <CardDescription>
-                    Uploaded {new Date(doc.created_at).toLocaleDateString()}
+                    {t("space.documents.panel.uploadedLabel", undefined, {
+                      date: new Date(doc.created_at).toLocaleDateString(),
+                    })}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-1 flex-col gap-3">
                   {doc.payload?.summary ? (
-                    <p className="text-sm text-muted-foreground line-clamp-5 whitespace-pre-wrap">{doc.payload.summary}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-5 whitespace-pre-wrap">
+                      {doc.payload.summary}
+                    </p>
                   ) : (
-                    <p className="text-sm text-muted-foreground">No summary available yet.</p>
+                    <p className="text-sm text-muted-foreground">
+                      {t("space.documents.panel.summaryPlaceholder")}
+                    </p>
                   )}
                   <Separator />
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -258,7 +268,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-8 w-8">
                           <MoreVertical className="h-4 w-4" />
-                          <span className="sr-only">Open document menu</span>
+                          <span className="sr-only">{t("space.documents.panel.dropdownMenuSr")}</span>
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-40">
@@ -271,7 +281,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                               className="flex items-center gap-2"
                             >
                               <Download className="h-4 w-4" />
-                              Download
+                              {t("space.documents.panel.dropdownDownload")}
                             </Link>
                           </DropdownMenuItem>
                         ) : doc.source_url ? (
@@ -283,11 +293,13 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                               className="flex items-center gap-2"
                             >
                               <ExternalLink className="h-4 w-4" />
-                              Open page
+                              {t("space.documents.panel.dropdownOpenPage")}
                             </Link>
                           </DropdownMenuItem>
                         ) : (
-                          <DropdownMenuItem disabled>No file URL</DropdownMenuItem>
+                          <DropdownMenuItem disabled>
+                            {t("space.documents.panel.dropdownNoUrl")}
+                          </DropdownMenuItem>
                         )}
                         <DropdownMenuItem
                           className="group cursor-pointer focus:bg-destructive/10 focus:text-destructive"
@@ -323,7 +335,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
               <CardContent className="p-0">
                 <div className="divide-y divide-border">
                   {safeDocuments.map((doc) => {
-                    const docTitle = doc.payload?.title || doc.payload?.file_name || "Untitled document"
+                    const docTitle = doc.payload?.title || doc.payload?.file_name || t("space.documents.panel.untitled")
 
                     return (
                       <div
@@ -333,7 +345,9 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                         <div className="font-medium text-foreground">
                           {docTitle}
                           <div className="text-xs text-muted-foreground">
-                            Uploaded {new Date(doc.created_at).toLocaleDateString()}
+                            {t("space.documents.panel.uploadedLabel", undefined, {
+                              date: new Date(doc.created_at).toLocaleDateString(),
+                            })}
                           </div>
                         </div>
                         <div className="text-muted-foreground">
@@ -342,11 +356,17 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                               {doc.payload.summary}
                             </p>
                           ) : (
-                            <p className="text-xs text-muted-foreground">No summary available yet.</p>
+                            <p className="text-xs text-muted-foreground">
+                              {t("space.documents.panel.summaryPlaceholder")}
+                            </p>
                           )}
                         </div>
                         <div>
-                          {doc.classification && <Badge variant="outline">{doc.classification}</Badge>}
+                          {doc.classification && (
+                            <Badge variant="outline">
+                              {t(`workspace.common.classification.${doc.classification}` as const)}
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           {doc.payload?.file_name && <Badge variant="secondary">{doc.payload.file_name}</Badge>}
@@ -357,37 +377,39 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-8 w-8">
                                   <MoreVertical className="h-4 w-4" />
-                                  <span className="sr-only">Open document menu</span>
+                                  <span className="sr-only">{t("space.documents.panel.dropdownMenuSr")}</span>
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-40">
                                 {doc.payload?.file_url ? (
-                                  <DropdownMenuItem asChild className="cursor-pointer">
-                                    <Link
-                                      href={doc.payload.file_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-2"
-                                    >
-                                      <Download className="h-4 w-4" />
-                                      Download
-                                    </Link>
-                                  </DropdownMenuItem>
-                                ) : doc.source_url ? (
-                                  <DropdownMenuItem asChild className="cursor-pointer">
-                                    <Link
-                                      href={doc.source_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-2"
-                                    >
-                                      <ExternalLink className="h-4 w-4" />
-                                      Open page
-                                    </Link>
-                                  </DropdownMenuItem>
-                                ) : (
-                                  <DropdownMenuItem disabled>No file URL</DropdownMenuItem>
-                                )}
+                                <DropdownMenuItem asChild className="cursor-pointer">
+                                  <Link
+                                    href={doc.payload.file_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2"
+                                  >
+                                    <Download className="h-4 w-4" />
+                                    {t("space.documents.panel.dropdownDownload")}
+                                  </Link>
+                                </DropdownMenuItem>
+                              ) : doc.source_url ? (
+                                <DropdownMenuItem asChild className="cursor-pointer">
+                                  <Link
+                                    href={doc.source_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2"
+                                  >
+                                    <ExternalLink className="h-4 w-4" />
+                                    {t("space.documents.panel.dropdownOpenPage")}
+                                  </Link>
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem disabled>
+                                  {t("space.documents.panel.dropdownNoUrl")}
+                                </DropdownMenuItem>
+                              )}
                                 <DropdownMenuItem
                                   className="group cursor-pointer focus:bg-destructive/10 focus:text-destructive"
                                   disabled={isDeleting === doc.id}
@@ -404,7 +426,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                                     <Trash2 className="mr-2 h-4 w-4 text-muted-foreground transition-colors group-hover:text-destructive group-focus:text-destructive" />
                                   )}
                                   <span className="transition-colors group-hover:text-destructive group-focus:text-destructive">
-                                    Delete
+                                    {t("space.documents.panel.dropdownDelete")}
                                   </span>
                                 </DropdownMenuItem>
                               </DropdownMenuContent>

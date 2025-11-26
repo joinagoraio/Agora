@@ -8,6 +8,7 @@ import { UserMenu } from "@/components/user-menu"
 import { Button } from "@/components/ui/button"
 import { SpacePageClient } from "@/components/space-page-client"
 import { ArrowLeft } from "lucide-react"
+import { getServerTranslator } from "@/lib/i18n/server"
 
 export default async function SpacePage({
   params,
@@ -55,6 +56,8 @@ export default async function SpacePage({
   // Get workspaces
   const { data: workspaces } = await getWorkspacesBySpace(spaceId)
 
+  const { t } = await getServerTranslator()
+
   const { data: documents } = await getSpaceItems(spaceId, { item_type: "document" })
 
   const scopeMetadata = (space.metadata as Record<string, any> | null) ?? {}
@@ -72,13 +75,13 @@ export default async function SpacePage({
           <Button variant="ghost" asChild>
             <Link href="/dashboard">
               <ArrowLeft className="mr-2 h-3 w-3" />
-              <span className="text-xs font-normal">Back to Dashboard</span>
+              <span className="text-xs font-normal">{t("space.page.backToDashboard")}</span>
             </Link>
           </Button>
           <div className="flex items-center gap-2">
             {membership?.role && (
               <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-primary">
-                {membership.role}
+                {t(`space.common.roles.${membership.role.toLowerCase()}`, membership.role)}
               </span>
             )}
             <UserMenu />

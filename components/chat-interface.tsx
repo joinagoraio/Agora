@@ -39,6 +39,7 @@ import { EvidenceList } from "@/components/chat/evidence-list"
 import { clientLogger } from "@/lib/utils/client-logger"
 import { useOptionalHighlightContext, type Highlight } from "@/lib/contexts/highlight-context"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 type UseAiChatOptions = Parameters<typeof useAiChat>[0]
 
@@ -202,6 +203,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   const [excludedDocumentIds, setExcludedDocumentIds] = useState<Set<string>>(new Set())
   const [excludedNoteIds, setExcludedNoteIds] = useState<Set<string>>(new Set())
   const [excludedEvidenceIds, setExcludedEvidenceIds] = useState<Set<string>>(new Set())
+  const { t } = useI18n()
 
   const readMessageContent = useCallback((message: unknown): string => {
     if (!message || typeof message !== "object") {
@@ -1507,13 +1509,22 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   const hasContextItems =
     hasLoadedWorkspaceMetadata || documents.length > 0 || contextNotes.length > 0 || evidenceItems.length > 0
 
+  const formatIncludedLabel = (count: number) => t("workspace.chat.interface.context.included", undefined, { count })
+  const formatExcludedLabel = (count: number) => t("workspace.chat.interface.context.excluded", undefined, { count })
+  const formatThoughtDurationLabel = (duration?: number | null) => {
+    if (duration !== undefined && duration !== null && !Number.isNaN(duration)) {
+      return t("workspace.chat.interface.messages.thoughtFor", undefined, { duration: formatDuration(duration) })
+    }
+    return t("workspace.chat.interface.messages.thought")
+  }
+
   const emptyStateDescription = documentId
-    ? "Ask questions about your document and get instant answers"
-    : "Ask questions about your documents and get instant answers"
+    ? t("workspace.chat.interface.empty.descriptionDocument")
+    : t("workspace.chat.interface.empty.descriptionDocuments")
 
   const inputPlaceholder = documentId
-    ? "Ask a question about your document..."
-    : "Ask a question about your documents..."
+    ? t("workspace.chat.interface.input.placeholderDocument")
+    : t("workspace.chat.interface.input.placeholderDocuments")
 
   // Pre-compute badge information for all messages to prevent flash
 
@@ -1529,17 +1540,17 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
               onClick={() => setIsClearConfirmOpen(true)}
             >
               <X className="h-3.5 w-3.5" />
-              Clear chat
+              {t("workspace.chat.interface.controls.clear")}
             </button>
           ) : (
             <div className="inline-flex items-center gap-2 text-xs h-6">
-              <span className="text-muted-foreground">Clear this conversation?</span>
+              <span className="text-muted-foreground">{t("workspace.chat.interface.controls.confirmQuestion")}</span>
               <button
                 type="button"
                 className="px-2 py-1 text-muted-foreground hover:text-foreground transition-colors h-6"
                 onClick={() => setIsClearConfirmOpen(false)}
               >
-                Cancel
+                {t("common.actions.cancel")}
               </button>
               <button
                 type="button"
@@ -1549,7 +1560,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                   setIsClearConfirmOpen(false)
                 }}
               >
-                Clear
+                {t("workspace.chat.interface.controls.confirm")}
               </button>
             </div>
           )}
@@ -1564,7 +1575,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
         {messages.length === 0 && !isLoading && !isSwitchingConversation && (
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
-              <h3 className="mb-2 text-lg font-semibold">Start a conversation</h3>
+              <h3 className="mb-2 text-lg font-semibold">{t("workspace.chat.interface.empty.title")}</h3>
               <p className="text-sm text-muted-foreground">{emptyStateDescription}</p>
             </div>
           </div>
@@ -1585,26 +1596,26 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           const displayContent = sanitizeMessageContent(rawContent)
 
           const thinkingLabel = (() => {
-                      if (message.thinking_duration !== null && message.thinking_duration !== undefined) {
-                        const duration =
-                          typeof message.thinking_duration === "number"
-                            ? message.thinking_duration
-                            : Number.parseFloat(String(message.thinking_duration))
-                        if (!isNaN(duration)) {
-                          return `Thought for ${formatDuration(duration)} sec`
-                        }
-                      }
+            if (message.thinking_duration !== null && message.thinking_duration !== undefined) {
+              const duration =
+                typeof message.thinking_duration === "number"
+                  ? message.thinking_duration
+                  : Number.parseFloat(String(message.thinking_duration))
+              if (!isNaN(duration)) {
+                return formatThoughtDurationLabel(duration)
+              }
+            }
 
-                      if (thinkingDurations.has(index)) {
-                        const duration = thinkingDurations.get(index)!
-                        return `Thought for ${formatDuration(duration)} sec`
-                      }
+            if (thinkingDurations.has(index)) {
+              const duration = thinkingDurations.get(index)!
+              return formatThoughtDurationLabel(duration)
+            }
 
-                      if (isLastAssistant && lastThinkingDuration !== null) {
-                        return `Thought for ${formatDuration(lastThinkingDuration)} sec`
-                      }
+            if (isLastAssistant && lastThinkingDuration !== null) {
+              return formatThoughtDurationLabel(lastThinkingDuration)
+            }
 
-                      return "Thought"
+            return t("workspace.chat.interface.messages.thought")
           })()
 
           const messageAlignment = isUser ? "justify-end" : "justify-start"
@@ -1614,7 +1625,10 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
               <div className="space-y-2 group">
                 {shouldShowLiveThinking && (
                   <div className="flex items-center px-2 mb-1 animate-pulse">
-                    <span className="text-xs italic text-muted-foreground">Thinking{ellipsis}</span>
+                    <span className="text-xs italic text-muted-foreground">
+                      {t("workspace.chat.interface.messages.thinking")}
+                      {ellipsis}
+                    </span>
                   </div>
                 )}
 
@@ -1660,7 +1674,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                   {isAssistant && citations.length === 0 && !isStreamingAssistant && canUseHighlights && (
                     <div className="pt-2">
                       <div className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-xs text-amber-900/80">
-                        No verifiable highlights were returned for this answer.
+                        {t("workspace.chat.interface.messages.noHighlights")}
                       </div>
                     </div>
                   )}
@@ -1678,17 +1692,17 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                           {evidenceStatus === "saving" ? (
                             <>
                               <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                              Saving…
+                              {t("workspace.chat.interface.evidence.saving")}
                             </>
                           ) : (
                             <>
                               <Plus className="mr-1 h-3 w-3" />
-                              Save as evidence
+                              {t("workspace.chat.interface.evidence.save")}
                             </>
                           )}
                         </Button>
                         {evidenceStatus === "success" && (
-                          <span className="text-xs text-emerald-600">Saved to workspace evidence</span>
+                          <span className="text-xs text-emerald-600">{t("workspace.chat.interface.evidence.saved")}</span>
                         )}
                         {evidenceStatus === "error" && evidenceStatusEntry?.error && (
                           <span className="text-xs text-destructive">{evidenceStatusEntry.error}</span>
@@ -1704,7 +1718,8 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           <div className="flex justify-start">
             <div className="flex items-center px-2 animate-pulse">
               <span className="text-sm italic text-muted-foreground">
-                Thinking{ellipsis}
+                {t("workspace.chat.interface.messages.thinking")}
+                {ellipsis}
               </span>
             </div>
           </div>
@@ -1744,32 +1759,36 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
             {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
           </Button>
         </form>
-        <p className="text-xs text-muted-foreground pl-3">Press Enter to send, Shift+Enter for new line</p>
+        <p className="text-xs text-muted-foreground pl-3">{t("workspace.chat.interface.input.hint")}</p>
 
         {/* AI context accordion */}
         {!isContextLoading && hasContextItems && (
           <Accordion type="single" collapsible defaultValue="documents" className="mt-4">
             <AccordionItem value="documents" className="border-none">
               <AccordionTrigger className="py-3 text-xs font-medium text-muted-foreground hover:no-underline data-[state=closed]:inline-flex data-[state=closed]:items-center data-[state=closed]:rounded-full data-[state=closed]:bg-secondary data-[state=closed]:px-3 data-[state=closed]:py-2 data-[state=closed]:w-fit [&[data-state=closed]_svg]:translate-y-0">
-                <span>AI Context</span>
+                <span>{t("workspace.chat.interface.context.title")}</span>
               </AccordionTrigger>
               <AccordionContent className="pt-2">
                 <TooltipProvider>
                   <div className="space-y-3">
                     <div className="rounded-md border border-border/60 bg-secondary/10 px-3 py-2">
-                      <p className="text-xs font-medium text-foreground/90">Space and Workspace Scope (always included)</p>
+                      <p className="text-xs font-medium text-foreground/90">
+                        {t("workspace.chat.interface.context.scopeAlwaysIncluded")}
+                      </p>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {documentId
-                        ? "In document view, the Assistant can only access this document plus Space and Workspace scope (always included). Workspace knowledge is not included in the AI context."
-                        : "Select which items to include in this conversation (excluding items does not delete them):"}
+                        ? t("workspace.chat.interface.context.documentNotice")
+                        : t("workspace.chat.interface.context.selectionDescription")}
                     </p>
                     {documentId ? (
                       // Simple view for document viewer - no tabs, just show the document
                       <div className="space-y-4 mt-3">
                         {(availableSourceDocuments.length > 0 || availableInheritedDocuments.length > 0) && (
                           <div>
-                            <p className="mb-2 text-xs font-medium text-muted-foreground">Document:</p>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              {t("workspace.chat.interface.context.documentLabel")}
+                            </p>
                             <div className="flex flex-wrap gap-2">
                               {[...availableSourceDocuments, ...availableInheritedDocuments].map((doc) => (
                                 <Tooltip key={doc.id}>
@@ -1792,18 +1811,22 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                       <Tabs defaultValue="sources" className="w-full">
                         <TabsList className="grid w-full grid-cols-4 h-8" key={`tablist-${evidenceVersion}-${availableEvidence.length}`}>
                           <TabsTrigger value="sources" className="text-xs" key={`src-${availableSourceDocuments.length}`}>
-                            Sources <span className="font-normal">({availableSourceDocuments.length})</span>
+                            {t("workspace.tabs.sources")}{" "}
+                            <span className="font-normal">({availableSourceDocuments.length})</span>
                           </TabsTrigger>
                           <TabsTrigger value="inherited" className="text-xs" key={`inh-${availableInheritedDocuments.length}`}>
-                            Inherited <span className="font-normal">({availableInheritedDocuments.length})</span>
+                            {t("workspace.tabs.inherited")}{" "}
+                            <span className="font-normal">({availableInheritedDocuments.length})</span>
                           </TabsTrigger>
                           <TabsTrigger value="evidence" className="text-xs" key={`ev-${availableEvidence.length}-${evidenceVersion}`}>
-                            Evidence <span className="font-normal" key={`ev-count-${availableEvidence.length}`}>
+                            {t("workspace.tabs.evidence")}{" "}
+                            <span className="font-normal" key={`ev-count-${availableEvidence.length}`}>
                               ({availableEvidence.length})
                             </span>
                           </TabsTrigger>
                           <TabsTrigger value="notes" className="text-xs" key={`notes-${availableNotes.length}`}>
-                            Notes <span className="font-normal">({availableNotes.length})</span>
+                            {t("workspace.tabs.notes")}{" "}
+                            <span className="font-normal">({availableNotes.length})</span>
                           </TabsTrigger>
                         </TabsList>
                         
@@ -1811,7 +1834,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                         {availableSourceDocuments.length > 0 && (
                           <div>
                             <p className="mb-2 text-xs font-medium text-muted-foreground">
-                              Included ({availableSourceDocuments.length}):
+                              {formatIncludedLabel(availableSourceDocuments.length)}
                             </p>
                             <div className="flex flex-wrap gap-2">
                               {availableSourceDocuments.map((doc) => (
@@ -1838,7 +1861,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                         {!documentId && excludedSourceDocuments.length > 0 && (
                           <div>
                             <p className="mb-2 text-xs font-medium text-muted-foreground">
-                              Excluded ({excludedSourceDocuments.length}):
+                              {formatExcludedLabel(excludedSourceDocuments.length)}
                             </p>
                             <div className="flex flex-wrap gap-2">
                               {excludedSourceDocuments.map((doc) => (
@@ -1863,7 +1886,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                           </div>
                         )}
                         {availableSourceDocuments.length === 0 && excludedSourceDocuments.length === 0 && (
-                          <p className="text-xs text-muted-foreground">No source documents</p>
+                          <p className="text-xs text-muted-foreground">{t("workspace.chat.interface.context.noSources")}</p>
                         )}
                       </TabsContent>
 
@@ -1871,7 +1894,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                         {availableInheritedDocuments.length > 0 && (
                           <div>
                             <p className="mb-2 text-xs font-medium text-muted-foreground">
-                              Included ({availableInheritedDocuments.length}):
+                              {formatIncludedLabel(availableInheritedDocuments.length)}
                             </p>
                             <div className="flex flex-wrap gap-2">
                               {availableInheritedDocuments.map((doc) => (
@@ -1898,7 +1921,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                         {!documentId && excludedInheritedDocuments.length > 0 && (
                           <div>
                             <p className="mb-2 text-xs font-medium text-muted-foreground">
-                              Excluded ({excludedInheritedDocuments.length}):
+                              {formatExcludedLabel(excludedInheritedDocuments.length)}
                             </p>
                             <div className="flex flex-wrap gap-2">
                               {excludedInheritedDocuments.map((doc) => (
@@ -1923,7 +1946,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                           </div>
                         )}
                         {availableInheritedDocuments.length === 0 && excludedInheritedDocuments.length === 0 && (
-                          <p className="text-xs text-muted-foreground">No inherited documents</p>
+                          <p className="text-xs text-muted-foreground">{t("workspace.chat.interface.context.noInherited")}</p>
                         )}
                       </TabsContent>
 
@@ -1935,7 +1958,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                           onRestore={handleRestoreEvidence}
                           includedLabelClassName="mb-2 text-xs font-medium text-muted-foreground"
                           excludedLabelClassName="mb-2 text-xs font-medium text-muted-foreground"
-                          emptyMessage="No evidence items"
+                          emptyMessage={t("workspace.chat.interface.context.noEvidence")}
                         />
                       </TabsContent>
 
@@ -1943,17 +1966,19 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                         {availableNotes.length > 0 && (
                           <div>
                             <p className="mb-2 text-xs font-medium text-muted-foreground">
-                              Included ({availableNotes.length}):
+                              {formatIncludedLabel(availableNotes.length)}
                             </p>
                             <div className="space-y-2">
                               {availableNotes.map((note) => {
                                 const authorName =
-                                  note.author?.full_name || note.author?.email || "Workspace member"
+                                  note.author?.full_name ||
+                                  note.author?.email ||
+                                  t("workspace.sections.notes.status.memberFallback")
                                 const trimmedContent = note.content.trim()
                                 const preview =
                                   trimmedContent.length > 200
                                     ? `${trimmedContent.slice(0, 200).trimEnd()}...`
-                                    : trimmedContent || "[No content]"
+                                    : trimmedContent || t("workspace.sections.notes.previewEmpty")
 
                                 return (
                                   <div
@@ -1966,7 +1991,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                                         type="button"
                                         onClick={() => handleRemoveNote(note.id)}
                                         className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                        aria-label="Remove note from AI context"
+                                        aria-label={t("workspace.sections.notes.contextRemove")}
                                       >
                                         <X className="h-3 w-3" />
                                       </button>
@@ -1981,17 +2006,19 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                         {excludedNotes.length > 0 && (
                           <div>
                             <p className="mb-2 text-xs font-medium text-muted-foreground">
-                              Excluded ({excludedNotes.length}):
+                              {formatExcludedLabel(excludedNotes.length)}
                             </p>
                             <div className="space-y-2">
                               {excludedNotes.map((note) => {
                                 const authorName =
-                                  note.author?.full_name || note.author?.email || "Workspace member"
+                                  note.author?.full_name ||
+                                  note.author?.email ||
+                                  t("workspace.sections.notes.status.memberFallback")
                                 const trimmedContent = note.content.trim()
                                 const preview =
                                   trimmedContent.length > 200
                                     ? `${trimmedContent.slice(0, 200).trimEnd()}...`
-                                    : trimmedContent || "[No content]"
+                                    : trimmedContent || t("workspace.sections.notes.previewEmpty")
 
                                 return (
                                   <div
@@ -2004,7 +2031,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                                         type="button"
                                         onClick={() => handleRestoreNote(note.id)}
                                         className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                        aria-label="Restore note to AI context"
+                                        aria-label={t("workspace.sections.notes.contextRestore")}
                                       >
                                         <Plus className="h-3 w-3" />
                                       </button>
@@ -2019,7 +2046,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                           </div>
                         )}
                         {availableNotes.length === 0 && excludedNotes.length === 0 && (
-                          <p className="text-xs text-muted-foreground">No notes</p>
+                          <p className="text-xs text-muted-foreground">{t("workspace.chat.interface.context.noNotes")}</p>
                         )}
                       </TabsContent>
                     </Tabs>
@@ -2034,15 +2061,15 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       <Dialog open={pendingEvidence !== null} onOpenChange={(open) => (!open ? handleCloseEvidenceDialog() : null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Save as workspace evidence</DialogTitle>
-            <DialogDescription>
-              Store this assistant response in the workspace evidence board so teammates can revisit it later.
-            </DialogDescription>
+            <DialogTitle>{t("workspace.chat.interface.dialog.title")}</DialogTitle>
+            <DialogDescription>{t("workspace.chat.interface.dialog.description")}</DialogDescription>
           </DialogHeader>
           {pendingEvidence && (
             <div className="space-y-4">
               <div>
-                <p className="text-xs font-medium uppercase text-muted-foreground">Question</p>
+                <p className="text-xs font-medium uppercase text-muted-foreground">
+                  {t("workspace.chat.interface.dialog.questionLabel")}
+                </p>
                 <p className="mt-1 text-sm text-foreground/90 whitespace-pre-wrap">
                   {pendingEvidence.question.length > 600
                     ? `${pendingEvidence.question.slice(0, 600)}…`
@@ -2050,29 +2077,37 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                 </p>
               </div>
               <div>
-                <p className="text-xs font-medium uppercase text-muted-foreground">Confidence</p>
+                <p className="text-xs font-medium uppercase text-muted-foreground">
+                  {t("workspace.chat.interface.dialog.confidenceLabel")}
+                </p>
                 <Select
                   value={evidenceConfidence}
                   onValueChange={(value) => setEvidenceConfidence(value as "low" | "medium" | "high")}
                 >
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select confidence level" />
+                    <SelectValue placeholder={t("workspace.chat.interface.dialog.confidencePlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="high">High confidence</SelectItem>
-                    <SelectItem value="medium">Medium confidence</SelectItem>
-                    <SelectItem value="low">Low confidence</SelectItem>
+                    <SelectItem value="high">{t("workspace.chat.interface.dialog.confidenceHigh")}</SelectItem>
+                    <SelectItem value="medium">{t("workspace.chat.interface.dialog.confidenceMedium")}</SelectItem>
+                    <SelectItem value="low">{t("workspace.chat.interface.dialog.confidenceLow")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <p className="text-xs font-medium uppercase text-muted-foreground">Citations</p>
+                <p className="text-xs font-medium uppercase text-muted-foreground">
+                  {t("workspace.chat.interface.dialog.citationsLabel")}
+                </p>
                 <p className="mt-1 text-sm text-foreground/80">
                   {Array.isArray(pendingEvidence.sources) && pendingEvidence.sources.length > 0
-                    ? `${pendingEvidence.sources.length} source${
-                        pendingEvidence.sources.length === 1 ? "" : "s"
-                      } will be linked.`
-                    : "No supporting documents were detected for this answer."}
+                    ? pendingEvidence.sources.length === 1
+                      ? t("workspace.chat.interface.dialog.citationsLinkedOne", undefined, {
+                          count: pendingEvidence.sources.length,
+                        })
+                      : t("workspace.chat.interface.dialog.citationsLinkedMany", undefined, {
+                          count: pendingEvidence.sources.length,
+                        })
+                    : t("workspace.chat.interface.dialog.noCitations")}
                 </p>
               </div>
               {evidenceError && <p className="text-sm text-destructive">{evidenceError}</p>}
@@ -2080,16 +2115,16 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
           )}
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseEvidenceDialog} disabled={isSavingEvidence}>
-              Cancel
+              {t("common.actions.cancel")}
             </Button>
             <Button onClick={handleSaveEvidence} disabled={isSavingEvidence}>
               {isSavingEvidence ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving
+                  {t("workspace.chat.interface.dialog.saving")}
                 </>
               ) : (
-                "Save to evidence"
+                t("workspace.chat.interface.dialog.save")
               )}
             </Button>
           </DialogFooter>

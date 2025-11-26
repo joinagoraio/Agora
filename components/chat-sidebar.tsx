@@ -47,12 +47,27 @@ interface ChatSidebarProps {
   canManage?: boolean
 }
 
+const DEFAULT_CONVERSATION_TITLE_KEY = "new conversation"
+
 export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canManage = true }: ChatSidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { sidebarWidth, setSidebarWidth, setIsSidebarResizing, setIsChatOpen } = useChatContext()
   const { t } = useI18n()
+  const getConversationTitle = useCallback(
+    (title?: string | null) => {
+      const trimmed = title?.trim()
+      if (!trimmed || trimmed.length === 0) {
+        return t("workspace.chat.interface.defaultTitle")
+      }
+      if (trimmed.toLowerCase() === DEFAULT_CONVERSATION_TITLE_KEY) {
+        return t("workspace.chat.interface.defaultTitle")
+      }
+      return trimmed
+    },
+    [t],
+  )
 
   const chatContext = useMemo(() => {
     if (!pathname) {
@@ -945,6 +960,7 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
                   {conversations && conversations.length > 0 ? (
                     conversations.map((conv) => {
                       const isActive = conv.id === currentConversationId
+                      const displayTitle = getConversationTitle(conv.title)
                       return (
                       <div
                         key={conv.id}
@@ -961,10 +977,10 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
                               <p className={cn(
                                 "truncate text-xs",
                                 isActive ? "font-bold" : "font-medium"
-                              )}>{conv.title}</p>
+                              )}>{displayTitle}</p>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p>{conv.title}</p>
+                                <p>{displayTitle}</p>
                             </TooltipContent>
                           </Tooltip>
                         </div>

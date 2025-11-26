@@ -62,7 +62,8 @@ export const getServerTranslator = cache(async (): Promise<{ language: Supported
   const { language, messages } = await getServerDictionary()
   return {
     language,
-    t: (key: string, fallback?: string) => translate(messages, key, fallback),
+    t: (key: string, fallback?: string, replacements?: Record<string, string | number>) =>
+      translate(messages, key, fallback, replacements),
   }
 })
 

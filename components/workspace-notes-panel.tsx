@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 export type WorkspaceNote = {
   id: string
@@ -43,12 +44,15 @@ type DraftWorkspaceNote = {
   isDraft: true
 }
 
-const CSRF_ERROR_MESSAGE = "Could not verify your session. Refresh and try again."
-
-async function requestWithCsrf<T = unknown>(input: RequestInfo, init: RequestInit, defaultError: string): Promise<T> {
+async function requestWithCsrf<T = unknown>(
+  input: RequestInfo,
+  init: RequestInit,
+  defaultError: string,
+  csrfError?: string,
+): Promise<T> {
   const csrfToken = await fetchCsrfToken()
   if (!csrfToken) {
-    throw new Error(CSRF_ERROR_MESSAGE)
+    throw new Error(csrfError ?? defaultError ?? "Could not verify your session. Refresh and try again.")
   }
 
   const headers = new Headers(init.headers ?? undefined)
@@ -88,6 +92,8 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
   const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const { t } = useI18n()
+  const csrfErrorMessage = t("workspace.sections.notes.errors.csrf")
 
   const emitWorkspaceContextUpdate = useCallback(
     (payload?: Record<string, any>) => {
@@ -150,7 +156,7 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
     }
 
     if (!editContent.trim()) {
-      setEditError("Write a note before saving.")
+      setEditError(t("workspace.sections.notes.errors.emptyContent"))
       return
     }
 
@@ -166,14 +172,16 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content: editContent, includeInAiContext: noteToUpdate.include_in_ai_context }),
         },
-        "Unable to update note.",
+        t("workspace.sections.notes.errors.update"),
+        csrfErrorMessage,
       )
 
       setNotes((prev) => prev.map((note) => (note.id === editingNoteId ? payload.data : note)))
       setEditingNoteId(null)
       setEditContent("")
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : "Unable to update note.")
+      const fallback = t("workspace.sections.notes.errors.update")
+      setEditError(err instanceof Error ? err.message : fallback)
     } finally {
       setIsSavingEdit(false)
     }
@@ -188,7 +196,7 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
 
   const handleSaveDraft = async () => {
     if (!draftContent.trim()) {
-      setDraftError("Write a note before saving.")
+      setDraftError(t("workspace.sections.notes.errors.emptyContent"))
       return
     }
 
@@ -203,7 +211,8 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content: draftContent, includeInAiContext: draftIncludeInAiContext }),
         },
-        "Unable to save note.",
+        t("workspace.sections.notes.errors.create"),
+        csrfErrorMessage,
       )
 
       setNotes((prev) => [payload.data, ...prev])
@@ -217,7 +226,8 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
         includeInAiContext: payload?.data?.include_in_ai_context,
       })
     } catch (err) {
-      setDraftError(err instanceof Error ? err.message : "Unable to save note.")
+      const fallback = t("workspace.sections.notes.errors.create")
+      setDraftError(err instanceof Error ? err.message : fallback)
     } finally {
       setIsSavingDraft(false)
     }
@@ -228,7 +238,12 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
     setGeneralError(null)
 
     try {
-      await requestWithCsrf(`/api/workspaces/${workspaceId}/notes/${noteId}`, { method: "DELETE" }, "Unable to delete note.")
+      await requestWithCsrf(
+        `/api/workspaces/${workspaceId}/notes/${noteId}`,
+        { method: "DELETE" },
+        t("workspace.sections.notes.errors.delete"),
+        csrfErrorMessage,
+      )
 
       setNotes((prev) => prev.filter((note) => note.id !== noteId))
       emitWorkspaceContextUpdate({
@@ -237,7 +252,8 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
         noteId,
       })
     } catch (err) {
-      setGeneralError(err instanceof Error ? err.message : "Unable to delete note.")
+      const fallback = t("workspace.sections.notes.errors.delete")
+      setGeneralError(err instanceof Error ? err.message : fallback)
     } finally {
       setDeletingId(null)
     }
@@ -264,7 +280,8 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ includeInAiContext: nextValue }),
         },
-        "Unable to update note.",
+        t("workspace.sections.notes.errors.update"),
+        csrfErrorMessage,
       )
 
       setNotes((prev) => prev.map((note) => (note.id === noteId ? payload.data : note)))
@@ -275,7 +292,8 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
         includeInAiContext: payload?.data?.include_in_ai_context,
       })
     } catch (err) {
-      setGeneralError(err instanceof Error ? err.message : "Unable to update note.")
+      const fallback = t("workspace.sections.notes.errors.update")
+      setGeneralError(err instanceof Error ? err.message : fallback)
       if (previousNote) {
         setNotes((prev) =>
           prev.map((note) => (note.id === noteId ? { ...note, include_in_ai_context: previousNote.include_in_ai_context } : note)),
@@ -292,17 +310,17 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
-          <h3 className="text-lg font-semibold">Workspace Notes</h3>
+          <h3 className="text-lg font-semibold">{t("workspace.sections.notes.title")}</h3>
           <p className="text-sm text-muted-foreground">
-            {canManage 
-              ? "Capture research logs, to-do lists, and team context that evolves over time."
-              : "View team notes and context for this workspace."}
+            {canManage
+              ? t("workspace.sections.notes.descriptionManage")
+              : t("workspace.sections.notes.descriptionView")}
           </p>
         </div>
         {canManage && (
           <Button onClick={handleAddDraft} disabled={!!draftNote}>
             <Plus className="mr-2 h-4 w-4" />
-            Add Note
+            {t("workspace.sections.notes.addButton")}
           </Button>
         )}
       </div>
@@ -312,9 +330,9 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
       {items.length === 0 ? (
         <Card className="shadow">
           <CardContent className="py-6 text-sm text-muted-foreground">
-            {canManage 
-              ? "No notes yet. Capture insights, pending tasks, or decisions for this workspace."
-              : "No notes have been created yet."}
+            {canManage
+              ? t("workspace.sections.notes.emptyManage")
+              : t("workspace.sections.notes.emptyView")}
           </CardContent>
         </Card>
       ) : (
@@ -327,19 +345,21 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
               return (
                 <Card key={item.id} className="flex h-full flex-col shadow">
                   <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-sm font-medium text-foreground">New note</div>
+                    <div className="text-sm font-medium text-foreground">
+                      {t("workspace.sections.notes.draft.title")}
+                    </div>
                     <div className="flex items-center gap-2 self-end sm:self-auto">
                       <Button variant="outline" onClick={handleCancelDraft} disabled={isSavingDraft}>
-                        Cancel
+                        {t("common.actions.cancel")}
                       </Button>
                       <Button onClick={handleSaveDraft} disabled={isSavingDraft}>
                         {isSavingDraft ? (
                           <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Saving...
+                            {t("workspace.sections.notes.draft.saving")}
                           </>
                         ) : (
-                          "Save Note"
+                          t("workspace.sections.notes.draft.save")
                         )}
                       </Button>
                     </div>
@@ -349,7 +369,7 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
                     <Textarea
                       value={draftContent}
                       onChange={(event) => setDraftContent(event.target.value)}
-                      placeholder="Capture key decisions, next steps, or handover notes for the team."
+                      placeholder={t("workspace.sections.notes.draft.placeholder")}
                       rows={6}
                       autoFocus
                     />
@@ -357,12 +377,14 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
                   </CardContent>
                   <CardFooter className="mt-auto justify-between gap-2 border-t px-4 py-0.5 pt-0">
                     <p className="text-sm leading-none text-muted-foreground">
-                      {draftIncludeInAiContext ? "Included in AI context" : "Excluded from AI context"}
+                      {draftIncludeInAiContext
+                        ? t("workspace.sections.notes.status.included")
+                        : t("workspace.sections.notes.status.excluded")}
                     </p>
                     <Switch
                       checked={draftIncludeInAiContext}
                       onCheckedChange={(checked) => setDraftIncludeInAiContext(checked)}
-                      aria-label="Toggle AI context inclusion for new note"
+                      aria-label={t("workspace.sections.notes.draft.toggleLabel")}
                     />
                   </CardFooter>
                 </Card>
@@ -371,9 +393,14 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
 
             const note = item as WorkspaceNote
             const isOwner = note.created_by === currentUserId
-            const authorName = note.author?.full_name || note.author?.email || "Member"
-            const toggleLabel = note.include_in_ai_context ? "Remove from AI context" : "Add to AI context"
-            const statusLabel = note.include_in_ai_context ? "Included in AI context" : "Excluded from AI context"
+            const authorName =
+              note.author?.full_name || note.author?.email || t("workspace.sections.notes.status.memberFallback")
+            const toggleLabel = note.include_in_ai_context
+              ? t("workspace.sections.notes.status.removeFromContext")
+              : t("workspace.sections.notes.status.addToContext")
+            const statusLabel = note.include_in_ai_context
+              ? t("workspace.sections.notes.status.included")
+              : t("workspace.sections.notes.status.excluded")
             const isEditing = editingNoteId === note.id
 
             return (
@@ -383,7 +410,12 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
                     <div className="text-sm font-medium">{authorName}</div>
                     <div className="text-xs text-muted-foreground">
                       {new Date(note.created_at).toLocaleString()}
-                      {note.updated_at !== note.created_at && " · Updated"}
+                      {note.updated_at !== note.created_at && (
+                        <>
+                          {" · "}
+                          {t("workspace.sections.notes.status.updated")}
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -391,16 +423,16 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
                       (isEditing ? (
                         <>
                           <Button variant="outline" size="sm" onClick={handleCancelEdit} disabled={isSavingEdit}>
-                            Cancel
+                            {t("common.actions.cancel")}
                           </Button>
                           <Button size="sm" onClick={handleSaveEdit} disabled={isSavingEdit}>
                             {isSavingEdit ? (
                               <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Saving...
+                                {t("workspace.sections.notes.edit.saving")}
                               </>
                             ) : (
-                              "Save"
+                              t("common.actions.save")
                             )}
                           </Button>
                         </>
@@ -418,7 +450,7 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
                               ) : (
                                 <MoreVertical className="h-4 w-4" />
                               )}
-                              <span className="sr-only">Open note menu</span>
+                              <span className="sr-only">{t("workspace.sections.notes.menu.label")}</span>
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
@@ -429,7 +461,7 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
                               }}
                             >
                               <PenSquare className="mr-2 h-4 w-4 text-muted-foreground" />
-                              Edit note
+                              {t("workspace.sections.notes.menu.edit")}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -444,7 +476,7 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
                             >
                               <Trash2 className="mr-2 h-4 w-4 text-muted-foreground transition-colors group-hover:text-destructive group-focus:text-destructive" />
                               <span className="transition-colors group-hover:text-destructive group-focus:text-destructive">
-                                Delete note
+                                {t("workspace.sections.notes.menu.delete")}
                               </span>
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -466,7 +498,7 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
                 <CardFooter className="mt-auto justify-between gap-2 border-t px-4 py-0.5 pt-0">
                   <div className="text-sm leading-none text-muted-foreground">
                     {statusLabel}
-                    {updatingId === note.id ? " · Updating..." : ""}
+                    {updatingId === note.id ? ` · ${t("workspace.sections.notes.status.updating")}` : ""}
                   </div>
                   {isOwner ? (
                     <Switch

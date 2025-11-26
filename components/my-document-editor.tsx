@@ -29,6 +29,7 @@ import { deleteDocument, generateWorkspaceDocumentDraft, updateWorkspaceDocument
 import { CircleStop, Loader2, MoreVertical, Save, Sparkles, Trash2 } from "lucide-react"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { toast } from "sonner"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface MyDocumentEditorProps {
   workspaceId: string
@@ -50,6 +51,7 @@ export function MyDocumentEditor({
   lastEditedAt,
 }: MyDocumentEditorProps) {
   const router = useRouter()
+  const { t } = useI18n()
   const [title, setTitle] = useState(initialTitle)
   const [content, setContent] = useState(initialContent || "")
   const [instructions, setInstructions] = useState(initialInstructions || "")
@@ -230,7 +232,8 @@ export function MyDocumentEditor({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold">
-            Editing: <span className="text-primary">{title || "Untitled document"}</span>
+            {t("common.labels.editing")}{" "}
+            <span className="text-primary">{title || "Untitled document"}</span>
           </h1>
           <p className="text-sm text-muted-foreground">
             Edit your draft in place. Use AI instructions to describe what you want the next draft to focus on.

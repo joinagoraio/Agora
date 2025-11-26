@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useState } from "react"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("")
@@ -21,6 +22,7 @@ export default function SignUpPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get("redirect")
+  const { t } = useI18n()
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,7 +55,7 @@ export default function SignUpPage() {
         router.push("/auth/verify-email")
       }
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
+      setError(error instanceof Error ? error.message : t("auth.signup.errorGeneric"))
     } finally {
       setIsLoading(false)
     }
@@ -83,7 +85,7 @@ export default function SignUpPage() {
       })
       if (error) throw error
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
+      setError(error instanceof Error ? error.message : t("auth.signup.errorGeneric"))
       setIsGoogleLoading(false)
     }
   }
@@ -93,36 +95,36 @@ export default function SignUpPage() {
       <div className="w-full max-w-sm">
         <Card>
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl">Create an account</CardTitle>
-            <CardDescription>Enter your details to get started with AGORA</CardDescription>
+            <CardTitle className="text-2xl">{t("auth.signup.title")}</CardTitle>
+            <CardDescription>{t("auth.signup.subtitle")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <form onSubmit={handleSignUp} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name</Label>
+                  <Label htmlFor="fullName">{t("auth.signup.nameLabel")}</Label>
                   <Input
                     id="fullName"
                     type="text"
-                    placeholder="John Doe"
+                    placeholder={t("auth.signup.namePlaceholder")}
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">{t("auth.signup.emailLabel")}</Label>
                   <Input
                     id="email"
                     type="email"
-                    placeholder="you@example.com"
+                    placeholder={t("auth.login.emailPlaceholder")}
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">{t("auth.signup.passwordLabel")}</Label>
                   <Input
                     id="password"
                     type="password"
@@ -131,11 +133,13 @@ export default function SignUpPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
-                  <p className="text-xs text-muted-foreground">Must be at least 6 characters</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("auth.signup.passwordHint")}
+                  </p>
                 </div>
                 {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
                 <Button type="submit" className="w-full" disabled={isLoading || isGoogleLoading}>
-                  {isLoading ? "Creating account..." : "Create account"}
+                  {isLoading ? t("auth.signup.submitting") : t("auth.signup.submit")}
                 </Button>
               </form>
 
@@ -144,7 +148,7 @@ export default function SignUpPage() {
                   <span className="w-full border-t" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+                  <span className="bg-background px-2 text-muted-foreground">{t("auth.login.divider")}</span>
                 </div>
               </div>
 
@@ -156,7 +160,7 @@ export default function SignUpPage() {
                 disabled={isGoogleLoading || isLoading}
               >
                 {isGoogleLoading ? (
-                  "Signing up with Google..."
+                  t("auth.login.googleSubmitting")
                 ) : (
                   <>
                     <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
@@ -177,18 +181,18 @@ export default function SignUpPage() {
                         fill="#EA4335"
                       />
                     </svg>
-                    Continue with Google
+                    {t("auth.login.googleCta")}
                   </>
                 )}
               </Button>
             </div>
             <div className="mt-4 text-center text-sm text-muted-foreground">
-              Already have an account?{" "}
+              {t("auth.signup.existingAccount")}{" "}
               <Link 
                 href={redirectTo ? `/auth/login?redirect=${encodeURIComponent(redirectTo)}` : "/auth/login"} 
                 className="font-medium text-primary underline-offset-4 hover:underline"
               >
-                Sign in
+                {t("auth.signup.loginLink")}
               </Link>
             </div>
           </CardContent>

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { FileText, Plus, X } from "lucide-react"
 import React from "react"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 type EvidenceItem = {
   id: string
@@ -30,15 +31,20 @@ export function EvidenceList({
   onRestore,
   includedLabelClassName = "mb-2 text-xs font-medium text-muted-foreground",
   excludedLabelClassName = "mb-2 text-xs font-medium text-muted-foreground/70",
-  emptyMessage = "No workspace evidence yet.",
+  emptyMessage,
   className = "space-y-2",
 }: EvidenceListProps) {
+  const { t } = useI18n()
+  const includedLabel = t("workspace.chat.interface.context.included", undefined, { count: available.length })
+  const excludedLabel = t("workspace.chat.interface.context.excluded", undefined, { count: excluded.length })
+  const emptyLabel = emptyMessage ?? t("workspace.chat.interface.context.noEvidence")
+
   return (
     <div className={className}>
       {available.length > 0 && (
         <div>
           <p className={includedLabelClassName}>
-            Included ({available.length}):
+            {includedLabel}
           </p>
           <EvidenceBadgeGroup items={available} variant="included" onClick={onRemove} />
         </div>
@@ -47,14 +53,14 @@ export function EvidenceList({
       {excluded.length > 0 && (
         <div>
           <p className={excludedLabelClassName}>
-            Excluded ({excluded.length}):
+            {excludedLabel}
           </p>
           <EvidenceBadgeGroup items={excluded} variant="excluded" onClick={onRestore} />
         </div>
       )}
 
       {available.length === 0 && excluded.length === 0 && (
-        <p className="text-xs text-muted-foreground">{emptyMessage}</p>
+        <p className="text-xs text-muted-foreground">{emptyLabel}</p>
       )}
     </div>
   )
@@ -67,10 +73,11 @@ interface EvidenceBadgeGroupProps {
 }
 
 function EvidenceBadgeGroup({ items, variant, onClick }: EvidenceBadgeGroupProps) {
+  const { t } = useI18n()
   return (
     <div className="flex flex-wrap gap-2">
       {items.map((item) => {
-        const question = item.payload?.question || "Saved evidence"
+        const question = item.payload?.question || t("workspace.chat.interface.context.savedEvidence")
         const truncated = question.length > 120 ? `${question.slice(0, 120)}…` : question
 
         return (

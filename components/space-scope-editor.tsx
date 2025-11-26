@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 const SPACE_TYPE_OPTIONS = ["national", "regional", "municipal", "party", "other"] as const
 type SpaceTypeValue = (typeof SPACE_TYPE_OPTIONS)[number]
@@ -74,6 +75,7 @@ export function SpaceScopeEditor({
   const [originalSummary, setOriginalSummary] = useState<string | null>(null)
   const [originalDescription, setOriginalDescription] = useState<string | null>(null)
   const [enhancementCompleted, setEnhancementCompleted] = useState<{ summary?: boolean; description?: boolean }>({})
+  const { t } = useI18n()
 
   const handleSave = () => {
     setError(null)
@@ -244,31 +246,37 @@ export function SpaceScopeEditor({
     <section className="space-y-6">
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="space-scope">Scope</Label>
+          <Label htmlFor="space-scope">{t("space.wizard.basics.scopeLabel")}</Label>
           <Select value={spaceTypeValue} onValueChange={(value) => setSpaceTypeValue(value as SpaceTypeValue)}>
             <SelectTrigger id="space-scope">
-              <SelectValue placeholder="Select scope" />
+              <SelectValue
+                aria-label={t("space.wizard.basics.scopeLabel")}
+                placeholder={t("space.wizard.basics.scopePlaceholder")}
+              />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="national">National</SelectItem>
-              <SelectItem value="regional">Regional</SelectItem>
-              <SelectItem value="municipal">Municipal</SelectItem>
-              <SelectItem value="party">Party</SelectItem>
-              <SelectItem value="other">Other</SelectItem>
+              <SelectItem value="national">{t("space.wizard.basics.scopeOptions.national")}</SelectItem>
+              <SelectItem value="regional">{t("space.wizard.basics.scopeOptions.regional")}</SelectItem>
+              <SelectItem value="municipal">{t("space.wizard.basics.scopeOptions.municipal")}</SelectItem>
+              <SelectItem value="party">{t("space.wizard.basics.scopeOptions.party")}</SelectItem>
+              <SelectItem value="other">{t("space.wizard.basics.scopeOptions.other")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="space-visibility">Visibility</Label>
+          <Label htmlFor="space-visibility">{t("space.wizard.basics.visibilityLabel")}</Label>
           <Select value={visibilityValue} onValueChange={(value) => setVisibilityValue(value as VisibilityValue)}>
             <SelectTrigger id="space-visibility">
-              <SelectValue placeholder="Select visibility" />
+              <SelectValue
+                aria-label={t("space.wizard.basics.visibilityLabel")}
+                placeholder={t("space.wizard.basics.visibilityPlaceholder")}
+              />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="public">Public</SelectItem>
-              <SelectItem value="internal">Internal</SelectItem>
-              <SelectItem value="confidential">Confidential</SelectItem>
+              <SelectItem value="public">{t("space.wizard.basics.visibilityOptions.public")}</SelectItem>
+              <SelectItem value="internal">{t("space.wizard.basics.visibilityOptions.internal")}</SelectItem>
+              <SelectItem value="confidential">{t("space.wizard.basics.visibilityOptions.confidential")}</SelectItem>
             </SelectContent>
           </Select>
         </div>

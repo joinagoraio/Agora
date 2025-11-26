@@ -23,7 +23,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { FileText, ExternalLink, Search, MoreVertical, Archive, Trash2, ArchiveRestore, Plus, Upload, Download, Plug, ArchiveX, Info } from "lucide-react"
+import {
+  FileText,
+  ExternalLink,
+  Search,
+  MoreVertical,
+  Archive,
+  Trash2,
+  ArchiveRestore,
+  Plus,
+  Upload,
+  Download,
+  Plug,
+  ArchiveX,
+  Info,
+} from "lucide-react"
 import { deleteDocument, archiveDocument, getWorkspaceDocuments, getArchivedDocumentCount } from "@/lib/actions/document"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -35,6 +49,7 @@ import { ManageSourcesDialog } from "@/components/manage-sources-dialog"
 import { FileIcon, defaultStyles } from "react-file-icon"
 import { getDocumentFileExtension } from "@/lib/utils/document-files"
 import { toast } from "sonner"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface DocumentsListProps {
   workspaceId: string
@@ -59,6 +74,20 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
   const [archivedCount, setArchivedCount] = useState(initialArchivedCount)
   const [isLoadingArchived, setIsLoadingArchived] = useState(false)
   const router = useRouter()
+  const { t } = useI18n()
+  const addSourceLabel = t("workspace.documents.list.addSource")
+  const addFromSourceLabel = t("workspace.documents.list.addFromSource")
+  const manageSourcesLabel = t("workspace.documents.list.manageSources")
+  const emptyTitleLabel = t("workspace.documents.list.emptyTitle")
+  const emptyManageDescription = t("workspace.documents.list.emptyManageDescription")
+  const emptyReadOnlyDescription = t("workspace.documents.list.emptyReadOnlyDescription")
+  const getSourceTypeLabel = useCallback(
+    (sourceType?: string | null) => {
+      if (!sourceType) return ""
+      return t(`workspace.sources.card.type.${sourceType}`, formatSourceType(sourceType))
+    },
+    [t],
+  )
 
   const emitWorkspaceContextUpdate = useCallback(
     (payload?: Record<string, any>) => {
@@ -116,11 +145,11 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
       setArchivedCount(archivedCountResult.count || 0)
     } catch (error) {
       console.error("Failed to fetch documents:", error)
-      toast.error("Failed to load documents")
+      toast.error(t("workspace.documents.list.toastFetchError"))
     } finally {
       setIsLoadingArchived(false)
     }
-  }, [workspaceId, isInheritedDocument])
+  }, [workspaceId, isInheritedDocument, t])
 
   // Listen for document upload events and refresh the list
   useEffect(() => {
@@ -152,19 +181,22 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
     }
 
     const documentId = documentToDelete.id
-    const documentTitle = documentToDelete.title || documentToDelete.metadata?.title || "Document"
+    const documentTitle =
+      documentToDelete.title || documentToDelete.metadata?.title || t("workspace.documents.create.trigger")
 
     const result = await deleteDocument(documentId, workspaceId)
     if (result.error) {
-      toast.error(`Failed to delete ${documentTitle}`, { description: result.error })
+      toast.error(t("workspace.documents.list.toastDeleteError", undefined, { title: documentTitle }), {
+        description: result.error,
+      })
     } else {
       emitWorkspaceContextUpdate({
         type: "document",
         action: "deleted",
         documentId,
       })
-      toast.success("Document deleted", {
-        description: `${documentTitle} was removed from this workspace.`,
+      toast.success(t("workspace.documents.list.toastDeleteSuccessTitle"), {
+        description: t("workspace.documents.list.toastDeleteSuccess", undefined, { title: documentTitle }),
       })
       // Close dialog and refresh after animation completes
       setDocumentToDelete(null)
@@ -191,9 +223,12 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
   const handleArchive = async (documentId: string, archive: boolean) => {
     const result = await archiveDocument(documentId, workspaceId, archive)
     if (result.error) {
-      toast.error(`Failed to ${archive ? "archive" : "unarchive"} document`, {
-        description: result.error,
-      })
+      toast.error(
+        archive
+          ? t("workspace.documents.list.toastArchiveError")
+          : t("workspace.documents.list.toastUnarchiveError"),
+        { description: result.error },
+      )
     } else {
       setArchivingDocId(null)
       emitWorkspaceContextUpdate({
@@ -201,7 +236,16 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
         action: archive ? "archived" : "unarchived",
         documentId,
       })
-      toast.success(`Document ${archive ? "archived" : "restored"}`)
+      toast.success(
+        archive
+          ? t("workspace.documents.list.toastArchiveSuccessTitle")
+          : t("workspace.documents.list.toastUnarchiveSuccessTitle"),
+        {
+          description: archive
+            ? t("workspace.documents.list.toastArchiveSuccess")
+            : t("workspace.documents.list.toastUnarchiveSuccess"),
+        },
+      )
       // Refresh documents list to reflect changes
       await fetchDocuments(showArchived)
     }
@@ -239,6 +283,13 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
   
   const activeDocuments = documents.filter((doc: any) => doc.status !== "archived")
 
+  const archivedToggleLabel =
+    archivedCount > 0
+      ? showArchived
+        ? t("workspace.documents.list.archivedHide", undefined, { count: archivedCount })
+        : t("workspace.documents.list.archivedShow", undefined, { count: archivedCount })
+      : ""
+
   if (!documents || documents.length === 0 || (!showArchived && activeDocuments.length === 0)) {
     return (
       <div className="space-y-6">
@@ -249,7 +300,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search sources..."
+              placeholder={t("workspace.documents.list.searchPlaceholder")}
               className="pl-10 w-full"
               disabled
             />
@@ -263,7 +314,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
               className="whitespace-nowrap"
             >
               <Archive className="mr-2 h-4 w-4" />
-              {showArchived ? `Hide Archived (${archivedCount})` : `Show Archived (${archivedCount})`}
+              {archivedToggleLabel}
             </Button>
           )}
         </div>
@@ -282,7 +333,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                 trigger={
                   <Button variant="outline" size="sm">
                     <Plug className="mr-2 h-4 w-4" />
-                    Manage Sources
+                    {manageSourcesLabel}
                   </Button>
                 }
               />
@@ -294,7 +345,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                 trigger={
                   <Button size="sm">
                     <Plus className="mr-2 h-4 w-4" />
-                    Add Source
+                    {addSourceLabel}
                   </Button>
                 }
               />
@@ -305,7 +356,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                 trigger={
                   <Button size="sm">
                     <Plus className="mr-2 h-4 w-4" />
-                    Add from Source
+                    {addFromSourceLabel}
                   </Button>
                 }
               />
@@ -315,20 +366,22 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
               trigger={
                 <Button size="sm">
                   <Upload className="mr-2 h-4 w-4" />
-                  Upload Documents
+                  {t("workspace.sources.upload.trigger")}
                 </Button>
               }
             />
           </div>
         )}
-        </div>
+      </div>
 
         <Card className="shadow">
           <CardContent className="flex flex-col items-center justify-center py-12 text-center space-y-4">
             <FileText className="mb-4 h-12 w-12 text-muted-foreground" />
-            <h3 className="mb-2 text-lg font-semibold">No documents yet</h3>
+            <h3 className="mb-2 text-lg font-semibold">{emptyTitleLabel}</h3>
             <p className="text-center text-sm text-muted-foreground">
-              {canManage ? "Upload documents or connect external sources to get started" : "No documents have been uploaded yet"}
+              {canManage
+                ? emptyManageDescription
+                : emptyReadOnlyDescription}
             </p>
             {canManage && (
               <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
@@ -339,7 +392,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                     trigger={
                       <Button variant="outline">
                         <Plus className="mr-2 h-4 w-4" />
-                        Add Source
+                        {addSourceLabel}
                       </Button>
                     }
                   />
@@ -350,7 +403,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                     trigger={
                       <Button variant="outline">
                         <Plus className="mr-2 h-4 w-4" />
-                        Add from Source
+                        {addFromSourceLabel}
                       </Button>
                     }
                   />
@@ -360,7 +413,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                   trigger={
                     <Button variant="outline">
                       <Upload className="mr-2 h-4 w-4" />
-                      Upload Documents
+                      {t("workspace.sources.upload.trigger")}
                     </Button>
                   }
                 />
@@ -381,7 +434,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search sources..."
+              placeholder={t("workspace.documents.list.searchPlaceholder")}
               className="pl-10 w-full"
             />
           </div>
@@ -394,7 +447,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
               className="whitespace-nowrap"
             >
               <Archive className="mr-2 h-4 w-4" />
-              {showArchived ? `Hide Archived (${archivedCount})` : `Show Archived (${archivedCount})`}
+              {archivedToggleLabel}
             </Button>
           )}
         </div>
@@ -413,7 +466,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                 trigger={
                   <Button variant="outline" size="sm">
                     <Plug className="mr-2 h-4 w-4" />
-                    Manage Sources
+                    {manageSourcesLabel}
                   </Button>
                 }
               />
@@ -425,7 +478,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                 trigger={
                   <Button size="sm">
                     <Plus className="mr-2 h-4 w-4" />
-                    Add Source
+                    {addSourceLabel}
                   </Button>
                 }
               />
@@ -436,7 +489,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                 trigger={
                   <Button size="sm">
                     <Plus className="mr-2 h-4 w-4" />
-                    Add from Source
+                    {addFromSourceLabel}
                   </Button>
                 }
               />
@@ -446,7 +499,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
               trigger={
                 <Button size="sm">
                   <Upload className="mr-2 h-4 w-4" />
-                  Upload Documents
+                  {t("workspace.sources.upload.trigger")}
                 </Button>
               }
             />
@@ -457,9 +510,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
       {showArchived && archivedCount > 0 && (
         <Alert variant="info">
           <Info />
-          <AlertDescription>
-            Viewing archived documents. These documents are hidden from AI search and won't appear in chat context.
-          </AlertDescription>
+          <AlertDescription>{t("workspace.documents.list.archivedAlert")}</AlertDescription>
         </Alert>
       )}
  
@@ -469,6 +520,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
             {displayDocuments.map((doc: any) => {
                   const fileExtension = getDocumentFileExtension(doc)
                   const isArchived = doc.status === "archived"
+                  const sourceTypeLabel = getSourceTypeLabel(doc.sources?.type)
                   return (
                   <Card key={doc.id} className={`shadow hover:shadow-md transition-shadow ${isArchived ? "opacity-70 bg-muted/30" : ""}`}>
               <CardHeader>
@@ -491,12 +543,12 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                         {isArchived && (
                           <Badge variant="secondary" className="text-xs">
                             <Archive className="mr-1 h-3 w-3" />
-                            Archived
+                            {t("workspace.documents.list.archivedBadge")}
                           </Badge>
                         )}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
-                        <span>{formatSourceType(doc.sources?.type)}</span>
+                        {sourceTypeLabel && <span>{sourceTypeLabel}</span>}
                         {doc.created_at && (
                           <>
                             <span className="text-muted-foreground/60">·</span>
@@ -509,10 +561,8 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                   <div className="flex items-center gap-2">
                     {doc.id && (
                       <Button variant="outline" size="sm" className="h-7 text-xs px-2" asChild>
-                        <Link
-                          href={`/workspaces/${workspaceId}/documents/${doc.id}`}
-                        >
-                          View document
+                        <Link href={`/workspaces/${workspaceId}/documents/${doc.id}`}>
+                          {t("workspace.documents.list.viewDocument")}
                         </Link>
                       </Button>
                     )}
@@ -533,7 +583,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                                 className="cursor-pointer"
                               >
                                 <Download className="mr-2 h-4 w-4" />
-                                Download
+                                {t("workspace.documents.list.download")}
                               </a>
                             </DropdownMenuItem>
                           )}
@@ -543,7 +593,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                               className="cursor-pointer"
                             >
                               <ArchiveRestore className="mr-2 h-4 w-4" />
-                              Unarchive
+                              {t("workspace.documents.list.unarchive")}
                             </DropdownMenuItem>
                           ) : (
                             <DropdownMenuItem
@@ -551,7 +601,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                               className="cursor-pointer"
                             >
                               <Archive className="mr-2 h-4 w-4" />
-                              Archive
+                              {t("workspace.documents.list.archive")}
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem
@@ -562,7 +612,7 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                             className="hover:!bg-destructive/10 hover:!text-destructive focus:!bg-destructive/10 focus:!text-destructive [&:hover_svg]:!text-destructive [&:focus_svg]:!text-destructive [&:hover_span]:!text-destructive [&:focus_span]:!text-destructive"
                           >
                             <Trash2 className="mr-2 h-3.5 w-3.5" />
-                            <span>Delete</span>
+                            <span>{t("workspace.documents.list.deleteSubmit")}</span>
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -592,9 +642,9 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
         <Card className="shadow">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Search className="mb-4 h-12 w-12 text-muted-foreground" />
-            <h3 className="mb-2 text-lg font-semibold">No documents found</h3>
+            <h3 className="mb-2 text-lg font-semibold">{t("workspace.documents.list.noResultsTitle")}</h3>
             <p className="text-center text-sm text-muted-foreground">
-              No documents match "{searchQuery}". Try different keywords.
+              {t("workspace.documents.list.noResultsDescription", undefined, { query: searchQuery })}
             </p>
           </CardContent>
         </Card>
@@ -604,31 +654,31 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
       <AlertDialog open={documentToDelete !== null} onOpenChange={handleDeleteDialogClose}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Document</AlertDialogTitle>
+            <AlertDialogTitle>{t("workspace.documents.list.deleteTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this document? The document will be removed from storage and will no longer appear in your workspace.
+              {t("workspace.documents.list.deleteDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {needsConfirmation && (
             <p className="text-sm text-destructive font-medium">
-              This action cannot be undone.
+              {t("workspace.documents.list.deleteWarning")}
             </p>
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("workspace.documents.create.buttonCancel")}</AlertDialogCancel>
             {needsConfirmation ? (
               <AlertDialogAction
                 onClick={handleDelete}
                 className="bg-destructive text-white hover:bg-destructive/90"
               >
-                Confirm?
+                {t("workspace.documents.list.deleteConfirm")}
               </AlertDialogAction>
             ) : (
               <Button
                 onClick={handleDelete}
                 className="bg-destructive text-white hover:bg-destructive/90"
               >
-                Delete
+                {t("workspace.documents.list.deleteSubmit")}
               </Button>
             )}
           </AlertDialogFooter>
