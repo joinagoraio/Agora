@@ -6,7 +6,15 @@
 export function getBaseUrl(): string {
   // Client-side: always use window.location.origin (it's always correct for the current page)
   if (typeof window !== "undefined") {
-    return window.location.origin
+    const origin = window.location.origin
+    // Always log for debugging (can be removed later)
+    console.log("[getBaseUrl] Client-side origin:", origin, {
+      hostname: window.location.hostname,
+      protocol: window.location.protocol,
+      port: window.location.port,
+      fullUrl: window.location.href,
+    })
+    return origin
   }
 
   // Server-side: prefer env vars, then VERCEL_URL, then default
