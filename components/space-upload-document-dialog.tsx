@@ -226,7 +226,7 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
                   onClick={clearSelectedFile}
                   className="h-10 w-10 hover:bg-red-500 group"
                 >
-                  <X className="h-4 w-4 group-hover:text-red-500" />
+                  <X className="h-4 w-4 group-hover:text-white" />
                   <span className="sr-only">{t("space.documents.upload.removeFile")}</span>
                 </Button>
               )}
