@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Plug, Plus, CheckCircle2 } from "lucide-react"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { getBaseUrl } from "@/lib/utils/get-base-url"
 
 interface ManageSourcesDialogProps {
   workspaceId: string
@@ -162,7 +163,7 @@ export function ManageSourcesDialog({
   const handleGoogleConnect = async () => {
     const supabase = createClient()
     try {
-      const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(window.location.pathname)}`
+      const redirectUrl = `${getBaseUrl()}/auth/callback?next=${encodeURIComponent(window.location.pathname)}`
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {

@@ -11,6 +11,7 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useState } from "react"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { getBaseUrl } from "@/lib/utils/get-base-url"
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("")
@@ -32,9 +33,10 @@ export default function SignUpPage() {
 
     try {
       // Determine the redirect URL after email verification
+      const baseUrl = getBaseUrl()
       const finalRedirect = redirectTo 
-        ? `${window.location.origin}${redirectTo}`
-        : process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`
+        ? `${baseUrl}${redirectTo}`
+        : process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${baseUrl}/dashboard`
 
       const { error } = await supabase.auth.signUp({
         email,
@@ -68,9 +70,10 @@ export default function SignUpPage() {
 
     try {
       // Build callback URL with redirect parameter if present (use 'next' for callback route)
+      const baseUrl = getBaseUrl()
       const callbackUrl = redirectTo
-        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`
-        : `${window.location.origin}/auth/callback`
+        ? `${baseUrl}/auth/callback?next=${encodeURIComponent(redirectTo)}`
+        : `${baseUrl}/auth/callback`
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",

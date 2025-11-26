@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { FileIcon, defaultStyles } from "react-file-icon"
 import { createClient } from "@/lib/supabase/client"
+import { getBaseUrl } from "@/lib/utils/get-base-url"
 
 interface GoogleDriveFile {
   id: string
@@ -290,7 +291,7 @@ export function GoogleDriveSearch({ accessToken, onDocumentsSelected, showSelect
                     const { error: oauthError } = await supabase.auth.signInWithOAuth({
                       provider: "google",
                       options: {
-                        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(window.location.pathname)}`,
+                        redirectTo: `${getBaseUrl()}/auth/callback?next=${encodeURIComponent(window.location.pathname)}`,
                         queryParams: {
                           access_type: "offline",
                           prompt: "consent",

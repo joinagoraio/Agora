@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Mail, Users, Calendar, Loader2, AlertCircle } from "lucide-react"
 import Image from "next/image"
+import { getBaseUrl } from "@/lib/utils/get-base-url"
 
 interface InvitePageClientProps {
   token: string
@@ -225,7 +226,7 @@ export default function InvitePageClient({ token, invitation, user, error: fetch
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(`/invite/${token}`)}`,
+          redirectTo: `${getBaseUrl()}/auth/callback?next=${encodeURIComponent(`/invite/${token}`)}`,
           queryParams: {
             access_type: "offline",
             prompt: "consent",

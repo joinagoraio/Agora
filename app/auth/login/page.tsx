@@ -13,6 +13,7 @@ import { useState } from "react"
 import { ArrowLeft } from "lucide-react"
 import Image from "next/image"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { getBaseUrl } from "@/lib/utils/get-base-url"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -55,9 +56,12 @@ export default function LoginPage() {
 
     try {
       // Build callback URL with redirect parameter if present
+      const baseUrl = getBaseUrl()
       const callbackUrl = redirectTo
-        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`
-        : `${window.location.origin}/auth/callback`
+        ? `${baseUrl}/auth/callback?next=${encodeURIComponent(redirectTo)}`
+        : `${baseUrl}/auth/callback`
+      
+      console.log("[Google Login] Redirect URL:", callbackUrl, "Base URL:", baseUrl, "Window origin:", typeof window !== "undefined" ? window.location.origin : "N/A")
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",

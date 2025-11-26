@@ -22,6 +22,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Plus, CheckCircle2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { getBaseUrl } from "@/lib/utils/get-base-url"
 
 interface CreateSourceDialogProps {
   workspaceId: string
@@ -164,7 +165,7 @@ export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [
   const handleGoogleConnect = async () => {
     const supabase = createClient()
     try {
-      const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(`/workspaces/${workspaceId}/sources`)}`
+      const redirectUrl = `${getBaseUrl()}/auth/callback?next=${encodeURIComponent(`/workspaces/${workspaceId}/sources`)}`
       console.log("[CreateSource] Initiating Google OAuth with redirect:", redirectUrl)
       
       const { error } = await supabase.auth.signInWithOAuth({
