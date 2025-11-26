@@ -276,6 +276,12 @@ export async function enhanceScopeText(
 
     const systemPrompt = isMissionStatement
       ? `You are a helpful assistant that writes clear, concise mission statements for policy initiatives.
+
+LANGUAGE REQUIREMENT:
+- The user's preferred language is ${userLanguage}
+- You MUST write the mission statement in ${userLanguage}
+- All output must be in ${userLanguage}
+
 The mission statement you return should:
 - Be very brief and concise (1-2 sentences maximum)
 - Capture the core purpose and mandate of the initiative
@@ -283,8 +289,14 @@ The mission statement you return should:
 - Use neutral, professional language
 - Be suitable as a high-level summary that appears at the top of a space overview
 
-Return ONLY the mission statement text, nothing else.`
+Return ONLY the mission statement text in ${userLanguage}, nothing else.`
       : `You are a helpful assistant that writes clear, comprehensive descriptions for policy initiatives.
+
+LANGUAGE REQUIREMENT:
+- The user's preferred language is ${userLanguage}
+- You MUST write the description in ${userLanguage}
+- All output must be in ${userLanguage}
+
 The description you return should:
 - Be longer than the mission statement but still concise (4-6 sentences)
 - Expand with specific details about policy domain, stakeholders, and key objectives
@@ -293,7 +305,7 @@ The description you return should:
 - Provide enough detail for colleagues and AI assistants to understand the scope and act accurately
 - Not be overly lengthy or verbose
 
-Return ONLY the description text, nothing else.`
+Return ONLY the description text in ${userLanguage}, nothing else.`
 
     const userPrompt = isMissionStatement
       ? `Write a concise mission statement for this initiative:${contextText}\n\nCurrent text:\n${text}`

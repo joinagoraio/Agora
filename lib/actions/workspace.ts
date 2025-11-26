@@ -321,6 +321,15 @@ export async function enhanceContextText(text: string): Promise<{ enhanced?: str
     return { error: "Unauthorized" }
   }
 
+  // Get user's language preference
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("language")
+    .eq("id", user.id)
+    .single()
+  
+  const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
+
   if (!env.OPENAI_API_KEY) {
     return { error: "OpenAI API key not configured" }
   }
@@ -339,6 +348,11 @@ export async function enhanceContextText(text: string): Promise<{ enhanced?: str
           role: "system",
           content: `You are a helpful assistant that enhances workspace context descriptions. Your job is to improve the clarity, completeness, and usefulness of workspace context descriptions that will help AI search and understand documents better.
 
+LANGUAGE REQUIREMENT:
+- The user's preferred language is ${userLanguage}
+- You MUST write the enhanced text in ${userLanguage}
+- All output must be in ${userLanguage}
+
 Rules:
 - Keep the enhanced text concise but comprehensive
 - Maintain the original meaning and intent
@@ -346,7 +360,7 @@ Rules:
 - Use clear, professional language
 - Focus on domain, document types, and key information
 - Do not add information that wasn't implied in the original text
-- Return only the enhanced text, no explanations or meta-commentary`,
+- Return only the enhanced text in ${userLanguage}, no explanations or meta-commentary`,
         },
         {
           role: "user",
@@ -390,6 +404,15 @@ export async function enhanceWorkspaceText(
     return { error: "Unauthorized" }
   }
 
+  // Get user's language preference
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("language")
+    .eq("id", user.id)
+    .single()
+  
+  const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
+
   if (!env.OPENAI_API_KEY) {
     return { error: "OpenAI API key not configured" }
   }
@@ -417,6 +440,12 @@ export async function enhanceWorkspaceText(
 
     const systemPrompt = isSummary
       ? `You are a helpful assistant that writes clear, concise summaries for policy workspaces.
+
+LANGUAGE REQUIREMENT:
+- The user's preferred language is ${userLanguage}
+- You MUST write the summary in ${userLanguage}
+- All output must be in ${userLanguage}
+
 The summary you return should:
 - Be very brief and concise (1-2 sentences maximum)
 - Capture the core purpose and scope of the workspace
@@ -424,8 +453,14 @@ The summary you return should:
 - Use neutral, professional language
 - Be suitable as a high-level overview that appears at the top of the workspace
 
-Return ONLY the summary text, nothing else.`
+Return ONLY the summary text in ${userLanguage}, nothing else.`
       : `You are a helpful assistant that writes clear, comprehensive descriptions for policy workspaces.
+
+LANGUAGE REQUIREMENT:
+- The user's preferred language is ${userLanguage}
+- You MUST write the description in ${userLanguage}
+- All output must be in ${userLanguage}
+
 The description you return should:
 - Be longer than the summary but still concise (4-6 sentences)
 - Expand with specific details about the workspace's focus, documents, and objectives
@@ -434,7 +469,7 @@ The description you return should:
 - Provide enough detail for colleagues and AI assistants to understand the workspace's scope
 - Not be overly lengthy or verbose
 
-Return ONLY the description text, nothing else.`
+Return ONLY the description text in ${userLanguage}, nothing else.`
 
     const userPrompt = isSummary
       ? `Write a concise summary for this workspace:${contextText}\n\nCurrent text:\n${text}`
