@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { Document, Page, pdfjs } from "react-pdf"
-import workerHref from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -30,8 +29,9 @@ import "react-pdf/dist/Page/AnnotationLayer.css"
 import "react-pdf/dist/Page/TextLayer.css"
 
 // Configure PDF.js worker using bundled worker asset (works with Turbopack/Next.js 16)
-if (typeof window !== "undefined" && pdfjs.GlobalWorkerOptions.workerSrc !== workerHref) {
-  pdfjs.GlobalWorkerOptions.workerSrc = workerHref
+if (typeof window !== "undefined" && typeof pdfjs.GlobalWorkerOptions.workerSrc !== "string") {
+  const workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString()
+  pdfjs.GlobalWorkerOptions.workerSrc = workerSrc
 }
 
 export type ViewerFitMode = "width" | "height"
