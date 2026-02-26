@@ -1,0 +1,24 @@
+# Triggers a Vercel deployment when the GitHub webhook is missing or broken.
+# One-time setup: In Vercel → Project → Settings → Git → Deploy Hooks, create a hook
+# for branch "main". Then in GitHub → Repo → Settings → Secrets → Actions, add
+# VERCEL_DEPLOY_HOOK with that URL.
+name: Trigger Vercel Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  trigger:
+    name: Trigger Vercel deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Vercel Deploy Hook
+        env:
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$VERCEL_DEPLOY_HOOK" ]; then
+            echo "VERCEL_DEPLOY_HOOK secret is not set. Add it in repo Settings → Secrets → Actions to enable deploy triggers."
+            exit 0
+          fi
+          curl -f -X POST "$VERCEL_DEPLOY_HOOK"
