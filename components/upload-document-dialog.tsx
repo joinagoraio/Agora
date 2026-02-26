@@ -56,8 +56,8 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
     [t],
   )
 
-  // Vercel body limit; files above this use direct-to-storage upload
-  const PLATFORM_MAX_FILE_SIZE_BYTES = 4.5 * 1024 * 1024
+  // Vercel body limit ~4.5 MB; use signed-URL path above 4 MB to leave room for multipart overhead
+  const PLATFORM_MAX_FILE_SIZE_BYTES = 4 * 1024 * 1024
   const MAX_FILE_SIZE_BYTES = 9 * 1024 * 1024
 
   const getFileId = (file: File) => `${file.name}-${file.size}`
