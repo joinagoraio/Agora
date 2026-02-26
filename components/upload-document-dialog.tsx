@@ -56,8 +56,6 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
     [t],
   )
 
-  // Vercel body limit ~4.5 MB; use signed-URL path above 4 MB to leave room for multipart overhead
-  const PLATFORM_MAX_FILE_SIZE_BYTES = 4 * 1024 * 1024
   const MAX_FILE_SIZE_BYTES = 9 * 1024 * 1024
 
   const getFileId = (file: File) => `${file.name}-${file.size}`
@@ -153,115 +151,8 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
 
   const uploadFileWithProgress = async (file: File): Promise<any> => {
     const fileId = getFileId(file)
-
-    if (file.size > PLATFORM_MAX_FILE_SIZE_BYTES) {
-      return uploadViaSignedUrl(file, fileId)
-    }
-
-    const csrfToken = await fetchCsrfToken()
-    if (!csrfToken) {
-      throw new Error(t("workspace.sources.upload.errorGeneral"))
-    }
-
-    return new Promise((resolve, reject) => {
-      const fileId = getFileId(file)
-      const xhr = new XMLHttpRequest()
-      const formData = new FormData()
-
-      const buildError = (message: string, code?: string): UploadError => {
-        const errorInstance = new Error(message) as UploadError
-        if (code) {
-          errorInstance.code = code
-        }
-        errorInstance.fileName = file.name
-        errorInstance.fileId = fileId
-        return errorInstance
-      }
-      
-      formData.append("file", file)
-      formData.append("workspaceId", workspaceId)
-      formData.append("classification", classification)
-
-      let uploadComplete = false
-
-      // Track upload progress (file transfer only, not server processing)
-      xhr.upload.addEventListener("progress", (e) => {
-        if (e.lengthComputable && !uploadComplete) {
-          // Cap at 85% during upload, remaining 15% is for server processing
-          const uploadPercent = Math.round((e.loaded / e.total) * 85)
-          setUploadProgress((prev) => ({
-            ...prev,
-            [fileId]: Math.max(prev[fileId] || 0, uploadPercent),
-          }))
-        }
-      })
-
-      // Track when upload completes (but server is still processing)
-      xhr.upload.addEventListener("load", () => {
-        uploadComplete = true
-        // Set to 90% when upload transfer completes, server is processing
-        setUploadProgress((prev) => ({
-          ...prev,
-          [fileId]: 90,
-        }))
-      })
-
-      // Handle response completion
-      xhr.addEventListener("loadend", () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const response = JSON.parse(xhr.responseText)
-            if (response.error) {
-              reject(buildError(response.error, response.errorCode))
-            } else {
-              // Only set to 100% when we get the final successful response
-              setUploadProgress((prev) => ({
-                ...prev,
-                [fileId]: 100,
-              }))
-              // Small delay to ensure UI updates before resolving
-              setTimeout(() => resolve(response.data), 100)
-            }
-          } catch (err) {
-            reject(new Error(t("workspace.sources.upload.errorParse")))
-          }
-        } else {
-          try {
-            const error = JSON.parse(xhr.responseText)
-            const message =
-              xhr.status === 503
-                ? t("workspace.sources.upload.errorUpload503")
-                : xhr.status === 413
-                  ? t("workspace.sources.upload.errorUpload413")
-                  : error.error || t("workspace.sources.upload.errorUpload", undefined, { status: xhr.status })
-            reject(buildError(message, error.errorCode))
-          } catch {
-            const message =
-              xhr.status === 503
-                ? t("workspace.sources.upload.errorUpload503")
-                : xhr.status === 413
-                  ? t("workspace.sources.upload.errorUpload413")
-                  : t("workspace.sources.upload.errorUpload", undefined, { status: xhr.status })
-            reject(buildError(message))
-          }
-        }
-      })
-
-      // Handle errors
-      xhr.addEventListener("error", () => {
-        reject(buildError(t("workspace.sources.upload.errorNetwork")))
-      })
-
-      // Handle abort
-      xhr.addEventListener("abort", () => {
-        reject(buildError(t("workspace.sources.upload.errorCancelled")))
-      })
-
-      // Start upload
-      xhr.open("POST", `/api/documents/upload?workspaceId=${encodeURIComponent(workspaceId)}`)
-      xhr.setRequestHeader("x-csrf-token", csrfToken)
-      xhr.send(formData)
-    })
+    // Always use signed-URL path so file bytes never hit Vercel's body limit (avoids 413)
+    return uploadViaSignedUrl(file, fileId)
   }
 
   const handleUpload = async () => {
