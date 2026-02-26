@@ -755,6 +755,7 @@ export const nlMessages = {
         errorCancelled: "Upload geannuleerd",
         errorParse: "Antwoord kon niet worden verwerkt",
         errorUpload: "Upload mislukt met status {{status}}",
+        errorUpload503: "Service tijdelijk niet beschikbaar. De upload kan zijn verlopen—probeer opnieuw of gebruik een kleiner bestand.",
         errorGeneral: "Er is een fout opgetreden tijdens het uploaden",
         errorFileType:
           "We konden dit bestandstype niet bevestigen. Controleer of de bestandsextensie overeenkomt met het werkelijke formaat (PDF, DOCX, TXT of MD) en upload het opnieuw.",

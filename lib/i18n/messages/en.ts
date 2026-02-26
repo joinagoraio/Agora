@@ -753,6 +753,7 @@ export const enMessages = {
         errorCancelled: "Upload was cancelled",
         errorParse: "Failed to parse response",
         errorUpload: "Upload failed with status {{status}}",
+        errorUpload503: "Service temporarily unavailable. The upload may have timed out—try again or use a smaller file.",
         errorGeneral: "An error occurred during upload",
         errorFileType:
           "We couldn't verify this file type. Make sure the file extension matches the actual format (PDF, DOCX, TXT, or MD) and try uploading again.",

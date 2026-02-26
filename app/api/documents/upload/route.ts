@@ -15,7 +15,11 @@ import { validateFileMagicNumber } from "@/lib/utils/file-validation"
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 const MAX_FILE_SIZE_MB = MAX_FILE_SIZE_BYTES / (1024 * 1024)
-const PARSER_TIMEOUT_MS = 30_000
+const PARSER_TIMEOUT_MS = 15_000
+const SUMMARY_TIMEOUT_MS = 8_000
+
+// Allow enough time for storage upload, PDF/Word parsing, summary, and DB writes
+export const maxDuration = 120
 
 // Helper function to strip markdown syntax for better AI processing
 function stripMarkdown(text: string): string {
@@ -89,13 +93,14 @@ async function generateDocumentSummary(content: string, title?: string, isMarkdo
       contentLength: content.length,
       processedLength: processedContent.length,
     })
-    
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Use cheaper model for summarization
-      messages: [
-        {
-          role: "system",
-          content: `You are a document summarization assistant. Create a concise, informative summary of the document content.
+
+    const response = await withTimeout(
+      openai.chat.completions.create({
+        model: "gpt-4o-mini", // Use cheaper model for summarization
+        messages: [
+          {
+            role: "system",
+            content: `You are a document summarization assistant. Create a concise, informative summary of the document content.
 
 Rules:
 - Write 1-2 sentences (max 150 characters)
@@ -109,17 +114,20 @@ Examples:
 - "Security audit findings and recommendations for code quality improvements."
 - "Municipal policy guidelines for public space management and maintenance procedures."
 - "Annual budget report with financial projections and expenditure analysis."`
-        },
-        {
-          role: "user",
-          content: title 
-            ? `Document title: ${title}\n\nContent:\n${contentSample}`
-            : `Content:\n${contentSample}`
-        }
-      ],
-      max_tokens: 60, // Limit to keep it concise
-      temperature: 0.3, // Lower temperature for more consistent results
-    })
+          },
+          {
+            role: "user",
+            content: title 
+              ? `Document title: ${title}\n\nContent:\n${contentSample}`
+              : `Content:\n${contentSample}`
+          }
+        ],
+        max_tokens: 60, // Limit to keep it concise
+        temperature: 0.3, // Lower temperature for more consistent results
+      }),
+      SUMMARY_TIMEOUT_MS,
+      "Summary generation timed out",
+    )
 
     const summary = response.choices[0]?.message?.content?.trim()
     if (summary && summary.length > 0 && summary.length <= 200) {

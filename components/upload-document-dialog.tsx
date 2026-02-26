@@ -152,14 +152,17 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
         } else {
           try {
             const error = JSON.parse(xhr.responseText)
-            reject(
-              buildError(
-                error.error || t("workspace.sources.upload.errorUpload", undefined, { status: xhr.status }),
-                error.errorCode,
-              ),
-            )
+            const message =
+              xhr.status === 503
+                ? t("workspace.sources.upload.errorUpload503")
+                : error.error || t("workspace.sources.upload.errorUpload", undefined, { status: xhr.status })
+            reject(buildError(message, error.errorCode))
           } catch {
-            reject(buildError(t("workspace.sources.upload.errorUpload", undefined, { status: xhr.status })))
+            const message =
+              xhr.status === 503
+                ? t("workspace.sources.upload.errorUpload503")
+                : t("workspace.sources.upload.errorUpload", undefined, { status: xhr.status })
+            reject(buildError(message))
           }
         }
       })
