@@ -124,66 +124,68 @@ export function CreateWorkspaceDocumentDialog({ workspaceId, trigger }: CreateWo
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[520px] max-w-[calc(100vw-2rem)]">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-[520px] max-w-[calc(100vw-2rem)]">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{t("workspace.documents.create.title")}</DialogTitle>
           <DialogDescription>{t("workspace.documents.create.description")}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          <div className="space-y-2">
-            <Label htmlFor="document-title">{t("workspace.documents.create.titleLabel")}</Label>
-            <Input
-              id="document-title"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder={t("workspace.documents.create.titlePlaceholder")}
-              autoFocus
-              disabled={isCreating}
-              className="w-full"
-            />
-          </div>
+        <div className="min-h-0 shrink overflow-y-auto py-2">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="document-title">{t("workspace.documents.create.titleLabel")}</Label>
+              <Input
+                id="document-title"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder={t("workspace.documents.create.titlePlaceholder")}
+                autoFocus
+                disabled={isCreating}
+                className="w-full"
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="document-classification">{t("workspace.common.classification.label")}</Label>
-            <Select
-              value={classification}
-              onValueChange={(value: "public" | "internal" | "confidential") => setClassification(value)}
-              disabled={isCreating}
-            >
-              <SelectTrigger id="document-classification" className="w-fit">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="w-fit min-w-[var(--radix-select-trigger-width)]">
-                {classificationOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="document-classification">{t("workspace.common.classification.label")}</Label>
+              <Select
+                value={classification}
+                onValueChange={(value: "public" | "internal" | "confidential") => setClassification(value)}
+                disabled={isCreating}
+              >
+                <SelectTrigger id="document-classification" className="w-fit">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="w-fit min-w-[var(--radix-select-trigger-width)]">
+                  {classificationOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="document-instructions">{t("workspace.documents.create.instructionsLabel")}</Label>
-            <Textarea
-              id="document-instructions"
-              value={instructions}
-              onChange={(event) => setInstructions(event.target.value)}
-              placeholder={t("workspace.documents.create.instructionsPlaceholder")}
-              rows={6}
-              disabled={isCreating}
-              className="w-full resize-none"
-            />
-            <p className="text-xs text-muted-foreground">
-              {t("workspace.documents.create.instructionsHint")}
-            </p>
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="document-instructions">{t("workspace.documents.create.instructionsLabel")}</Label>
+              <Textarea
+                id="document-instructions"
+                value={instructions}
+                onChange={(event) => setInstructions(event.target.value)}
+                placeholder={t("workspace.documents.create.instructionsPlaceholder")}
+                rows={6}
+                disabled={isCreating}
+                className="w-full resize-y min-h-[8rem] max-h-[40vh] overflow-y-auto"
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("workspace.documents.create.instructionsHint")}
+              </p>
+            </div>
 
-          {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+            {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+          </div>
         </div>
 
-        <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0 sm:justify-end">
+        <DialogFooter className="shrink-0 flex flex-col sm:flex-row gap-2 sm:gap-0 sm:justify-end">
           <Button 
             type="button" 
             variant="outline" 
