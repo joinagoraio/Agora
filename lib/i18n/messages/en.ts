@@ -755,7 +755,7 @@ export const enMessages = {
         errorParse: "Failed to parse response",
         errorUpload: "Upload failed with status {{status}}",
         errorUpload503: "Service temporarily unavailable. The upload may have timed out—try again or use a smaller file.",
-        errorUpload413: "File is too large (max 4.5 MB per file on this server). Use a smaller file or split the document.",
+        errorUpload413: "File is too large (max 9 MB per file on this server). Use a smaller file or split the document.",
         errorFileTooLarge: "File is too large (max 9 MB per file). Use a smaller file or split the document.",
         errorGeneral: "An error occurred during upload",
         errorFileType:

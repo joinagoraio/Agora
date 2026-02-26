@@ -757,7 +757,7 @@ export const nlMessages = {
         errorParse: "Antwoord kon niet worden verwerkt",
         errorUpload: "Upload mislukt met status {{status}}",
         errorUpload503: "Service tijdelijk niet beschikbaar. De upload kan zijn verlopen—probeer opnieuw of gebruik een kleiner bestand.",
-        errorUpload413: "Bestand is te groot (max. 4,5 MB per bestand op deze server). Gebruik een kleiner bestand of splits het document.",
+        errorUpload413: "Bestand is te groot (max. 9 MB per bestand op deze server). Gebruik een kleiner bestand of splits het document.",
         errorFileTooLarge: "Bestand is te groot (max. 9 MB per bestand). Gebruik een kleiner bestand of splits het document.",
         errorGeneral: "Er is een fout opgetreden tijdens het uploaden",
         errorFileType:
