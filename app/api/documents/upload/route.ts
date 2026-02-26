@@ -2,146 +2,28 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
-import OpenAI from "openai"
 import { documentUploadSchema, type DocumentSafetyContext, validateDocumentSafety } from "@/lib/validations/document"
 import { applyRateLimitHeaders, checkRateLimit, uploadRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { requireAuthAndPermission } from "@/lib/middleware/authorization"
 import { invalidateCacheByTag } from "@/lib/cache/api-cache"
-import { env } from "@/lib/env"
 import { getClientIdentifier } from "@/lib/utils/request"
 import { createSafeErrorResponse } from "@/lib/utils/api-error-handler"
 import { logger } from "@/lib/utils/logger"
 import { validateFileMagicNumber } from "@/lib/utils/file-validation"
+import {
+  stripMarkdown,
+  withTimeout,
+  generateDocumentSummary,
+  sanitizeContentForDatabase,
+  PARSER_TIMEOUT_MS,
+  SUMMARY_TIMEOUT_MS,
+} from "@/lib/documents/upload-helpers"
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 const MAX_FILE_SIZE_MB = MAX_FILE_SIZE_BYTES / (1024 * 1024)
-const PARSER_TIMEOUT_MS = 15_000
-const SUMMARY_TIMEOUT_MS = 8_000
 
 // Allow enough time for storage upload, PDF/Word parsing, summary, and DB writes
 export const maxDuration = 120
-
-// Helper function to strip markdown syntax for better AI processing
-function stripMarkdown(text: string): string {
-  if (!text) return text
-  
-  // Remove markdown headers
-  text = text.replace(/^#{1,6}\s+/gm, '')
-  // Remove bold/italic
-  text = text.replace(/\*\*([^*]+)\*\*/g, '$1')
-  text = text.replace(/\*([^*]+)\*/g, '$1')
-  text = text.replace(/__([^_]+)__/g, '$1')
-  text = text.replace(/_([^_]+)_/g, '$1')
-  // Remove links but keep text
-  text = text.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
-  // Remove code blocks
-  text = text.replace(/```[\s\S]*?```/g, '')
-  text = text.replace(/`([^`]+)`/g, '$1')
-  // Remove images
-  text = text.replace(/!\[([^\]]*)\]\([^\)]+\)/g, '')
-  // Remove horizontal rules
-  text = text.replace(/^---$/gm, '')
-  text = text.replace(/^\*\*\*$/gm, '')
-  // Remove list markers
-  text = text.replace(/^[\*\-\+]\s+/gm, '')
-  text = text.replace(/^\d+\.\s+/gm, '')
-  // Remove blockquotes
-  text = text.replace(/^>\s+/gm, '')
-  
-  return text.trim()
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      reject(new Error(timeoutMessage))
-    }, timeoutMs)
-
-    promise.then(
-      (value) => {
-        clearTimeout(timeoutId)
-        resolve(value)
-      },
-      (error) => {
-        clearTimeout(timeoutId)
-        reject(error)
-      },
-    )
-  })
-}
-
-// Helper function to generate a concise AI summary of document content
-async function generateDocumentSummary(content: string, title?: string, isMarkdown = false): Promise<string> {
-  // Only use AI if OpenAI is configured and content is substantial
-  if (!env.OPENAI_API_KEY || !content || content.length < 100) {
-    // Fallback: return first 150 characters
-    const fallback = content.substring(0, 150).trim() + (content.length > 150 ? "..." : "")
-    return isMarkdown ? stripMarkdown(fallback) : fallback
-  }
-
-  try {
-    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
-    
-    // For markdown, strip syntax for better AI understanding
-    let processedContent = isMarkdown ? stripMarkdown(content) : content
-    
-    // Take a sample of the content (first 2000 chars for efficiency)
-    const contentSample = processedContent.substring(0, 2000)
-    
-    logger.info("[Upload API] Generating summary", {
-      documentType: isMarkdown ? "markdown" : "document",
-      contentLength: content.length,
-      processedLength: processedContent.length,
-    })
-
-    const response = await withTimeout(
-      openai.chat.completions.create({
-        model: "gpt-4o-mini", // Use cheaper model for summarization
-        messages: [
-          {
-            role: "system",
-            content: `You are a document summarization assistant. Create a concise, informative summary of the document content.
-
-Rules:
-- Write 1-2 sentences (max 150 characters)
-- Focus on the main topic, purpose, or key information
-- Use clear, professional language
-- If the document title is provided, incorporate it naturally
-- Do not include meta-commentary like "This document discusses..." - just state the information directly
-${isMarkdown ? "- The content is from a markdown file - focus on the actual information, not the formatting" : ""}
-
-Examples:
-- "Security audit findings and recommendations for code quality improvements."
-- "Municipal policy guidelines for public space management and maintenance procedures."
-- "Annual budget report with financial projections and expenditure analysis."`
-          },
-          {
-            role: "user",
-            content: title 
-              ? `Document title: ${title}\n\nContent:\n${contentSample}`
-              : `Content:\n${contentSample}`
-          }
-        ],
-        max_tokens: 60, // Limit to keep it concise
-        temperature: 0.3, // Lower temperature for more consistent results
-      }),
-      SUMMARY_TIMEOUT_MS,
-      "Summary generation timed out",
-    )
-
-    const summary = response.choices[0]?.message?.content?.trim()
-    if (summary && summary.length > 0 && summary.length <= 200) {
-      logger.debug("[Upload API] Generated AI summary", { preview: summary.substring(0, 100) })
-      return summary
-    }
-  } catch (error) {
-    logger.error("[Upload API] Error generating summary:", error)
-  }
-
-  // Fallback: return first 150 characters (strip markdown if needed)
-  const fallback = content.substring(0, 150).trim() + (content.length > 150 ? "..." : "")
-  return isMarkdown ? stripMarkdown(fallback) : fallback
-}
 
 export async function POST(req: NextRequest) {
   let rateLimitResult: RateLimitStatus | undefined
@@ -538,11 +420,6 @@ export async function POST(req: NextRequest) {
     }
     
     logger.info("[Upload API] Final document summary", { preview: documentSummary.substring(0, 100) })
-
-    // Sanitize content for database
-    const sanitizeContentForDatabase = (text: string): string => {
-      return text.replace(/\0/g, "").substring(0, 1000000)
-    }
 
     // Create document record
     const { data: document, error: docError } = await adminClient

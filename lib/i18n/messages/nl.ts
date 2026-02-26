@@ -738,6 +738,7 @@ export const nlMessages = {
         fileSelectedSingle: "{{name}} geselecteerd",
         fileSelectedMultiple: "{{count}} bestanden geselecteerd",
         supportedFormats: "Ondersteunde formaten: PDF, Word (.doc, .docx), Tekst (.txt), Markdown (.md)",
+        maxFileSizeHint: "Max. 9 MB per bestand.",
         selectedFiles: "Geselecteerde bestanden",
         clear: "Leegmaken",
         upload: "Uploaden",
@@ -756,6 +757,8 @@ export const nlMessages = {
         errorParse: "Antwoord kon niet worden verwerkt",
         errorUpload: "Upload mislukt met status {{status}}",
         errorUpload503: "Service tijdelijk niet beschikbaar. De upload kan zijn verlopen—probeer opnieuw of gebruik een kleiner bestand.",
+        errorUpload413: "Bestand is te groot (max. 4,5 MB per bestand op deze server). Gebruik een kleiner bestand of splits het document.",
+        errorFileTooLarge: "Bestand is te groot (max. 9 MB per bestand). Gebruik een kleiner bestand of splits het document.",
         errorGeneral: "Er is een fout opgetreden tijdens het uploaden",
         errorFileType:
           "We konden dit bestandstype niet bevestigen. Controleer of de bestandsextensie overeenkomt met het werkelijke formaat (PDF, DOCX, TXT of MD) en upload het opnieuw.",

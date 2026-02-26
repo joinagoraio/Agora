@@ -736,6 +736,7 @@ export const enMessages = {
         fileSelectedSingle: "{{name}} selected",
         fileSelectedMultiple: "{{count}} files selected",
         supportedFormats: "Supported formats: PDF, Word (.doc, .docx), Text (.txt), Markdown (.md)",
+        maxFileSizeHint: "Max 9 MB per file.",
         selectedFiles: "Selected Files",
         clear: "Clear",
         upload: "Upload",
@@ -754,6 +755,8 @@ export const enMessages = {
         errorParse: "Failed to parse response",
         errorUpload: "Upload failed with status {{status}}",
         errorUpload503: "Service temporarily unavailable. The upload may have timed out—try again or use a smaller file.",
+        errorUpload413: "File is too large (max 4.5 MB per file on this server). Use a smaller file or split the document.",
+        errorFileTooLarge: "File is too large (max 9 MB per file). Use a smaller file or split the document.",
         errorGeneral: "An error occurred during upload",
         errorFileType:
           "We couldn't verify this file type. Make sure the file extension matches the actual format (PDF, DOCX, TXT, or MD) and try uploading again.",

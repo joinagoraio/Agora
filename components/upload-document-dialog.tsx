@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { createClient as createSupabaseClient } from "@/lib/supabase/client"
 
 type UploadError = Error & {
   code?: string
@@ -55,14 +56,83 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
     [t],
   )
 
+  // Vercel body limit; files above this use direct-to-storage upload
+  const PLATFORM_MAX_FILE_SIZE_BYTES = 4.5 * 1024 * 1024
+  const MAX_FILE_SIZE_BYTES = 9 * 1024 * 1024
+
   const getFileId = (file: File) => `${file.name}-${file.size}`
+
+  const uploadViaSignedUrl = async (file: File, fileId: string): Promise<any> => {
+    const csrfToken = await fetchCsrfToken()
+    if (!csrfToken) throw new Error(t("workspace.sources.upload.errorGeneral"))
+
+    setUploadProgress((prev) => ({ ...prev, [fileId]: 15 }))
+    const urlRes = await fetch("/api/documents/upload-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+      body: JSON.stringify({
+        workspaceId,
+        filename: file.name,
+        contentType: file.type,
+        classification,
+        size: file.size,
+      }),
+    })
+    if (!urlRes.ok) {
+      const err = await urlRes.json().catch(() => ({}))
+      throw new Error(err.error || `Upload URL failed: ${urlRes.status}`)
+    }
+    const { path, token } = await urlRes.json()
+
+    setUploadProgress((prev) => ({ ...prev, [fileId]: 45 }))
+    const supabase = createSupabaseClient()
+    const { error: uploadErr } = await supabase.storage
+      .from("documents")
+      .uploadToSignedUrl(path, token, file, { contentType: file.type || undefined })
+    if (uploadErr) throw new Error(uploadErr.message)
+
+    setUploadProgress((prev) => ({ ...prev, [fileId]: 75 }))
+    const finalizeRes = await fetch("/api/documents/upload-finalize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+      body: JSON.stringify({
+        workspaceId,
+        path,
+        originalName: file.name,
+        classification,
+        size: file.size,
+        mimeType: file.type,
+      }),
+    })
+    if (!finalizeRes.ok) {
+      const err = await finalizeRes.json().catch(() => ({}))
+      throw new Error(err.error || `Finalize failed: ${finalizeRes.status}`)
+    }
+    const finalizeData = await finalizeRes.json()
+    setUploadProgress((prev) => ({ ...prev, [fileId]: 100 }))
+    return finalizeData.data
+  }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const selectedFiles = Array.from(e.target.files)
-      setFiles((prev) => [...prev, ...selectedFiles])
-      setError(null)
-      setFailedFileId(null)
+      const overLimit = selectedFiles.filter((f) => f.size > MAX_FILE_SIZE_BYTES)
+      if (overLimit.length > 0) {
+        const names = overLimit.map((f) => f.name).join(", ")
+        setError(
+          t("workspace.sources.upload.errorFileTooLarge") +
+            (overLimit.length === 1 ? ` (${names})` : ` (${overLimit.length} files: ${names})`),
+        )
+        toast.error(t("workspace.sources.upload.toastUploadError"), {
+          description: t("workspace.sources.upload.errorFileTooLarge"),
+        })
+      }
+      const allowed = selectedFiles.filter((f) => f.size <= MAX_FILE_SIZE_BYTES)
+      setFiles((prev) => [...prev, ...allowed])
+      if (allowed.length > 0) {
+        setError(null)
+        setFailedFileId(null)
+      }
     }
   }
 
@@ -82,6 +152,12 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
   }
 
   const uploadFileWithProgress = async (file: File): Promise<any> => {
+    const fileId = getFileId(file)
+
+    if (file.size > PLATFORM_MAX_FILE_SIZE_BYTES) {
+      return uploadViaSignedUrl(file, fileId)
+    }
+
     const csrfToken = await fetchCsrfToken()
     if (!csrfToken) {
       throw new Error(t("workspace.sources.upload.errorGeneral"))
@@ -155,13 +231,17 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
             const message =
               xhr.status === 503
                 ? t("workspace.sources.upload.errorUpload503")
-                : error.error || t("workspace.sources.upload.errorUpload", undefined, { status: xhr.status })
+                : xhr.status === 413
+                  ? t("workspace.sources.upload.errorUpload413")
+                  : error.error || t("workspace.sources.upload.errorUpload", undefined, { status: xhr.status })
             reject(buildError(message, error.errorCode))
           } catch {
             const message =
               xhr.status === 503
                 ? t("workspace.sources.upload.errorUpload503")
-                : t("workspace.sources.upload.errorUpload", undefined, { status: xhr.status })
+                : xhr.status === 413
+                  ? t("workspace.sources.upload.errorUpload413")
+                  : t("workspace.sources.upload.errorUpload", undefined, { status: xhr.status })
             reject(buildError(message))
           }
         }
@@ -304,12 +384,12 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] overflow-hidden">
         <DialogHeader>
           <DialogTitle>{t("workspace.sources.upload.title")}</DialogTitle>
           <DialogDescription>{t("workspace.sources.upload.description")}</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 min-w-0 overflow-hidden">
         <div className="space-y-2">
           <Label htmlFor="classification">{t("workspace.common.classification.label")}</Label>
           <Select value={classification} onValueChange={(value: any) => setClassification(value)}>
@@ -367,7 +447,7 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
-            {t("workspace.sources.upload.supportedFormats")}
+            {t("workspace.sources.upload.supportedFormats")} {t("workspace.sources.upload.maxFileSizeHint")}
           </p>
         </div>
 
@@ -376,14 +456,14 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
             <Label>
               {t("workspace.sources.upload.selectedFiles")} ({files.length})
             </Label>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
+            <div className="space-y-2 max-h-48 overflow-y-auto overflow-x-hidden min-w-0">
               {files.map((file, index) => {
                 const fileId = `${file.name}-${file.size}`
                 const progress = uploadProgress[fileId] || 0
                 return (
                   <div
                     key={`${file.name}-${index}`}
-                    className="flex items-center justify-between rounded-md border p-2"
+                    className="flex items-center justify-between gap-2 rounded-md border p-2 min-w-0"
                   >
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -398,13 +478,13 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
                         variant="ghost"
                         size="icon"
                         onClick={() => removeFile(index)}
-                        className="h-8 w-8"
+                        className="h-8 w-8 shrink-0"
                       >
                         <X className="h-4 w-4" />
                       </Button>
                     )}
                     {isUploading && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <Loader2 className="h-4 w-4 animate-spin" />
                       </div>
                     )}
@@ -416,10 +496,10 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
         )}
 
         {error && (
-          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive space-y-2">
-            <p>{error}</p>
+          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive space-y-2 min-w-0 overflow-hidden">
+            <p className="break-words">{error}</p>
             {failedFile && (
-              <div className="flex flex-wrap items-center gap-2 text-xs text-destructive">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-destructive min-w-0">
                 <span className="font-medium">&ldquo;{failedFile.name}&rdquo;</span>
                 <Button
                   type="button"
