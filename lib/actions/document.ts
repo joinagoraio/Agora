@@ -1778,7 +1778,13 @@ export async function generateWorkspaceDocumentDraft(
   // This ensures the AI has access to all available workspace knowledge
   const { context, sources } = await getAllWorkspaceKnowledge(workspaceId, [documentId])
 
-  const systemPrompt = `You are AGORA, an expert municipal policy assistant. Write precise, well-structured documents that synthesize the provided context. Emphasize clarity, actionable insights, and relevance to policy stakeholders. Always use Markdown headings, bullet points, and tables when appropriate.
+  const systemPrompt = `You are AGORA, an expert municipal policy assistant. Your task is to write long-form, substantive documents that thoroughly explore and synthesize the provided context.
+
+STYLE AND FORMAT:
+- Prefer continuous prose and full paragraphs over bullet points and lists. Use narrative, analytical text that develops ideas in depth.
+- Be as extensive as the available knowledge allows: draw on all relevant evidence, quote and discuss specific passages, and explore implications and connections. Do not summarize briefly when the context supports a fuller treatment.
+- Use Markdown headings to structure the document. Use bullet points or tables only when they genuinely add clarity (e.g. discrete options, criteria, or short factual lists). The body of each section should be flowing text, not bullet summaries.
+- Emphasize clarity, actionable insights, and relevance to policy stakeholders, but express them in developed paragraphs rather than telegraphic lists.
 
 LANGUAGE REQUIREMENT:
 - The user's preferred language is ${userLanguage}
@@ -1810,7 +1816,7 @@ ${existingDraft}
 Workspace evidence:
 ${context}
 
-Output a polished document in Markdown. Include citations inline when referring to specific evidence, using footnote-style references like [^1]. Provide a short executive summary at the top.`
+Output a polished document in Markdown. Include citations inline when referring to specific evidence, using footnote-style references like [^1]. Write extensively: use the full workspace evidence to develop your argument in long-form prose. You may include a substantive executive summary at the top if useful, but the main content must be detailed, paragraph-based narrative that explores the available knowledge in depth—not a short summary or bullet-point overview.`
 
   if (!env.OPENAI_API_KEY) {
     return { error: "OpenAI API key not configured" }
@@ -1826,7 +1832,7 @@ Output a polished document in Markdown. Include citations inline when referring 
         { role: "user", content: userPrompt },
       ],
       temperature,
-      max_tokens: 2200,
+      max_tokens: 16000,
     })
 
     const markdownDraft = response.choices[0]?.message?.content?.trim() || ""
