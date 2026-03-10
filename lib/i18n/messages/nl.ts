@@ -239,6 +239,8 @@ export const nlMessages = {
         emptyTitle: "Nog geen workspace-bewijs",
         emptyDescription:
           "Bewaar antwoorden van de assistent of upload ondersteunend materiaal om een bewijsdossier voor deze workspace op te bouwen.",
+        removeLabel: "Verwijderen uit kennis",
+        removeAria: "Dit bewijs uit de workspace-kennis verwijderen",
       },
       notes: {
         title: "Workspace Notities",
@@ -754,7 +756,7 @@ export const nlMessages = {
         toastUploadError: "Upload mislukt",
         errorNetwork: "Netwerkfout tijdens uploaden",
         errorCancelled: "Upload geannuleerd",
-        errorParse: "Antwoord kon niet worden verwerkt",
+        errorParse: "Upload mislukt: onverwachte reactie van de server. Probeer het over een moment opnieuw.",
         errorUpload: "Upload mislukt met status {{status}}",
         errorUpload503: "Service tijdelijk niet beschikbaar. De upload kan zijn verlopen—probeer opnieuw of gebruik een kleiner bestand.",
         errorUpload413: "Bestand is te groot (max. 9 MB per bestand op deze server). Gebruik een kleiner bestand of splits het document.",

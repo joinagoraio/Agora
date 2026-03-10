@@ -77,10 +77,22 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
       }),
     })
     if (!urlRes.ok) {
-      const err = await urlRes.json().catch(() => ({}))
+      let err: { error?: string } = {}
+      try {
+        err = await urlRes.json()
+      } catch {
+        throw new Error(t("workspace.sources.upload.errorParse"))
+      }
       throw new Error(err.error || `Upload URL failed: ${urlRes.status}`)
     }
-    const { path, token } = await urlRes.json()
+    let urlData: { path?: string; token?: string }
+    try {
+      urlData = await urlRes.json()
+    } catch {
+      throw new Error(t("workspace.sources.upload.errorParse"))
+    }
+    const { path, token } = urlData
+    if (!path || !token) throw new Error(t("workspace.sources.upload.errorParse"))
 
     setUploadProgress((prev) => ({ ...prev, [fileId]: 45 }))
     const supabase = createSupabaseClient()
@@ -103,10 +115,20 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
       }),
     })
     if (!finalizeRes.ok) {
-      const err = await finalizeRes.json().catch(() => ({}))
+      let err: { error?: string } = {}
+      try {
+        err = await finalizeRes.json()
+      } catch {
+        throw new Error(t("workspace.sources.upload.errorParse"))
+      }
       throw new Error(err.error || `Finalize failed: ${finalizeRes.status}`)
     }
-    const finalizeData = await finalizeRes.json()
+    let finalizeData: { data?: unknown }
+    try {
+      finalizeData = await finalizeRes.json()
+    } catch {
+      throw new Error(t("workspace.sources.upload.errorParse"))
+    }
     setUploadProgress((prev) => ({ ...prev, [fileId]: 100 }))
     return finalizeData.data
   }

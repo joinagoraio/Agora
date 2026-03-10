@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import ReactMarkdown from "react-markdown"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/select"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { deleteWorkspaceItem } from "@/lib/actions/workspace-item"
 
 type EvidencePayload = {
   type?: string
@@ -74,6 +76,7 @@ interface WorkspaceEvidenceBoardProps {
     name: string
     space_type?: string | null
   }>
+  canManage?: boolean
 }
 
 const CSRF_ERROR_MESSAGE = "Could not verify your session. Refresh and try again."
@@ -133,14 +136,19 @@ interface EvidenceCardProps {
   currentUserId: string
   initialComments: WorkspaceComment[]
   parentSpaces: NonNullable<WorkspaceEvidenceBoardProps["parentSpaces"]>
+  canManage?: boolean
 }
 
-function EvidenceCard({ item, workspaceId, currentUserId, initialComments, parentSpaces }: EvidenceCardProps) {
+function EvidenceCard({ item, workspaceId, currentUserId, initialComments, parentSpaces, canManage = false }: EvidenceCardProps) {
+  const router = useRouter()
+  const { t } = useI18n()
   const [comments, setComments] = useState<WorkspaceComment[]>(initialComments)
   const [draft, setDraft] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [isDeletingEvidence, setIsDeletingEvidence] = useState(false)
+  const [removeError, setRemoveError] = useState<string | null>(null)
   const [selectedSpaceId, setSelectedSpaceId] = useState(parentSpaces[0]?.id ?? "")
   const [selectedClassification, setSelectedClassification] = useState<"public" | "internal" | "confidential">(
     (item.classification as "public" | "internal" | "confidential" | null) ?? "public",
@@ -270,10 +278,35 @@ function EvidenceCard({ item, workspaceId, currentUserId, initialComments, paren
     }
   }
 
+  const handleRemoveEvidence = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!canManage || isDeletingEvidence) return
+    setIsDeletingEvidence(true)
+    setRemoveError(null)
+    try {
+      const result = await deleteWorkspaceItem(item.id)
+      if (result.error) {
+        setRemoveError(result.error)
+        return
+      }
+      window.dispatchEvent(
+        new CustomEvent("workspaceContextUpdated", {
+          detail: { workspaceId, type: "evidence", action: "removed" },
+        }),
+      )
+      router.refresh()
+    } catch (err) {
+      setRemoveError(err instanceof Error ? err.message : "Failed to remove evidence")
+    } finally {
+      setIsDeletingEvidence(false)
+    }
+  }
+
   return (
     <AccordionItem value={item.id} className="border rounded-lg mb-4 last:mb-0 last:border-b shadow">
-      <AccordionTrigger className="hover:no-underline px-4">
-        <div className="flex flex-wrap items-center gap-2 text-left flex-1">
+      <div className="flex items-center gap-2">
+        <AccordionTrigger className="hover:no-underline px-4 flex-1">
+          <div className="flex flex-wrap items-center gap-2 text-left flex-1">
           <span className="text-sm font-semibold flex-shrink-0">{item.payload?.question ?? "Saved evidence"}</span>
           {item.payload?.confidence && (
             <Badge variant={confidenceVariants[item.payload.confidence] ?? "secondary"} className="flex-shrink-0">
@@ -307,6 +340,24 @@ function EvidenceCard({ item, workspaceId, currentUserId, initialComments, paren
           )}
         </div>
       </AccordionTrigger>
+      {canManage && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleRemoveEvidence}
+          disabled={isDeletingEvidence}
+          className="shrink-0 text-muted-foreground hover:text-destructive"
+          title={t("workspace.sections.evidence.removeLabel")}
+          aria-label={t("workspace.sections.evidence.removeAria")}
+        >
+          {isDeletingEvidence ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Trash2 className="h-4 w-4" />
+          )}
+        </Button>
+      )}
+      </div>
       <AccordionContent className="space-y-4 px-4 pb-4">
         {item.payload?.answer && (
           <div className="prose prose-sm dark:prose-invert max-w-none">
@@ -338,6 +389,7 @@ function EvidenceCard({ item, workspaceId, currentUserId, initialComments, paren
           </>
         )}
         <Separator />
+        {removeError && <p className="text-sm text-destructive">{removeError}</p>}
         <div className="flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
             {includeInAiContext ? "Included in AI context" : "Excluded from AI context"}
@@ -482,6 +534,7 @@ export function WorkspaceEvidenceBoard({
   initialItems,
   initialComments = {},
   parentSpaces = [],
+  canManage = false,
 }: WorkspaceEvidenceBoardProps) {
   const { t } = useI18n()
   const evidenceItems = useMemo(
@@ -510,6 +563,7 @@ export function WorkspaceEvidenceBoard({
           currentUserId={currentUserId}
           initialComments={initialComments[item.id] ?? []}
           parentSpaces={parentSpaces}
+          canManage={canManage}
         />
       ))}
     </Accordion>

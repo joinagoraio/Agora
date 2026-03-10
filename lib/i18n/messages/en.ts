@@ -238,6 +238,8 @@ export const enMessages = {
         emptyTitle: "No workspace evidence yet",
         emptyDescription:
           "Save answers from the assistant or upload supporting material to build an evidence trail for this workspace.",
+        removeLabel: "Remove from knowledge",
+        removeAria: "Remove this evidence from workspace knowledge",
       },
       notes: {
         title: "Workspace Notes",
@@ -752,7 +754,7 @@ export const enMessages = {
         toastUploadError: "Upload failed",
         errorNetwork: "Network error during upload",
         errorCancelled: "Upload was cancelled",
-        errorParse: "Failed to parse response",
+        errorParse: "Upload failed: received an unexpected response from the server. Try again in a moment.",
         errorUpload: "Upload failed with status {{status}}",
         errorUpload503: "Service temporarily unavailable. The upload may have timed out—try again or use a smaller file.",
         errorUpload413: "File is too large (max 9 MB per file on this server). Use a smaller file or split the document.",

@@ -556,6 +556,7 @@ export default async function WorkspacePage({
                       initialItems={localWorkspaceItems}
                       initialComments={workspaceCommentsByItem}
                       parentSpaces={parentSpaces}
+                      canManage={canManage}
                     />
                   </div>
                 </TabsContent>
