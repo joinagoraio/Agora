@@ -26,6 +26,7 @@ import { Loader2, Upload, X } from "lucide-react"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { createClient as createSupabaseClient } from "@/lib/supabase/client"
 
 type SpaceDocument = any
 
@@ -68,6 +69,21 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
     [t],
   )
 
+  const MAX_FILE_SIZE_BYTES = 9 * 1024 * 1024
+
+  const safeJsonParse = async (res: Response, step: string): Promise<any> => {
+    const text = await res.text()
+    try {
+      return JSON.parse(text)
+    } catch {
+      console.error(`[SpaceUpload] ${step}: status=${res.status}, body=${text.substring(0, 500)}`)
+      const isServerError = res.status >= 500 || res.status === 0 || (res.headers.get("content-type") ?? "").includes("text/html")
+      throw new Error(isServerError
+        ? t("workspace.sources.upload.errorServerUnavailable")
+        : t("space.documents.upload.errorParse"))
+    }
+  }
+
   const handleUpload = async () => {
     if (!file) {
       const message = t("space.documents.upload.errorNoFile")
@@ -76,89 +92,100 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
       return
     }
 
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      const message = t("workspace.sources.upload.errorFileTooLarge")
+      setError(message)
+      toast.error(t("space.documents.upload.toastUploadFailed"), { description: message })
+      return
+    }
+
     setIsUploading(true)
     setError(null)
     setSyncWarning(null)
 
-    const formData = new FormData()
-    formData.append("file", file)
-    if (title.trim().length > 0) {
-      formData.append("title", title.trim())
-    }
-    formData.append("classification", classification)
-    if (notes.trim().length > 0) {
-      formData.append("notes", notes.trim())
-    }
-
-    const csrfToken = await fetchCsrfToken()
-    if (!csrfToken) {
-      const message = t("space.documents.upload.toastUploadBlocked")
-      setError(message)
-      toast.error(t("space.documents.upload.toastUploadBlocked"), { description: message })
-      setIsUploading(false)
-      return
-    }
-
-    const response = await fetch(`/api/spaces/${spaceId}/documents/upload`, {
-      method: "POST",
-      body: formData,
-      headers: {
-        "x-csrf-token": csrfToken,
-      },
-    })
-
-    let payload: any = null
     try {
-      payload = await response.json()
-    } catch (parseError) {
-      console.error("[SpaceUpload] Failed to parse response payload:", parseError)
-      const message = t("space.documents.upload.errorParse")
-      setError(message)
-      toast.error(t("space.documents.upload.toastUploadFailed"), { description: message })
-      setIsUploading(false)
-      return
-    }
+      const csrfToken = await fetchCsrfToken()
+      if (!csrfToken) {
+        throw new Error(t("space.documents.upload.toastUploadBlocked"))
+      }
 
-    if (!response.ok) {
-      const message = payload.error || t("space.documents.upload.toastUploadFailed")
-      setError(message)
-      toast.error(t("space.documents.upload.toastUploadFailed"), { description: message })
-      setIsUploading(false)
-      return
-    }
+      const urlBody = await safeJsonParse(
+        await fetch(`/api/spaces/${spaceId}/documents/upload-url`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: file.type,
+            size: file.size,
+          }),
+        }),
+        "upload-url",
+      )
+      if (urlBody.error) throw new Error(urlBody.error)
+      const { path, token } = urlBody
+      if (!path || !token) throw new Error(t("space.documents.upload.errorParse"))
 
-    onUploaded?.(payload.data)
+      const supabase = createSupabaseClient()
+      const { error: storageErr } = await supabase.storage
+        .from("documents")
+        .uploadToSignedUrl(path, token, file, { contentType: file.type || undefined })
+      if (storageErr) throw new Error(storageErr.message)
 
-    if (payload.warnings && payload.warnings.length > 0) {
-      setSyncWarning(payload.warnings.join(" "))
-      setIsUploading(false)
+      const payload = await safeJsonParse(
+        await fetch(`/api/spaces/${spaceId}/documents/upload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+          body: JSON.stringify({
+            storagePath: path,
+            title: title.trim() || file.name,
+            filename: file.name,
+            mimeType: file.type,
+            classification,
+            notes: notes.trim(),
+          }),
+        }),
+        "upload-finalize",
+      )
+      if (payload.error) throw new Error(payload.error)
+
+      onUploaded?.(payload.data)
+
+      if (payload.warnings && payload.warnings.length > 0) {
+        setSyncWarning(payload.warnings.join(" "))
+        setFile(null)
+        setTitle("")
+        setNotes("")
+        toast.warning(t("space.documents.upload.warningToast"), {
+          description: payload.warnings.join(" "),
+        })
+        setIsUploading(false)
+        return
+      }
+
+      const uploadedName =
+        payload?.data?.payload?.title ||
+        payload?.data?.payload?.file_name ||
+        payload?.data?.title ||
+        title.trim() ||
+        file?.name ||
+        t("space.documents.upload.trigger")
+
+      setIsOpen(false)
       setFile(null)
       setTitle("")
       setNotes("")
-      toast.warning(t("space.documents.upload.warningToast"), {
-        description: payload.warnings.join(" "),
+      setClassification("public")
+      resetFileInput()
+      toast.success(t("space.documents.upload.successToast"), {
+        description: t("space.documents.upload.successDescription", undefined, { name: uploadedName }),
       })
-      return
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("space.documents.upload.toastUploadFailed")
+      setError(message)
+      toast.error(t("space.documents.upload.toastUploadFailed"), { description: message })
+    } finally {
+      setIsUploading(false)
     }
-
-    const uploadedName =
-      payload?.data?.payload?.title ||
-      payload?.data?.payload?.file_name ||
-      payload?.data?.title ||
-      title.trim() ||
-      file?.name ||
-      t("space.documents.upload.trigger")
-
-    setIsUploading(false)
-    setIsOpen(false)
-    setFile(null)
-    setTitle("")
-    setNotes("")
-    setClassification("public")
-    resetFileInput()
-    toast.success(t("space.documents.upload.successToast"), {
-      description: t("space.documents.upload.successDescription", undefined, { name: uploadedName }),
-    })
   }
 
   const handleOpenChange = (open: boolean) => {

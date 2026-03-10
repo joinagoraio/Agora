@@ -886,7 +886,7 @@ export const nlMessages = {
         description:
           "Voeg beleids-pdf's, memo's of ondersteunend onderzoek toe. Deze bestanden blijven bij de space en kunnen worden geërfd door alle workspaces.",
         fileLabel: "Bestand",
-        fileHint: "PDF-, Word- of tekstbestanden tot de limieten van je Supabase-project.",
+        fileHint: "PDF-, Word- of tekstbestanden. Max. 9 MB per bestand.",
         fileButton: "Bestand kiezen",
         changeFile: "Bestand vervangen",
         noFileSelected: "Nog geen bestand geselecteerd",
@@ -901,7 +901,8 @@ export const nlMessages = {
         errorNoFile: "Kies een bestand om te uploaden.",
         toastNoFile: "Geen bestand geselecteerd",
         toastUploadBlocked: "Upload geblokkeerd",
-        errorParse: "Upload mislukt: onverwachte reactie van de server.",
+        errorParse: "Upload mislukt: onverwachte reactie van de server. Probeer het over een moment opnieuw.",
+        errorFileTooLarge: "Bestand is te groot (max. 9 MB). Gebruik een kleiner bestand of splits het document.",
         toastUploadFailed: "Upload mislukt",
         warningToast: "Document geüpload met waarschuwingen",
         successToast: "Document geüpload",

@@ -885,7 +885,7 @@ export const enMessages = {
         description:
           "Add policy PDFs, memos, or supporting research. These files stay with the space and can be inherited by every workspace.",
         fileLabel: "File",
-        fileHint: "PDF, Word, or text files up to your Supabase project limits.",
+        fileHint: "PDF, Word, or text files. Max 9 MB per file.",
         fileButton: "Choose file",
         changeFile: "Replace file",
         noFileSelected: "No file selected",
@@ -900,7 +900,8 @@ export const enMessages = {
         errorNoFile: "Choose a file to upload.",
         toastNoFile: "No file selected",
         toastUploadBlocked: "Upload blocked",
-        errorParse: "Upload failed: received an unexpected response from the server.",
+        errorParse: "Upload failed: received an unexpected response from the server. Try again in a moment.",
+        errorFileTooLarge: "File is too large (max 9 MB). Use a smaller file or split the document.",
         toastUploadFailed: "Upload failed",
         warningToast: "Document uploaded with warnings",
         successToast: "Document uploaded",

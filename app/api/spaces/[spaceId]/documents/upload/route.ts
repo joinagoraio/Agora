@@ -9,6 +9,7 @@ import { assertUUIDParam } from "@/lib/utils/param-validation"
 import { ValidationError } from "@/lib/utils/errors"
 
 export const runtime = "nodejs"
+export const maxDuration = 120
 
 export async function POST(
   req: NextRequest,
@@ -28,66 +29,95 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const formData = await req.formData()
-    const file = formData.get("file") as File | null
-    const title = (formData.get("title") as string | null) ?? undefined
-    const classification =
-      (formData.get("classification") as "public" | "internal" | "confidential" | null) ?? "public"
-    const notes = ((formData.get("notes") as string | null) ?? "").trim()
+    const contentType = req.headers.get("content-type") ?? ""
+    const isJson = contentType.includes("application/json")
 
-    if (!file) {
-      return NextResponse.json({ error: "File is required" }, { status: 400 })
-    }
+    let storagePath: string
+    let fileTitle: string
+    let fileName: string
+    let mimeType: string
+    let classification: "public" | "internal" | "confidential" = "public"
+    let notes = ""
 
-    // Upload to Supabase Storage in the shared documents bucket
-    const extension = file.name.split(".").pop() ?? "bin"
-    const storagePath = `spaces/${spaceId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${extension}`
+    if (isJson) {
+      const body = await req.json()
+      storagePath = body.storagePath
+      fileTitle = body.title || body.filename || "Untitled"
+      fileName = body.filename || "unknown"
+      mimeType = body.mimeType || "application/octet-stream"
+      classification = body.classification || "public"
+      notes = (body.notes || "").trim()
 
-    const { error: uploadError } = await adminClient.storage.from("documents").upload(storagePath, file, {
-      cacheControl: "3600",
-      upsert: false,
-    })
+      if (!storagePath || !storagePath.startsWith(`spaces/${spaceId}/`)) {
+        return NextResponse.json({ error: "Invalid storage path" }, { status: 400 })
+      }
+    } else {
+      const formData = await req.formData()
+      const file = formData.get("file") as File | null
+      fileTitle = (formData.get("title") as string | null) ?? ""
+      classification =
+        (formData.get("classification") as "public" | "internal" | "confidential" | null) ?? "public"
+      notes = ((formData.get("notes") as string | null) ?? "").trim()
 
-    if (uploadError) {
-      console.error("[SpaceUpload] Storage error:", uploadError)
-      return NextResponse.json({ error: `Upload failed: ${uploadError.message}` }, { status: 500 })
+      if (!file) {
+        return NextResponse.json({ error: "File is required" }, { status: 400 })
+      }
+
+      fileName = file.name
+      mimeType = file.type
+      if (!fileTitle) fileTitle = file.name
+
+      const extension = file.name.split(".").pop() ?? "bin"
+      storagePath = `spaces/${spaceId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${extension}`
+
+      const { error: uploadError } = await adminClient.storage.from("documents").upload(storagePath, file, {
+        cacheControl: "3600",
+        upsert: false,
+      })
+
+      if (uploadError) {
+        console.error("[SpaceUpload] Storage error:", uploadError)
+        return NextResponse.json({ error: `Upload failed: ${uploadError.message}` }, { status: 500 })
+      }
     }
 
     const {
       data: { publicUrl },
     } = adminClient.storage.from("documents").getPublicUrl(storagePath)
 
-    // Light-weight text extraction (reuse logic from workspace uploads)
     let extractedText = ""
 
     try {
-      if (file.type === "text/plain" || file.type === "text/markdown") {
-        extractedText = await file.text()
-      } else if (file.type === "application/pdf") {
-        const arrayBuffer = await file.arrayBuffer()
-        const buffer = Buffer.from(arrayBuffer)
-        const PDFParser = (await import("pdf2json")).default
+      const { data: blob, error: downloadError } = await adminClient.storage
+        .from("documents")
+        .download(storagePath)
 
-        extractedText = await new Promise<string>((resolve, reject) => {
-          const parser = new PDFParser(null, true)
+      if (!downloadError && blob) {
+        if (mimeType === "text/plain" || mimeType === "text/markdown") {
+          extractedText = await blob.text()
+        } else if (mimeType === "application/pdf") {
+          const arrayBuffer = await blob.arrayBuffer()
+          const buffer = Buffer.from(arrayBuffer)
+          const PDFParser = (await import("pdf2json")).default
 
-          parser.on("pdfParser_dataError", (err: any) => reject(new Error(err.parserError)))
-          parser.on("pdfParser_dataReady", () => {
-            try {
-              resolve(parser.getRawTextContent() || "")
-            } catch (err) {
-              reject(err)
-            }
+          extractedText = await new Promise<string>((resolve, reject) => {
+            const parser = new PDFParser(null, true)
+            parser.on("pdfParser_dataError", (err: any) => reject(new Error(err.parserError)))
+            parser.on("pdfParser_dataReady", () => {
+              try {
+                resolve(parser.getRawTextContent() || "")
+              } catch (err) {
+                reject(err)
+              }
+            })
+            parser.parseBuffer(buffer)
           })
-
-          parser.parseBuffer(buffer)
-        })
+        }
       }
     } catch (extractionError) {
       console.warn("[SpaceUpload] Extraction failed, continuing without full text:", extractionError)
     }
 
-    // Trim overly long payload text
     const sanitizedFullText = sanitizeScopeContent(extractedText)
     const summary =
       notes.length > 0
@@ -100,10 +130,10 @@ export async function POST(
       item_type: "document",
       classification,
       payload: {
-        title: title || file.name,
-        file_name: file.name,
+        title: fileTitle || fileName,
+        file_name: fileName,
         file_url: publicUrl,
-        mime_type: file.type,
+        mime_type: mimeType,
         summary,
         full_text: sanitizedFullText,
       },
