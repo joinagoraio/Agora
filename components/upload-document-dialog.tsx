@@ -69,10 +69,21 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
     return t("workspace.sources.upload.errorParse")
   }
 
+  const safeJsonParse = async (res: Response, step: string): Promise<any> => {
+    const text = await res.text()
+    try {
+      return JSON.parse(text)
+    } catch {
+      console.error(`[Upload] ${step}: status=${res.status}, content-type=${res.headers.get("content-type")}, body=${text.substring(0, 500)}`)
+      throw new Error(getParseErrorMessage(res))
+    }
+  }
+
   const uploadViaSignedUrl = async (file: File, fileId: string): Promise<any> => {
     const csrfToken = await fetchCsrfToken()
     if (!csrfToken) throw new Error(t("workspace.sources.upload.errorGeneral"))
 
+    console.log("[Upload] Step 1: requesting signed URL...")
     setUploadProgress((prev) => ({ ...prev, [fileId]: 15 }))
     const urlRes = await fetch("/api/documents/upload-url", {
       method: "POST",
@@ -85,31 +96,31 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
         size: file.size,
       }),
     })
+    console.log("[Upload] Step 1 response:", urlRes.status, urlRes.headers.get("content-type"))
+    const urlBody = await safeJsonParse(urlRes, "upload-url")
     if (!urlRes.ok) {
-      let err: { error?: string } = {}
-      try {
-        err = await urlRes.json()
-      } catch {
-        throw new Error(getParseErrorMessage(urlRes))
-      }
-      throw new Error(err.error || `Upload URL failed: ${urlRes.status}`)
+      throw new Error(urlBody.error || `Upload URL failed: ${urlRes.status}`)
     }
-    let urlData: { path?: string; token?: string }
-    try {
-      urlData = await urlRes.json()
-    } catch {
-      throw new Error(getParseErrorMessage(urlRes))
+    const { path, token } = urlBody
+    if (!path || !token) {
+      console.error("[Upload] Step 1: missing path or token in response", urlBody)
+      throw new Error(t("workspace.sources.upload.errorParse"))
     }
-    const { path, token } = urlData
-    if (!path || !token) throw new Error(t("workspace.sources.upload.errorParse"))
+    console.log("[Upload] Step 1 OK, path:", path)
 
+    console.log("[Upload] Step 2: uploading to Supabase storage...")
     setUploadProgress((prev) => ({ ...prev, [fileId]: 45 }))
     const supabase = createSupabaseClient()
     const { error: uploadErr } = await supabase.storage
       .from("documents")
       .uploadToSignedUrl(path, token, file, { contentType: file.type || undefined })
-    if (uploadErr) throw new Error(uploadErr.message)
+    if (uploadErr) {
+      console.error("[Upload] Step 2 failed:", uploadErr)
+      throw new Error(uploadErr.message)
+    }
+    console.log("[Upload] Step 2 OK")
 
+    console.log("[Upload] Step 3: finalizing...")
     setUploadProgress((prev) => ({ ...prev, [fileId]: 75 }))
     const finalizeRes = await fetch("/api/documents/upload-finalize", {
       method: "POST",
@@ -123,23 +134,14 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
         mimeType: file.type,
       }),
     })
+    console.log("[Upload] Step 3 response:", finalizeRes.status, finalizeRes.headers.get("content-type"))
+    const finalizeBody = await safeJsonParse(finalizeRes, "upload-finalize")
     if (!finalizeRes.ok) {
-      let err: { error?: string } = {}
-      try {
-        err = await finalizeRes.json()
-      } catch {
-        throw new Error(getParseErrorMessage(finalizeRes))
-      }
-      throw new Error(err.error || `Finalize failed: ${finalizeRes.status}`)
+      throw new Error(finalizeBody.error || `Finalize failed: ${finalizeRes.status}`)
     }
-    let finalizeData: { data?: unknown }
-    try {
-      finalizeData = await finalizeRes.json()
-    } catch {
-      throw new Error(getParseErrorMessage(finalizeRes))
-    }
+    console.log("[Upload] Step 3 OK")
     setUploadProgress((prev) => ({ ...prev, [fileId]: 100 }))
-    return finalizeData.data
+    return finalizeBody.data
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
