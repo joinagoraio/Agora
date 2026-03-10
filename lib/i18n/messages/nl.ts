@@ -758,6 +758,7 @@ export const nlMessages = {
         errorCancelled: "Upload geannuleerd",
         errorParse: "Upload mislukt: onverwachte reactie van de server. Probeer het over een moment opnieuw.",
         errorUpload: "Upload mislukt met status {{status}}",
+        errorServerUnavailable: "Server tijdelijk niet beschikbaar. Probeer het over een moment opnieuw.",
         errorUpload503: "Service tijdelijk niet beschikbaar. De upload kan zijn verlopen—probeer opnieuw of gebruik een kleiner bestand.",
         errorUpload413: "Bestand is te groot (max. 9 MB per bestand op deze server). Gebruik een kleiner bestand of splits het document.",
         errorFileTooLarge: "Bestand is te groot (max. 9 MB per bestand). Gebruik een kleiner bestand of splits het document.",

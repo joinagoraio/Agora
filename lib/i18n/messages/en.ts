@@ -756,6 +756,7 @@ export const enMessages = {
         errorCancelled: "Upload was cancelled",
         errorParse: "Upload failed: received an unexpected response from the server. Try again in a moment.",
         errorUpload: "Upload failed with status {{status}}",
+        errorServerUnavailable: "Server temporarily unavailable. Try again in a moment.",
         errorUpload503: "Service temporarily unavailable. The upload may have timed out—try again or use a smaller file.",
         errorUpload413: "File is too large (max 9 MB per file on this server). Use a smaller file or split the document.",
         errorFileTooLarge: "File is too large (max 9 MB per file). Use a smaller file or split the document.",

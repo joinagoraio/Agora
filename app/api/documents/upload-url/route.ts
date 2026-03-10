@@ -6,6 +6,9 @@ import { requireAuthAndPermission } from "@/lib/middleware/authorization"
 import { getClientIdentifier } from "@/lib/utils/request"
 import { z } from "zod"
 
+// Ensure route can complete before platform timeout (e.g. Vercel)
+export const maxDuration = 30
+
 const MAX_FILE_SIZE_BYTES = 9 * 1024 * 1024 // 9 MB for direct upload path
 const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt", ".md", ".markdown"]
 
@@ -97,6 +100,9 @@ export async function POST(req: NextRequest) {
       }),
     )
   } catch (e) {
-    return NextResponse.json({ error: "An error occurred" }, { status: 500 })
+    return NextResponse.json(
+      { error: "An error occurred while creating the upload URL." },
+      { status: 500 },
+    )
   }
 }

@@ -304,9 +304,8 @@ function EvidenceCard({ item, workspaceId, currentUserId, initialComments, paren
 
   return (
     <AccordionItem value={item.id} className="border rounded-lg mb-4 last:mb-0 last:border-b shadow">
-      <div className="flex items-center gap-2">
-        <AccordionTrigger className="hover:no-underline px-4 flex-1">
-          <div className="flex flex-wrap items-center gap-2 text-left flex-1">
+      <AccordionTrigger className="hover:no-underline px-4">
+        <div className="flex flex-wrap items-center gap-2 text-left flex-1">
           <span className="text-sm font-semibold flex-shrink-0">{item.payload?.question ?? "Saved evidence"}</span>
           {item.payload?.confidence && (
             <Badge variant={confidenceVariants[item.payload.confidence] ?? "secondary"} className="flex-shrink-0">
@@ -340,24 +339,6 @@ function EvidenceCard({ item, workspaceId, currentUserId, initialComments, paren
           )}
         </div>
       </AccordionTrigger>
-      {canManage && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleRemoveEvidence}
-          disabled={isDeletingEvidence}
-          className="shrink-0 text-muted-foreground hover:text-destructive"
-          title={t("workspace.sections.evidence.removeLabel")}
-          aria-label={t("workspace.sections.evidence.removeAria")}
-        >
-          {isDeletingEvidence ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Trash2 className="h-4 w-4" />
-          )}
-        </Button>
-      )}
-      </div>
       <AccordionContent className="space-y-4 px-4 pb-4">
         {item.payload?.answer && (
           <div className="prose prose-sm dark:prose-invert max-w-none">
@@ -522,6 +503,26 @@ function EvidenceCard({ item, workspaceId, currentUserId, initialComments, paren
               )
             })}
           </ul>
+        )}
+        {canManage && (
+          <div className="flex justify-end pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRemoveEvidence}
+              disabled={isDeletingEvidence}
+              className="text-muted-foreground hover:text-destructive"
+              title={t("workspace.sections.evidence.removeLabel")}
+              aria-label={t("workspace.sections.evidence.removeAria")}
+            >
+              {isDeletingEvidence ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
+              {t("workspace.sections.evidence.removeLabel")}
+            </Button>
+          </div>
         )}
       </AccordionContent>
     </AccordionItem>

@@ -60,6 +60,12 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
 
   const getFileId = (file: File) => `${file.name}-${file.size}`
 
+  /** When response body is not JSON (e.g. 502/503/504 HTML), pick a message by status */
+  const getParseErrorMessage = (status: number) => {
+    if (status >= 500 && status <= 504) return t("workspace.sources.upload.errorServerUnavailable")
+    return t("workspace.sources.upload.errorParse")
+  }
+
   const uploadViaSignedUrl = async (file: File, fileId: string): Promise<any> => {
     const csrfToken = await fetchCsrfToken()
     if (!csrfToken) throw new Error(t("workspace.sources.upload.errorGeneral"))
@@ -81,7 +87,7 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
       try {
         err = await urlRes.json()
       } catch {
-        throw new Error(t("workspace.sources.upload.errorParse"))
+        throw new Error(getParseErrorMessage(urlRes.status))
       }
       throw new Error(err.error || `Upload URL failed: ${urlRes.status}`)
     }
@@ -89,7 +95,7 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
     try {
       urlData = await urlRes.json()
     } catch {
-      throw new Error(t("workspace.sources.upload.errorParse"))
+      throw new Error(getParseErrorMessage(urlRes.status))
     }
     const { path, token } = urlData
     if (!path || !token) throw new Error(t("workspace.sources.upload.errorParse"))
@@ -119,7 +125,7 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
       try {
         err = await finalizeRes.json()
       } catch {
-        throw new Error(t("workspace.sources.upload.errorParse"))
+        throw new Error(getParseErrorMessage(finalizeRes.status))
       }
       throw new Error(err.error || `Finalize failed: ${finalizeRes.status}`)
     }
@@ -127,7 +133,7 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
     try {
       finalizeData = await finalizeRes.json()
     } catch {
-      throw new Error(t("workspace.sources.upload.errorParse"))
+      throw new Error(getParseErrorMessage(finalizeRes.status))
     }
     setUploadProgress((prev) => ({ ...prev, [fileId]: 100 }))
     return finalizeData.data
