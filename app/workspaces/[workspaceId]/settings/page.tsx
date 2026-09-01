@@ -101,11 +101,13 @@ export default async function WorkspaceSettingsPage({
     const existing = memberMap.get(workspaceMember.user_id)
     if (existing) {
       existing.workspace_role = workspaceMember.role
+      existing.workspace_job = workspaceMember.job
     } else {
       memberMap.set(workspaceMember.user_id, {
         ...workspaceMember,
         source: "workspace" as const,
         workspace_role: workspaceMember.role,
+        workspace_job: workspaceMember.job,
       })
     }
   }

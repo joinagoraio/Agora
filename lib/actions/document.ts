@@ -11,6 +11,10 @@ import { logger } from "@/lib/utils/logger"
 // PDF extraction now handled by pdf2json directly
 import { getRelevantContext, getAllWorkspaceKnowledge } from "@/lib/rag/search"
 import { extractPdfPages } from "@/lib/utils/pdf-extraction"
+import { compileSystemPrompt } from "@/lib/chat/playbook-compiler"
+import { recordGenerationRun, computeUnusedDocumentIds } from "@/lib/actions/generation-run"
+import { getLatestPlaybookBody } from "@/lib/actions/playbook"
+import { parseProgrammeBindings } from "@/lib/programme/domain"
 import OpenAI from "openai"
 import { env } from "@/lib/env"
 import MarkdownIt from "markdown-it"
@@ -1663,6 +1667,16 @@ export async function updateWorkspaceDocument(
     return { error: "Document is not editable" }
   }
 
+  const { parseProgrammeBindings } = await import("@/lib/programme/domain")
+  const { data: workspace } = await supabase.from("workspaces").select("metadata").eq("id", workspaceId).single()
+  const bindings = parseProgrammeBindings((workspace?.metadata as Record<string, unknown>) || {})
+  const outlineNodeId = Object.entries(bindings.chapterDocuments || {}).find(([, id]) => id === documentId)?.[0]
+  if (outlineNodeId) {
+    const { requireSectionLock } = await import("@/lib/actions/collaboration")
+    const lock = await requireSectionLock(workspaceId, `chapter:${outlineNodeId}`)
+    if (lock.error) return { error: lock.error }
+  }
+
   const updatedMetadata: Record<string, any> = {
     ...(document.metadata || {}),
     lastEditedBy: user.id,
@@ -1702,6 +1716,17 @@ export async function updateWorkspaceDocument(
     return { error: updateError?.message || "Failed to update document" }
   }
 
+  if (outlineNodeId && typeof updates.content === "string") {
+    const { snapshotArtefact } = await import("@/lib/actions/collaboration")
+    await snapshotArtefact({
+      workspaceId,
+      artefactType: "document",
+      artefactId: documentId,
+      snapshot: { content: updates.content, outlineNodeId },
+      reason: "chapter save",
+    })
+  }
+
   revalidatePath(`/workspaces/${workspaceId}`)
   revalidatePath(`/workspaces/${workspaceId}/my-documents/${documentId}`)
   return { data: updatedDocument }
@@ -1713,9 +1738,15 @@ export async function generateWorkspaceDocumentDraft(
   {
     instructions,
     temperature = 0.4,
+    citationMode,
+    outlineNodeId,
+    privilegedContext,
   }: {
     instructions: string
     temperature?: number
+    citationMode?: "standard" | "strict"
+    outlineNodeId?: string
+    privilegedContext?: string
   },
 ) {
   const supabase = await createClient()
@@ -1757,7 +1788,7 @@ export async function generateWorkspaceDocumentDraft(
 
   const { data: workspace, error: workspaceError } = await supabase
     .from("workspaces")
-    .select("name, context, location")
+    .select("name, context, location, metadata")
     .eq("id", workspaceId)
     .single()
 
@@ -1778,19 +1809,65 @@ export async function generateWorkspaceDocumentDraft(
   // This ensures the AI has access to all available workspace knowledge
   const { context, sources } = await getAllWorkspaceKnowledge(workspaceId, [documentId])
 
-  const systemPrompt = `You are AGORA, an expert municipal policy assistant. Your task is to write long-form, substantive documents that thoroughly explore and synthesize the provided context.
+  const bindings = parseProgrammeBindings((workspace.metadata as Record<string, unknown>) || {})
+  const { boundAgentId } = await import("@/lib/programme/domain")
+  const { getLatestAgentVersion } = await import("@/lib/actions/agent")
+  const { listProgrammeOutlineNodes } = await import("@/lib/actions/outline")
+  const { listProgrammeMeasures } = await import("@/lib/actions/measures")
+  const draftAgentId = boundAgentId(bindings, "draft")
+  const agentVersion = draftAgentId ? (await getLatestAgentVersion(draftAgentId)).data : null
 
-STYLE AND FORMAT:
-- Prefer continuous prose and full paragraphs over bullet points and lists. Use narrative, analytical text that develops ideas in depth.
-- Be as extensive as the available knowledge allows: draw on all relevant evidence, quote and discuss specific passages, and explore implications and connections. Do not summarize briefly when the context supports a fuller treatment.
-- Use Markdown headings to structure the document. Use bullet points or tables only when they genuinely add clarity (e.g. discrete options, criteria, or short factual lists). The body of each section should be flowing text, not bullet summaries.
-- Emphasize clarity, actionable insights, and relevance to policy stakeholders, but express them in developed paragraphs rather than telegraphic lists.
+  let playbookBody: string | undefined = agentVersion?.instructions
+  let playbookVersionId: string | undefined
+  let playbookConfig: unknown = {}
+  if (!playbookBody && bindings.playbookId) {
+    const latest = await getLatestPlaybookBody(bindings.playbookId)
+    playbookBody = latest.body
+    playbookVersionId = latest.versionId
+    playbookConfig = latest.config ?? {}
+  }
 
-LANGUAGE REQUIREMENT:
-- The user's preferred language is ${userLanguage}
-- You MUST write the entire document in ${userLanguage}
-- All content, including headings, summaries, and explanations, must be in ${userLanguage}
-- Only use ${userLanguage === "Dutch" ? "Dutch" : "English"} for all output`
+  const { parsePlaybookRuntimeConfig, resolveModelForTask } = await import("@/lib/programme/model-tiers")
+  const runtimeConfig = parsePlaybookRuntimeConfig(playbookConfig)
+  const effectiveCitationMode = citationMode ?? runtimeConfig.citationMode
+  const model = agentVersion?.model || resolveModelForTask("draft", runtimeConfig)
+  const provider = agentVersion?.provider || "openai-compatible"
+
+  let nodeConstraint = ""
+  if (outlineNodeId && bindings.templateId) {
+    const outline = await listProgrammeOutlineNodes(bindings.templateId)
+    const node = outline.data.find((n) => n.id === outlineNodeId)
+    if (node) {
+      const nodeMeasures = (await listProgrammeMeasures(workspaceId)).data || []
+      const placed = nodeMeasures.filter((m: { outline_node_id?: string }) => m.outline_node_id === node.id)
+      nodeConstraint = [
+        `TEMPLATE NODE CONSTRAINTS (mandatory):`,
+        `Title: ${node.title}`,
+        `Required: ${node.required ? "yes" : "no"}`,
+        node.purpose ? `Purpose: ${node.purpose.replace(/<[^>]+>/g, " ").slice(0, 800)}` : "",
+        node.instructions ? `Section instructions: ${node.instructions}` : "",
+        node.qualityRules ? `Quality rules: ${node.qualityRules}` : "",
+        node.outputForm ? `Output form: ${node.outputForm}` : "",
+        node.relationHints ? `Relation hints: ${node.relationHints}` : "",
+        placed.length
+          ? `Linked measures:\n${placed.map((m: { title: string; specific_action?: string }) => `- ${m.title}: ${m.specific_action || ""}`).join("\n")}`
+          : "Linked measures: (none placed on this node)",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    }
+  }
+
+  const { systemPrompt } = compileSystemPrompt({
+    kind: "draft",
+    userLanguage,
+    playbookBody,
+    runInstructions: instructions.trim(),
+    citationMode: effectiveCitationMode,
+    runtimeSections: [nodeConstraint, privilegedContext, agentVersion?.qualityRules ? `QUALITY RULES:\n${agentVersion.qualityRules}` : ""]
+      .filter(Boolean)
+      .join("\n\n"),
+  })
 
   const workspaceDetails = [
     `Workspace: ${workspace.name}`,
@@ -1804,6 +1881,11 @@ LANGUAGE REQUIREMENT:
     ? `Existing draft (for reference, you may replace or improve it):\n${document.content}\n`
     : ""
 
+  const citationInstruction =
+    effectiveCitationMode === "strict"
+      ? `Output a polished document in Markdown. For EVERY factual claim include a structured citation [citation:{"quote":"exact text","documentId":"…","pageNumber":1}] using only evidence document IDs. Write extensively in long-form prose.`
+      : `Output a polished document in Markdown. Include citations inline when referring to specific evidence, using footnote-style references like [^1]. Write extensively: use the full workspace evidence to develop your argument in long-form prose. You may include a substantive executive summary at the top if useful, but the main content must be detailed, paragraph-based narrative that explores the available knowledge in depth—not a short summary or bullet-point overview.`
+
   const userPrompt = `Draft a document according to the following instructions.
 
 ${workspaceDetails}
@@ -1816,26 +1898,25 @@ ${existingDraft}
 Workspace evidence:
 ${context}
 
-Output a polished document in Markdown. Include citations inline when referring to specific evidence, using footnote-style references like [^1]. Write extensively: use the full workspace evidence to develop your argument in long-form prose. You may include a substantive executive summary at the top if useful, but the main content must be detailed, paragraph-based narrative that explores the available knowledge in depth—not a short summary or bullet-point overview.`
-
-  if (!env.OPENAI_API_KEY) {
-    return { error: "OpenAI API key not configured" }
-  }
+${citationInstruction}`
 
   let generatedText = ""
   try {
-    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const { completeLlm } = await import("@/lib/llm")
+    const completion = await completeLlm({
+      provider,
+      endpoint: agentVersion?.endpoint,
+      credentialsRef: agentVersion?.credentialsRef,
+      model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       temperature,
-      max_tokens: 16000,
+      maxTokens: 16000,
     })
 
-    const markdownDraft = response.choices[0]?.message?.content?.trim() || ""
+    const markdownDraft = completion.text
     generatedText = markdownToHtml(markdownDraft)
   } catch (error) {
     logger.error("[WorkspaceDocument] Failed to generate draft:", error)
@@ -1848,6 +1929,39 @@ Output a polished document in Markdown. Include citations inline when referring 
     return { error: "The AI did not return any content" }
   }
 
+  const sourceIds = (sources || [])
+    .map((s: any) => s.documentId || s.id)
+    .filter((id: unknown): id is string => typeof id === "string")
+
+  const evidenceDocs = (sources || [])
+    .map((s: any) => {
+      const documentId = s.documentId || s.id
+      const text = typeof s.content === "string" ? s.content : typeof s.text === "string" ? s.text : ""
+      if (typeof documentId !== "string" || !documentId) return null
+      return { documentId, text }
+    })
+    .filter((e): e is { documentId: string; text: string } => Boolean(e))
+
+  const { assessGroundedness } = await import("@/lib/programme/reliability")
+  const groundedness = assessGroundedness(generatedText, evidenceDocs)
+
+  const unused = await computeUnusedDocumentIds(workspaceId, sourceIds)
+  await recordGenerationRun({
+    workspaceId,
+    kind: "draft",
+    playbookVersionId,
+    agentVersionId: agentVersion?.id ?? null,
+    provider,
+    model,
+    temperature,
+    instructions: instructions.trim(),
+    sourceDocumentIds: sourceIds,
+    unusedDocumentIds: unused.data || [],
+    outputRef: documentId,
+    citations: { sources, groundedness },
+    userId: user.id,
+  })
+
   const metadata: Record<string, any> = {
     ...(document.metadata || {}),
     instructions: instructions.trim(),
@@ -1856,6 +1970,8 @@ Output a polished document in Markdown. Include citations inline when referring 
     lastGeneratedAt: new Date().toISOString(),
     lastGeneratedBy: user.id,
     lastGenerationSources: sources,
+    lastGroundedness: groundedness,
+    lastCitationMode: effectiveCitationMode,
   }
 
   const { data: updatedDocument, error: updateError } = await adminClient
@@ -1876,6 +1992,7 @@ Output a polished document in Markdown. Include citations inline when referring 
 
   revalidatePath(`/workspaces/${workspaceId}`)
   revalidatePath(`/workspaces/${workspaceId}/my-documents/${documentId}`)
+  revalidatePath(`/workspaces/${workspaceId}/programme`)
 
-  return { data: { content: generatedText, sources } }
+  return { data: { content: generatedText, sources, groundedness, model, citationMode: effectiveCitationMode } }
 }

@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { inviteUserToSpace, resendInvitation, revokeInvitation } from "@/lib/actions/invitation"
 import { deleteSpace, removeSpaceMember, updateSpaceMemberRole } from "@/lib/actions/space"
+import { updateSpaceMemberJob } from "@/lib/actions/guidance"
 import { useRouter } from "next/navigation"
 import { Trash2, Send, MoreVertical, UserMinus } from "lucide-react"
 import { toast } from "sonner"
@@ -27,6 +28,9 @@ import {
 } from "@/components/ui/alert-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { SpaceComplianceSettings } from "@/components/space-compliance-settings"
+import { SpaceTemplateLibrary } from "@/components/space-template-library"
+import { SpaceAgentAdmin } from "@/components/space-agent-admin"
 
 interface SpaceSettingsProps {
   space: any
@@ -38,6 +42,7 @@ interface SpaceSettingsProps {
 export function SpaceSettings({ space, members, invitations, currentUserId }: SpaceSettingsProps) {
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<"member" | "admin" | "viewer">("member")
+  const [inviteJob, setInviteJob] = useState<"administrator" | "none">("none")
   const [isInviting, setIsInviting] = useState(false)
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
   const [invitationAction, setInvitationAction] = useState<{ id: string; type: "resend" | "revoke" } | null>(null)
@@ -136,7 +141,7 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
     }
 
     setIsInviting(true)
-    const result = await inviteUserToSpace(space.id, email, inviteRole)
+    const result = await inviteUserToSpace(space.id, email, inviteRole, inviteJob)
     setIsInviting(false)
 
     if (result.error) {
@@ -212,6 +217,15 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
     router.refresh()
   }
 
+  const handleJobChange = async (memberUserId: string, nextJob: "administrator" | "none") => {
+    const result = await updateSpaceMemberJob(space.id, memberUserId, nextJob)
+    if (result?.error) {
+      toast.error(t("guidance.jobs.lastAdministrator"), { description: result.error })
+      return
+    }
+    router.refresh()
+  }
+
   const formatStatusLabel = (status?: string | null) => translateStatus(status)
 
   return (
@@ -220,6 +234,9 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
       <TabsList>
         <TabsTrigger value="members">{t("space.settings.tabs.members")}</TabsTrigger>
         <TabsTrigger value="invitations">{t("space.settings.tabs.invitations")}</TabsTrigger>
+        <TabsTrigger value="compliance">{t("space.settings.tabs.compliance")}</TabsTrigger>
+        <TabsTrigger value="templates">{t("space.settings.tabs.templates")}</TabsTrigger>
+        <TabsTrigger value="agents">{t("space.settings.tabs.agents")}</TabsTrigger>
         <TabsTrigger value="danger">{t("space.settings.tabs.danger")}</TabsTrigger>
       </TabsList>
 
@@ -236,6 +253,7 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                   <TableHead>{t("space.settings.members.table.name")}</TableHead>
                   <TableHead>{t("space.settings.members.table.email")}</TableHead>
                   <TableHead>{t("space.settings.members.table.role")}</TableHead>
+                  <TableHead>{t("guidance.jobs.spaceJobLabel")}</TableHead>
                   <TableHead>{t("space.settings.members.table.joined")}</TableHead>
                   <TableHead className="text-right">
                     <span className="sr-only">{t("space.settings.members.table.actions")}</span>
@@ -265,6 +283,21 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                           </SelectContent>
                         </Select>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={member.job === "administrator" ? "administrator" : "none"}
+                        onValueChange={(value) => handleJobChange(member.user_id, value as "administrator" | "none")}
+                        disabled={member.role === "owner"}
+                      >
+                        <SelectTrigger className="w-36">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="administrator">{t("guidance.jobs.administrator")}</SelectItem>
+                          <SelectItem value="none">{t("guidance.jobs.none")}</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell>{new Date(member.created_at).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">
@@ -353,7 +386,8 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
           </CardHeader>
           <CardContent className="space-y-6">
             <form onSubmit={handleInvite} className="space-y-4">
-              <div className="flex gap-2">
+              <p className="text-xs text-muted-foreground">{t("guidance.jobs.accessHint")}</p>
+              <div className="flex flex-wrap gap-2">
                 <input
                   type="email"
                   placeholder={t("space.settings.invitations.emailPlaceholder")}
@@ -362,7 +396,14 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                   required
                   className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
-                <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as "member" | "admin" | "viewer")}>
+                <Select
+                  value={inviteRole}
+                  onValueChange={(value) => {
+                    const role = value as "member" | "admin" | "viewer"
+                    setInviteRole(role)
+                    setInviteJob(role === "admin" ? "administrator" : "none")
+                  }}
+                >
                   <SelectTrigger className="min-w-28">
                     <SelectValue placeholder={t("space.settings.members.selectPlaceholder")} />
                   </SelectTrigger>
@@ -370,6 +411,15 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
                     <SelectItem value="viewer">{t("space.settings.members.selectOptions.viewer")}</SelectItem>
                     <SelectItem value="member">{t("space.settings.members.selectOptions.member")}</SelectItem>
                     <SelectItem value="admin">{t("space.settings.members.selectOptions.admin")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={inviteJob} onValueChange={(value) => setInviteJob(value as "administrator" | "none")}>
+                  <SelectTrigger className="min-w-36">
+                    <SelectValue placeholder={t("guidance.jobs.spaceJobLabel")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t("guidance.jobs.none")}</SelectItem>
+                    <SelectItem value="administrator">{t("guidance.jobs.administrator")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Button type="submit" disabled={isInviting}>
@@ -442,6 +492,18 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
             )}
           </CardContent>
         </Card>
+      </TabsContent>
+
+      <TabsContent value="compliance">
+        <SpaceComplianceSettings spaceId={space.id} />
+      </TabsContent>
+
+      <TabsContent value="templates">
+        <SpaceTemplateLibrary spaceId={space.id} />
+      </TabsContent>
+
+      <TabsContent value="agents">
+        <SpaceAgentAdmin spaceId={space.id} />
       </TabsContent>
 
       <TabsContent value="danger">

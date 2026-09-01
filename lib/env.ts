@@ -15,6 +15,8 @@ const envSchema = z
     NEXT_PUBLIC_BASE_URL: z.string().url().optional(),
     NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL: z.string().url().optional(),
     OPENAI_API_KEY: z.string().min(1).optional(),
+    ANTHROPIC_API_KEY: z.string().min(1).optional(),
+    LLM_SECOND_BASE_URL: z.string().url().optional(),
     UPSTASH_REDIS_REST_URL: z.string().url().optional(),
     UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
     VERCEL_URL: z.string().min(1).optional(),
@@ -29,6 +31,7 @@ const envSchema = z
     RESEND_API_KEY: z.string().min(1).optional(),
     INVITE_EMAIL_FROM: z.string().email().optional(),
     TOKEN_ENCRYPTION_KEY: z.string().min(32, "TOKEN_ENCRYPTION_KEY must be at least 32 characters"),
+    HELP_AI_ENABLED: z.string().optional(),
     MAX_SPACES_PER_USER: z
       .string()
       .regex(/^\d+$/, "MAX_SPACES_PER_USER must be a positive integer")
@@ -56,6 +59,8 @@ const parsedEnv = envSchema.safeParse({
   NEXT_PUBLIC_BASE_URL: process.env.NEXT_PUBLIC_BASE_URL,
   NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  LLM_SECOND_BASE_URL: process.env.LLM_SECOND_BASE_URL,
   UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
   UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
   VERCEL_URL: process.env.VERCEL_URL,
@@ -70,6 +75,7 @@ const parsedEnv = envSchema.safeParse({
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   INVITE_EMAIL_FROM: process.env.INVITE_EMAIL_FROM,
   TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY,
+  HELP_AI_ENABLED: process.env.HELP_AI_ENABLED,
   MAX_SPACES_PER_USER: process.env.MAX_SPACES_PER_USER,
 })
 
@@ -82,4 +88,15 @@ if (!parsedEnv.success) {
 
 export const env = parsedEnv.data
 export type Env = typeof env
+
+export function isHelpAiEnabled(
+  flag: string | undefined = env.HELP_AI_ENABLED,
+  options: { nodeEnv?: string; hasOpenAiKey?: boolean } = {},
+): boolean {
+  if (flag === "false" || flag === "0") return false
+  if (flag === "true" || flag === "1") return true
+  const nodeEnv = options.nodeEnv ?? env.NODE_ENV
+  const hasKey = options.hasOpenAiKey ?? Boolean(env.OPENAI_API_KEY)
+  return nodeEnv !== "production" && hasKey
+}
 

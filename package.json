@@ -8,6 +8,7 @@
     "lint": "eslint .",
     "start": "next start",
     "test": "vitest",
+    "test:e2e": "playwright test --project=chromium",
     "diagnose:rls": "npx tsx scripts/diagnose-workspace-rls.ts"
   },
   "dependencies": {
@@ -46,6 +47,7 @@
     "@supabase/supabase-js": "2.81.1",
     "@tiptap/core": "3.10.7",
     "@tiptap/extension-color": "3.10.7",
+    "@tiptap/extension-heading": "3.10.7",
     "@tiptap/extension-link": "3.10.7",
     "@tiptap/extension-placeholder": "3.10.5",
     "@tiptap/extension-text-align": "3.10.7",

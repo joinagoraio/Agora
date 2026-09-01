@@ -8,22 +8,23 @@ create type connector_type as enum ('google_drive', 'notion', 'confluence', 'sha
 create type connector_status as enum ('active', 'inactive', 'error');
 create type document_status as enum ('processing', 'ready', 'error');
 
--- Spaces (tenant/organization level)
-create table if not exists public.spaces (
-  id uuid primary key default uuid_generate_v4(),
-  name text not null,
-  slug text unique not null,
-  created_at timestamp with time zone default now(),
-  updated_at timestamp with time zone default now()
-);
-
--- Profiles (extends auth.users)
+-- Profiles (extends auth.users) — must exist before spaces.owner_id FK
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null,
   full_name text,
   avatar_url text,
   language text not null default 'en' check (language in ('en','nl')),
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+
+-- Spaces (tenant/organization level)
+create table if not exists public.spaces (
+  id uuid primary key default uuid_generate_v4(),
+  name text not null,
+  slug text unique not null,
+  owner_id uuid references public.profiles(id) on delete set null,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
 );
@@ -53,6 +54,17 @@ create table if not exists public.invitations (
   updated_at timestamp with time zone default now()
 );
 
+-- Workspaces (sub-spaces within a space) — must exist before members/invitations
+create table if not exists public.workspaces (
+  id uuid primary key default uuid_generate_v4(),
+  space_id uuid references public.spaces(id) on delete cascade not null,
+  name text not null,
+  description text,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+
 -- Workspace members (workspace-scoped access)
 create table if not exists public.workspace_members (
   id uuid primary key default uuid_generate_v4(),
@@ -75,17 +87,6 @@ create table if not exists public.workspace_invitations (
   invited_by uuid references public.profiles(id) on delete set null,
   expires_at timestamp with time zone not null,
   accepted_at timestamp with time zone,
-  created_at timestamp with time zone default now(),
-  updated_at timestamp with time zone default now()
-);
-
--- Workspaces (sub-spaces within a space)
-create table if not exists public.workspaces (
-  id uuid primary key default uuid_generate_v4(),
-  space_id uuid references public.spaces(id) on delete cascade not null,
-  name text not null,
-  description text,
-  created_by uuid references public.profiles(id) on delete set null,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
 );

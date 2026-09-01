@@ -132,10 +132,12 @@ export async function GET(req: NextRequest) {
     if (page === 1) {
       // Create a fresh count query with the same filters as searchQuery
       let countQuery = supabase
-        .from("workspace_items")
+        .from("documents")
         .select("*", { count: "exact", head: true })
         .eq("workspace_id", validated.workspaceId)
-      
+        .eq("status", "active")
+        .or(`title.ilike.%${escapedQuery}%,content.ilike.%${escapedQuery}%`)
+
       // Apply same filters as main query
       if (validated.domain) {
         countQuery = countQuery.eq("domain", validated.domain)
@@ -154,7 +156,7 @@ export async function GET(req: NextRequest) {
           countQuery = countQuery.gte("publication_date", startDate).lte("publication_date", endDate)
         }
       }
-      
+
       const { count } = await countQuery
       total = count || undefined
     }

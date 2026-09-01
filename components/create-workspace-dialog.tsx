@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createWorkspace } from "@/lib/actions/workspace"
+import { workspaceHomeHref } from "@/lib/programme/domain"
 import { Plus } from "lucide-react"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
@@ -45,7 +46,7 @@ export function CreateWorkspaceDialog({ spaceId, trigger }: CreateWorkspaceDialo
     setIsLoading(true)
     setError(null)
 
-    const result = await createWorkspace(spaceId, trimmedName)
+    const result = await createWorkspace(spaceId, trimmedName, undefined, "environmental_programme")
 
     if (result.error) {
       setError(result.error)
@@ -62,7 +63,16 @@ export function CreateWorkspaceDialog({ spaceId, trigger }: CreateWorkspaceDialo
           name: result.data?.name || trimmedName,
         }),
       })
-      router.push(`/workspaces/${result.data?.id}?new=true`)
+      const created = result.data
+      if (created?.id) {
+        router.push(
+          workspaceHomeHref({
+            id: created.id,
+            kind: created.kind ?? "environmental_programme",
+            metadata: created.metadata as Record<string, unknown> | null,
+          }),
+        )
+      }
     }
   }
 
@@ -92,6 +102,7 @@ export function CreateWorkspaceDialog({ spaceId, trigger }: CreateWorkspaceDialo
                 onChange={(e) => setName(e.target.value)}
                 required
               />
+              <p className="text-xs text-muted-foreground">{t("space.workspaces.dialog.kindProgrammeHelp")}</p>
             </div>
             {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
           </div>

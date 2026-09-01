@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react"
 
+import { useRouter } from "next/navigation"
 import { updateSpace, updateSpaceScope, enhanceScopeText, updateSpaceSetupState } from "@/lib/actions/space"
 import { createWorkspace } from "@/lib/actions/workspace"
+import { workspaceHomeHref } from "@/lib/programme/domain"
 import { AddOverheidDocumentsDialog } from "@/components/add-overheid-documents-dialog"
 import { SpaceUploadDocumentDialog } from "@/components/space-upload-document-dialog"
 import { type SpaceDocumentItem } from "@/components/space-documents-panel"
@@ -77,6 +79,7 @@ export function SpaceSetupWizard({
   onSpaceDetailsChange,
 }: SpaceSetupWizardProps) {
   const { t } = useI18n()
+  const router = useRouter()
   const normalizedInitialWizardState = useMemo<SetupWizardState>(() => {
     if (!initialWizardState) return {}
     return {
@@ -208,7 +211,12 @@ export function SpaceSetupWizard({
     setWorkspaceName((current) => (current === defaultWorkspaceName ? defaultWorkspaceName : current))
   }, [defaultWorkspaceName])
   const [workspaceError, setWorkspaceError] = useState<string | null>(null)
-  const [createdWorkspace, setCreatedWorkspace] = useState<{ id: string; name: string } | null>(null)
+  const [createdWorkspace, setCreatedWorkspace] = useState<{
+    id: string
+    name: string
+    kind?: string | null
+    metadata?: Record<string, unknown> | null
+  } | null>(null)
   const [workspaceIsCreating, setWorkspaceIsCreating] = useState(false)
 
   const [stepError, setStepError] = useState<string | null>(null)
@@ -481,6 +489,9 @@ export function SpaceSetupWizard({
       return
     }
     onCompleted()
+    if (createdWorkspace) {
+      router.push(workspaceHomeHref(createdWorkspace))
+    }
   }
 
   const handleDocumentUploaded = (document: SpaceDocumentItem) => {
@@ -515,7 +526,7 @@ export function SpaceSetupWizard({
     setWorkspaceError(null)
     setWorkspaceIsCreating(true)
 
-    const result = await createWorkspace(spaceId, workspaceName.trim())
+    const result = await createWorkspace(spaceId, workspaceName.trim(), undefined, "environmental_programme")
     setWorkspaceIsCreating(false)
 
     if (result?.error) {
@@ -525,7 +536,12 @@ export function SpaceSetupWizard({
 
     if (result?.data) {
       onWorkspaceCreated(result.data)
-      setCreatedWorkspace({ id: result.data.id, name: result.data.name })
+      setCreatedWorkspace({
+        id: result.data.id,
+        name: result.data.name,
+        kind: result.data.kind ?? "environmental_programme",
+        metadata: result.data.metadata as Record<string, unknown> | null,
+      })
     }
   }
 
@@ -988,6 +1004,7 @@ export function SpaceSetupWizard({
                     placeholder={t("space.wizard.workspace.namePlaceholder")}
                   />
                 </div>
+                <p className="text-xs text-muted-foreground">{t("space.workspaces.dialog.kindProgrammeHelp")}</p>
                 <Button onClick={handleCreateWorkspace} disabled={workspaceIsCreating} className="w-fit">
                   {workspaceIsCreating ? (
                     <>

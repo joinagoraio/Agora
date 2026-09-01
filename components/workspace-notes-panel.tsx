@@ -37,6 +37,7 @@ interface WorkspaceNotesPanelProps {
   currentUserId: string
   initialNotes: WorkspaceNote[]
   canManage?: boolean
+  hideHeading?: boolean
 }
 
 type DraftWorkspaceNote = {
@@ -82,7 +83,13 @@ async function requestWithCsrf<T = unknown>(
   return payload as T
 }
 
-export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, canManage = true }: WorkspaceNotesPanelProps) {
+export function WorkspaceNotesPanel({
+  workspaceId,
+  currentUserId,
+  initialNotes,
+  canManage = true,
+  hideHeading = false,
+}: WorkspaceNotesPanelProps) {
   const [notes, setNotes] = useState<WorkspaceNote[]>(initialNotes)
   const [draftNote, setDraftNote] = useState<DraftWorkspaceNote | null>(null)
   const [draftContent, setDraftContent] = useState("")
@@ -309,16 +316,18 @@ export function WorkspaceNotesPanel({ workspaceId, currentUserId, initialNotes, 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <h3 className="text-lg font-semibold">{t("workspace.sections.notes.title")}</h3>
-          <p className="text-sm text-muted-foreground">
-            {canManage
-              ? t("workspace.sections.notes.descriptionManage")
-              : t("workspace.sections.notes.descriptionView")}
-          </p>
-        </div>
+        {!hideHeading && (
+          <div className="space-y-1">
+            <h3 className="text-lg font-semibold">{t("workspace.sections.notes.title")}</h3>
+            <p className="text-sm text-muted-foreground">
+              {canManage
+                ? t("workspace.sections.notes.descriptionManage")
+                : t("workspace.sections.notes.descriptionView")}
+            </p>
+          </div>
+        )}
         {canManage && (
-          <Button onClick={handleAddDraft} disabled={!!draftNote}>
+          <Button onClick={handleAddDraft} disabled={!!draftNote} className={hideHeading ? "ml-auto" : undefined}>
             <Plus className="mr-2 h-4 w-4" />
             {t("workspace.sections.notes.addButton")}
           </Button>

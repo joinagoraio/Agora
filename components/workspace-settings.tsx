@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { inviteUserToWorkspace, resendWorkspaceInvitation, revokeWorkspaceInvitation } from "@/lib/actions/workspace-invitation"
 import { deleteWorkspace, removeWorkspaceMember, updateWorkspaceMemberRole } from "@/lib/actions/workspace"
+import { updateWorkspaceMemberJob } from "@/lib/actions/guidance"
 import { useRouter } from "next/navigation"
 import { Trash2, Send, MoreVertical, UserMinus } from "lucide-react"
 import { toast } from "sonner"
@@ -50,6 +51,7 @@ interface WorkspaceSettingsProps {
 export function WorkspaceSettings({ workspace, space: _space, members, invitations, currentUserId }: WorkspaceSettingsProps) {
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<"member" | "admin" | "viewer">("member")
+  const [inviteJob, setInviteJob] = useState<"author" | "reviewer">("author")
   const [isInviting, setIsInviting] = useState(false)
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
   const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false)
@@ -108,7 +110,7 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
     }
 
     setIsInviting(true)
-    const result = await inviteUserToWorkspace(workspace.id, email, inviteRole)
+    const result = await inviteUserToWorkspace(workspace.id, email, inviteRole, inviteJob)
     setIsInviting(false)
 
     if (result.error) {
@@ -179,6 +181,15 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
     router.refresh()
   }
 
+  const handleWorkspaceJobChange = async (userId: string, nextJob: "author" | "reviewer") => {
+    const result = await updateWorkspaceMemberJob(workspace.id, userId, nextJob)
+    if (result?.error) {
+      toast.error(t("workspace.settings.members.updateRole.error"), { description: result.error })
+      return
+    }
+    router.refresh()
+  }
+
   return (
     <Tabs defaultValue="members" className="space-y-6">
       <TabsList>
@@ -200,6 +211,7 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
                   <TableHead>{t("workspace.settings.members.table.name")}</TableHead>
                   <TableHead>{t("workspace.settings.members.table.email")}</TableHead>
                   <TableHead>{t("workspace.settings.members.table.role")}</TableHead>
+                  <TableHead>{t("guidance.jobs.workspaceJobLabel")}</TableHead>
                   <TableHead>{t("workspace.settings.members.table.joined")}</TableHead>
                   <TableHead className="text-right">
                     <span className="sr-only">{t("workspace.settings.members.table.actions")}</span>
@@ -239,6 +251,22 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
                           <span className="capitalize">{translateRole(displayRole)}</span>
                         )}
                       </TableCell>
+                      <TableCell>
+                        <Select
+                          value={member.workspace_job === "reviewer" ? "reviewer" : "author"}
+                          onValueChange={(value) =>
+                            handleWorkspaceJobChange(member.user_id, value as "author" | "reviewer")
+                          }
+                        >
+                          <SelectTrigger className="w-[120px] h-8">
+                            <SelectValue placeholder={t("guidance.jobs.workspaceJobLabel")} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="author">{t("guidance.jobs.author")}</SelectItem>
+                            <SelectItem value="reviewer">{t("guidance.jobs.reviewer")}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
                       <TableCell>{new Date(member.created_at).toLocaleDateString()}</TableCell>
                       <TableCell className="text-right">
                         {isSpaceMember ? (
@@ -275,7 +303,8 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
           </CardHeader>
           <CardContent className="space-y-6">
             <form onSubmit={handleInvite} className="space-y-4">
-              <div className="flex gap-2">
+              <p className="text-xs text-muted-foreground">{t("guidance.jobs.accessHint")}</p>
+              <div className="flex flex-wrap gap-2">
                 <input
                   type="email"
                   placeholder={t("workspace.settings.invitations.emailPlaceholder")}
@@ -292,6 +321,15 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
                     <SelectItem value="viewer">{t("workspace.settings.members.selectOptions.viewer")}</SelectItem>
                     <SelectItem value="member">{t("workspace.settings.members.selectOptions.member")}</SelectItem>
                     <SelectItem value="admin">{t("workspace.settings.members.selectOptions.admin")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={inviteJob} onValueChange={(value) => setInviteJob(value as "author" | "reviewer")}>
+                  <SelectTrigger className="min-w-32">
+                    <SelectValue placeholder={t("guidance.jobs.workspaceJobLabel")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="author">{t("guidance.jobs.author")}</SelectItem>
+                    <SelectItem value="reviewer">{t("guidance.jobs.reviewer")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Button type="submit" disabled={isInviting}>

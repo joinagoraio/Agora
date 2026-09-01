@@ -9,6 +9,7 @@ import { getUserSpaces } from "@/lib/actions/space"
 import { createClient } from "@/lib/supabase/server"
 import { WelcomeUserDialog } from "@/components/welcome-user-dialog"
 import { getServerTranslator } from "@/lib/i18n/server"
+import { isEnvironmentalProgrammeWorkspace, workspaceHomeHref } from "@/lib/programme/domain"
 
 export default async function DashboardPage() {
   const { t } = await getServerTranslator()
@@ -30,6 +31,18 @@ export default async function DashboardPage() {
     .eq("user_id", user.id)
   
   const userSpaceIds = new Set(spaceMemberships?.map(sm => sm.space_id) ?? [])
+
+  const { data: spaceProgrammes } =
+    userSpaceIds.size > 0
+      ? await supabase
+          .from("workspaces")
+          .select("id, name, description, space_id, kind, metadata")
+          .in("space_id", [...userSpaceIds])
+          .eq("kind", "environmental_programme")
+          .order("updated_at", { ascending: false })
+      : { data: [] as Array<{ id: string; name: string; description?: string | null; space_id: string; kind?: string | null; metadata?: unknown }> }
+
+  const programmeById = new Map((spaceProgrammes ?? []).map((row) => [row.id, row]))
   
   // Fetch workspaces where user is a direct member
   const { data: allWorkspaceMemberships, error: workspaceError } = await supabase
@@ -40,7 +53,9 @@ export default async function DashboardPage() {
         id,
         name,
         description,
-        space_id
+        space_id,
+        kind,
+        metadata
       )
     `)
     .eq("user_id", user.id)
@@ -48,17 +63,18 @@ export default async function DashboardPage() {
   if (workspaceError) {
     console.error("[Dashboard] Error fetching workspace memberships:", workspaceError)
   }
-  
-  // Filter to only show workspaces where user is NOT a member of the parent space
-  const directWorkspaces = allWorkspaceMemberships?.filter((membership: any) => {
-    const workspace = Array.isArray(membership.workspace) 
-      ? membership.workspace[0] 
-      : membership.workspace
-    return workspace && !userSpaceIds.has(workspace.space_id)
-  }) ?? []
+
+  for (const membership of allWorkspaceMemberships ?? []) {
+    const raw = (membership as { workspace?: unknown }).workspace
+    const workspace = Array.isArray(raw) ? raw[0] : raw
+    if (workspace && typeof workspace === "object" && "id" in workspace && isEnvironmentalProgrammeWorkspace(workspace)) {
+      programmeById.set(String((workspace as { id: string }).id), workspace as { id: string; name: string; description?: string | null; space_id: string; kind?: string | null; metadata?: unknown })
+    }
+  }
+  const myProgrammes = [...programmeById.values()]
   
   const hasSpaces = Boolean(spaces && spaces.length > 0)
-  const hasDirectWorkspaces = Boolean(directWorkspaces && directWorkspaces.length > 0)
+  const hasProgrammes = myProgrammes.length > 0
   const displayName =
     (user.user_metadata as Record<string, any> | null | undefined)?.full_name ??
     (user.user_metadata as Record<string, any> | null | undefined)?.name ??
@@ -75,7 +91,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <WelcomeUserDialog userId={user.id} userName={displayName} hasSpaces={hasSpaces} hasWorkspaces={hasDirectWorkspaces} />
+      <WelcomeUserDialog userId={user.id} userName={displayName} hasSpaces={hasSpaces} hasWorkspaces={hasProgrammes} />
       <header className="bg-card">
         <div className="flex h-16 items-center justify-between px-4">
           <div></div>
@@ -87,6 +103,34 @@ export default async function DashboardPage() {
 
       <main className="flex-1 bg-white">
         <div className="container mx-auto py-8 px-8">
+          {hasProgrammes && (
+            <div className="mb-12">
+              <div className="mb-8">
+                <h2 className="text-2xl font-semibold">{t("dashboard.workspaces.title")}</h2>
+                <p className="text-sm text-muted-foreground">{t("dashboard.workspaces.subtitle")}</p>
+              </div>
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {myProgrammes.map((workspace) => (
+                  <Link key={workspace.id} href={workspaceHomeHref(workspace)}>
+                    <Card className="transition-all hover:shadow-md">
+                      <CardHeader>
+                        <div className="flex items-center gap-3">
+                          <FolderKanban className="h-5 w-5 text-primary" />
+                          <CardTitle className="mt-0">{workspace.name}</CardTitle>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        {workspace.description && (
+                          <p className="text-sm text-muted-foreground line-clamp-2">{workspace.description}</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="mb-8 flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-semibold">{t("dashboard.spaces.title")}</h2>
@@ -135,53 +179,6 @@ export default async function DashboardPage() {
                 <CreateSpaceDialog />
               </CardContent>
             </Card>
-          )}
-          
-          {/* Direct Workspace Memberships Section */}
-          {hasDirectWorkspaces && (
-            <div className="mt-12">
-              <div className="mb-8">
-                <h2 className="text-2xl font-semibold">{t("dashboard.workspaces.title")}</h2>
-                <p className="text-sm text-muted-foreground">{t("dashboard.workspaces.subtitle")}</p>
-              </div>
-              
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {directWorkspaces?.map((membership: any) => {
-                  const workspace = Array.isArray(membership.workspace) 
-                    ? membership.workspace[0] 
-                    : membership.workspace
-                  
-                  if (!workspace) return null
-                  
-                  return (
-                    <Link key={workspace.id} href={`/workspaces/${workspace.id}`}>
-                      <Card className="transition-all hover:shadow-md">
-                        <CardHeader>
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-3">
-                              <FolderKanban className="h-5 w-5 text-primary" />
-                              <div>
-                                <CardTitle className="mt-0">{workspace.name}</CardTitle>
-                              </div>
-                            </div>
-                            <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                              {translateRole(membership.role)}
-                            </span>
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          {workspace.description && (
-                            <p className="text-sm text-muted-foreground line-clamp-2">
-                              {workspace.description}
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  )
-                })}
-              </div>
-            </div>
           )}
         </div>
       </main>

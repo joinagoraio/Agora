@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { getRelevantContext } from "@/lib/rag/search"
 import { buildWorkspaceContext } from "@/lib/chat/context"
 import { analyzePromptInjection } from "@/lib/chat/prompt-guard"
+import { compileSystemPrompt } from "@/lib/chat/playbook-compiler"
 import OpenAI from "openai"
 import { applyRateLimitHeaders, chatRateLimit, checkRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { chatMessageSchema } from "@/lib/validations/document"
@@ -503,79 +504,31 @@ The conversation history above may contain references to items that are no longe
 `
       : ""
 
-    const systemPrompt = `You are AGORA, an intelligent policy assistant. You help users find and understand information from their organization's documents.
+    const runtimeSections = `${contextAwarenessSection}${formattedContextInstructions}${formattedWorkspaceContextSection}${contextChangeNotice}Context from user-selected documents, notes, and evidence (from AI Context section):
+${context}`
 
-LANGUAGE REQUIREMENT:
-- The user's preferred language is ${userLanguage}
-- You MUST respond in ${userLanguage} at all times
-- All your responses, explanations, and answers must be in ${userLanguage}
-- If the user asks questions in ${userLanguage === "Dutch" ? "Dutch" : "English"}, respond in ${userLanguage}
-- Only use ${userLanguage === "Dutch" ? "Dutch" : "English"} for your responses
+    const { parseProgrammeBindings } = await import("@/lib/programme/domain")
+    const { getLatestPlaybookBody } = await import("@/lib/actions/playbook")
+    const { parsePlaybookRuntimeConfig, resolveModelForTask } = await import("@/lib/programme/model-tiers")
+    const bindings = parseProgrammeBindings((workspace?.metadata as Record<string, unknown>) || {})
+    let playbookBody: string | undefined
+    let playbookConfig: unknown = {}
+    if (bindings.playbookId) {
+      const latest = await getLatestPlaybookBody(bindings.playbookId)
+      playbookBody = latest.body
+      playbookConfig = latest.config ?? {}
+    }
+    const runtimeConfig = parsePlaybookRuntimeConfig(playbookConfig)
 
-${contextAwarenessSection}${formattedContextInstructions}${formattedWorkspaceContextSection}${contextChangeNotice}Context from user-selected documents, notes, and evidence (from AI Context section):
-${context}
-
-Instructions:
-- Answer questions based ONLY on the context provided below - this is the ONLY source of document/note/evidence information available to you
-- The workspace and space properties define the organizational scope and framework (these are always available)
-- The document/note/evidence context contains ONLY what the user has currently included in the AI Context section
-- PARAMOUNT: You must ONLY use information from the documents, notes, and evidence that are actually provided in the context below
-- NEVER reference documents, notes, or evidence that are not in the provided context - they have been excluded by the user
-- If previous messages in the conversation reference something that's not in the current context below, IGNORE those references - that information is no longer available
-- If asked about something not in your context, explain that it's not included in the current conversation's AI Context
-- If asked to continue or follow up on something from a previous message, check if the referenced items are in the current context - if not, state they're no longer available
-- Use the workspace/space properties to provide contextualized answers within the defined scope
-- Be concise and accurate
-
-CRITICAL QUOTING REQUIREMENTS:
-- When referencing information from documents, you MUST quote the specific passages using double quotes (") around the EXACT text from the document context
-- The quoted text MUST match character-for-character with the text in the context provided above
-- Do NOT modify, paraphrase, or summarize the quoted text - copy it EXACTLY as it appears
-- Do NOT change punctuation, capitalization, or wording in quotes
-- Do NOT add or remove words from the original text
-- If you cannot find the exact text in the context, do NOT quote it - instead, describe what you found
-
-STRUCTURED CITATION FORMAT (MANDATORY):
-- For every quote you include, you MUST add a structured citation in this format: [citation:{"quote":"exact quoted text","documentId":"doc-id","textSpan":{"start":100,"end":200},"pageNumber":1}]
-- The quote field MUST contain the EXACT text you're quoting (character-for-character match)
-- The documentId MUST match the document ID from the sources provided
-- The textSpan MUST indicate the character positions (start and end) of the quote in the document
-- The pageNumber MUST indicate which page the quote is on
-- Structured citations enable accurate highlighting and auditing - they are required for every quote
-- Example: "The entrepreneur mentions the need for a clear view" [citation:{"quote":"The entrepreneur mentions the need for a clear view","documentId":"doc-123","textSpan":{"start":150,"end":200},"pageNumber":1}]
-
-Example of CORRECT quoting:
-Context contains: "The entrepreneur mentions the need for a clear view of my financial situation and a clear view of risks, like employees calling in sick or inability to fire them, and what that can cost."
-Your response: "The entrepreneur mentions the need for a 'clear view of my financial situation' and a 'clear view of risks, like employees calling in sick or inability to fire them, and what that can cost.'" [citation:{"quote":"The entrepreneur mentions the need for a 'clear view of my financial situation' and a 'clear view of risks, like employees calling in sick or inability to fire them, and what that can cost.","documentId":"doc-123","textSpan":{"start":150,"end":280},"pageNumber":1}]
-
-Example of INCORRECT quoting (DO NOT DO THIS):
-Context contains: "The entrepreneur mentions the need for a clear view of my financial situation"
-Your response: "The entrepreneur wants to see their finances" ❌ WRONG - this is paraphrased, not quoted
-Your response: "The entrepreneur mentions the need for a clear view of their financial situation" ❌ WRONG - changed "my" to "their"
-Your response: There are four items: Authentication & Authorization, Encryption & Secrets Management, API Security, Code Organization. ❌ WRONG - items are not quoted individually with structured citations
-
-- When referencing workspace/space properties (not from documents), you can mention it without quotes or use single quotes to distinguish it
-- Be explicit about what comes from documents/notes/evidence vs workspace/space properties
-- The workspace and space properties define the scope and purpose of your work - use them actively to provide contextualized answers
-- PARAMOUNT: The document/note/evidence context contains ONLY what the user has included in the AI Context section - you must NEVER reference excluded items
-- CRITICAL: If previous messages in the conversation referenced specific documents, notes, or evidence, and those items are NOT in the current context below, you MUST NOT use that information - ignore those previous references completely
-- When answering follow-up questions, first verify that any documents/notes/evidence mentioned in previous messages are still in the current context - if not, state they're no longer available
-- Cite sources when possible, including page numbers if available
-${isDocumentPreview ? "- Since you're viewing a specific document, you can reference specific pages and sections. Continue to quote exact text and include structured citations for each quote." : ""}
-- If asked about something outside your context, politely explain you can only answer based on:
-  1. The documents, notes, and evidence that the user has included in the AI Context section (provided below)
-  2. The workspace and space properties (always available)
-- When asked about your context or what information you have access to, clearly explain:
-  1. The documents, notes, and evidence you can access - these are ONLY the items the user has included in the AI Context section
-${contextMentionInstruction}
-
-Citation formatting rules:
-- ALWAYS quote specific passages from documents using double quotes ("text") with EXACT character-for-character match
-- ALWAYS include structured citations [citation:{...}] for each quote (enables perfect highlighting)
-- Do NOT summarize, paraphrase, or modify quoted text - copy it EXACTLY
-- For lists of items from documents, quote the relevant passage EXACTLY and include a structured citation after the quote
-- You can have multiple quoted passages with citations in a single response
-- If a quote spans multiple sentences, include the entire passage in one quote with a structured citation at the end`
+    const { systemPrompt } = compileSystemPrompt({
+      kind: "chat",
+      userLanguage,
+      playbookBody,
+      runtimeSections,
+      isDocumentPreview,
+      contextMentionInstruction,
+      citationMode: runtimeConfig.citationMode,
+    })
 
     // Prepare messages for OpenAI (convert to OpenAI format)
     const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
@@ -593,9 +546,8 @@ Citation formatting rules:
     // Create a streaming response
     // Note: maxDuration (60s) handles overall route timeout
     // The OpenAI SDK will handle connection timeouts internally
-    // Use gpt-4o for document view mode (better exact quoting accuracy for highlighting)
-    // Use gpt-4o-mini for workspace mode (cost-effective for general queries)
-    const model = isDocumentPreview ? "gpt-4o" : "gpt-4o-mini"
+    // Model tiers from playbook config (defaults preserve gpt-4o preview / gpt-4o-mini workspace)
+    const model = resolveModelForTask("chat", runtimeConfig, { isDocumentPreview })
     const stream = await openai.chat.completions.create({
       model,
       messages: openaiMessages,

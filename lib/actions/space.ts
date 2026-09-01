@@ -7,6 +7,7 @@ import OpenAI from "openai"
 import { env } from "@/lib/env"
 import { requireAuth, requireAuthAndPermission } from "@/lib/middleware/authorization"
 import { getServerTranslator } from "@/lib/i18n/server"
+import { wouldLeaveLastAdministrator } from "@/lib/guidance/jobs"
 
 export async function createSpace(
   name: string,
@@ -115,11 +116,15 @@ export async function createSpace(
     return { error: spaceError.message }
   }
 
-  const { error: memberError } = await adminClient.from("space_members").insert({
-    space_id: newSpace.id,
-    user_id: user.id,
-    role: "owner",
-  })
+  const { error: memberError } = await adminClient.from("space_members").upsert(
+    {
+      space_id: newSpace.id,
+      user_id: user.id,
+      role: "owner",
+      job: "administrator",
+    },
+    { onConflict: "space_id,user_id", ignoreDuplicates: true },
+  )
 
   if (memberError) {
     console.error("[v0] Error creating space member:", memberError.message)
@@ -481,7 +486,7 @@ export async function removeSpaceMember(spaceId: string, memberUserId: string) {
 
   const { data: targetMember, error: memberFetchError } = await supabase
     .from("space_members")
-    .select("role")
+    .select("role, job")
     .eq("space_id", spaceId)
     .eq("user_id", memberUserId)
     .maybeSingle()
@@ -492,6 +497,23 @@ export async function removeSpaceMember(spaceId: string, memberUserId: string) {
 
   if (!targetMember) {
     return { error: "Member not found" }
+  }
+
+  if (targetMember.job === "administrator") {
+    const { count } = await supabase
+      .from("space_members")
+      .select("id", { count: "exact", head: true })
+      .eq("space_id", spaceId)
+      .eq("job", "administrator")
+    if (
+      wouldLeaveLastAdministrator({
+        currentJob: targetMember.job,
+        nextJob: "none",
+        administratorCount: count ?? 0,
+      })
+    ) {
+      return { error: "This organisation needs at least one administrator." }
+    }
   }
 
   if (targetMember.role === "owner") {
@@ -555,7 +577,7 @@ export async function deleteSpace(spaceId: string) {
   // First verify the user is the owner of the space
   const { data: space, error: spaceError } = await supabase
     .from("spaces")
-    .select("owner_id")
+    .select("owner_id, metadata")
     .eq("id", spaceId)
     .single()
 
@@ -565,6 +587,12 @@ export async function deleteSpace(spaceId: string) {
 
   if (space.owner_id !== user.id) {
     return { error: "Only the space owner can delete this space" }
+  }
+
+  const { parseRetentionPolicy, assertDestructiveAllowed } = await import("@/lib/programme/reliability")
+  const hold = assertDestructiveAllowed(parseRetentionPolicy(space.metadata as Record<string, unknown>))
+  if (!hold.ok) {
+    return { error: hold.reason }
   }
 
   // Proceed with deletion - cascade will handle workspaces and related data

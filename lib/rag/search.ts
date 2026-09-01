@@ -895,11 +895,13 @@ export async function getAllWorkspaceKnowledge(
 
     sources.push({
       id: doc.id,
+      documentId: doc.id,
       title: doc.title,
       url: doc.url || doc.external_url,
+      content,
     })
 
-    documentSections.push(`Document: ${doc.title}\n${content}\n---`)
+    documentSections.push(`Document: ${doc.title} (id: ${doc.id})\n${content}\n---`)
   }
 
   if (documentSections.length > 0) {

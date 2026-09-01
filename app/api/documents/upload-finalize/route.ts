@@ -15,6 +15,7 @@ import {
   sanitizeContentForDatabase,
   PARSER_TIMEOUT_MS,
 } from "@/lib/documents/upload-helpers"
+import { rebuildDocumentSectionsWithClient } from "@/lib/documents/rebuild-sections"
 import { z } from "zod"
 
 export const maxDuration = 120
@@ -265,6 +266,10 @@ export async function POST(req: NextRequest) {
         }
         if (pages.length > 0) {
           await adminClient.from("document_pages").insert(pages)
+          const sections = await rebuildDocumentSectionsWithClient(adminClient, document.id, workspaceId)
+          if (sections.error) {
+            logger.error("[Upload Finalize] Failed to rebuild document sections:", sections.error)
+          }
         }
       } catch (e) {
         logger.error("[Upload Finalize] PDF pages error:", e)
@@ -280,6 +285,10 @@ export async function POST(req: NextRequest) {
         text_items: [],
         character_offsets: {},
       })
+      const sections = await rebuildDocumentSectionsWithClient(adminClient, document.id, workspaceId)
+      if (sections.error) {
+        logger.error("[Upload Finalize] Failed to rebuild document sections:", sections.error)
+      }
     } else if (
       (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || originalName.toLowerCase().endsWith(".docx")) &&
       canStorePage
@@ -291,6 +300,10 @@ export async function POST(req: NextRequest) {
         text_items: [],
         character_offsets: {},
       })
+      const sections = await rebuildDocumentSectionsWithClient(adminClient, document.id, workspaceId)
+      if (sections.error) {
+        logger.error("[Upload Finalize] Failed to rebuild document sections:", sections.error)
+      }
     }
 
     revalidatePath(`/workspaces/${workspaceId}`)

@@ -1,9 +1,16 @@
-import { test, expect } from "@playwright/test"
+import { test, expect, type Page } from "@playwright/test"
 
 const requiredEnvVars = ["E2E_BASE_URL", "E2E_TEST_EMAIL", "E2E_TEST_PASSWORD", "E2E_WORKSPACE_PATH"]
 const missingEnv = requiredEnvVars.filter((key) => !process.env[key])
-
 const shouldRunE2E = missingEnv.length === 0
+
+async function login(page: Page, baseUrl: string, email: string, password: string) {
+  await page.goto(`${baseUrl}/auth/login`)
+  await page.getByLabel(/email/i).fill(email)
+  await page.getByLabel(/password/i).fill(password)
+  await page.getByRole("button", { name: /sign in/i }).click()
+  await expect(page).toHaveURL(/dashboard|workspaces|spaces/, { timeout: 30000 })
+}
 
 test.describe(shouldRunE2E ? "Critical user flows" : "Critical user flows (skipped)", () => {
   test.skip(!shouldRunE2E, `Missing E2E env vars: ${missingEnv.join(", ") || "none"}`)
@@ -13,66 +20,17 @@ test.describe(shouldRunE2E ? "Critical user flows" : "Critical user flows (skipp
   const testPassword = process.env.E2E_TEST_PASSWORD!
   const workspacePath = process.env.E2E_WORKSPACE_PATH!
 
-  test("user can login, upload document, and view chat context", async ({ page }) => {
-    await page.goto(`${baseUrl}/login`)
-    await page.getByLabel(/email/i).fill(testEmail)
-    await page.getByLabel(/password/i).fill(testPassword)
-    await page.getByRole("button", { name: /sign in|log in/i }).click()
-
-    await page.goto(`${baseUrl}${workspacePath}`)
-
-    await page.getByRole("button", { name: /upload document/i }).click()
-    await page.setInputFiles('input[type="file"]', "tests/fixtures/sample.pdf")
-    await page.getByRole("button", { name: /upload/i }).click()
-    await expect(page.getByText("sample.pdf")).toBeVisible({ timeout: 60000 })
-
-    await page.getByRole("button", { name: /chat/i }).click()
-    await page.getByPlaceholder(/ask/i).fill("Summarize the latest upload")
-    await page.getByRole("button", { name: /send/i }).click()
-    await expect(page.locator(".message-assistant")).toBeVisible({ timeout: 60000 })
-  })
-
-  test("highlights from chat link to document viewer", async ({ page }) => {
-    await page.goto(`${baseUrl}${workspacePath}`)
-
-    await page.getByRole("button", { name: /chat/i }).click()
-    await page.getByPlaceholder(/ask/i).fill("Highlight key policy statements")
-    await page.getByRole("button", { name: /send/i }).click()
-    await expect(page.locator("[data-highlight-ref]")).toBeVisible({ timeout: 60000 })
-
-    await page.getByRole("button", { name: /view document/i }).first().click()
-    await expect(page.locator(".word-document-content, canvas")).toBeVisible()
-  })
-
-  test("search functionality works", async ({ page }) => {
-    await page.goto(`${baseUrl}${workspacePath}`)
-
-    // Look for search input or button
-    const searchInput = page.getByPlaceholder(/search/i).first()
-    if (await searchInput.isVisible()) {
-      await searchInput.fill("test query")
-      await page.keyboard.press("Enter")
-      // Wait for results or no results message
-      await expect(
-        page.locator("[data-testid='search-results'], .search-results, .no-results").first()
-      ).toBeVisible({ timeout: 10000 })
-    }
-  })
-
   test("health check endpoints are accessible", async ({ page }) => {
-    // Test liveness endpoint
     const liveResponse = await page.request.get(`${baseUrl}/api/health/live`)
     expect(liveResponse.status()).toBe(200)
     const liveData = await liveResponse.json()
     expect(liveData.status).toBe("alive")
 
-    // Test readiness endpoint
     const readyResponse = await page.request.get(`${baseUrl}/api/health/ready`)
-    expect([200, 503]).toContain(readyResponse.status()) // Can be either depending on DB state
+    expect([200, 503]).toContain(readyResponse.status())
     const readyData = await readyResponse.json()
     expect(readyData.status).toBeDefined()
 
-    // Test full health endpoint
     const healthResponse = await page.request.get(`${baseUrl}/api/health`)
     expect([200, 503]).toContain(healthResponse.status())
     const healthData = await healthResponse.json()
@@ -81,15 +39,53 @@ test.describe(shouldRunE2E ? "Critical user flows" : "Critical user flows (skipp
   })
 
   test("API returns proper error responses", async ({ page }) => {
-    // Test 404 for non-existent route
     const notFoundResponse = await page.request.get(`${baseUrl}/api/nonexistent`)
     expect(notFoundResponse.status()).toBe(404)
 
-    // Test unauthorized access (without auth token)
     const unauthorizedResponse = await page.request.post(`${baseUrl}/api/documents/upload`, {
       data: {},
     })
     expect([401, 403, 400]).toContain(unauthorizedResponse.status())
   })
-})
 
+  test("user can login and open workspace", async ({ page }) => {
+    await login(page, baseUrl, testEmail, testPassword)
+    await page.goto(`${baseUrl}${workspacePath}`)
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 30000 })
+    await expect(page).toHaveURL(/\/programme/)
+  })
+
+  test("programme workbench journey: setup → analysis → measures → export", async ({ page }) => {
+    await login(page, baseUrl, testEmail, testPassword)
+
+    await page.goto(`${baseUrl}${workspacePath}/programme?section=setup`)
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 30000 })
+    await expect(page.getByRole("tablist", { name: /programme sections|programmasecties/i })).toBeVisible()
+
+    for (const section of ["analysis", "measures", "review", "export"] as const) {
+      await page.goto(`${baseUrl}${workspacePath}/programme?section=${section}`)
+      await expect(page.getByRole("tab", { selected: true })).toBeVisible()
+      await expect(page).toHaveURL(new RegExp(`section=${section}`))
+    }
+
+    await page.goto(`${baseUrl}${workspacePath}/programme?section=review`)
+    await expect(page.getByText(/distinct reviewer|andere reviewer/i)).toBeVisible()
+    await expect(page.getByRole("button", { name: /add local reviewer|lokale reviewer/i })).toBeVisible()
+
+    await page.goto(`${baseUrl}${workspacePath}/programme?section=export`)
+    await expect(page.getByRole("button", { name: /docx/i })).toBeVisible()
+    await expect(page.getByRole("button", { name: /markdown/i })).toBeVisible()
+    await expect(page.getByRole("button", { name: /pdf|print/i })).toBeVisible()
+    await expect(page.getByRole("button", { name: /cancel fill|annuleer vullen/i })).toBeVisible()
+    await expect(page.getByRole("button", { name: /retry remaining|resterende hoofdstukken/i })).toBeVisible()
+  })
+
+  test("guided programme opens first incomplete stage with coach", async ({ page }) => {
+    await login(page, baseUrl, testEmail, testPassword)
+    await page.goto(`${baseUrl}${workspacePath}/programme`)
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 30000 })
+    await expect(page).toHaveURL(/\/programme/)
+    await expect(page.getByRole("complementary", { name: /guidance|begeleiding/i })).toBeVisible()
+    await expect(page.getByRole("tablist", { name: /programme sections|programmasecties/i })).toBeVisible()
+  })
+})

@@ -81,10 +81,12 @@ security definer
 set search_path = public
 as $$
 begin
-  -- Add the creator as an owner of the space
+  -- Prefer auth.uid() for user-scoped inserts; fall back to owner_id when
+  -- spaces are created via service role (admin client) where auth.uid() is null.
   insert into public.space_members (space_id, user_id, role)
-  values (new.id, auth.uid(), 'owner');
-  
+  values (new.id, coalesce(auth.uid(), new.owner_id), 'owner')
+  on conflict (space_id, user_id) do nothing;
+
   return new;
 end;
 $$;

@@ -129,12 +129,14 @@ function createLimiter(slidingWindow: [number, string]) {
 }
 
 export const chatRateLimit = createLimiter([10, "1 m"])
+export const helpRateLimit = createLimiter([10, "1 m"])
 export const uploadRateLimit = createLimiter([5, "1 m"])
 export const searchRateLimit = createLimiter([20, "1 m"])
 export const evidenceRateLimit = createLimiter([10, "1 m"])
 export const driveRateLimit = createLimiter([10, "1 m"])
 export const externalSearchRateLimit = createLimiter([30, "10 m"])
 export const connectorTestRateLimit = createLimiter([5, "5 m"])
+export const publishCodeRateLimit = createLimiter([8, "10 m"])
 
 export type RateLimitStatus = {
   success: boolean

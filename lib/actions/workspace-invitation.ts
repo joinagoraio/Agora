@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto"
 
 import { createClient } from "@/lib/supabase/server"
 import { env } from "@/lib/env"
+import { workspaceJobFromInvite } from "@/lib/guidance/jobs"
 import { sendWorkspaceInvitationEmail } from "@/lib/services/email"
 import { revalidatePath } from "next/cache"
 
@@ -26,6 +27,7 @@ export async function inviteUserToWorkspace(
   workspaceId: string,
   email: string,
   role: WorkspaceRole = "member",
+  job?: string | null,
 ) {
   const supabase = await createClient()
 
@@ -52,6 +54,7 @@ export async function inviteUserToWorkspace(
       workspace_id: workspaceId,
       email,
       role,
+      job: workspaceJobFromInvite(job),
       token,
       invited_by: user.id,
       expires_at: expiresAt.toISOString(),
@@ -245,6 +248,7 @@ export async function acceptWorkspaceInvitation(token: string) {
         workspace_id: invitation.workspace_id,
         user_id: user.id,
         role: invitation.role,
+        job: workspaceJobFromInvite(invitation.job),
       },
       { onConflict: "workspace_id,user_id" },
     )

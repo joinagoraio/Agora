@@ -18,6 +18,7 @@ import {
   PARSER_TIMEOUT_MS,
   SUMMARY_TIMEOUT_MS,
 } from "@/lib/documents/upload-helpers"
+import { rebuildDocumentSectionsWithClient } from "@/lib/documents/rebuild-sections"
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 const MAX_FILE_SIZE_MB = MAX_FILE_SIZE_BYTES / (1024 * 1024)
@@ -485,8 +486,17 @@ export async function POST(req: NextRequest) {
 
         if (pages.length > 0) {
           const { error: pageError } = await adminClient.from("document_pages").insert(pages)
-        if (pageError) {
-          logger.error("[Upload] Failed to store PDF pages:", pageError)
+          if (pageError) {
+            logger.error("[Upload] Failed to store PDF pages:", pageError)
+          } else {
+            const sections = await rebuildDocumentSectionsWithClient(
+              adminClient,
+              document.id,
+              validated.workspaceId,
+            )
+            if (sections.error) {
+              logger.error("[Upload] Failed to rebuild document sections:", sections.error)
+            }
           }
         }
       } catch (pageError) {
@@ -509,10 +519,18 @@ export async function POST(req: NextRequest) {
             character_offsets: {},
           })
 
-        if (pageError) {
-          logger.error("[Upload API] Failed to store text/markdown content as page:", pageError)
+          if (pageError) {
+            logger.error("[Upload API] Failed to store text/markdown content as page:", pageError)
           } else {
-          logger.debug("[Upload API] Stored text/markdown content as page 1", { documentId: document.id })
+            logger.debug("[Upload API] Stored text/markdown content as page 1", { documentId: document.id })
+            const sections = await rebuildDocumentSectionsWithClient(
+              adminClient,
+              document.id,
+              validated.workspaceId,
+            )
+            if (sections.error) {
+              logger.error("[Upload] Failed to rebuild document sections:", sections.error)
+            }
           }
         } catch (pageError) {
         logger.error("[Upload API] Error storing text/markdown content as page:", pageError)
@@ -534,10 +552,18 @@ export async function POST(req: NextRequest) {
             character_offsets: {},
           })
 
-        if (pageError) {
-          logger.error("[Upload API] Failed to store Word document content as page:", pageError)
+          if (pageError) {
+            logger.error("[Upload API] Failed to store Word document content as page:", pageError)
           } else {
-          logger.debug("[Upload API] Stored Word document content as page 1", { documentId: document.id })
+            logger.debug("[Upload API] Stored Word document content as page 1", { documentId: document.id })
+            const sections = await rebuildDocumentSectionsWithClient(
+              adminClient,
+              document.id,
+              validated.workspaceId,
+            )
+            if (sections.error) {
+              logger.error("[Upload] Failed to rebuild document sections:", sections.error)
+            }
           }
         } catch (pageError) {
         logger.error("[Upload API] Error storing Word document content as page:", pageError)

@@ -882,7 +882,7 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
           <div>
             <h2 className="text-sm">
               <span className="font-semibold">{workspaceName}</span> <span className="text-muted-foreground">·</span>{" "}
-              {t("workspace.chat.header")}
+              {t("guidance.chat.programmeAssistant")}
             </h2>
           </div>
           <div className="flex items-center gap-2">

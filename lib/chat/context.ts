@@ -1,9 +1,12 @@
+import { getWorkspaceKind, parseProgrammeBindings } from "@/lib/programme/domain"
+
 type WorkspaceRecord = {
   name?: string | null
   context?: string | null
   location?: string | null
   summary?: string | null
   description?: string | null
+  kind?: string | null
   metadata?: Record<string, unknown> | null
 }
 
@@ -45,6 +48,24 @@ export function buildWorkspaceContext({
 
   if (workspace?.name) {
     appendWorkspaceContextSection(`Workspace name: ${workspace.name}`)
+  }
+
+  if (workspace) {
+    const workspaceKind = workspace.kind ?? getWorkspaceKind(workspace.metadata ?? null)
+    appendWorkspaceContextSection(`Workspace kind: ${workspaceKind}`)
+
+    if (workspaceKind === "environmental_programme") {
+      const bindings = parseProgrammeBindings(workspace.metadata ?? null)
+      appendWorkspaceContextSection(
+        `Privileged programme bindings (leading frameworks):\n` +
+          `- Environmental vision docs: ${bindings.environmentalVisionDocumentIds.join(", ") || "(none)"}\n` +
+          `- Environmental effects report docs: ${bindings.environmentalEffectsReportDocumentIds.join(", ") || "(none)"}\n` +
+          `- Programme handbook docs: ${bindings.programmeHandbookDocumentIds.join(", ") || "(none)"}\n` +
+          `- Quality/style rules docs: ${bindings.qualityStyleRulesDocumentIds.join(", ") || "(none)"}\n` +
+          `- Housing programme docs: ${bindings.housingProgrammeDocumentIds.join(", ") || "(none)"}\n` +
+          `Treat privileged documents as leading frameworks over supporting policy.`,
+      )
+    }
   }
 
   const scopeMetadata = (((workspace?.metadata as Record<string, unknown> | null) ?? {}).scope ??

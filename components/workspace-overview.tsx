@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 
-import { PencilLine, Save, X, Loader2, Wand2, MoreVertical, Settings, RotateCcw } from "lucide-react"
+import { PencilLine, Save, X, Loader2, Wand2, MoreVertical, Settings, RotateCcw, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -24,6 +24,7 @@ import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { GuidanceCoach } from "@/components/guidance-coach"
 
 type ParentSpace = {
   id: string
@@ -41,6 +42,7 @@ interface WorkspaceOverviewProps {
   parentSpaces: ParentSpace[]
   canManage?: boolean
   canAccessSettings?: boolean
+  showProgrammeWorkbench?: boolean
 }
 
 export function WorkspaceOverview({
@@ -53,6 +55,7 @@ export function WorkspaceOverview({
   parentSpaces,
   canManage = true,
   canAccessSettings = true,
+  showProgrammeWorkbench = false,
 }: WorkspaceOverviewProps) {
   const router = useRouter()
   const { t } = useI18n()
@@ -77,6 +80,7 @@ export function WorkspaceOverview({
   const [draftDescription, setDraftDescription] = useState(initialDescription ?? "")
   const [draftContext, setDraftContext] = useState(initialContext ?? "")
   const [draftLocation, setDraftLocation] = useState(initialLocation ?? "")
+  const [guidanceOpen, setGuidanceOpen] = useState(true)
 
   useEffect(() => {
     if (isEditing) return
@@ -237,7 +241,19 @@ export function WorkspaceOverview({
   }
 
   return (
-    <section className="space-y-4">
+    <section
+      className="guidance-content-shift space-y-4"
+      data-open={guidanceOpen ? "true" : undefined}
+    >
+      <GuidanceCoach
+        surface={showProgrammeWorkbench ? "programme" : "research"}
+        placeName={name}
+        workspaceId={workspaceId}
+        spaceId={parentSpaces[0]?.id}
+        job="author"
+        guidanceMode="guided"
+        onOpenChange={setGuidanceOpen}
+      />
       {isEditing ? (
         <div className="space-y-4 rounded-lg border border-border bg-card/50 p-4 shadow-lg">
           <h2 className="text-lg font-semibold text-foreground">
@@ -467,11 +483,16 @@ export function WorkspaceOverview({
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-semibold text-foreground">{name}</h1>
+              <Badge variant="outline">
+                {showProgrammeWorkbench
+                  ? t("space.workspaces.kindProgramme")
+                  : t("space.workspaces.kindResearch")}
+              </Badge>
               {location && (
                 <span className="text-sm font-medium text-muted-foreground">{location}</span>
               )}
             </div>
-            {canManage && (
+            {(canManage || showProgrammeWorkbench) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -485,10 +506,20 @@ export function WorkspaceOverview({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleStartEditing}>
-                    <PencilLine className="h-4 w-4" />
-                    {t("workspace.overview.menu.edit")}
-                  </DropdownMenuItem>
+                  {canManage && (
+                    <DropdownMenuItem onClick={handleStartEditing}>
+                      <PencilLine className="h-4 w-4" />
+                      {t("workspace.overview.menu.edit")}
+                    </DropdownMenuItem>
+                  )}
+                  {showProgrammeWorkbench && (
+                    <DropdownMenuItem asChild>
+                      <Link href={`/workspaces/${workspaceId}/programme`}>
+                        <FileText className="h-4 w-4" />
+                        {t("workspace.overview.menu.programme")}
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   {canAccessSettings && (
                     <DropdownMenuItem asChild>
                       <Link href={`/workspaces/${workspaceId}/settings`}>
@@ -502,6 +533,11 @@ export function WorkspaceOverview({
             )}
           </div>
           <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              {showProgrammeWorkbench
+                ? t("workspace.overview.kindProgrammeHint")
+                : t("workspace.overview.kindResearchHint")}
+            </p>
             <p className="whitespace-pre-line text-sm font-semibold text-foreground">
               {summary.trim().length > 0 ? summary : t("space.overview.summaryEmpty")}
             </p>

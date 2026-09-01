@@ -24,7 +24,14 @@ const nextConfig = {
       "https://*.upstash.io",
     ]
     if (isDev) {
-      connectSources.push("https://vercel.live")
+      // Local Supabase (supabase start) — required for browser auth/API calls
+      connectSources.push(
+        "http://localhost:54321",
+        "http://127.0.0.1:54321",
+        "ws://localhost:54321",
+        "ws://127.0.0.1:54321",
+        "https://vercel.live",
+      )
     }
     
     const csp = [
@@ -40,8 +47,14 @@ const nextConfig = {
       "base-uri 'self'",
       "form-action 'self'",
       "frame-ancestors 'none'",
-      "upgrade-insecure-requests",
-    ].join("; ")
+    ]
+    // Local Supabase is HTTP. This directive would upgrade those calls to HTTPS
+    // and produce a browser TypeError: Failed to fetch on login.
+    if (!isDev) {
+      csp.push("upgrade-insecure-requests")
+    }
+
+    const cspHeader = csp.join("; ")
     
     return [
       {
@@ -73,7 +86,7 @@ const nextConfig = {
           },
           {
             key: "Content-Security-Policy",
-            value: csp,
+            value: cspHeader,
           },
         ],
       },

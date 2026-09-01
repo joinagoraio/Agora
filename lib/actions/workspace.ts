@@ -10,7 +10,12 @@ import { withCache, workspaceCacheKey } from "@/lib/cache/api-cache"
 import { requireAuthAndPermission } from "@/lib/middleware/authorization"
 import { getServerTranslator } from "@/lib/i18n/server"
 
-export async function createWorkspace(spaceId: string, name: string, description?: string) {
+export async function createWorkspace(
+  spaceId: string,
+  name: string,
+  description?: string,
+  kind: "research" | "environmental_programme" = "research",
+) {
   const supabase = await createClient()
   const { t } = await getServerTranslator()
 
@@ -35,6 +40,8 @@ export async function createWorkspace(spaceId: string, name: string, description
       name,
       description,
       created_by: user.id,
+      kind,
+      metadata: { kind },
     })
     .select()
     .single()
@@ -148,6 +155,27 @@ export async function deleteWorkspace(workspaceId: string) {
   } = await supabase.auth.getUser()
   if (!user) {
     return { error: "Unauthorized" }
+  }
+
+  const { data: workspace, error: workspaceError } = await supabase
+    .from("workspaces")
+    .select("id, space_id")
+    .eq("id", workspaceId)
+    .single()
+
+  if (workspaceError || !workspace) {
+    return { error: "Workspace not found" }
+  }
+
+  if (workspace.space_id) {
+    const { data: space } = await supabase.from("spaces").select("metadata").eq("id", workspace.space_id).maybeSingle()
+    if (space) {
+      const { parseRetentionPolicy, assertDestructiveAllowed } = await import("@/lib/programme/reliability")
+      const hold = assertDestructiveAllowed(parseRetentionPolicy(space.metadata as Record<string, unknown>))
+      if (!hold.ok) {
+        return { error: hold.reason }
+      }
+    }
   }
 
   const { error } = await supabase.from("workspaces").delete().eq("id", workspaceId)

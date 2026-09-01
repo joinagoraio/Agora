@@ -42,7 +42,19 @@ describe("Search API rate limit headers", () => {
       .fn()
       .mockImplementation(function select(_columns?: string, options?: any) {
         if (options && options.count) {
-          return Promise.resolve({ count: 1 })
+          const countQuery = {
+            eq: vi.fn().mockReturnThis(),
+            or: vi.fn().mockReturnThis(),
+            gte: vi.fn().mockReturnThis(),
+            lte: vi.fn().mockReturnThis(),
+            then: (onFulfilled: any, onRejected?: any) =>
+              Promise.resolve({ count: 1, data: null, error: null }).then(onFulfilled, onRejected),
+          }
+          countQuery.eq.mockReturnValue(countQuery)
+          countQuery.or.mockReturnValue(countQuery)
+          countQuery.gte.mockReturnValue(countQuery)
+          countQuery.lte.mockReturnValue(countQuery)
+          return countQuery
         }
         return mockDocumentsQuery
       }),

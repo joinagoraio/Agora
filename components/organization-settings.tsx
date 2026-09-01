@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Upload, CheckCircle2, AlertCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface OrganizationSettingsProps {
   space: {
@@ -21,6 +22,7 @@ interface OrganizationSettingsProps {
 
 export function OrganizationSettings({ space }: OrganizationSettingsProps) {
   const router = useRouter()
+  const { t } = useI18n()
   const [name, setName] = useState(space.name)
   const [logoUrl, setLogoUrl] = useState(space.logo_url || "")
   const [isSaving, setIsSaving] = useState(false)
@@ -65,22 +67,22 @@ export function OrganizationSettings({ space }: OrganizationSettingsProps) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Organization Profile</CardTitle>
-          <CardDescription>Update your organization's name and logo</CardDescription>
+          <CardTitle>{t("space.settings.compliance.profile.title")}</CardTitle>
+          <CardDescription>{t("space.settings.compliance.profile.description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Organization Name</Label>
+            <Label htmlFor="name">{t("space.settings.compliance.profile.name")}</Label>
             <Input
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Enter organization name"
+              placeholder={t("space.settings.compliance.profile.namePlaceholder")}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="logo">Logo URL</Label>
+            <Label htmlFor="logo">{t("space.settings.compliance.profile.logo")}</Label>
             <Input
               id="logo"
               value={logoUrl}
@@ -88,17 +90,17 @@ export function OrganizationSettings({ space }: OrganizationSettingsProps) {
               placeholder="https://example.com/logo.png"
             />
             <p className="text-xs text-muted-foreground">
-              Enter a URL to your organization's logo image
+              {t("space.settings.compliance.profile.logoHint")}
             </p>
           </div>
 
           {logoUrl && (
             <div className="flex items-center gap-4">
               <div className="h-16 w-16 rounded border bg-muted flex items-center justify-center overflow-hidden">
-                <img src={logoUrl} alt="Logo preview" className="max-h-full max-w-full object-contain" />
+                <img src={logoUrl} alt={t("space.settings.compliance.profile.logoPreview")} className="max-h-full max-w-full object-contain" />
               </div>
               <div className="text-sm text-muted-foreground">
-                Logo preview
+                {t("space.settings.compliance.profile.logoPreview")}
               </div>
             </div>
           )}
@@ -113,7 +115,7 @@ export function OrganizationSettings({ space }: OrganizationSettingsProps) {
           {success && (
             <Alert>
               <CheckCircle2 className="h-4 w-4" />
-              <AlertDescription>Settings saved successfully</AlertDescription>
+              <AlertDescription>{t("space.settings.compliance.profile.saved")}</AlertDescription>
             </Alert>
           )}
 
@@ -122,10 +124,10 @@ export function OrganizationSettings({ space }: OrganizationSettingsProps) {
               {isSaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
+                  {t("space.settings.compliance.profile.saving")}
                 </>
               ) : (
-                "Save Changes"
+                {t("space.settings.compliance.profile.save")}
               )}
             </Button>
           </div>
@@ -134,13 +136,13 @@ export function OrganizationSettings({ space }: OrganizationSettingsProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle>SSO Configuration</CardTitle>
-          <CardDescription>Configure single sign-on for your organization</CardDescription>
+          <CardTitle>{t("space.settings.compliance.profile.ssoTitle")}</CardTitle>
+          <CardDescription>{t("space.settings.compliance.profile.ssoDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Alert>
             <AlertDescription>
-              SSO configuration is not yet implemented in the MVP. This feature will be available in a future release.
+              {t("space.settings.compliance.profile.ssoSoon")}
             </AlertDescription>
           </Alert>
         </CardContent>

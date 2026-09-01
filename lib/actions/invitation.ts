@@ -3,12 +3,14 @@
 import { createClient } from "@/lib/supabase/server"
 import { randomBytes } from "node:crypto"
 import { env } from "@/lib/env"
+import { spaceJobFromInvite } from "@/lib/guidance/jobs"
 import { sendSpaceInvitationEmail } from "@/lib/services/email"
 
 export async function inviteUserToSpace(
   spaceId: string,
   email: string,
   role: "owner" | "admin" | "member" | "viewer" = "member",
+  job?: string | null,
 ) {
   const supabase = await createClient()
 
@@ -30,6 +32,7 @@ export async function inviteUserToSpace(
       space_id: spaceId,
       email,
       role,
+      job: spaceJobFromInvite(role, job),
       token,
       invited_by: user.id,
       expires_at: expiresAt.toISOString(),
@@ -117,6 +120,7 @@ export async function acceptInvitation(token: string) {
     space_id: invitation.space_id,
     user_id: user.id,
     role: invitation.role,
+    job: spaceJobFromInvite(invitation.role, invitation.job),
   })
 
   if (memberError) {

@@ -4,6 +4,9 @@ import JSZip from "jszip"
 export const documentUploadSchema = z.object({
   workspaceId: z.string().uuid("workspaceId must be a valid UUID"),
   file: z.instanceof(File, { message: "file must be a File object" })
+    .refine((file) => file.size > 0, {
+      message: "File cannot be empty",
+    })
     .refine((file) => file.size <= 50_000_000, {
       message: "File must be less than 50MB",
     })
@@ -28,6 +31,18 @@ export const documentUploadSchema = z.object({
     }),
   classification: z.enum(["public", "internal", "confidential"]).default("public"),
   title: z.string().max(500).optional().nullable(),
+  documentRole: z
+    .enum([
+      "environmental_vision",
+      "environmental_effects_report",
+      "programme_handbook",
+      "existing_policy",
+      "housing_programme",
+      "quality_style_rules",
+      "other",
+    ])
+    .optional()
+    .nullable(),
 })
 
 export const chatMessageSchema = z.object({

@@ -30,6 +30,7 @@ import { WorkspaceOverview } from "@/components/workspace-overview"
 import { ManageSourcesDialog } from "@/components/manage-sources-dialog"
 import { CreateSourceDialog } from "@/components/create-source-dialog"
 import { EvidenceRefreshListener } from "@/components/evidence-refresh-listener"
+import { isEnvironmentalProgrammeWorkspace } from "@/lib/programme/domain"
 
 type WorkspaceCommentRecord = {
   id: string
@@ -47,10 +48,13 @@ type WorkspaceCommentRecord = {
 
 export default async function WorkspacePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ workspaceId: string }>
+  searchParams: Promise<{ files?: string }>
 }) {
   const { workspaceId } = await params
+  const { files } = await searchParams
   const supabase = await createClient()
   const { t } = await getServerTranslator()
 
@@ -72,6 +76,15 @@ export default async function WorkspacePage({
   if (workspaceError || !workspace) {
     console.error("Error fetching workspace:", workspaceError)
     redirect("/dashboard")
+  }
+
+  const isProgrammeWorkspace = isEnvironmentalProgrammeWorkspace({
+    kind: workspace.kind,
+    metadata: workspace.metadata as Record<string, unknown>,
+  })
+
+  if (isProgrammeWorkspace && files !== "1") {
+    redirect(`/workspaces/${workspaceId}/programme`)
   }
 
   // Get space details separately to avoid RLS issues with joins
@@ -366,9 +379,11 @@ export default async function WorkspacePage({
   return (
     <WorkspaceChatWrapper workspaceId={workspaceId} workspaceName={workspace.name} canManage={canManage}>
       <EvidenceRefreshListener />
-      <Suspense fallback={null}>
-        <WelcomeWorkspaceWrapper workspace={workspace} />
-      </Suspense>
+      {!(isProgrammeWorkspace && files === "1") && (
+        <Suspense fallback={null}>
+          <WelcomeWorkspaceWrapper workspace={workspace} />
+        </Suspense>
+      )}
       <div className="flex min-h-screen flex-col overflow-x-hidden">
         <header className="sticky top-0 z-40 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75">
           <div className="flex h-16 items-center justify-between px-4">
@@ -410,6 +425,29 @@ export default async function WorkspacePage({
 
         <main className="flex-1 bg-white">
           <div className="container mx-auto py-8 px-8">
+            {isProgrammeWorkspace && files === "1" ? (
+              <div className="space-y-6">
+                <Button variant="outline" asChild>
+                  <Link href={`/workspaces/${workspaceId}/programme?section=corpus`}>
+                    {t("workspace.programme.backToProgramme")}
+                  </Link>
+                </Button>
+                <div className="space-y-2">
+                  <h1 className="text-2xl font-semibold tracking-tight">
+                    {t("workspace.programme.filesManagerTitle")}
+                  </h1>
+                  <p className="text-sm text-muted-foreground">{t("workspace.programme.filesManagerHint")}</p>
+                </div>
+                <DocumentsList
+                  workspaceId={workspaceId}
+                  initialDocuments={uploadedDocuments}
+                  initialArchivedCount={archivedDocCount}
+                  sources={sourcesArray}
+                  canManage={canManage}
+                />
+              </div>
+            ) : (
+            <>
             <div className="mb-8">
               <WorkspaceOverview
                 workspaceId={workspaceId}
@@ -421,6 +459,7 @@ export default async function WorkspacePage({
                 parentSpaces={parentSpaces}
                 canManage={canManage}
                 canAccessSettings={canAccessSettings}
+                showProgrammeWorkbench={isProgrammeWorkspace}
               />
             </div>
 
@@ -572,6 +611,8 @@ export default async function WorkspacePage({
               </Tabs>
               </div>
             </div>
+            </>
+            )}
           </div>
         </main>
       </div>

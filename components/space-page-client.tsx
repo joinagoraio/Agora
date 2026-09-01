@@ -24,6 +24,8 @@ import Link from "next/link"
 
 import { updateSpaceScope, updateSpace, enhanceScopeText } from "@/lib/actions/space"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { GuidanceCoach } from "@/components/guidance-coach"
+import type { GuidanceMode } from "@/lib/guidance/jobs"
 
 type SpaceScope = {
   summary?: string | null
@@ -49,6 +51,9 @@ interface SpacePageClientProps {
   canManage: boolean
   canAccessSettings: boolean
   wizardState?: SetupWizardState | null
+  spaceJob?: string | null
+  guidanceMode?: GuidanceMode
+  helpAiEnabled?: boolean
 }
 
 export function SpacePageClient({
@@ -63,8 +68,12 @@ export function SpacePageClient({
   canManage,
   canAccessSettings,
   wizardState,
+  spaceJob = "none",
+  guidanceMode = "guided",
+  helpAiEnabled = false,
 }: SpacePageClientProps) {
   const { t } = useI18n()
+  const [guidanceOpen, setGuidanceOpen] = useState(guidanceMode === "guided")
   const [spaceTitle, setSpaceTitle] = useState(spaceName)
   const [spaceTitleDraft, setSpaceTitleDraft] = useState(spaceName)
   const [spaceDetails, setSpaceDetails] = useState({
@@ -213,6 +222,10 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
                     </Link>
                   </DropdownMenuItem>
                 )}
+                <DropdownMenuItem onClick={() => setWizardOpen(true)}>
+                  <Wand2 className="h-4 w-4" />
+                  {t("guidance.coach.reopenWizard")}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -442,7 +455,13 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
   }
 
   return (
-    <div className="container mx-auto py-8 px-8">
+    <>
+    <div
+      className="guidance-content-shift min-h-screen"
+      data-open={guidanceOpen ? "true" : undefined}
+    >
+    <div className="container mx-auto flex flex-col gap-6 py-8 px-8">
+      <div className="min-w-0 flex-1">
       {canManage && (
         <SpaceSetupWizard
           open={wizardOpen}
@@ -710,7 +729,21 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
           canManage={canManage}
         />
       </div>
+      </div>
     </div>
+    </div>
+      <GuidanceCoach
+        surface="organisation"
+        placeName={spaceTitle}
+        spaceId={spaceId}
+        job={spaceJob === "administrator" ? "administrator" : "author"}
+        guidanceMode={guidanceMode}
+        helpAiEnabled={helpAiEnabled}
+        canReopenWizard={canManage}
+        onReopenWizard={() => setWizardOpen(true)}
+        onOpenChange={setGuidanceOpen}
+      />
+    </>
   )
 }
 
