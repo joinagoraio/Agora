@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, RotateCcw, Sparkles, Upload, Wand2, X, Search } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { IconTooltip } from "@/components/icon-tooltip"
 import { useI18n } from "@/lib/i18n/use-i18n"
 
 type SetupWizardState = {
@@ -948,21 +949,23 @@ export function SpaceSetupWizard({
                               )}
                             </Badge>
                           )}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDocumentDeleted(doc.id)}
-                            disabled={deletingDocumentId === doc.id}
-                            className="h-8 w-8 hover:bg-red-100 group"
-                          >
-                            {deletingDocumentId === doc.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <X className="h-4 w-4 group-hover:text-red-500" />
-                            )}
-                            <span className="sr-only">{t("space.wizard.documents.remove")}</span>
-                          </Button>
+                          <IconTooltip label={t("space.wizard.documents.remove")}>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDocumentDeleted(doc.id)}
+                              disabled={deletingDocumentId === doc.id}
+                              className="h-8 w-8 hover:bg-red-100 group"
+                              aria-label={t("space.wizard.documents.remove")}
+                            >
+                              {deletingDocumentId === doc.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <X className="h-4 w-4 group-hover:text-red-500" />
+                              )}
+                            </Button>
+                          </IconTooltip>
                         </div>
                       </div>
                     )

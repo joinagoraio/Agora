@@ -35,6 +35,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { useEffect } from "react"
+import { useI18n } from "@/lib/i18n/use-i18n"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 interface RichTextEditorProps {
   content: string
@@ -44,6 +46,9 @@ interface RichTextEditorProps {
 }
 
 export function RichTextEditor({ content, onChange, placeholder, className }: RichTextEditorProps) {
+  const { t } = useI18n()
+  const tb = (key: string) => t(`workspace.documents.editor.toolbar.${key}`)
+
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -135,63 +140,79 @@ export function RichTextEditor({ content, onChange, placeholder, className }: Ri
     <div className="border rounded-md">
       <div className="flex flex-wrap items-center gap-1 p-2 border-b bg-muted/50">
         {/* Text Formatting */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          disabled={!editor.can().chain().focus().toggleBold().run()}
-          className={cn(editor.isActive("bold") && "bg-muted")}
-        >
-          <Bold className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          disabled={!editor.can().chain().focus().toggleItalic().run()}
-          className={cn(editor.isActive("italic") && "bg-muted")}
-        >
-          <Italic className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => editor.chain().focus().toggleUnderline().run()}
-          disabled={!editor.can().chain().focus().toggleUnderline().run()}
-          className={cn(editor.isActive("underline") && "bg-muted")}
-        >
-          <UnderlineIcon className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => editor.chain().focus().toggleStrike().run()}
-          disabled={!editor.can().chain().focus().toggleStrike().run()}
-          className={cn(editor.isActive("strike") && "bg-muted")}
-        >
-          <Strikethrough className="h-4 w-4" />
-        </Button>
+        <IconTooltip label={tb("bold")}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().toggleBold().run()}
+            disabled={!editor.can().chain().focus().toggleBold().run()}
+            className={cn(editor.isActive("bold") && "bg-muted")}
+            aria-label={tb("bold")}
+          >
+            <Bold className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
+        <IconTooltip label={tb("italic")}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+            disabled={!editor.can().chain().focus().toggleItalic().run()}
+            className={cn(editor.isActive("italic") && "bg-muted")}
+            aria-label={tb("italic")}
+          >
+            <Italic className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
+        <IconTooltip label={tb("underline")}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+            disabled={!editor.can().chain().focus().toggleUnderline().run()}
+            className={cn(editor.isActive("underline") && "bg-muted")}
+            aria-label={tb("underline")}
+          >
+            <UnderlineIcon className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
+        <IconTooltip label={tb("strike")}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().toggleStrike().run()}
+            disabled={!editor.can().chain().focus().toggleStrike().run()}
+            className={cn(editor.isActive("strike") && "bg-muted")}
+            aria-label={tb("strike")}
+          >
+            <Strikethrough className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
 
         <Separator orientation="vertical" className="h-6" />
 
         {/* Headings */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="ghost" size="sm">
-              {editor.isActive("heading", { level: 1 }) ? (
-                <Heading1 className="h-4 w-4" />
-              ) : editor.isActive("heading", { level: 2 }) ? (
-                <Heading2 className="h-4 w-4" />
-              ) : editor.isActive("heading", { level: 3 }) ? (
-                <Heading3 className="h-4 w-4" />
-              ) : (
-                "Normal"
-              )}
-            </Button>
+            <span className="inline-flex">
+              <IconTooltip label={tb("heading")}>
+                <Button type="button" variant="ghost" size="sm" aria-label={tb("heading")}>
+                  {editor.isActive("heading", { level: 1 }) ? (
+                    <Heading1 className="h-4 w-4" />
+                  ) : editor.isActive("heading", { level: 2 }) ? (
+                    <Heading2 className="h-4 w-4" />
+                  ) : editor.isActive("heading", { level: 3 }) ? (
+                    <Heading3 className="h-4 w-4" />
+                  ) : (
+                    "Normal"
+                  )}
+                </Button>
+              </IconTooltip>
+            </span>
           </DropdownMenuTrigger>
           <DropdownMenuContent>
             <DropdownMenuItem
@@ -224,99 +245,126 @@ export function RichTextEditor({ content, onChange, placeholder, className }: Ri
         <Separator orientation="vertical" className="h-6" />
 
         {/* Lists */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          className={cn(editor.isActive("bulletList") && "bg-muted")}
-        >
-          <List className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          className={cn(editor.isActive("orderedList") && "bg-muted")}
-        >
-          <ListOrdered className="h-4 w-4" />
-        </Button>
+        <IconTooltip label={tb("bulletList")}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+            className={cn(editor.isActive("bulletList") && "bg-muted")}
+            aria-label={tb("bulletList")}
+          >
+            <List className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
+        <IconTooltip label={tb("numberedList")}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            className={cn(editor.isActive("orderedList") && "bg-muted")}
+            aria-label={tb("numberedList")}
+          >
+            <ListOrdered className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
 
         <Separator orientation="vertical" className="h-6" />
 
         {/* Alignment */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => editor.chain().focus().setTextAlign("left").run()}
-          className={cn(editor.isActive({ textAlign: "left" }) && "bg-muted")}
-        >
-          <AlignLeft className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => editor.chain().focus().setTextAlign("center").run()}
-          className={cn(editor.isActive({ textAlign: "center" }) && "bg-muted")}
-        >
-          <AlignCenter className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => editor.chain().focus().setTextAlign("right").run()}
-          className={cn(editor.isActive({ textAlign: "right" }) && "bg-muted")}
-        >
-          <AlignRight className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => editor.chain().focus().setTextAlign("justify").run()}
-          className={cn(editor.isActive({ textAlign: "justify" }) && "bg-muted")}
-        >
-          <AlignJustify className="h-4 w-4" />
-        </Button>
+        <IconTooltip label={tb("alignLeft")}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().setTextAlign("left").run()}
+            className={cn(editor.isActive({ textAlign: "left" }) && "bg-muted")}
+            aria-label={tb("alignLeft")}
+          >
+            <AlignLeft className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
+        <IconTooltip label={tb("alignCenter")}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().setTextAlign("center").run()}
+            className={cn(editor.isActive({ textAlign: "center" }) && "bg-muted")}
+            aria-label={tb("alignCenter")}
+          >
+            <AlignCenter className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
+        <IconTooltip label={tb("alignRight")}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().setTextAlign("right").run()}
+            className={cn(editor.isActive({ textAlign: "right" }) && "bg-muted")}
+            aria-label={tb("alignRight")}
+          >
+            <AlignRight className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
+        <IconTooltip label={tb("justify")}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().setTextAlign("justify").run()}
+            className={cn(editor.isActive({ textAlign: "justify" }) && "bg-muted")}
+            aria-label={tb("justify")}
+          >
+            <AlignJustify className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
 
         <Separator orientation="vertical" className="h-6" />
 
         {/* Link */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={setLink}
-          className={cn(editor.isActive("link") && "bg-muted")}
-        >
-          <LinkIcon className="h-4 w-4" />
-        </Button>
+        <IconTooltip label={tb("link")}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={setLink}
+            className={cn(editor.isActive("link") && "bg-muted")}
+            aria-label={tb("link")}
+          >
+            <LinkIcon className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
 
         <Separator orientation="vertical" className="h-6" />
 
         {/* Undo/Redo */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => editor.chain().focus().undo().run()}
-          disabled={!editor.can().chain().focus().undo().run()}
-        >
-          <Undo className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => editor.chain().focus().redo().run()}
-          disabled={!editor.can().chain().focus().redo().run()}
-        >
-          <Redo className="h-4 w-4" />
-        </Button>
+        <IconTooltip label={tb("undo")}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().undo().run()}
+            disabled={!editor.can().chain().focus().undo().run()}
+            aria-label={tb("undo")}
+          >
+            <Undo className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
+        <IconTooltip label={tb("redo")}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().redo().run()}
+            disabled={!editor.can().chain().focus().redo().run()}
+            aria-label={tb("redo")}
+          >
+            <Redo className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
       </div>
       <EditorContent editor={editor} />
     </div>

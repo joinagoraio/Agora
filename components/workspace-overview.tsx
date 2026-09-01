@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { GuidanceCoach } from "@/components/guidance-coach"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 type ParentSpace = {
   id: string
@@ -297,17 +298,19 @@ export function WorkspaceOverview({
               {activeField === "summary" && (
                 <div className="absolute bottom-2 right-2 flex items-center gap-2">
                   {summaryPrevious !== null && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => handleUndoEnhance("summary")}
-                      className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
-                    >
-                      <RotateCcw className="h-4 w-4" />
-                      <span className="sr-only">{t("workspace.overview.edit.summaryUndo")}</span>
-                    </Button>
+                    <IconTooltip label={t("workspace.overview.edit.summaryUndo")}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => handleUndoEnhance("summary")}
+                        className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
+                        aria-label={t("workspace.overview.edit.summaryUndo")}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </Button>
+                    </IconTooltip>
                   )}
                   <TooltipProvider>
                     <Tooltip>
@@ -355,17 +358,19 @@ export function WorkspaceOverview({
               {activeField === "description" && (
                 <div className="absolute bottom-2 right-2 flex items-center gap-2">
                   {descriptionPrevious !== null && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => handleUndoEnhance("description")}
-                      className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
-                    >
-                      <RotateCcw className="h-4 w-4" />
-                      <span className="sr-only">{t("workspace.overview.edit.descriptionUndo")}</span>
-                    </Button>
+                    <IconTooltip label={t("workspace.overview.edit.descriptionUndo")}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => handleUndoEnhance("description")}
+                        className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
+                        aria-label={t("workspace.overview.edit.descriptionUndo")}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </Button>
+                    </IconTooltip>
                   )}
                   <TooltipProvider>
                     <Tooltip>
@@ -413,17 +418,19 @@ export function WorkspaceOverview({
               {activeField === "context" && (
                 <div className="absolute bottom-2 right-2 flex items-center gap-2">
                   {contextPrevious !== null && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => handleUndoEnhance("context")}
-                      className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
-                    >
-                      <RotateCcw className="h-4 w-4" />
-                      <span className="sr-only">{t("workspace.overview.edit.contextUndo")}</span>
-                    </Button>
+                    <IconTooltip label={t("workspace.overview.edit.contextUndo")}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => handleUndoEnhance("context")}
+                        className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
+                        aria-label={t("workspace.overview.edit.contextUndo")}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </Button>
+                    </IconTooltip>
                   )}
                   <TooltipProvider>
                     <Tooltip>
@@ -495,15 +502,18 @@ export function WorkspaceOverview({
             {(canManage || showProgrammeWorkbench) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    title={t("workspace.overview.menu.more")}
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                    <span className="sr-only">{t("workspace.overview.menu.more")}</span>
-                  </Button>
+                  <span className="inline-flex">
+                    <IconTooltip label={t("workspace.overview.menu.more")}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        aria-label={t("workspace.overview.menu.more")}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </IconTooltip>
+                  </span>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   {canManage && (

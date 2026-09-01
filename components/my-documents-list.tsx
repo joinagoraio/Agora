@@ -28,6 +28,7 @@ import { deleteDocument } from "@/lib/actions/document"
 import { Calendar, Edit3, FileText, MoreVertical, Search, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 interface MyDocumentsListProps {
   workspaceId: string
@@ -237,9 +238,13 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.preventDefault()}>
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
+                              <span className="inline-flex">
+                                <IconTooltip label={t("common.tooltips.moreActions")}>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.preventDefault()} aria-label={t("common.tooltips.moreActions")}>
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </IconTooltip>
+                              </span>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem asChild>

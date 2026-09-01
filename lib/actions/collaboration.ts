@@ -111,7 +111,7 @@ export async function getSectionLockHolder(workspaceId: string, sectionKey: stri
   const supabase = await createClient()
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, email, full_name")
+    .select("id, email, full_name, avatar_url")
     .eq("id", lock.data.locked_by)
     .maybeSingle()
   return {
@@ -185,14 +185,15 @@ export async function listSectionPresence(workspaceId: string, sectionKey: strin
   const others = (data || []).filter((row) => row.user_id !== user?.id)
   const ids = others.map((row) => row.user_id)
   const { data: profiles } = ids.length
-    ? await supabase.from("profiles").select("id, email, full_name").in("id", ids)
-    : { data: [] as Array<{ id: string; email: string; full_name: string | null }> }
+    ? await supabase.from("profiles").select("id, email, full_name, avatar_url").in("id", ids)
+    : { data: [] as Array<{ id: string; email: string; full_name: string | null; avatar_url: string | null }> }
   return {
     data: others.map((row) => {
       const profile = (profiles || []).find((item) => item.id === row.user_id)
       return {
         userId: row.user_id,
         name: profile?.full_name || profile?.email || row.user_id.slice(0, 8),
+        avatarUrl: profile?.avatar_url || null,
         lastSeenAt: row.last_seen_at,
       }
     }),

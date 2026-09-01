@@ -16,12 +16,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { createSharedLink, getConversationSharedLinks, deleteSharedLink } from "@/lib/actions/sharing"
 import { Share2, Copy, Check, Trash2, ExternalLink } from "lucide-react"
+import { useI18n } from "@/lib/i18n/use-i18n"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 interface ShareConversationDialogProps {
   conversationId: string
 }
 
 export function ShareConversationDialog({ conversationId }: ShareConversationDialogProps) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [expiryDays, setExpiryDays] = useState<string>("7")
   const [shareUrl, setShareUrl] = useState<string | null>(null)
@@ -109,14 +112,18 @@ export function ShareConversationDialog({ conversationId }: ShareConversationDia
                 <Label>Share Link</Label>
                 <div className="flex gap-2">
                   <Input value={shareUrl} readOnly className="flex-1" />
-                  <Button size="icon" variant="outline" onClick={() => handleCopy(shareUrl)}>
-                    {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                  </Button>
-                  <Button size="icon" variant="outline" asChild>
-                    <a href={shareUrl} target="_blank" rel="noopener noreferrer">
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  </Button>
+                  <IconTooltip label={t("common.tooltips.copy")}>
+                    <Button size="icon" variant="outline" onClick={() => handleCopy(shareUrl)} aria-label={t("common.tooltips.copy")}>
+                      {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </IconTooltip>
+                  <IconTooltip label={t("common.tooltips.openLink")}>
+                    <Button size="icon" variant="outline" asChild>
+                      <a href={shareUrl} target="_blank" rel="noopener noreferrer" aria-label={t("common.tooltips.openLink")}>
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  </IconTooltip>
                 </div>
                 <p className="text-xs text-muted-foreground">Anyone with this link can view the conversation</p>
               </div>
@@ -150,12 +157,16 @@ export function ShareConversationDialog({ conversationId }: ShareConversationDia
                       </p>
                     </div>
                     <div className="flex gap-2">
-                      <Button size="icon" variant="ghost" onClick={() => handleCopy(getShareUrl(link.token))}>
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" onClick={() => handleDelete(link.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <IconTooltip label={t("common.tooltips.copy")}>
+                        <Button size="icon" variant="ghost" onClick={() => handleCopy(getShareUrl(link.token))} aria-label={t("common.tooltips.copy")}>
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </IconTooltip>
+                      <IconTooltip label={t("common.tooltips.delete")}>
+                        <Button size="icon" variant="ghost" onClick={() => handleDelete(link.id)} aria-label={t("common.tooltips.delete")}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </IconTooltip>
                     </div>
                   </div>
                 ))}

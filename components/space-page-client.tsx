@@ -25,6 +25,7 @@ import Link from "next/link"
 import { updateSpaceScope, updateSpace, enhanceScopeText } from "@/lib/actions/space"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { GuidanceCoach } from "@/components/guidance-coach"
+import { IconTooltip } from "@/components/icon-tooltip"
 import type { GuidanceMode } from "@/lib/guidance/jobs"
 
 type SpaceScope = {
@@ -199,15 +200,18 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
           {canManage && !isEditingScope && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  title={t("space.overview.menu.more")}
-                >
-                  <MoreVertical className="h-4 w-4" />
-                  <span className="sr-only">{t("space.overview.menu.more")}</span>
-                </Button>
+                <span className="inline-flex">
+                  <IconTooltip label={t("space.overview.menu.more")}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      aria-label={t("space.overview.menu.more")}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </IconTooltip>
+                </span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={handleEditClick}>
@@ -589,17 +593,19 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
               {activeField === "summary" && (
                 <div className="absolute bottom-2 right-2 flex items-center gap-2">
                   {summaryPrevious !== null && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => handleUndoEnhance("summary")}
-                      className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
-                    >
-                      <RotateCcw className="h-4 w-4" />
-                      <span className="sr-only">{t("space.overview.edit.undoSummary")}</span>
-                    </Button>
+                    <IconTooltip label={t("space.overview.edit.undoSummary")}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => handleUndoEnhance("summary")}
+                        className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
+                        aria-label={t("space.overview.edit.undoSummary")}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </Button>
+                    </IconTooltip>
                   )}
                   <TooltipProvider>
                     <Tooltip>
@@ -647,17 +653,19 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
               {activeField === "description" && (
                 <div className="absolute bottom-2 right-2 flex items-center gap-2">
                   {descriptionPrevious !== null && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => handleUndoEnhance("description")}
-                      className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
-                    >
-                      <RotateCcw className="h-4 w-4" />
-                      <span className="sr-only">{t("space.overview.edit.undoDescription")}</span>
-                    </Button>
+                    <IconTooltip label={t("space.overview.edit.undoDescription")}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => handleUndoEnhance("description")}
+                        className="h-8 w-8 p-0 bg-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
+                        aria-label={t("space.overview.edit.undoDescription")}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </Button>
+                    </IconTooltip>
                   )}
                   <TooltipProvider>
                     <Tooltip>

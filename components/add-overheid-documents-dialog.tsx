@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, CheckCircle2, FileText, ExternalLink, Sparkles, Edit2, Search } from "lucide-react"
+import { IconTooltip } from "@/components/icon-tooltip"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ensureOverheidNLSource, addDocumentsFromSource } from "@/lib/actions/document"
@@ -599,18 +600,21 @@ export function AddOverheidDocumentsDialog({
                             className="text-sm bg-white"
                           />
                           {editableQueries.length > 1 && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                const newQueries = editableQueries.filter((_, i) => i !== idx)
-                                setEditableQueries(newQueries)
-                                queryInputRefs.current = queryInputRefs.current.filter((_, i) => i !== idx)
-                              }}
-                              className="h-10 w-10 shrink-0"
-                            >
-                              ×
-                            </Button>
+                            <IconTooltip label={t("workspace.sources.overheidDialog.queryEditor.removeQuery")}>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  const newQueries = editableQueries.filter((_, i) => i !== idx)
+                                  setEditableQueries(newQueries)
+                                  queryInputRefs.current = queryInputRefs.current.filter((_, i) => i !== idx)
+                                }}
+                                className="h-10 w-10 shrink-0"
+                                aria-label={t("workspace.sources.overheidDialog.queryEditor.removeQuery")}
+                              >
+                                ×
+                              </Button>
+                            </IconTooltip>
                           )}
                         </div>
                       ))}

@@ -34,6 +34,7 @@ import {
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 interface DocumentViewerClientProps {
   workspaceId: string
@@ -768,14 +769,17 @@ export function DocumentViewerClient({
                   {controls.pageNumber} of {controls.numPages || "?"}
                 </span>
                 <div className="h-6 w-px bg-border" />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={controls.zoomOut}
-                  disabled={controls.scale <= (controls.minScale ?? 0.5)}
-                >
-                  <ZoomOut className="h-4 w-4" />
-                </Button>
+                <IconTooltip label={t("workspace.documents.viewer.zoomOut")}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={controls.zoomOut}
+                    disabled={controls.scale <= (controls.minScale ?? 0.5)}
+                    aria-label={t("workspace.documents.viewer.zoomOut")}
+                  >
+                    <ZoomOut className="h-4 w-4" />
+                  </Button>
+                </IconTooltip>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="gap-2 px-2">
@@ -795,14 +799,17 @@ export function DocumentViewerClient({
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={controls.zoomIn}
-                  disabled={controls.scale >= (controls.maxScale ?? 3.0)}
-                >
-                  <ZoomIn className="h-4 w-4" />
-                </Button>
+                <IconTooltip label={t("workspace.documents.viewer.zoomIn")}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={controls.zoomIn}
+                    disabled={controls.scale >= (controls.maxScale ?? 3.0)}
+                    aria-label={t("workspace.documents.viewer.zoomIn")}
+                  >
+                    <ZoomIn className="h-4 w-4" />
+                  </Button>
+                </IconTooltip>
                 {controls.fitToWidth && (
                   <>
                     <div className="h-6 w-px bg-border" />
@@ -812,12 +819,21 @@ export function DocumentViewerClient({
                           variant={controls.fitMode === "width" ? "secondary" : "ghost"}
                           size="sm"
                           onClick={controls.fitToWidth}
+                          aria-label={
+                            controls.fitMode === "width"
+                              ? t("workspace.documents.viewer.disableFitToWidth")
+                              : t("workspace.documents.viewer.fitToWidth")
+                          }
                         >
                           <ChevronsLeftRight className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>{controls.fitMode === "width" ? "Disable fit to width" : "Fit to width"}</p>
+                        <p>
+                          {controls.fitMode === "width"
+                            ? t("workspace.documents.viewer.disableFitToWidth")
+                            : t("workspace.documents.viewer.fitToWidth")}
+                        </p>
                       </TooltipContent>
                     </Tooltip>
                   </>
@@ -832,19 +848,23 @@ export function DocumentViewerClient({
                           size="sm"
                           onClick={navigateToPreviousHighlight}
                           disabled={finalHighlights.length === 0}
+                          aria-label={t("workspace.documents.viewer.previousHighlight")}
                         >
                           <ChevronUp className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Previous highlight</p>
+                        <p>{t("workspace.documents.viewer.previousHighlight")}</p>
                       </TooltipContent>
                     </Tooltip>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span 
                           className="text-xs text-muted-foreground min-w-[3rem] text-center cursor-default"
-                          aria-label={`Highlight ${currentHighlightIndex !== null ? currentHighlightIndex + 1 : 0} of ${finalHighlights.length}`}
+                          aria-label={t("workspace.documents.viewer.highlightOf", undefined, {
+                            current: currentHighlightIndex !== null ? currentHighlightIndex + 1 : 0,
+                            total: finalHighlights.length,
+                          })}
                         >
                           {currentHighlightIndex !== null && finalHighlights.length > 0
                             ? `${currentHighlightIndex + 1} / ${finalHighlights.length}`
@@ -852,7 +872,7 @@ export function DocumentViewerClient({
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Use <kbd className="px-1 py-0.5 text-xs font-semibold bg-muted rounded">n</kbd> for next, <kbd className="px-1 py-0.5 text-xs font-semibold bg-muted rounded">p</kbd> for previous</p>
+                        <p>{t("workspace.documents.viewer.highlightNavHint")}</p>
                       </TooltipContent>
                     </Tooltip>
                     <Tooltip>
@@ -862,12 +882,13 @@ export function DocumentViewerClient({
                           size="sm"
                           onClick={navigateToNextHighlight}
                           disabled={finalHighlights.length === 0}
+                          aria-label={t("workspace.documents.viewer.nextHighlight")}
                         >
                           <ChevronDownIcon className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Next highlight</p>
+                        <p>{t("workspace.documents.viewer.nextHighlight")}</p>
                       </TooltipContent>
                     </Tooltip>
                     <div className="h-6 w-px bg-border" />
@@ -879,6 +900,11 @@ export function DocumentViewerClient({
                       variant={autoHighlight ? "secondary" : "ghost"}
                       size="sm"
                       onClick={() => setAutoHighlight(!autoHighlight)}
+                      aria-label={
+                        autoHighlight
+                          ? t("workspace.documents.viewer.hideHighlights")
+                          : t("workspace.documents.viewer.showHighlights")
+                      }
                     >
                       <Highlighter className={cn(
                         "h-4 w-4",
@@ -887,7 +913,11 @@ export function DocumentViewerClient({
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>{autoHighlight ? "Hide highlights" : "Show highlights"}</p>
+                    <p>
+                      {autoHighlight
+                        ? t("workspace.documents.viewer.hideHighlights")
+                        : t("workspace.documents.viewer.showHighlights")}
+                    </p>
                   </TooltipContent>
                 </Tooltip>
               </>
@@ -898,13 +928,13 @@ export function DocumentViewerClient({
                 <Tooltip>
                   <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon" asChild>
-                  <a href={documentUrl} target="_blank" rel="noopener noreferrer">
+                  <a href={documentUrl} target="_blank" rel="noopener noreferrer" aria-label={t("workspace.documents.viewer.download")}>
                     <Download className="h-4 w-4" />
                   </a>
                 </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Download</p>
+                    <p>{t("workspace.documents.viewer.download")}</p>
                   </TooltipContent>
                 </Tooltip>
               </>

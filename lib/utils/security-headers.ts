@@ -45,14 +45,25 @@ function getCSP(): string {
     "https://*.upstash.io",
   ]
   if (isDev) {
-    connectSources.push("https://vercel.live")
+    connectSources.push(
+      "http://localhost:54321",
+      "http://127.0.0.1:54321",
+      "ws://localhost:54321",
+      "ws://127.0.0.1:54321",
+      "https://vercel.live",
+    )
+  }
+
+  const imageSources = ["'self'", "data:", "blob:", "https:"]
+  if (isDev) {
+    imageSources.push("http://localhost:54321", "http://127.0.0.1:54321")
   }
 
   const directives = [
     "default-src 'self'",
     `script-src ${scriptSources.join(" ")}`,
     `style-src ${styleSources.join(" ")}`,
-    "img-src 'self' data: https:",
+    `img-src ${imageSources.join(" ")}`,
     "font-src 'self' data:",
     `connect-src ${connectSources.join(" ")}`,
     "worker-src 'self' blob:",
@@ -61,8 +72,10 @@ function getCSP(): string {
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
-    "upgrade-insecure-requests",
   ]
+  if (!isDev) {
+    directives.push("upgrade-insecure-requests")
+  }
 
   return directives.join("; ")
 }

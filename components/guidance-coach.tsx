@@ -11,6 +11,7 @@ import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { trackGuidanceEvent } from "@/lib/guidance/telemetry"
 import { PIPELINE_STAGES, type GuidancePipelineSnapshot, type PipelineStageId } from "@/lib/guidance/pipeline"
 import type { GuidanceJob, GuidanceMode } from "@/lib/guidance/jobs"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 type HelpChatMessage = {
   id: string
@@ -334,22 +335,26 @@ export function GuidanceCoach({
             <label htmlFor="guidance-mode-switch" className="text-xs font-medium">
               {t("guidance.mode.guided")}
             </label>
-            <Switch
-              id="guidance-mode-switch"
-              checked={mode === "guided"}
-              onCheckedChange={(checked) => void persistMode(checked ? "guided" : "expert")}
-              aria-label={t("guidance.mode.toggleSr")}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setOpen(false)}
-              aria-label={t("guidance.coach.closePanel")}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <IconTooltip label={t("guidance.mode.toggleSr")}>
+              <Switch
+                id="guidance-mode-switch"
+                checked={mode === "guided"}
+                onCheckedChange={(checked) => void persistMode(checked ? "guided" : "expert")}
+                aria-label={t("guidance.mode.toggleSr")}
+              />
+            </IconTooltip>
+            <IconTooltip label={t("guidance.coach.closePanel")}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setOpen(false)}
+                aria-label={t("guidance.coach.closePanel")}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </IconTooltip>
           </div>
         </header>
 
@@ -517,16 +522,18 @@ export function GuidanceCoach({
                     disabled={askBusy}
                     aria-label={t("guidance.header.help")}
                   />
-                  <Button
-                    type="submit"
-                    variant="ghost"
-                    size="icon"
-                    disabled={askBusy || !ask.trim()}
-                    className="absolute bottom-1.5 right-1.5 h-7 w-7"
-                    aria-label={t("guidance.coach.send")}
-                  >
-                    {askBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                  </Button>
+                  <IconTooltip label={t("guidance.coach.send")}>
+                    <Button
+                      type="submit"
+                      variant="ghost"
+                      size="icon"
+                      disabled={askBusy || !ask.trim()}
+                      className="absolute bottom-1.5 right-1.5 h-7 w-7"
+                      aria-label={t("guidance.coach.send")}
+                    >
+                      {askBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                    </Button>
+                  </IconTooltip>
                 </div>
                 <p className="sr-only">{t("guidance.chat.programmeAssistantHint")}</p>
               </form>

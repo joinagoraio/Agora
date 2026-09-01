@@ -2,7 +2,7 @@ export const HELP_GLOSSARY: Record<string, string> = {
   authority:
     "Your authority (province, municipality, or department). Shared documents, people, templates, specialists. Storage name: space. Chrome shows the instance name.",
   programme:
-    "One environmental programme. Opening it is the workbench (overview, documents, analysis, chapters, review, export). Result: one official programme. Storage: workspace kind environmental_programme.",
+    "One programme. Opening it is the workbench (overview, documents, analysis, chapters, review, export). Result: one official programme document. Storage: workspace.",
   documents:
     "Files this programme may use. Bound documents have a role: vision, effects report, handbook, existing policy, or other.",
   research:
@@ -27,11 +27,11 @@ const GLOSSARY_ALIASES: Record<string, string> = {
 }
 
 export const HELP_CORPUS = `
-Agora produces environmental programmes under the Environment and Planning Act.
+Agora is where a team produces programmes: analyse sources, draft chapters, review, and export one official document.
 
 Display names (never use storage names in answers to users):
 - Authority (NL: Bevoegd gezag) — tenant. Chrome shows the proper name (e.g. Provincie Flevoland). URL still /spaces.
-- Programme — one environmental programme. Home is /workspaces/{id}/programme (Overview, then stages). One programme → one official programme document (chapters inside).
+- Programme — one programme. Home is /workspaces/{id}/programme (Overview, then stages). One programme → one official programme document (chapters inside). Some programmes bind a vision and an effects report; those are document roles, not the product name.
 - Vision (omgevingsvisie) — authority Document with role environmental vision. Programmes bind it. It is not a programme.
 - Documents — shared on the authority, or on a programme with a role. Not a Knowledge cluster (files/inherited/evidence/notes).
 - Ask — programme assistant (sources and drafts). Help — how Agora works. Separate.

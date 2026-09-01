@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Send, Loader2, ExternalLink, FileText, X, Plus, CircleStop, Highlighter } from "lucide-react"
+import { IconTooltip } from "@/components/icon-tooltip"
 import ReactMarkdown from "react-markdown"
 import Link from "next/link"
 import { buildDocumentUrlFromSource } from "@/lib/utils/document-linking"
@@ -1739,25 +1740,31 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
             onKeyDown={handleTextareaKeyDown}
           />
           {isLoading && (
+            <IconTooltip label={t("workspace.chat.interface.input.stop")} className="absolute bottom-2 right-11">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={handleStop}
+                className="h-6 w-6 p-0"
+                aria-label={t("workspace.chat.interface.input.stop")}
+              >
+                <CircleStop className="h-3 w-3" />
+              </Button>
+            </IconTooltip>
+          )}
+          <IconTooltip label={t("workspace.chat.interface.input.send")} className="absolute bottom-2 right-3">
             <Button
-              type="button"
+              type="submit"
               variant="ghost"
               size="icon"
-              onClick={handleStop}
-              className="absolute bottom-2 right-11 h-6 w-6 p-0"
+              disabled={isLoading || !safeInput.trim()}
+              className="h-6 w-6 p-0"
+              aria-label={t("workspace.chat.interface.input.send")}
             >
-              <CircleStop className="h-3 w-3" />
+              {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
             </Button>
-          )}
-          <Button
-            type="submit"
-            variant="ghost"
-            size="icon"
-            disabled={isLoading || !safeInput.trim()}
-            className="absolute bottom-2 right-3 h-6 w-6 p-0"
-          >
-            {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-          </Button>
+          </IconTooltip>
         </form>
         <p className="text-xs text-muted-foreground pl-3">{t("workspace.chat.interface.input.hint")}</p>
 
@@ -1987,14 +1994,16 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                                   >
                                     <div className="flex items-center justify-between gap-2 pb-1 text-[11px] uppercase tracking-wide text-muted-foreground/80">
                                       <span className="truncate">{authorName}</span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveNote(note.id)}
-                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                        aria-label={t("workspace.sections.notes.contextRemove")}
-                                      >
-                                        <X className="h-3 w-3" />
-                                      </button>
+                                      <IconTooltip label={t("workspace.sections.notes.contextRemove")}>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveNote(note.id)}
+                                          className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                          aria-label={t("workspace.sections.notes.contextRemove")}
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </IconTooltip>
                                     </div>
                                     <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">{preview}</p>
                                   </div>
@@ -2027,14 +2036,16 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                                   >
                                     <div className="flex items-center justify-between gap-2 pb-1 text-[11px] uppercase tracking-wide text-muted-foreground/80">
                                       <span className="truncate line-through">{authorName}</span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRestoreNote(note.id)}
-                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                        aria-label={t("workspace.sections.notes.contextRestore")}
-                                      >
-                                        <Plus className="h-3 w-3" />
-                                      </button>
+                                      <IconTooltip label={t("workspace.sections.notes.contextRestore")}>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRestoreNote(note.id)}
+                                          className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                          aria-label={t("workspace.sections.notes.contextRestore")}
+                                        >
+                                          <Plus className="h-3 w-3" />
+                                        </button>
+                                      </IconTooltip>
                                     </div>
                                     <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/80 line-through">
                                       {preview}

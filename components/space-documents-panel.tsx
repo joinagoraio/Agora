@@ -20,6 +20,7 @@ import {
 import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 export type SpaceDocumentItem = {
   id: string
@@ -163,28 +164,32 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 rounded-md bg-background p-1">
-            <Button
-              type="button"
-              variant={viewMode === "list" ? "secondary" : "ghost"}
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setViewMode("list")}
-              aria-pressed={viewMode === "list"}
-            >
-              <List className="h-4 w-4" />
-              <span className="sr-only">{t("space.documents.panel.viewList")}</span>
-            </Button>
-            <Button
-              type="button"
-              variant={viewMode === "grid" ? "secondary" : "ghost"}
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setViewMode("grid")}
-              aria-pressed={viewMode === "grid"}
-            >
-              <LayoutGrid className="h-4 w-4" />
-              <span className="sr-only">{t("space.documents.panel.viewGrid")}</span>
-            </Button>
+            <IconTooltip label={t("space.documents.panel.viewList")}>
+              <Button
+                type="button"
+                variant={viewMode === "list" ? "secondary" : "ghost"}
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setViewMode("list")}
+                aria-pressed={viewMode === "list"}
+              >
+                <List className="h-4 w-4" />
+                <span className="sr-only">{t("space.documents.panel.viewList")}</span>
+              </Button>
+            </IconTooltip>
+            <IconTooltip label={t("space.documents.panel.viewGrid")}>
+              <Button
+                type="button"
+                variant={viewMode === "grid" ? "secondary" : "ghost"}
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setViewMode("grid")}
+                aria-pressed={viewMode === "grid"}
+              >
+                <LayoutGrid className="h-4 w-4" />
+                <span className="sr-only">{t("space.documents.panel.viewGrid")}</span>
+              </Button>
+            </IconTooltip>
           </div>
           {canUpload && (
             <SpaceUploadDocumentDialog
@@ -266,10 +271,14 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                   <CardFooter className="flex items-center justify-end gap-2">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical className="h-4 w-4" />
-                          <span className="sr-only">{t("space.documents.panel.dropdownMenuSr")}</span>
-                        </Button>
+                        <span className="inline-flex">
+                          <IconTooltip label={t("space.documents.panel.dropdownMenuSr")}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVertical className="h-4 w-4" />
+                              <span className="sr-only">{t("space.documents.panel.dropdownMenuSr")}</span>
+                            </Button>
+                          </IconTooltip>
+                        </span>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-40">
                         {doc.payload?.file_url ? (
@@ -375,10 +384,14 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                           <div className="flex justify-end">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <MoreVertical className="h-4 w-4" />
-                                  <span className="sr-only">{t("space.documents.panel.dropdownMenuSr")}</span>
-                                </Button>
+                                <span className="inline-flex">
+                                  <IconTooltip label={t("space.documents.panel.dropdownMenuSr")}>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                      <MoreVertical className="h-4 w-4" />
+                                      <span className="sr-only">{t("space.documents.panel.dropdownMenuSr")}</span>
+                                    </Button>
+                                  </IconTooltip>
+                                </span>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-40">
                                 {doc.payload?.file_url ? (

@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { IconTooltip } from "@/components/icon-tooltip"
 import { MessageSquare, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/use-i18n"
@@ -22,20 +23,20 @@ export function ChatToggleButton({
 }: ChatToggleButtonProps) {
   const { t } = useI18n()
 
+  const label = isOpen ? t("workspace.chat.toggle.close") : t("workspace.chat.toggle.open")
+
   return (
-    <Button
-      onClick={onClick}
-      size="lg"
-      style={{ right: offsetRight, bottom: offsetBottom }}
+    <IconTooltip
+      label={label}
       className={cn(
         "fixed z-[60] h-10 w-10 rounded-full shadow-lg transition-transform hover:scale-110",
-        className
+        className,
       )}
+      style={{ right: offsetRight, bottom: offsetBottom }}
     >
-      {isOpen ? <X className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
-      <span className="sr-only">
-        {isOpen ? t("workspace.chat.toggle.close") : t("workspace.chat.toggle.open")}
-      </span>
-    </Button>
+      <Button onClick={onClick} size="lg" className="h-10 w-10 rounded-full" aria-label={label}>
+        {isOpen ? <X className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
+      </Button>
+    </IconTooltip>
   )
 }

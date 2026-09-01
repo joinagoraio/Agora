@@ -19,7 +19,21 @@ export async function listProgrammeComments(
   if (artefactId) query = query.eq("artefact_id", artefactId)
   const { data, error } = await query
   if (error) return { error: error.message, data: [] }
-  return { data: data || [] }
+  const rows = data || []
+  const ids = [...new Set(rows.map((row) => row.created_by).filter((id): id is string => Boolean(id)))]
+  const { data: profiles } = ids.length
+    ? await supabase.from("profiles").select("id, email, full_name, avatar_url").in("id", ids)
+    : { data: [] as Array<{ id: string; email: string; full_name: string | null; avatar_url: string | null }> }
+  return {
+    data: rows.map((row) => {
+      const profile = (profiles || []).find((item) => item.id === row.created_by)
+      return {
+        ...row,
+        authorName: profile?.full_name || profile?.email || null,
+        authorAvatarUrl: profile?.avatar_url || null,
+      }
+    }),
+  }
 }
 
 export async function addProgrammeComment(input: {

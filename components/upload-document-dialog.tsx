@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertTriangle, Upload, FileText, X, Loader2 } from "lucide-react"
+import { IconTooltip } from "@/components/icon-tooltip"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
@@ -397,15 +398,18 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
                       </div>
                     </div>
                     {!isUploading && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeFile(index)}
-                        className="h-8 w-8 shrink-0"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+                      <IconTooltip label={t("workspace.documents.upload.removeFile")}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeFile(index)}
+                          className="h-8 w-8 shrink-0"
+                          aria-label={t("workspace.documents.upload.removeFile")}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </IconTooltip>
                     )}
                     {isUploading && (
                       <div className="flex items-center gap-2 shrink-0">

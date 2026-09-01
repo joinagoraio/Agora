@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Loader2, Upload, X } from "lucide-react"
+import { IconTooltip } from "@/components/icon-tooltip"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
@@ -246,16 +247,18 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
                   : t("space.documents.upload.noFileSelected")}
               </span>
               {file && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={clearSelectedFile}
-                  className="h-10 w-10 hover:bg-red-500 group"
-                >
-                  <X className="h-4 w-4 group-hover:text-white" />
-                  <span className="sr-only">{t("space.documents.upload.removeFile")}</span>
-                </Button>
+                <IconTooltip label={t("space.documents.upload.removeFile")}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={clearSelectedFile}
+                    className="h-10 w-10 hover:bg-red-500 group"
+                    aria-label={t("space.documents.upload.removeFile")}
+                  >
+                    <X className="h-4 w-4 group-hover:text-white" />
+                  </Button>
+                </IconTooltip>
               )}
             </div>
             <p className="text-xs text-muted-foreground">{t("space.documents.upload.fileHint")}</p>

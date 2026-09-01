@@ -20,11 +20,15 @@ import { createClient } from "@/lib/supabase/client"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage, isSupportedLanguage } from "@/lib/i18n/config"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
+import { UserAvatar } from "@/components/user-avatar"
+import { IconTooltip } from "@/components/icon-tooltip"
+import { PROFILE_UPDATED_EVENT } from "@/lib/profile/display-name"
 
 export function UserMenu() {
   const router = useRouter()
   const [userName, setUserName] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
   const [isUpdatingLanguage, setIsUpdatingLanguage] = useState(false)
   const { language, setLanguage: setLanguageFn, t } = useI18n()
@@ -42,17 +46,26 @@ export function UserMenu() {
       } = await supabase.auth.getUser()
       
       if (user) {
-        // Try to get name from user_metadata or use email
-        const name = user.user_metadata?.full_name || 
-                     user.user_metadata?.name || 
-                     user.email?.split("@")[0] || 
-                     "User"
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name, avatar_url")
+          .eq("id", user.id)
+          .maybeSingle()
+        const name =
+          profile?.full_name ||
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          user.email?.split("@")[0] ||
+          "User"
         setUserName(name)
         setUserEmail(user.email || null)
+        setAvatarUrl(profile?.avatar_url || user.user_metadata?.avatar_url || null)
       }
     }
     
-    fetchUser()
+    void fetchUser()
+    window.addEventListener(PROFILE_UPDATED_EVENT, fetchUser)
+    return () => window.removeEventListener(PROFILE_UPDATED_EVENT, fetchUser)
   }, [])
 
   const handleSignOut = async () => {
@@ -137,11 +150,13 @@ export function UserMenu() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon">
-          <User className="h-5 w-5" />
-        </Button>
-      </DropdownMenuTrigger>
+      <IconTooltip label={t("common.tooltips.accountMenu")}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="rounded-full" aria-label={t("common.tooltips.accountMenu")}>
+            <UserAvatar name={userName} url={avatarUrl} />
+          </Button>
+        </DropdownMenuTrigger>
+      </IconTooltip>
         <DropdownMenuContent align="end" className="w-64">
         {userName && (
           <>

@@ -111,6 +111,7 @@ import { ProgrammeOutlineEditor } from "@/components/programme-outline-editor"
 import { ProgrammeChapterEditor } from "@/components/programme-chapter-editor"
 import { ProgrammeEffectsPanel } from "@/components/programme-effects-panel"
 import { ProgrammePolicyGraph } from "@/components/programme-policy-graph"
+import { UserAvatar } from "@/components/user-avatar"
 import { WorkspaceNotesPanel, type WorkspaceNote } from "@/components/workspace-notes-panel"
 import { CircleHelp } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -2037,8 +2038,12 @@ export function ProgrammeWorkbench({
           <ul className="text-sm">
             {comments.map((c) => (
               <li key={c.id} className="flex items-center justify-between gap-2">
-                <span className={c.resolved ? "line-through text-muted-foreground" : ""}>
-                  {c.artefact_type}: {c.body}
+                <span className="flex min-w-0 items-center gap-2">
+                  <UserAvatar name={c.authorName} url={c.authorAvatarUrl} className="h-6 w-6 shrink-0" />
+                  <span className={c.resolved ? "line-through text-muted-foreground" : ""}>
+                    {c.authorName ? `${c.authorName} · ` : ""}
+                    {c.artefact_type}: {c.body}
+                  </span>
                 </span>
                 <Button
                   size="sm"

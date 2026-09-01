@@ -34,6 +34,8 @@ import {
   listSectionPresence,
 } from "@/lib/actions/collaboration"
 import { addProgrammeComment, listProgrammeComments } from "@/lib/actions/comments"
+import { UserAvatar } from "@/components/user-avatar"
+import { IconTooltip } from "@/components/icon-tooltip"
 import type { ProgrammeBindings, ProgrammeOutlineNode } from "@/lib/programme/domain"
 import type { ChapterWorkflowStatus } from "@/lib/programme/review-policy"
 
@@ -72,9 +74,11 @@ export function ProgrammeChapterEditor({
   const [compareVersionA, setCompareVersionA] = useState("")
   const [compareVersionB, setCompareVersionB] = useState("")
   const [versionDiff, setVersionDiff] = useState<Array<{ path: string; before: string; after: string }>>([])
-  const [alsoOpen, setAlsoOpen] = useState<string[]>([])
+  const [alsoOpen, setAlsoOpen] = useState<Array<{ name: string; avatarUrl: string | null }>>([])
   const [chapterComment, setChapterComment] = useState("")
-  const [chapterComments, setChapterComments] = useState<Array<{ id: string; body: string; resolved: boolean }>>([])
+  const [chapterComments, setChapterComments] = useState<
+    Array<{ id: string; body: string; resolved: boolean; authorName?: string | null; authorAvatarUrl?: string | null }>
+  >([])
 
   const loadNodes = (templateId: string) => {
     startTransition(async () => {
@@ -115,12 +119,12 @@ export function ProgrammeChapterEditor({
       } else setLockHolder(null)
       await heartbeatSectionPresence(workspaceId, key)
       const presence = await listSectionPresence(workspaceId, key)
-      setAlsoOpen((presence.data || []).map((row) => row.name))
+      setAlsoOpen((presence.data || []).map((row) => ({ name: row.name, avatarUrl: row.avatarUrl })))
     })
     const timer = window.setInterval(() => {
       void heartbeatSectionPresence(workspaceId, key).then(() =>
         listSectionPresence(workspaceId, key).then((presence) =>
-          setAlsoOpen((presence.data || []).map((row) => row.name)),
+          setAlsoOpen((presence.data || []).map((row) => ({ name: row.name, avatarUrl: row.avatarUrl }))),
         ),
       )
     }, 20000)
@@ -485,9 +489,24 @@ export function ProgrammeChapterEditor({
                 )}
                 {lockHolder && <p className="text-xs text-destructive">{lockHolder}</p>}
                 {alsoOpen.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {t("workspace.programme.alsoOpen", undefined, { names: alsoOpen.join(", ") })}
-                  </p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="flex -space-x-1">
+                      {alsoOpen.map((person) => (
+                        <IconTooltip key={`${person.name}-${person.avatarUrl || "none"}`} label={person.name}>
+                          <UserAvatar
+                            name={person.name}
+                            url={person.avatarUrl}
+                            className="h-5 w-5 ring-2 ring-background"
+                          />
+                        </IconTooltip>
+                      ))}
+                    </span>
+                    <span>
+                      {t("workspace.programme.alsoOpen", undefined, {
+                        names: alsoOpen.map((person) => person.name).join(", "),
+                      })}
+                    </span>
+                  </div>
                 )}
                 {showHistory && chapterVersions.length > 1 && (
                   <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -552,9 +571,17 @@ export function ProgrammeChapterEditor({
                     <p className="text-xs font-medium">{t("workspace.programme.chapterComments")}</p>
                     <ul className="space-y-1 text-xs">
                       {chapterComments.map((comment) => (
-                        <li key={comment.id}>
-                          {comment.resolved ? "[done] " : ""}
-                          {comment.body}
+                        <li key={comment.id} className="flex items-start gap-2">
+                          <UserAvatar
+                            name={comment.authorName}
+                            url={comment.authorAvatarUrl}
+                            className="mt-0.5 h-5 w-5"
+                          />
+                          <span>
+                            {comment.resolved ? "[done] " : ""}
+                            {comment.authorName ? `${comment.authorName}: ` : ""}
+                            {comment.body}
+                          </span>
                         </li>
                       ))}
                     </ul>

@@ -5,6 +5,7 @@ import { ErrorBoundary } from "@/components/error-boundary"
 import { Toaster } from "sonner"
 import { getServerDictionary } from "@/lib/i18n/server"
 import { I18nClientProvider } from "@/components/providers/i18n-client-provider"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -36,7 +37,9 @@ export default async function RootLayout({
     <html lang={language}>
       <body className={`font-sans antialiased bg-white`}>
         <I18nClientProvider initialLanguage={language} initialMessages={messages}>
-          <ErrorBoundary>{children}</ErrorBoundary>
+          <TooltipProvider delayDuration={400}>
+            <ErrorBoundary>{children}</ErrorBoundary>
+          </TooltipProvider>
         <Toaster position="bottom-center" richColors closeButton />
         <Analytics />
         </I18nClientProvider>

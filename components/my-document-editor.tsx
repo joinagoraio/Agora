@@ -28,6 +28,7 @@ import {
 import { deleteDocument, generateWorkspaceDocumentDraft, updateWorkspaceDocument } from "@/lib/actions/document"
 import { CircleStop, Loader2, MoreVertical, Save, Sparkles, Trash2 } from "lucide-react"
 import { RichTextEditor } from "@/components/rich-text-editor"
+import { IconTooltip } from "@/components/icon-tooltip"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
 
@@ -259,9 +260,13 @@ export function MyDocumentEditor({
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-9 w-9">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
+              <span className="inline-flex">
+                <IconTooltip label={t("common.tooltips.moreActions")}>
+                  <Button variant="ghost" size="icon" className="h-9 w-9" aria-label={t("common.tooltips.moreActions")}>
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </IconTooltip>
+              </span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem
@@ -293,16 +298,18 @@ export function MyDocumentEditor({
               <Label htmlFor="document-instructions">{t("workspace.documents.editor.instructionsLabel")}</Label>
               <div className="flex items-center gap-2">
                 {isGenerating && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleStopGeneration}
-                    className="h-6 w-6 p-0"
-                    title={t("workspace.documents.editor.stopGeneration")}
-                  >
-                    <CircleStop className="h-3 w-3" />
-                  </Button>
+                  <IconTooltip label={t("workspace.documents.editor.stopGeneration")}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleStopGeneration}
+                      className="h-6 w-6 p-0"
+                      aria-label={t("workspace.documents.editor.stopGeneration")}
+                    >
+                      <CircleStop className="h-3 w-3" />
+                    </Button>
+                  </IconTooltip>
                 )}
                 <Button
                   type="button"

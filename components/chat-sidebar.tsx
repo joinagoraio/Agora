@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 interface ChatSidebarProps {
   workspaceId: string
@@ -886,10 +887,15 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
             </h2>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={handleNewChat} title={t("workspace.chat.actions.newChat")}>
-              <Plus className="h-5 w-5" />
-            </Button>
-            <Button 
+            <IconTooltip label={t("workspace.chat.actions.newChat")}>
+              <Button variant="ghost" size="icon" onClick={handleNewChat} aria-label={t("workspace.chat.actions.newChat")}>
+                <Plus className="h-5 w-5" />
+              </Button>
+            </IconTooltip>
+            <IconTooltip
+              label={isListExpanded ? t("workspace.chat.actions.collapseList") : t("workspace.chat.actions.expandList")}
+            >
+              <Button 
               variant="ghost" 
               size="icon" 
               onClick={() => {
@@ -918,13 +924,14 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
                 
                 // Mark as manually adjusted so auto-update doesn't override
                 hasManuallyResizedRef.current = true
-              }} 
-              title={
+              }}
+              aria-label={
                 isListExpanded ? t("workspace.chat.actions.collapseList") : t("workspace.chat.actions.expandList")
               }
             >
               <List className="h-5 w-5" />
             </Button>
+            </IconTooltip>
           </div>
         </div>
       </div>
@@ -1001,9 +1008,13 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
                           onClick={(e) => e.stopPropagation()}
                           className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-auto"
                         >
-                          <Button variant="ghost" size="icon" className="h-7 w-7 p-1.5 hover:bg-accent-foreground/10">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
+                          <span className="inline-flex">
+                            <IconTooltip label={t("common.tooltips.moreActions")}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 p-1.5 hover:bg-accent-foreground/10" aria-label={t("common.tooltips.moreActions")}>
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </IconTooltip>
+                          </span>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem

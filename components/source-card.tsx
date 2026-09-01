@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 interface SourceCardProps {
   source: {
@@ -184,9 +185,13 @@ export function SourceCard({ source }: SourceCardProps) {
           {!isWorkspaceSource && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isDeleting}>
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
+                <span className="inline-flex">
+                  <IconTooltip label={t("common.tooltips.moreActions")}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isDeleting} aria-label={t("common.tooltips.moreActions")}>
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </IconTooltip>
+                </span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={handleTest} disabled={isTesting}>

@@ -35,6 +35,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { UserAvatar } from "@/components/user-avatar"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 interface WorkspaceSettingsProps {
   workspace: {
@@ -227,7 +229,16 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
 
                   return (
                     <TableRow key={member.user_id}>
-                      <TableCell>{member.profiles?.full_name || "—"}</TableCell>
+                      <TableCell>
+                        <span className="flex items-center gap-2">
+                          <UserAvatar
+                            name={member.profiles?.full_name || member.profiles?.email}
+                            url={member.profiles?.avatar_url}
+                            className="h-7 w-7"
+                          />
+                          {member.profiles?.full_name || "—"}
+                        </span>
+                      </TableCell>
                       <TableCell>{member.profiles?.email || "—"}</TableCell>
                       <TableCell>
                         {isWorkspaceMember ? (
@@ -368,14 +379,18 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
                         <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                aria-label={t("workspace.settings.invitations.table.actions")}
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
+                              <span className="inline-flex">
+                                <IconTooltip label={t("common.tooltips.moreActions")}>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    aria-label={t("workspace.settings.invitations.table.actions")}
+                                  >
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </IconTooltip>
+                              </span>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem

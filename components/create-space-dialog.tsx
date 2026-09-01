@@ -20,14 +20,16 @@ import { createSpace } from "@/lib/actions/space"
 import { Plus } from "lucide-react"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { IconTooltip } from "@/components/icon-tooltip"
 
-export function CreateSpaceDialog() {
+export function CreateSpaceDialog({ variant = "button" }: { variant?: "button" | "icon" }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const { t } = useI18n()
+  const triggerLabel = t("space.dashboard.createSpace.trigger")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,12 +65,28 @@ export function CreateSpaceDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          {t("space.dashboard.createSpace.trigger")}
-        </Button>
-      </DialogTrigger>
+      {variant === "icon" ? (
+        <IconTooltip label={triggerLabel}>
+          <DialogTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="size-5 rounded-full [&_svg]:size-3"
+              aria-label={triggerLabel}
+            >
+              <Plus className="size-3" />
+            </Button>
+          </DialogTrigger>
+        </IconTooltip>
+      ) : (
+        <DialogTrigger asChild>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            {triggerLabel}
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>

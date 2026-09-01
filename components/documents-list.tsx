@@ -50,6 +50,7 @@ import { FileIcon, defaultStyles } from "react-file-icon"
 import { getDocumentFileExtension } from "@/lib/utils/document-files"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 interface DocumentsListProps {
   workspaceId: string
@@ -569,9 +570,13 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                     {canManage && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
+                          <span className="inline-flex">
+                            <IconTooltip label={t("common.tooltips.moreActions")}>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t("common.tooltips.moreActions")}>
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </IconTooltip>
+                          </span>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           {doc.url && (

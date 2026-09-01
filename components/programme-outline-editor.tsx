@@ -6,6 +6,7 @@ import StarterKit from "@tiptap/starter-kit"
 import Heading from "@tiptap/extension-heading"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { IconTooltip } from "@/components/icon-tooltip"
 import {
   buildOutlineTree,
   outlineNodesToTipTapHtml,
@@ -174,26 +175,30 @@ export function ProgrammeOutlineEditor({
               <Plus className="mr-2 h-4 w-4" />
               {t("workspace.programme.outlineAddSection")}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              disabled={pending || !selectedId}
-              onClick={() => moveSelected("up")}
-              aria-label={t("workspace.programme.outlineMoveUp")}
-            >
-              <ArrowUp className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              disabled={pending || !selectedId}
-              onClick={() => moveSelected("down")}
-              aria-label={t("workspace.programme.outlineMoveDown")}
-            >
-              <ArrowDown className="h-4 w-4" />
-            </Button>
+            <IconTooltip label={t("workspace.programme.outlineMoveUp")}>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                disabled={pending || !selectedId}
+                onClick={() => moveSelected("up")}
+                aria-label={t("workspace.programme.outlineMoveUp")}
+              >
+                <ArrowUp className="h-4 w-4" />
+              </Button>
+            </IconTooltip>
+            <IconTooltip label={t("workspace.programme.outlineMoveDown")}>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                disabled={pending || !selectedId}
+                onClick={() => moveSelected("down")}
+                aria-label={t("workspace.programme.outlineMoveDown")}
+              >
+                <ArrowDown className="h-4 w-4" />
+              </Button>
+            </IconTooltip>
           </>
         )}
       </div>

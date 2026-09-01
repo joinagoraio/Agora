@@ -16,6 +16,7 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 export type WorkspaceNote = {
   id: string
@@ -448,19 +449,23 @@ export function WorkspaceNotesPanel({
                       ) : (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 rounded-full"
-                              disabled={deletingId === note.id}
-                            >
-                              {deletingId === note.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <MoreVertical className="h-4 w-4" />
-                              )}
-                              <span className="sr-only">{t("workspace.sections.notes.menu.label")}</span>
-                            </Button>
+                            <span className="inline-flex">
+                              <IconTooltip label={t("workspace.sections.notes.menu.label")}>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 rounded-full"
+                                  disabled={deletingId === note.id}
+                                >
+                                  {deletingId === note.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <MoreVertical className="h-4 w-4" />
+                                  )}
+                                  <span className="sr-only">{t("workspace.sections.notes.menu.label")}</span>
+                                </Button>
+                              </IconTooltip>
+                            </span>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem

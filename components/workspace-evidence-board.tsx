@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { IconTooltip } from "@/components/icon-tooltip"
 import { deleteWorkspaceItem } from "@/lib/actions/workspace-item"
 
 type EvidencePayload = {
@@ -483,19 +484,21 @@ function EvidenceCard({ item, workspaceId, currentUserId, initialComments, paren
                       </div>
                     </div>
                     {isOwner && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteComment(comment.id)}
-                        disabled={deletingId === comment.id}
-                      >
-                        {deletingId === comment.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                        <span className="sr-only">Delete comment</span>
-                      </Button>
+                      <IconTooltip label={t("common.tooltips.delete")}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteComment(comment.id)}
+                          disabled={deletingId === comment.id}
+                          aria-label={t("common.tooltips.delete")}
+                        >
+                          {deletingId === comment.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </IconTooltip>
                     )}
                   </div>
                   <p className="whitespace-pre-line text-sm leading-relaxed text-foreground/90">{comment.content}</p>

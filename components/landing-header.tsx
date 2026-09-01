@@ -6,6 +6,7 @@ import Link from "next/link"
 import { User } from "lucide-react"
 
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 export function LandingHeader() {
   const [showLogo, setShowLogo] = useState(false)
@@ -43,13 +44,15 @@ export function LandingHeader() {
           <Image src="/logo.svg" alt="AGORA" width={695} height={136} className="w-24 h-auto" priority />
         </div>
         <nav className="hidden items-center gap-4 md:flex">
-          <Link
-            href="/auth/login"
-            aria-label={t("common.navigation.signIn")}
-            className="text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <User className="h-5 w-5" />
-          </Link>
+          <IconTooltip label={t("common.navigation.signIn")}>
+            <Link
+              href="/auth/login"
+              aria-label={t("common.navigation.signIn")}
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <User className="h-5 w-5" />
+            </Link>
+          </IconTooltip>
         </nav>
       </div>
     </header>
