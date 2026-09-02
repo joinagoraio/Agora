@@ -22,7 +22,18 @@ try {
 
 function supabaseConnectSources() {
   const raw = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!raw || raw.includes("PLACEHOLDER") || raw.includes("placeholder")) return []
+  const placeholderOrigin = "https://__AGORA_SUPABASE_URL_PLACEHOLDER__"
+
+  // Docker builds bake this placeholder; docker-entrypoint.sh replaces it at boot.
+  // Skipping it meant production CSP never allowed the self-hosted API host.
+  if (!raw || raw.includes("PLACEHOLDER") || raw.includes("placeholder")) {
+    if (process.env.DOCKER_BUILD === "1") {
+      const host = placeholderOrigin.slice("https://".length)
+      return [placeholderOrigin, `wss://${host}`, `ws://${host}`]
+    }
+    return []
+  }
+
   try {
     const url = new URL(raw)
     return [url.origin, `wss://${url.host}`, `ws://${url.host}`]
