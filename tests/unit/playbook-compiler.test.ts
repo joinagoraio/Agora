@@ -103,4 +103,14 @@ describe("compileSystemPrompt (S1 spike)", () => {
       expect(emptied.systemPrompt).toContain("Dutch")
     },
   )
+
+  it("puts the shared programme-layer line on Ask, draft, analysis, and measures", () => {
+    for (const kind of ["chat", "draft", "analysis", "measures"] as const) {
+      const result = compileSystemPrompt({ kind, userLanguage: "English" })
+      expect(result.systemPrompt).toContain("Ask may draft")
+      expect(result.systemPrompt).toContain("Help may not")
+      expect(result.systemPrompt).toContain("write reports only")
+      expect(result.systemPrompt).toContain("document menu")
+    }
+  })
 })

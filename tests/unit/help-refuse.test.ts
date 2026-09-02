@@ -39,6 +39,18 @@ describe("help route isolation", () => {
     expect(HELP_SYSTEM_PROMPT).toMatch(/Never quote or request policy document bodies/)
     expect(HELP_SYSTEM_PROMPT).not.toMatch(/<p>/)
   })
+
+  it("teaches the document layers Help must describe", () => {
+    expect(HELP_SYSTEM_PROMPT).toMatch(/document menu/)
+    expect(HELP_SYSTEM_PROMPT).toMatch(/not as header icons/)
+    expect(HELP_SYSTEM_PROMPT).toMatch(/Read all/)
+    expect(HELP_SYSTEM_PROMPT).toMatch(/Focus/)
+    expect(HELP_SYSTEM_PROMPT).toMatch(/Document owner/)
+    expect(HELP_SYSTEM_PROMPT).toMatch(/Chapter owner/)
+    expect(HELP_SYSTEM_PROMPT).toMatch(/does not write chapters/)
+    expect(HELP_SYSTEM_PROMPT).toMatch(/Ask may draft/)
+    expect(HELP_SYSTEM_PROMPT).toMatch(/comments on the right/i)
+  })
 })
 
 describe("programme landing from job", () => {

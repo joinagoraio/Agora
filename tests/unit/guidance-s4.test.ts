@@ -55,4 +55,11 @@ describe("glossary aliases", () => {
     expect(glossaryDefinition("bound documents")).toBe(bindings)
     expect(glossaryDefinition("organisation")).toBe(glossaryDefinition("authority"))
   })
+
+  it("distinguishes document owner, chapter owner, and focus from jobs", () => {
+    expect(glossaryDefinition("document owner")).toMatch(/Not a job/)
+    expect(glossaryDefinition("chapter owner")).toMatch(/Not the assigned reviewer/)
+    expect(glossaryDefinition("read all")).toMatch(/Focus is write mode/)
+    expect(glossaryDefinition("job")).toMatch(/not document owner/)
+  })
 })
