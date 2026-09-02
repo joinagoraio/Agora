@@ -83,8 +83,8 @@ export default async function WorkspacePage({
     metadata: workspace.metadata as Record<string, unknown>,
   })
 
-  if (isProgrammeWorkspace && files !== "1") {
-    redirect(`/workspaces/${workspaceId}/programme`)
+  if (isProgrammeWorkspace) {
+    redirect(files === "1" ? `/workspaces/${workspaceId}/programme?view=knowledge` : `/workspaces/${workspaceId}/programme`)
   }
 
   // Get space details separately to avoid RLS issues with joins

@@ -764,6 +764,7 @@ export async function listProgrammeChapters(workspaceId: string) {
                 ? ((row.metadata as Record<string, unknown>).lastEditedBy as string)
                 : null,
           outlineNodeId,
+          content: typeof row.content === "string" ? row.content : "",
           hasBody: Boolean(typeof row.content === "string" && row.content.replace(/<[^>]+>/g, "").trim()),
         }
       }),

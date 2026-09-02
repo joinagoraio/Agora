@@ -81,7 +81,7 @@ export function moreNavSections(job: GuidanceJob, allSections: readonly string[]
 
 export function defaultProgrammeSection(job: GuidanceJob): string {
   if (job === "reviewer") return "review"
-  return "overview"
+  return "editor"
 }
 
 export function resolveProgrammeLandingSection(input: {

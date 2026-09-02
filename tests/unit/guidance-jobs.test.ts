@@ -37,8 +37,8 @@ describe("guidance jobs", () => {
     expect(primaryNavSections("author")).not.toContain("setup")
     expect(moreNavSections("author", PROGRAMME_WORKBENCH_SECTIONS)).toContain("setup")
     expect(defaultProgrammeSection("reviewer")).toBe("review")
-    expect(defaultProgrammeSection("author")).toBe("overview")
-    expect(defaultProgrammeSection("administrator")).toBe("overview")
+    expect(defaultProgrammeSection("author")).toBe("editor")
+    expect(defaultProgrammeSection("administrator")).toBe("editor")
     expect(primaryNavSections("author")).toContain("overview")
   })
 

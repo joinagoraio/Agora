@@ -8,6 +8,16 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Select,
   SelectContent,
@@ -18,7 +28,6 @@ import {
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { GuidanceCoach } from "@/components/guidance-coach"
 import { UserMenu } from "@/components/user-menu"
-import { cn } from "@/lib/utils"
 import {
   canShowProgrammeConfiguration,
   effectiveJob,
@@ -30,7 +39,6 @@ import {
 import { deriveGuidancePipeline, pipelineInputFromWorkbench, STAGE_TO_SECTION } from "@/lib/guidance/pipeline"
 import { listProgrammeOutlineNodes } from "@/lib/actions/outline"
 import {
-  bindProgrammeDocumentRole,
   bindWorkspaceAgents,
   bindWorkspaceTemplate,
   ensureDefaultAgentsBound,
@@ -47,7 +55,6 @@ import {
   listProgrammeChapters,
   assignChapterReviewer,
   setChapterWorkflowStatus,
-  seedProgrammeCorpusFixtures,
   updateProgrammeBindings,
   updateProgrammePolicies,
 } from "@/lib/actions/programme"
@@ -76,7 +83,6 @@ import { listArtefactVersions, restoreArtefactVersion, compareArtefactVersions }
 import { listGenerationRuns, getProgrammeObservabilityMetrics } from "@/lib/actions/generation-run"
 import { runMarkdownOrDocxExport, buildAuditPackageJson } from "@/lib/actions/export"
 import {
-  bindPublishedProgrammeAsPolicy,
   getActiveProgrammePublication,
   listCitablePublications,
   publishProgrammeSnapshot,
@@ -90,29 +96,26 @@ import { convertPolicyProseToMeasures, findDuplicateMeasures, generateVisionSkel
 import { addProgrammeComment, listProgrammeComments, setProgrammeCommentResolved } from "@/lib/actions/comments"
 import {
   AGENT_STAGES,
-  DOCUMENT_ROLES,
   documentOriginFromMetadata,
   emptyProgrammeBindings,
   isProgrammeWorkbenchSection,
   PROGRAMME_WORKBENCH_SECTIONS,
   type DocumentOrigin,
-  type DocumentRole,
   type ProgrammeBindings,
   type ProgrammeWorkbenchSection,
   type WorkspaceKind,
 } from "@/lib/programme/domain"
-import { isChapterDocumentId } from "@/lib/programme/source-set-bindings"
 import { splitAnchorList } from "@/lib/programme/vision-path"
 import { ProgrammeOutlineEditor } from "@/components/programme-outline-editor"
 import { ProgrammeChapterEditor } from "@/components/programme-chapter-editor"
 import { ProgrammeEffectsPanel } from "@/components/programme-effects-panel"
 import { ProgrammePolicyGraph } from "@/components/programme-policy-graph"
+import { ProgrammeDocumentRoles } from "@/components/programme-document-roles"
+import { ProgrammeKnowledgeView } from "@/components/programme-knowledge-view"
 import { UserAvatar } from "@/components/user-avatar"
 import { WorkspaceNotesPanel, type WorkspaceNote } from "@/components/workspace-notes-panel"
-import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Check, CircleHelp } from "lucide-react"
-import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
 import { getDocumentFileExtension } from "@/lib/utils/document-files"
+import { ArrowLeft, CircleHelp, Menu } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 function StageHeading({ title, purpose }: { title: string; purpose: string }) {
@@ -135,6 +138,26 @@ function StageHeading({ title, purpose }: { title: string; purpose: string }) {
     </div>
   )
 }
+
+const SHEET_SECTIONS = new Set<ProgrammeWorkbenchSection>([
+  "overview",
+  "setup",
+  "corpus",
+  "analysis",
+  "outline",
+  "measures",
+  "effects",
+  "provenance",
+  "review",
+  "export",
+])
+
+const MENU_GROUPS: { id: "work" | "skeleton" | "properties" | "output"; sections: ProgrammeWorkbenchSection[] }[] = [
+  { id: "work", sections: ["analysis", "measures", "effects", "provenance", "review"] },
+  { id: "skeleton", sections: ["outline"] },
+  { id: "properties", sections: ["overview", "setup"] },
+  { id: "output", sections: ["export"] },
+]
 
 const emptyMeasureDraft = {
   title: "",
@@ -239,19 +262,65 @@ export function ProgrammeWorkbench({
   )
 
   const sectionParam = searchParams.get("section")
+  const viewParam = searchParams.get("view")
+  const isKnowledgeView = viewParam === "knowledge"
   const activeSection: ProgrammeWorkbenchSection = isProgrammeWorkbenchSection(sectionParam)
     ? sectionParam
-    : "corpus"
+    : "editor"
+  const [sheetDismissed, setSheetDismissed] = useState(false)
+  const sheetOpen = !isKnowledgeView && SHEET_SECTIONS.has(activeSection) && !sheetDismissed
+
+  useEffect(() => {
+    setSheetDismissed(false)
+  }, [sectionParam])
+
+  const replaceParams = useCallback(
+    (mutate: (params: URLSearchParams) => void) => {
+      const params = new URLSearchParams(searchParams.toString())
+      mutate(params)
+      const query = params.toString()
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+    },
+    [pathname, router, searchParams],
+  )
+
+  const setMode = useCallback(
+    (mode: "document" | "knowledge") => {
+      replaceParams((params) => {
+        params.delete("section")
+        if (mode === "knowledge") params.set("view", "knowledge")
+        else params.delete("view")
+      })
+    },
+    [replaceParams],
+  )
 
   const setSection = useCallback(
     (section: string) => {
       if (!isProgrammeWorkbenchSection(section)) return
-      const params = new URLSearchParams(searchParams.toString())
-      params.set("section", section)
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+      setSheetDismissed(false)
+      if (section === "editor") {
+        replaceParams((params) => {
+          params.delete("section")
+          params.set("view", "document")
+        })
+        return
+      }
+      replaceParams((params) => {
+        params.set("view", "document")
+        params.set("section", section)
+      })
     },
-    [pathname, router, searchParams],
+    [replaceParams],
   )
+
+  const closeSheet = useCallback(() => {
+    setSheetDismissed(true)
+    replaceParams((params) => {
+      params.delete("section")
+      params.set("view", "document")
+    })
+  }, [replaceParams])
 
   const [bindings, setBindings] = useState<ProgrammeBindings>(emptyProgrammeBindings())
   const [measures, setMeasures] = useState<any[]>([])
@@ -457,16 +526,24 @@ export function ProgrammeWorkbench({
     [bindings, reports, measures, chapters, outlineNodeCount, observability],
   )
 
+  const [landingApplied, setLandingApplied] = useState(false)
+
   useEffect(() => {
-    if (sectionParam) return
+    if (landingApplied) return
+    if (sectionParam || viewParam === "knowledge") {
+      setLandingApplied(true)
+      return
+    }
     if (chromeJob !== "reviewer" && !snapshotLoaded) return
     const next = resolveProgrammeLandingSection({
       job: chromeJob,
       firstIncompleteSection: pipeline.firstIncompleteSection,
       guided: guidanceMode === "guided",
     })
+    setLandingApplied(true)
+    if (next === "editor" || next === "overview") return
     if (isProgrammeWorkbenchSection(next)) setSection(next)
-  }, [sectionParam, chromeJob, snapshotLoaded, pipeline.firstIncompleteSection, guidanceMode, setSection])
+  }, [landingApplied, sectionParam, viewParam, chromeJob, snapshotLoaded, pipeline.firstIncompleteSection, guidanceMode, setSection])
 
   const boundTemplateName = templates.find((tpl) => tpl.id === bindings.templateId)?.name
   const setupSteps: Array<{
@@ -523,15 +600,41 @@ export function ProgrammeWorkbench({
   )
   if (measures.length > 0) doneBySection.measures = true
 
+  const navSet = new Set(navSections)
+  const documentMenuGroups = MENU_GROUPS.map((group) => ({
+    ...group,
+    sections: group.sections.filter((section) => {
+      if (section === "setup") return showConfiguration && navSet.has(section)
+      return navSet.has(section)
+    }),
+  })).filter((group) => group.sections.length > 0)
+  const documentRoleList = (
+    <ProgrammeDocumentRoles
+      workspaceId={workspaceId}
+      corpusDocs={corpusDocs}
+      bindings={bindings}
+      pending={pending}
+      canBind={chromeJob !== "reviewer"}
+      citablePublications={citablePublications}
+      citePublicationId={citePublicationId}
+      onCitePublicationIdChange={setCitePublicationId}
+      onBindingsChange={setBindings}
+      onMessage={setMessage}
+      onRefresh={refresh}
+      startTransition={startTransition}
+    />
+  )
+  const coachSection = isKnowledgeView ? "knowledge" : activeSection
+
   return (
     <>
     <div
       className="guidance-content-shift flex h-dvh flex-col overflow-hidden bg-white"
       data-open={guidanceOpen ? "true" : undefined}
     >
-      <header className="shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75">
-        <div className="flex h-16 items-center justify-between px-4">
-          <Button variant="ghost" asChild>
+      <header className="shrink-0 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75">
+        <div className="flex h-16 items-center gap-3 px-4">
+          <Button variant="ghost" asChild className="shrink-0">
             <Link href={`/spaces/${spaceId}`}>
               <ArrowLeft className="mr-2 h-3 w-3" />
               <span className="text-xs font-normal">
@@ -539,91 +642,108 @@ export function ProgrammeWorkbench({
               </span>
             </Link>
           </Button>
-          <div className="flex items-center gap-2">
+          <h1 className="min-w-0 truncate text-sm font-semibold">{workspaceName}</h1>
+          <div className="ml-auto flex items-center gap-2">
+            <div className="flex rounded-md border p-0.5" role="tablist" aria-label={t("workspace.programme.viewsAria")}>
+              <Button size="sm" variant={!isKnowledgeView ? "secondary" : "ghost"} asChild>
+                <Link href={`${pathname}?view=document`} scroll={false}>
+                  {t("workspace.programme.views.document")}
+                </Link>
+              </Button>
+              <Button size="sm" variant={isKnowledgeView ? "secondary" : "ghost"} asChild>
+                <Link href={`${pathname}?view=knowledge`} scroll={false}>
+                  {t("workspace.programme.views.knowledge")}
+                </Link>
+              </Button>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" size="sm" aria-label={t("workspace.programme.navAria")}>
+                  <Menu className="mr-2 h-4 w-4" />
+                  {t("workspace.programme.menu")}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {documentMenuGroups.map((group, index) => (
+                  <DropdownMenuGroup key={group.id}>
+                    {index > 0 ? <DropdownMenuSeparator /> : null}
+                    <DropdownMenuLabel>{t(`workspace.programme.menuGroup.${group.id}`)}</DropdownMenuLabel>
+                    {group.sections.map((section) => (
+                      <DropdownMenuItem
+                        key={section}
+                        onClick={() => setSection(section)}
+                        className={sheetOpen && activeSection === section ? "bg-accent" : undefined}
+                      >
+                        {t(`workspace.programme.nav.${section}`)}
+                        {doneBySection[section] ? " · ✓" : ""}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuGroup>
+                ))}
+                {showConfiguration && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href={`/spaces/${spaceId}/settings`}>{t("space.overview.menu.settings")}</Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <UserMenu />
           </div>
         </div>
       </header>
 
-      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-6">
-        <section className="max-h-[42vh] shrink-0 overflow-y-auto pt-6">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-semibold text-foreground">{workspaceName}</h1>
-              <Badge variant="outline">{t("workspace.programme.kindEnvironmental")}</Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">{t("workspace.overview.kindProgrammeHint")}</p>
-            {workspaceSummary.trim() ? (
-              <p className="whitespace-pre-line text-sm font-semibold text-foreground">{workspaceSummary}</p>
-            ) : null}
-            {workspaceDescription.trim() ? (
-              <p className="whitespace-pre-line text-sm text-muted-foreground">{workspaceDescription}</p>
-            ) : null}
+      {message && (
+        <p className="shrink-0 border-b px-4 py-2 text-sm" role="status" aria-live="polite">
+          {message}
+        </p>
+      )}
+
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {isKnowledgeView ? (
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+            <ProgrammeKnowledgeView
+              workspaceId={workspaceId}
+              currentUserId={currentUserId}
+              canManage={chromeJob !== "reviewer"}
+              excludeDocumentIds={Object.values(bindings.chapterDocuments || {})}
+              filesExtra={documentRoleList}
+            />
           </div>
-          <Separator className="mt-4 bg-border" />
-        </section>
-
-        <div className="flex min-h-0 flex-1 gap-10 overflow-hidden pb-8 pt-4">
-        <aside className="hidden w-52 shrink-0 overflow-y-auto md:block">
-          <nav className="space-y-1" aria-label={t("workspace.programme.navAria")}>
-            {navSections.map((section) => {
-              const active = activeSection === section
-              return (
-                <button
-                  key={section}
-                  type="button"
-                  onClick={() => setSection(section)}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors",
-                    active
-                      ? "bg-muted font-medium text-foreground"
-                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                  )}
-                >
-                  <span>{t(`workspace.programme.nav.${section}`)}</span>
-                  {doneBySection[section] ? <Check className="h-3.5 w-3.5 shrink-0 opacity-60" /> : null}
-                </button>
-              )
-            })}
-            {showConfiguration && (
-              <Link
-                href={`/spaces/${spaceId}/settings`}
-                className="mt-2 block rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-              >
-                {t("space.overview.menu.settings")}
-              </Link>
-            )}
-          </nav>
-        </aside>
-
-        <div className="min-w-0 flex-1 space-y-6 overflow-y-auto">
-          <div className="md:hidden">
-            <Select value={activeSection} onValueChange={setSection}>
-              <SelectTrigger aria-label={t("workspace.programme.navAria")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {navSections.map((section) => (
-                  <SelectItem key={section} value={section}>
-                    {t(`workspace.programme.nav.${section}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto bg-white">
+            <ProgrammeChapterEditor
+              workspaceId={workspaceId}
+              spaceId={spaceId}
+              bindings={bindings}
+              onBindingsChange={setBindings}
+              onMessage={setMessage}
+              onGoOutline={() => setSection("outline")}
+            />
           </div>
+        )}
+      </div>
 
-          {message && (
-            <p className="rounded-md border p-3 text-sm" role="status" aria-live="polite">
-              {message}
-            </p>
-          )}
-
+      <Dialog open={sheetOpen} onOpenChange={(open) => { if (!open) closeSheet() }}>
+        <DialogContent className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{t(`workspace.programme.nav.${activeSection}`, activeSection)}</DialogTitle>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto pr-2">
           <Tabs value={activeSection} onValueChange={setSection} className="space-y-6">
         <TabsContent value="overview" className="space-y-4">
           <StageHeading
             title={t("workspace.programme.nav.overview")}
             purpose={t("workspace.programme.purpose.overview")}
           />
+          {workspaceSummary.trim() ? (
+            <p className="whitespace-pre-line text-sm font-semibold text-foreground">{workspaceSummary}</p>
+          ) : null}
+          {workspaceDescription.trim() ? (
+            <p className="whitespace-pre-line text-sm text-muted-foreground">{workspaceDescription}</p>
+          ) : null}
           {pipeline.firstIncomplete ? (
             <Button type="button" onClick={() => setSection(pipeline.firstIncompleteSection)}>
               {t("guidance.coach.next", undefined, {
@@ -816,140 +936,10 @@ export function ProgrammeWorkbench({
             title={t("workspace.programme.nav.corpus")}
             purpose={t("workspace.programme.purpose.corpus")}
           />
-          <p className="text-sm text-muted-foreground">{t("workspace.programme.corpusHint")}</p>
-          <button
-            type="button"
-            className="text-sm underline"
-            onClick={() => {
-              window.dispatchEvent(new CustomEvent("agora-open-glossary", { detail: { term: "bindings" } }))
-            }}
-          >
-            {t("workspace.programme.boundDocumentsGlossary")}
-          </button>
-          <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline">
-              <Link href={`/workspaces/${workspaceId}?files=1`}>{t("workspace.programme.openCorpus")}</Link>
-            </Button>
-            <Button
-              disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  const result = await seedProgrammeCorpusFixtures(workspaceId)
-                  setMessage(
-                    result.error ||
-                      t("workspace.programme.corpusSeeded", undefined, {
-                        count: String(result.data?.created ?? 0),
-                      }),
-                  )
-                  refresh()
-                })
-              }
-            >
-              {t("workspace.programme.seedCorpus")}
-            </Button>
-          </div>
-          <ul className="space-y-2 text-sm">
-            {corpusDocs.filter((doc) => !isChapterDocumentId(bindings, doc.id)).length === 0 && (
-              <li>
-                {t("workspace.programme.corpusEmpty")} {t("workspace.programme.emptyNext.corpus")}
-              </li>
-            )}
-            {corpusDocs
-              .filter((doc) => !isChapterDocumentId(bindings, doc.id))
-              .map((doc) => (
-                <li key={doc.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2">
-                  <span className="flex min-w-0 flex-wrap items-center gap-2">
-                    <DocumentFileTypeIcon extension={doc.fileExtension} />
-                    <span>{doc.title}</span>
-                    <Badge variant="outline">
-                      {doc.origin === "authority"
-                        ? t("workspace.programme.corpusOriginAuthority")
-                        : doc.origin === "generated"
-                          ? t("workspace.programme.corpusOriginGenerated")
-                          : doc.origin === "published"
-                            ? t("workspace.programme.corpusOriginPublished")
-                            : t("workspace.programme.corpusOriginUploaded")}
-                    </Badge>
-                  </span>
-                  <label className="flex items-center gap-2 text-xs">
-                    <span className="text-muted-foreground">{t("workspace.programme.corpusRole")}</span>
-                    <Select
-                      value={doc.document_role || "none"}
-                      disabled={pending}
-                      onValueChange={(value) =>
-                        startTransition(async () => {
-                          const role = (value === "none" ? null : value) as DocumentRole | null
-                          const result = await bindProgrammeDocumentRole(workspaceId, doc.id, role)
-                          setMessage(result.error || t("workspace.programme.corpusRole"))
-                          if (result.data && typeof result.data === "object" && "environmentalVisionDocumentIds" in result.data) {
-                            setBindings(result.data)
-                          }
-                          refresh()
-                        })
-                      }
-                    >
-                      <SelectTrigger
-                        size="sm"
-                        className="min-w-48"
-                        data-guidance-target={
-                          !bindings.environmentalVisionDocumentIds.length && doc.document_role !== "environmental_vision"
-                            ? "bind-vision"
-                            : undefined
-                        }
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">{t("workspace.programme.corpusUnassigned")}</SelectItem>
-                        {DOCUMENT_ROLES.map((role) => (
-                          <SelectItem key={role} value={role}>
-                            {t(`workspace.programme.documentRoles.${role}`, role)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </label>
-                </li>
-              ))}
-          </ul>
-          <div className="space-y-2 rounded-md border p-3">
-            <h3 className="text-sm font-medium">{t("workspace.programme.citePublishedTitle")}</h3>
-            <p className="text-sm text-muted-foreground">{t("workspace.programme.citePublishedHint")}</p>
-            {citablePublications.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t("workspace.programme.citePublishedEmpty")}</p>
-            ) : (
-              <div className="flex flex-wrap items-end gap-2">
-                <label className="space-y-1 text-xs">
-                  <span className="text-muted-foreground">{t("workspace.programme.citePublishedSelect")}</span>
-                  <Select value={citePublicationId} onValueChange={setCitePublicationId}>
-                    <SelectTrigger size="sm" className="min-w-64">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {citablePublications.map((item) => (
-                        <SelectItem key={item.id} value={item.id}>
-                          {item.workspaceName || item.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </label>
-                <Button
-                  size="sm"
-                  disabled={pending || chromeJob === "reviewer" || !citePublicationId}
-                  onClick={() =>
-                    startTransition(async () => {
-                      const result = await bindPublishedProgrammeAsPolicy(workspaceId, citePublicationId)
-                      setMessage(result.error || t("workspace.programme.citePublishedDone"))
-                      refresh()
-                    })
-                  }
-                >
-                  {t("workspace.programme.citePublishedBind")}
-                </Button>
-              </div>
-            )}
-          </div>
+          {documentRoleList}
+          <Button variant="outline" type="button" onClick={() => setMode("knowledge")}>
+            {t("workspace.programme.openKnowledge")}
+          </Button>
         </TabsContent>
 
         <TabsContent value="analysis" className="space-y-3">
@@ -1226,21 +1216,6 @@ export function ProgrammeWorkbench({
           {outlineNodeCount === 0 && (
             <p className="text-sm text-muted-foreground">{t("workspace.programme.emptyNext.outline")}</p>
           )}
-        </TabsContent>
-
-        <TabsContent value="editor" className="space-y-3">
-          <StageHeading
-            title={t("workspace.programme.nav.editor")}
-            purpose={t("workspace.programme.purpose.editor")}
-          />
-          <ProgrammeChapterEditor
-            workspaceId={workspaceId}
-            spaceId={spaceId}
-            bindings={bindings}
-            onBindingsChange={setBindings}
-            onMessage={setMessage}
-            onGoOutline={() => setSection("outline")}
-          />
         </TabsContent>
 
         <TabsContent value="measures" className="space-y-3">
@@ -2444,16 +2419,16 @@ export function ProgrammeWorkbench({
           )}
         </TabsContent>
       </Tabs>
-        </div>
-        </div>
-      </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
       <GuidanceCoach
         surface="programme"
         placeName={workspaceName}
         spaceId={spaceId}
         workspaceId={workspaceId}
-        section={activeSection}
+        section={coachSection}
         job={chromeJob}
         guidanceMode={guidanceMode}
         pipeline={pipeline}

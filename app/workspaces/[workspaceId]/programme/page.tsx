@@ -2,6 +2,7 @@ import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/server"
 import { redirect, notFound } from "next/navigation"
 import { ProgrammeWorkbench } from "@/components/programme-workbench"
+import { WorkspaceChatWrapper } from "@/components/workspace-chat-wrapper"
 import { isEnvironmentalProgrammeWorkspace, resolveWorkspaceKind } from "@/lib/programme/domain"
 import { isSpaceHelpAiDisabled, resolveHelpAiEnabled } from "@/lib/guidance/help-flag"
 import type { GuidanceMode } from "@/lib/guidance/jobs"
@@ -60,9 +61,16 @@ export default async function ProgrammeWorkbenchPage({
 
   const guidanceMode: GuidanceMode = profile?.guidance_mode === "expert" ? "expert" : "guided"
   const canAccessSettings = spaceMembership?.role === "owner" || spaceMembership?.role === "admin"
+  const canManage =
+    spaceMembership?.role === "owner" ||
+    spaceMembership?.role === "admin" ||
+    spaceMembership?.role === "member" ||
+    workspaceMembership?.role === "admin" ||
+    workspaceMembership?.role === "member"
 
   return (
     <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+      <WorkspaceChatWrapper workspaceId={workspace.id} workspaceName={workspace.name} canManage={canManage}>
       <ProgrammeWorkbench
         workspaceId={workspace.id}
         workspaceName={workspace.name}
@@ -81,6 +89,7 @@ export default async function ProgrammeWorkbenchPage({
         })}
         canAccessSettings={canAccessSettings}
       />
+      </WorkspaceChatWrapper>
     </Suspense>
   )
 }
