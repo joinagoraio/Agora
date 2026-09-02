@@ -123,8 +123,8 @@ The `infrastructure/` stack is production only.
 
 ## GitHub, Vercel, and Hetzner
 
-- **Hetzner** is the new environment. Push to `feat/programme-workbench-guidance` (or `main`) runs `.github/workflows/deploy-hetzner.yml`, which rsyncs the repo and runs `scripts/deploy/deploy.sh`. Env files on the VPS are not overwritten.
-- **Vercel** stays as the old comparison site. `vercel.json` sets `git.deploymentEnabled: false` so this branch does not create new Vercel deployments. In the Vercel project, also turn off **Settings → Git → Auto-deploy** (or disconnect the GitHub repo) so a later merge to `main` cannot replace that URL. Do not merge this branch to `main` until that is off.
+- **Hetzner** is the new environment. Push to `main` runs `.github/workflows/deploy-hetzner.yml`, which rsyncs the repo and runs `scripts/deploy/deploy.sh`. Env files on the VPS are not overwritten.
+- **Vercel** stays as the old comparison site (Git disconnected). `vercel.json` keeps Git deployments off if the project is ever reconnected.
 - Cut over the public hostname to Hetzner when the new version is ready. Then disconnect the Vercel project.
 
 ## Optional

@@ -3,7 +3,6 @@ name: Deploy to Hetzner
 on:
   push:
     branches:
-      - feat/programme-workbench-guidance
       - main
   workflow_dispatch:
 
