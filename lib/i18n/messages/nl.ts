@@ -271,6 +271,11 @@ export const nlMessages = {
       zoomOut: "Uitzoomen",
       focusEdit: "Bewerken",
       readAll: "Alles lezen",
+      documentOwner: "Documenteigenaar",
+      chapterOwner: "Hoofdstukeigenaar",
+      ownerUnassigned: "Niet toegewezen",
+      ownerSaved: "Eigenaar toegewezen",
+      ownerReadOnly: "Je kunt commentaar geven op dit hoofdstuk. Alleen de hoofdstukeigenaar kan opslaan, genereren of bevriezen.",
       nav: {
         overview: "Status",
         setup: "Configuratie",
@@ -512,6 +517,8 @@ export const nlMessages = {
       mergeDone: "Duplicaten samengevoegd in {{title}}",
       freezePresent: "Bevroren {{at}}",
       freezeMissing: "Nog geen freeze — stakeholder-download faalt zolang het beleid aan staat",
+      freezeNeedOwner: "Alleen de documenteigenaar kan dit programma bevriezen of publiceren",
+      freezeNeedApproved: "Keur verplichte hoofdstukken goed voordat je het programma bevriest",
       publishTitle: "Publiceer snapshot",
       publishBody:
         "Publiceren maakt deze freeze leesbaar en citeerbaar. Word en PDF blijven overdrachtsbestanden. Dit is geen publicatie in het Staatsblad.",

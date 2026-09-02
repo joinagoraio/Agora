@@ -36,6 +36,7 @@ import {
   resolveProgrammeLandingSection,
   type GuidanceMode,
 } from "@/lib/guidance/jobs"
+import { canAdministerProgramme, landingOwnedChapterId } from "@/lib/programme/ownership"
 import { deriveGuidancePipeline, pipelineInputFromWorkbench, STAGE_TO_SECTION } from "@/lib/guidance/pipeline"
 import { listProgrammeOutlineNodes } from "@/lib/actions/outline"
 import {
@@ -57,6 +58,7 @@ import {
   setChapterWorkflowStatus,
   updateProgrammeBindings,
   updateProgrammePolicies,
+  assignDocumentOwner,
 } from "@/lib/actions/programme"
 import { getWorkspaceDocuments } from "@/lib/actions/document"
 import { getWorkspaceNotes } from "@/lib/actions/workspace-notes"
@@ -225,6 +227,9 @@ type Props = {
   expertPromptDismissed?: boolean
   helpAiEnabled?: boolean
   canAccessSettings?: boolean
+  currentUserId?: string | null
+  accessRole?: string | null
+  initialDocumentOwnerId?: string | null
 }
 
 export function ProgrammeWorkbench({
@@ -241,6 +246,9 @@ export function ProgrammeWorkbench({
   expertPromptDismissed = false,
   helpAiEnabled = false,
   canAccessSettings = false,
+  currentUserId: currentUserIdProp = null,
+  accessRole: accessRoleProp = null,
+  initialDocumentOwnerId = null,
 }: Props) {
   const workspaceSummary = workspaceSummaryProp ?? ""
   const workspaceDescription = workspaceDescriptionProp ?? ""
@@ -253,7 +261,16 @@ export function ProgrammeWorkbench({
   const [snapshotLoaded, setSnapshotLoaded] = useState(false)
 
   const chromeJob = effectiveJob({ spaceJob, workspaceJob, pathname })
-  const showConfiguration = canShowProgrammeConfiguration({ spaceJob, canAccessSettings })
+  const [documentOwnerId, setDocumentOwnerId] = useState<string | null>(initialDocumentOwnerId)
+  const [accessRole, setAccessRole] = useState<string | null>(accessRoleProp)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(currentUserIdProp)
+  const canAdminister = canAdministerProgramme({
+    actorId: currentUserId,
+    accessRole,
+    documentOwnerId,
+  })
+  const showConfiguration =
+    canShowProgrammeConfiguration({ spaceJob, canAccessSettings }) || canAdminister
   const primarySections = primaryNavSections(chromeJob).filter(
     (section) => section !== "setup" || showConfiguration,
   )
@@ -380,7 +397,6 @@ export function ProgrammeWorkbench({
   const [revealedAccessCode, setRevealedAccessCode] = useState<string | null>(null)
   const [citePublicationId, setCitePublicationId] = useState("")
   const [reviewers, setReviewers] = useState<Array<{ id: string; name: string; email: string }>>([])
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [historyMeasureId, setHistoryMeasureId] = useState<string | null>(null)
   const [measureVersions, setMeasureVersions] = useState<Array<{ id: string; reason: string | null; created_at: string }>>([])
   const [restoreReason, setRestoreReason] = useState("")
@@ -406,6 +422,7 @@ export function ProgrammeWorkbench({
       title: string
       workflowStatus: string
       assignedReviewerId: string | null
+      chapterOwnerId: string | null
       outlineNodeId: string | null
       hasBody?: boolean
     }>
@@ -447,6 +464,8 @@ export function ProgrammeWorkbench({
           freezeId: policyResult.data.freezeId,
           freezeAt: policyResult.data.freezeAt,
         })
+        if (policyResult.data.documentOwnerId) setDocumentOwnerId(policyResult.data.documentOwnerId)
+        if (policyResult.data.accessRole) setAccessRole(policyResult.data.accessRole)
         if (policyResult.data.fillJob?.progress?.length) {
           setFillProgress(policyResult.data.fillJob.progress)
         }
@@ -543,20 +562,56 @@ export function ProgrammeWorkbench({
 
   useEffect(() => {
     if (landingApplied) return
-    if (sectionParam || viewParam === "knowledge") {
+    if (sectionParam || viewParam === "knowledge" || chapterParam) {
       setLandingApplied(true)
       return
     }
-    if (chromeJob !== "reviewer" && !snapshotLoaded) return
+    if (chromeJob === "reviewer") {
+      const next = resolveProgrammeLandingSection({
+        job: chromeJob,
+        firstIncompleteSection: pipeline.firstIncompleteSection,
+        guided: guidanceMode === "guided",
+      })
+      setLandingApplied(true)
+      if (next === "editor" || next === "overview") return
+      if (isProgrammeWorkbenchSection(next)) setSection(next)
+      return
+    }
+    if (!snapshotLoaded) return
+    const owned = landingOwnedChapterId({
+      actorId: currentUserId,
+      chapters: chapters.map((chapter) => ({
+        outlineNodeId: chapter.outlineNodeId,
+        chapterOwnerId: chapter.chapterOwnerId ?? null,
+        workflowStatus: chapter.workflowStatus,
+      })),
+    })
+    setLandingApplied(true)
+    if (owned) {
+      setFocusChapter(owned)
+      return
+    }
     const next = resolveProgrammeLandingSection({
       job: chromeJob,
       firstIncompleteSection: pipeline.firstIncompleteSection,
       guided: guidanceMode === "guided",
     })
-    setLandingApplied(true)
     if (next === "editor" || next === "overview") return
     if (isProgrammeWorkbenchSection(next)) setSection(next)
-  }, [landingApplied, sectionParam, viewParam, chromeJob, snapshotLoaded, pipeline.firstIncompleteSection, guidanceMode, setSection])
+  }, [
+    landingApplied,
+    sectionParam,
+    viewParam,
+    chapterParam,
+    chromeJob,
+    snapshotLoaded,
+    pipeline.firstIncompleteSection,
+    guidanceMode,
+    setSection,
+    currentUserId,
+    chapters,
+    setFocusChapter,
+  ])
 
   const boundTemplateName = templates.find((tpl) => tpl.id === bindings.templateId)?.name
   const setupSteps: Array<{
@@ -737,6 +792,11 @@ export function ProgrammeWorkbench({
               canComment
               focusChapterId={chapterParam}
               onFocusChapter={setFocusChapter}
+              currentUserId={currentUserId}
+              accessRole={accessRole}
+              documentOwnerId={documentOwnerId}
+              reviewers={reviewers}
+              onChapterOwnerChange={refresh}
             />
           </div>
         )}
@@ -910,6 +970,34 @@ export function ProgrammeWorkbench({
               vision: bindings.environmentalVisionDocumentIds.join(", ") || t("workspace.programme.none"),
             })}
           </p>
+          <div className="space-y-2 rounded-md border p-3">
+            <p className="text-sm font-medium">{t("workspace.programme.documentOwner")}</p>
+            <Select
+              value={documentOwnerId || "none"}
+              disabled={pending || !canAdminister}
+              onValueChange={(value) =>
+                startTransition(async () => {
+                  if (value === "none") return
+                  const result = await assignDocumentOwner(workspaceId, value)
+                  if (result.data?.documentOwnerId) setDocumentOwnerId(result.data.documentOwnerId)
+                  setMessage(result.error || t("workspace.programme.ownerSaved"))
+                })
+              }
+            >
+              <SelectTrigger size="sm" className="min-w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">{t("workspace.programme.ownerUnassigned")}</SelectItem>
+                {reviewers.map((reviewer) => (
+                  <SelectItem key={reviewer.id} value={reviewer.id}>
+                    {reviewer.name}
+                    {reviewer.id === currentUserId ? ` (${t("workspace.programme.reviewerYou")})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-2 rounded-md border p-3">
             <p className="text-sm font-medium">{t("workspace.programme.policyTitle")}</p>
             <label className="flex items-center gap-2 text-sm">
@@ -2164,7 +2252,7 @@ export function ProgrammeWorkbench({
             </label>
             <div className="flex flex-wrap gap-2">
               <Button
-                disabled={pending || chromeJob === "reviewer" || !policies.hasFreeze}
+                disabled={pending || chromeJob === "reviewer" || !policies.hasFreeze || !canAdminister}
                 onClick={() =>
                   startTransition(async () => {
                     const result = await publishProgrammeSnapshot({
@@ -2328,7 +2416,7 @@ export function ProgrammeWorkbench({
               {t("workspace.programme.exportJson")}
             </Button>
             <Button
-              disabled={pending || filling}
+              disabled={pending || filling || !canAdminister}
               variant="outline"
               onClick={() => {
                 setFilling(true)
@@ -2364,7 +2452,7 @@ export function ProgrammeWorkbench({
               {t("workspace.programme.fillCancel")}
             </Button>
             <Button
-              disabled={pending || filling}
+              disabled={pending || filling || !canAdminister}
               variant="outline"
               onClick={() => {
                 setFilling(true)
@@ -2389,7 +2477,7 @@ export function ProgrammeWorkbench({
               {t("workspace.programme.fillRetry")}
             </Button>
             <Button
-              disabled={pending}
+              disabled={pending || !canAdminister}
               variant="outline"
               onClick={() =>
                 startTransition(async () => {

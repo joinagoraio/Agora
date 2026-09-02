@@ -27,6 +27,7 @@ import {
   setChapterWorkflowStatus,
   regenerateProgrammeChapter,
   listProgrammeChapters,
+  assignChapterOwner,
 } from "@/lib/actions/programme"
 import { updateWorkspaceDocument } from "@/lib/actions/document"
 import { listProgrammeMeasures } from "@/lib/actions/measures"
@@ -46,6 +47,7 @@ import { IconTooltip } from "@/components/icon-tooltip"
 import { ProgrammeCommentRail } from "@/components/programme-comment-rail"
 import type { ProgrammeBindings, ProgrammeOutlineNode } from "@/lib/programme/domain"
 import type { ChapterWorkflowStatus } from "@/lib/programme/review-policy"
+import { canAdministerProgramme, canWriteChapter } from "@/lib/programme/ownership"
 import {
   DEFAULT_PROGRAMME_DOCUMENT_LAYOUT,
   PROGRAMME_ZOOM_PRESETS,
@@ -67,6 +69,7 @@ type ChapterBody = {
   documentId: string | null
   content: string
   workflowStatus: ChapterWorkflowStatus
+  chapterOwnerId: string | null
 }
 
 type Props = {
@@ -79,6 +82,11 @@ type Props = {
   canComment?: boolean
   focusChapterId?: string | null
   onFocusChapter?: (chapterId: string | null) => void
+  currentUserId?: string | null
+  accessRole?: string | null
+  documentOwnerId?: string | null
+  reviewers?: Array<{ id: string; name: string; email: string }>
+  onChapterOwnerChange?: () => void
 }
 
 export function ProgrammeChapterEditor({
@@ -91,6 +99,11 @@ export function ProgrammeChapterEditor({
   canComment = true,
   focusChapterId = null,
   onFocusChapter,
+  currentUserId = null,
+  accessRole = null,
+  documentOwnerId = null,
+  reviewers = [],
+  onChapterOwnerChange,
 }: Props) {
   const { t } = useI18n()
   const [nodes, setNodes] = useState<ProgrammeOutlineNode[]>([])
@@ -131,6 +144,18 @@ export function ProgrammeChapterEditor({
   const selected = nodes.find((n) => n.id === selectedId) || null
   const documentId = selectedId ? bodies[selectedId]?.documentId ?? bindings.chapterDocuments?.[selectedId] ?? null : null
   const isFocus = Boolean(focusChapterId)
+  const chapterOwnerId = selectedId ? bodies[selectedId]?.chapterOwnerId ?? null : null
+  const canWriteFocused = canWriteChapter({
+    actorId: currentUserId,
+    accessRole,
+    documentOwnerId,
+    chapterOwnerId,
+  })
+  const canAssignOwners = canAdministerProgramme({
+    actorId: currentUserId,
+    accessRole,
+    documentOwnerId,
+  })
 
   const loadNodes = (templateId: string) => {
     startTransition(async () => {
@@ -148,6 +173,7 @@ export function ProgrammeChapterEditor({
           documentId: chapter.documentId,
           content: ensureBlockIdsInHtml(chapter.content || ""),
           workflowStatus: (chapter.workflowStatus as ChapterWorkflowStatus) || "generated",
+          chapterOwnerId: chapter.chapterOwnerId ?? null,
         }
       }
       setBodies(nextBodies)
@@ -210,6 +236,7 @@ export function ProgrammeChapterEditor({
           documentId: prev[selectedId]?.documentId ?? documentId,
           content,
           workflowStatus,
+          chapterOwnerId: prev[selectedId]?.chapterOwnerId ?? null,
         },
       }))
     }
@@ -246,6 +273,7 @@ export function ProgrammeChapterEditor({
         documentId: result.data.documentId,
         content: result.data.content || "",
         workflowStatus: "generated",
+        chapterOwnerId: documentOwnerId,
       }
       setBodies((prev) => ({ ...prev, [node.id]: nextBody }))
       setContent(nextBody.content)
@@ -280,6 +308,7 @@ export function ProgrammeChapterEditor({
         documentId: result.data.documentId,
         content: ensureBlockIdsInHtml(result.data.content),
         workflowStatus: result.data.workflowStatus || "generated",
+        chapterOwnerId: result.data.chapterOwnerId ?? null,
       }
       setBodies((prev) => ({ ...prev, [nodeId]: nextBody }))
       if (selectedId === nodeId) {
@@ -340,6 +369,53 @@ export function ProgrammeChapterEditor({
 
   const chapterToolbar = selected ? (
     <div className="space-y-3 border-b pb-4">
+      {canAssignOwners && documentId ? (
+        <label className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-muted-foreground">{t("workspace.programme.chapterOwner")}</span>
+          <Select
+            value={chapterOwnerId || "none"}
+            disabled={pending}
+            onValueChange={(value) =>
+              startTransition(async () => {
+                const result = await assignChapterOwner(
+                  workspaceId,
+                  documentId,
+                  value === "none" ? null : value,
+                )
+                if (result.error) {
+                  onMessage(result.error)
+                  return
+                }
+                const nextOwner = value === "none" ? null : value
+                setBodies((prev) => ({
+                  ...prev,
+                  [selected.id]: {
+                    documentId,
+                    content,
+                    workflowStatus,
+                    chapterOwnerId: nextOwner,
+                  },
+                }))
+                onMessage(t("workspace.programme.ownerSaved"))
+                onChapterOwnerChange?.()
+              })
+            }
+          >
+            <SelectTrigger size="sm" className="min-w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">{t("workspace.programme.ownerUnassigned")}</SelectItem>
+              {reviewers.map((reviewer) => (
+                <SelectItem key={reviewer.id} value={reviewer.id}>
+                  {reviewer.name}
+                  {reviewer.id === currentUserId ? ` (${t("workspace.programme.reviewerYou")})` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <Button
           disabled={pending || !dirty || !documentId}
@@ -358,7 +434,7 @@ export function ProgrammeChapterEditor({
               setDirty(false)
               setBodies((prev) => ({
                 ...prev,
-                [selected.id]: { documentId, content, workflowStatus },
+                [selected.id]: { documentId, content, workflowStatus, chapterOwnerId },
               }))
               onMessage(t("workspace.programme.editorSaved", undefined, { title: selected.title }))
             })
@@ -392,6 +468,7 @@ export function ProgrammeChapterEditor({
                   documentId,
                   content: result.data.content || "",
                   workflowStatus: "generated",
+                  chapterOwnerId,
                 },
               }))
               setGroundednessScore(result.data.groundedness?.score ?? null)
@@ -875,6 +952,7 @@ export function ProgrammeChapterEditor({
                   </div>
                   {showEditor ? (
                     hasDoc ? (
+                      canWriteFocused ? (
                       <>
                         {chapterToolbar}
                         <RichTextEditor
@@ -887,13 +965,33 @@ export function ProgrammeChapterEditor({
                           placeholder={t("workspace.programme.editorPlaceholder")}
                         />
                       </>
-                    ) : (
+                      ) : (
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">{t("workspace.programme.ownerReadOnly")}</p>
+                        {body?.content ? (
+                          <div
+                            className="text-sm leading-relaxed text-foreground [&_h1]:mb-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_p]:mb-2 [&_[data-block-id]]:cursor-pointer [&_[data-block-id]:hover]:bg-amber-50/70"
+                            onClick={(event) => onPreviewClick(event, node.id)}
+                            dangerouslySetInnerHTML={{
+                              __html: ensureBlockIdsInHtml(isSelected ? content || body.content : body.content),
+                            }}
+                          />
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            {t("workspace.programme.editorNoDraft", undefined, { title: node.title })}
+                          </p>
+                        )}
+                      </div>
+                      )
+                    ) : canAssignOwners ? (
                       <div className="space-y-2">
                         <p className="text-sm">{t("workspace.programme.editorNoDraft", undefined, { title: node.title })}</p>
                         <Button disabled={pending} onClick={() => openOrCreate(node)}>
                           {t("workspace.programme.editorCreateStub")}
                         </Button>
                       </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">{t("workspace.programme.ownerReadOnly")}</p>
                     )
                   ) : hasDoc && body?.content ? (
                     <div

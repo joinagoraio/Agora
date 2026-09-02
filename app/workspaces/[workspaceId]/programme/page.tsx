@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect, notFound } from "next/navigation"
 import { ProgrammeWorkbench } from "@/components/programme-workbench"
 import { WorkspaceChatWrapper } from "@/components/workspace-chat-wrapper"
+import { parseDocumentOwnerId } from "@/lib/programme/ownership"
 import { isEnvironmentalProgrammeWorkspace, resolveWorkspaceKind } from "@/lib/programme/domain"
 import { isSpaceHelpAiDisabled, resolveHelpAiEnabled } from "@/lib/guidance/help-flag"
 import type { GuidanceMode } from "@/lib/guidance/jobs"
@@ -21,7 +22,7 @@ export default async function ProgrammeWorkbenchPage({
 
   const { data: workspace } = await supabase
     .from("workspaces")
-        .select("id, name, summary, description, kind, metadata, space_id")
+        .select("id, name, summary, description, kind, metadata, space_id, created_by")
     .eq("id", workspaceId)
     .single()
 
@@ -61,6 +62,14 @@ export default async function ProgrammeWorkbenchPage({
 
   const guidanceMode: GuidanceMode = profile?.guidance_mode === "expert" ? "expert" : "guided"
   const canAccessSettings = spaceMembership?.role === "owner" || spaceMembership?.role === "admin"
+  const accessRole =
+    workspace.created_by === user.id
+      ? spaceMembership?.role === "owner"
+        ? "owner"
+        : "admin"
+      : spaceMembership?.role === "owner" || spaceMembership?.role === "admin"
+        ? spaceMembership.role
+        : workspaceMembership?.role || "viewer"
   const canManage =
     spaceMembership?.role === "owner" ||
     spaceMembership?.role === "admin" ||
@@ -88,6 +97,11 @@ export default async function ProgrammeWorkbenchPage({
           spaceHelpAiDisabled: isSpaceHelpAiDisabled(space?.metadata),
         })}
         canAccessSettings={canAccessSettings}
+        currentUserId={user.id}
+        accessRole={accessRole}
+        initialDocumentOwnerId={
+          parseDocumentOwnerId(workspace.metadata) || workspace.created_by || null
+        }
       />
       </WorkspaceChatWrapper>
     </Suspense>

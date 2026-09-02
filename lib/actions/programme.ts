@@ -11,7 +11,13 @@ import {
 } from "@/lib/programme/domain"
 import { applyDocumentRoleToBindings } from "@/lib/programme/source-set-bindings"
 import { rebuildDocumentSectionsWithClient } from "@/lib/documents/rebuild-sections"
-import { requireAuthAndPermission } from "@/lib/middleware/authorization"
+import { getUserWorkspaceRole, requireAuthAndPermission } from "@/lib/middleware/authorization"
+import {
+  canAdministerProgramme,
+  canWriteChapter,
+  parseChapterOwnerId,
+  parseDocumentOwnerId,
+} from "@/lib/programme/ownership"
 import {
   evaluateDistinctReviewerApproval,
   parseChapterWorkflow,
@@ -27,6 +33,29 @@ import {
 import { snapshotArtefact } from "@/lib/actions/collaboration"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { env } from "@/lib/env"
+
+async function loadProgrammeOwnership(workspaceId: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const { data: workspace } = await supabase
+    .from("workspaces")
+    .select("metadata, created_by")
+    .eq("id", workspaceId)
+    .single()
+  if (!workspace) {
+    return {
+      error: "Workspace not found",
+      user: null as Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"],
+      documentOwnerId: null as string | null,
+      accessRole: null as string | null,
+    }
+  }
+  const documentOwnerId = parseDocumentOwnerId(workspace.metadata) || workspace.created_by || null
+  const accessRole = user ? await getUserWorkspaceRole(user.id, workspaceId) : null
+  return { error: null as string | null, user, documentOwnerId, accessRole }
+}
 
 async function patchWorkspaceMetadata(workspaceId: string, patch: Record<string, unknown>) {
   const supabase = await createClient()
@@ -107,7 +136,7 @@ export async function getProgrammeBindings(workspaceId: string) {
 
 export async function getProgrammePolicies(workspaceId: string) {
   const supabase = await createClient()
-  const { data, error } = await supabase.from("workspaces").select("metadata").eq("id", workspaceId).single()
+  const { data, error } = await supabase.from("workspaces").select("metadata, created_by").eq("id", workspaceId).single()
   if (error || !data) {
     return {
       error: error?.message || "Not found",
@@ -118,9 +147,20 @@ export async function getProgrammePolicies(workspaceId: string) {
         freezeId: null as string | null,
         freezeAt: null as string | null,
         fillJob: null as FillJob | null,
+        documentOwnerId: null as string | null,
+        accessRole: null as string | null,
       },
     }
   }
+  let documentOwnerId = parseDocumentOwnerId(data.metadata)
+  if (!documentOwnerId && data.created_by) {
+    documentOwnerId = data.created_by
+    await patchWorkspaceMetadata(workspaceId, { documentOwnerId })
+  }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const accessRole = user ? await getUserWorkspaceRole(user.id, workspaceId) : null
   const { data: freeze } = await supabase
     .from("programme_freezes")
     .select("id, created_at")
@@ -135,8 +175,33 @@ export async function getProgrammePolicies(workspaceId: string) {
       freezeId: freeze?.id ?? null,
       freezeAt: freeze?.created_at ?? null,
       fillJob: (await loadLatestFillJob(workspaceId)) || parseFillJob(data.metadata),
+      documentOwnerId,
+      accessRole,
     },
   }
+}
+
+export async function assignDocumentOwner(workspaceId: string, ownerId: string) {
+  try {
+    await requireAuthAndPermission("workspace:update", { workspaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+  const ownership = await loadProgrammeOwnership(workspaceId)
+  if (ownership.error) return { error: ownership.error }
+  if (
+    !canAdministerProgramme({
+      actorId: ownership.user?.id,
+      accessRole: ownership.accessRole,
+      documentOwnerId: ownership.documentOwnerId,
+    })
+  ) {
+    return { error: "Only the document owner can assign the document owner" }
+  }
+  const saved = await patchWorkspaceMetadata(workspaceId, { documentOwnerId: ownerId })
+  if (saved.error) return { error: saved.error }
+  revalidatePath(`/workspaces/${workspaceId}/programme`)
+  return { data: { documentOwnerId: ownerId } }
 }
 
 export async function updateProgrammePolicies(workspaceId: string, patch: Partial<ProgrammePolicies>) {
@@ -280,22 +345,38 @@ export async function setChapterWorkflowStatus(
   if (status === "approved" && current === "generated") {
     return { error: "Request review before approval — generated chapters cannot jump to approved" }
   }
+  const { data: workspace } = await supabase.from("workspaces").select("metadata, created_by").eq("id", workspaceId).single()
+  const meta = (document.metadata as Record<string, unknown> | null) || {}
+  const documentOwnerId = parseDocumentOwnerId(workspace?.metadata) || workspace?.created_by || null
+  const chapterOwnerId = parseChapterOwnerId(document.metadata)
+  const accessRole = user ? await getUserWorkspaceRole(user.id, workspaceId) : null
+  const writer = canWriteChapter({
+    actorId: user?.id,
+    accessRole,
+    documentOwnerId,
+    chapterOwnerId,
+  })
+  if (status === "in_review" && !writer) {
+    return { error: "Only the chapter owner can request review" }
+  }
   if (status === "approved") {
-    const { data: workspace } = await supabase.from("workspaces").select("metadata").eq("id", workspaceId).single()
-    const meta = (document.metadata as Record<string, unknown> | null) || {}
     const createdBy =
       typeof meta.createdBy === "string"
         ? meta.createdBy
         : typeof meta.lastEditedBy === "string"
           ? meta.lastEditedBy
           : user?.id
+    const policies = parseProgrammePolicies(workspace?.metadata)
     const reviewerGate = evaluateDistinctReviewerApproval({
-      distinctReviewer: parseProgrammePolicies(workspace?.metadata).distinctReviewer,
+      distinctReviewer: policies.distinctReviewer,
       actorId: user?.id,
       assignedReviewerId: typeof meta.assignedReviewerId === "string" ? meta.assignedReviewerId : null,
       createdBy,
     })
     if (!reviewerGate.ok) return { error: reviewerGate.reason }
+    if (!policies.distinctReviewer && !writer) {
+      return { error: "Only the chapter owner can freeze this chapter" }
+    }
   }
   const metadata = {
     ...((document.metadata as Record<string, unknown>) || {}),
@@ -670,6 +751,17 @@ export async function ensureChapterDocument(
     }
   }
 
+  const ownership = await loadProgrammeOwnership(workspaceId)
+  if (
+    !canAdministerProgramme({
+      actorId: ownership.user?.id,
+      accessRole: ownership.accessRole,
+      documentOwnerId: ownership.documentOwnerId,
+    })
+  ) {
+    return { error: "Only the document owner can create a chapter stub" }
+  }
+
   const { createWorkspaceDocument } = await import("@/lib/actions/document")
   const stub =
     opts.purposeHtml && opts.purposeHtml.trim()
@@ -681,6 +773,26 @@ export async function ensureChapterDocument(
     content: stub,
   })
   if (created.error || !created.data) return { error: created.error || "Failed to create chapter document" }
+
+  if (ownership.documentOwnerId) {
+    const { data: createdRow } = await supabase
+      .from("documents")
+      .select("metadata")
+      .eq("id", created.data.id)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle()
+    await supabase
+      .from("documents")
+      .update({
+        metadata: {
+          ...((createdRow?.metadata as Record<string, unknown>) || {}),
+          chapterOwnerId: ownership.documentOwnerId,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", created.data.id)
+      .eq("workspace_id", workspaceId)
+  }
 
   const next: ProgrammeBindings = {
     ...bindings,
@@ -728,6 +840,7 @@ export async function getChapterDocument(workspaceId: string, documentId: string
       content: data.content || "",
       workflowStatus: parseChapterWorkflow(data.metadata),
       assignedReviewerId: typeof metadata.assignedReviewerId === "string" ? metadata.assignedReviewerId : null,
+      chapterOwnerId: parseChapterOwnerId(metadata),
     },
   }
 }
@@ -757,6 +870,7 @@ export async function listProgrammeChapters(workspaceId: string) {
           title: row.title,
           workflowStatus: parseChapterWorkflow(row.metadata),
           assignedReviewerId: typeof metadata.assignedReviewerId === "string" ? metadata.assignedReviewerId : null,
+          chapterOwnerId: parseChapterOwnerId(metadata),
           createdBy:
             typeof (row.metadata as Record<string, unknown> | null)?.createdBy === "string"
               ? ((row.metadata as Record<string, unknown>).createdBy as string)
@@ -799,6 +913,45 @@ export async function assignChapterReviewer(workspaceId: string, documentId: str
   return { data: { documentId, assignedReviewerId: reviewerId } }
 }
 
+export async function assignChapterOwner(workspaceId: string, documentId: string, ownerId: string | null) {
+  try {
+    await requireAuthAndPermission("workspace:update", { workspaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+  const ownership = await loadProgrammeOwnership(workspaceId)
+  if (ownership.error) return { error: ownership.error }
+  if (
+    !canAdministerProgramme({
+      actorId: ownership.user?.id,
+      accessRole: ownership.accessRole,
+      documentOwnerId: ownership.documentOwnerId,
+    })
+  ) {
+    return { error: "Only the document owner can assign chapter owners" }
+  }
+  const supabase = await createClient()
+  const { data: document, error } = await supabase
+    .from("documents")
+    .select("id, metadata")
+    .eq("id", documentId)
+    .eq("workspace_id", workspaceId)
+    .single()
+  if (error || !document) return { error: error?.message || "Chapter not found" }
+  const metadata = {
+    ...((document.metadata as Record<string, unknown>) || {}),
+    chapterOwnerId: ownerId,
+  }
+  const { error: updateError } = await supabase
+    .from("documents")
+    .update({ metadata, updated_at: new Date().toISOString() })
+    .eq("id", documentId)
+    .eq("workspace_id", workspaceId)
+  if (updateError) return { error: updateError.message }
+  revalidatePath(`/workspaces/${workspaceId}/programme`)
+  return { data: { documentId, chapterOwnerId: ownerId } }
+}
+
 export async function regenerateProgrammeChapter(
   workspaceId: string,
   outlineNodeId: string,
@@ -825,6 +978,25 @@ export async function regenerateProgrammeChapter(
     ? { data: { documentId: options.documentId }, error: undefined as string | undefined }
     : await ensureChapterDocument(workspaceId, outlineNodeId, { title: node.title, purposeHtml: node.purpose })
   if (chapter.error || !chapter.data) return { error: chapter.error || "Chapter document missing" }
+
+  const ownership = await loadProgrammeOwnership(workspaceId)
+  const supabase = await createClient()
+  const { data: chapterRow } = await supabase
+    .from("documents")
+    .select("metadata")
+    .eq("id", chapter.data.documentId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle()
+  if (
+    !canWriteChapter({
+      actorId: ownership.user?.id,
+      accessRole: ownership.accessRole,
+      documentOwnerId: ownership.documentOwnerId,
+      chapterOwnerId: parseChapterOwnerId(chapterRow?.metadata),
+    })
+  ) {
+    return { error: "Only the chapter owner can generate this chapter" }
+  }
 
   const privileged = [
     bindings.data.environmentalVisionDocumentIds.length
@@ -943,6 +1115,16 @@ export async function fillProgrammeChapters(
     await requireAuthAndPermission("workspace:update", { workspaceId })
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+  const ownership = await loadProgrammeOwnership(workspaceId)
+  if (
+    !canAdministerProgramme({
+      actorId: ownership.user?.id,
+      accessRole: ownership.accessRole,
+      documentOwnerId: ownership.documentOwnerId,
+    })
+  ) {
+    return { error: "Only the document owner can fill required chapters" }
   }
   void spaceId
   const supabase = await createClient()

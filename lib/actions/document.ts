@@ -1668,13 +1668,26 @@ export async function updateWorkspaceDocument(
   }
 
   const { parseProgrammeBindings } = await import("@/lib/programme/domain")
-  const { data: workspace } = await supabase.from("workspaces").select("metadata").eq("id", workspaceId).single()
+  const { data: workspace } = await supabase.from("workspaces").select("metadata, created_by").eq("id", workspaceId).single()
   const bindings = parseProgrammeBindings((workspace?.metadata as Record<string, unknown>) || {})
   const outlineNodeId = Object.entries(bindings.chapterDocuments || {}).find(([, id]) => id === documentId)?.[0]
   if (outlineNodeId) {
     const { requireSectionLock } = await import("@/lib/actions/collaboration")
     const lock = await requireSectionLock(workspaceId, `chapter:${outlineNodeId}`)
     if (lock.error) return { error: lock.error }
+    const { canWriteChapter, parseChapterOwnerId, parseDocumentOwnerId } = await import("@/lib/programme/ownership")
+    const { getUserWorkspaceRole } = await import("@/lib/middleware/authorization")
+    const accessRole = await getUserWorkspaceRole(user.id, workspaceId)
+    if (
+      !canWriteChapter({
+        actorId: user.id,
+        accessRole,
+        documentOwnerId: parseDocumentOwnerId(workspace?.metadata) || workspace?.created_by || null,
+        chapterOwnerId: parseChapterOwnerId(document.metadata),
+      })
+    ) {
+      return { error: "Only the chapter owner can save this chapter" }
+    }
   }
 
   const updatedMetadata: Record<string, any> = {

@@ -166,10 +166,23 @@ export async function publishProgrammeSnapshot(input: {
 
   const { data: workspace } = await supabase
     .from("workspaces")
-    .select("id, name, space_id")
+    .select("id, name, space_id, metadata, created_by")
     .eq("id", input.workspaceId)
     .single()
   if (!workspace?.space_id) return { error: "Programme not found" }
+
+  const { canAdministerProgramme, parseDocumentOwnerId } = await import("@/lib/programme/ownership")
+  const { getUserWorkspaceRole } = await import("@/lib/middleware/authorization")
+  const accessRole = user ? await getUserWorkspaceRole(user.id, input.workspaceId) : null
+  if (
+    !canAdministerProgramme({
+      actorId: user?.id,
+      accessRole,
+      documentOwnerId: parseDocumentOwnerId(workspace.metadata) || workspace.created_by || null,
+    })
+  ) {
+    return { error: "Only the document owner can publish this programme" }
+  }
 
   const { data: freeze } = await supabase
     .from("programme_freezes")

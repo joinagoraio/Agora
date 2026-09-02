@@ -271,6 +271,11 @@ export const enMessages = {
       zoomOut: "Zoom out",
       focusEdit: "Edit",
       readAll: "Read all",
+      documentOwner: "Document owner",
+      chapterOwner: "Chapter owner",
+      ownerUnassigned: "Unassigned",
+      ownerSaved: "Owner assigned",
+      ownerReadOnly: "You can comment on this chapter. Only the chapter owner can save, generate, or freeze it.",
       nav: {
         overview: "Status",
         setup: "Configuration",
@@ -512,6 +517,8 @@ export const enMessages = {
       mergeDone: "Merged duplicates into {{title}}",
       freezePresent: "Frozen {{at}}",
       freezeMissing: "No freeze yet — stakeholder download will fail while the policy is on",
+      freezeNeedOwner: "Only the document owner can freeze or publish this programme",
+      freezeNeedApproved: "Approve required chapters before freezing the programme",
       publishTitle: "Publish snapshot",
       publishBody:
         "Publishing makes this freeze readable and citable. Word and PDF stay handoff files. This is not gazette enactment.",

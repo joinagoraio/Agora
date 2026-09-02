@@ -239,7 +239,42 @@ export async function buildAuditPackageJson(workspaceId: string) {
     return { error: error instanceof Error ? error.message : "Unauthorized" }
   }
 
+  const { canAdministerProgramme, parseDocumentOwnerId, requiredChaptersAreApproved } = await import(
+    "@/lib/programme/ownership"
+  )
+  const { getUserWorkspaceRole } = await import("@/lib/middleware/authorization")
+  const { listProgrammeChapters, getProgrammeBindings } = await import("@/lib/actions/programme")
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const { data: workspaceMeta } = await supabase
+    .from("workspaces")
+    .select("metadata, created_by")
+    .eq("id", workspaceId)
+    .single()
+  const accessRole = user ? await getUserWorkspaceRole(user.id, workspaceId) : null
+  const documentOwnerId = parseDocumentOwnerId(workspaceMeta?.metadata) || workspaceMeta?.created_by || null
+  if (!canAdministerProgramme({ actorId: user?.id, accessRole, documentOwnerId })) {
+    return { error: "Only the document owner can freeze the programme" }
+  }
+  const chapters = await listProgrammeChapters(workspaceId)
+  const bindings = await getProgrammeBindings(workspaceId)
+  let requiredNodeIds: string[] = []
+  if (bindings.data.templateId) {
+    const { listProgrammeOutlineNodes } = await import("@/lib/actions/outline")
+    const nodes = await listProgrammeOutlineNodes(bindings.data.templateId)
+    requiredNodeIds = (nodes.data || []).filter((node) => node.required).map((node) => node.id)
+  }
+  if (
+    !requiredChaptersAreApproved({
+      chapters: chapters.data || [],
+      requiredNodeIds,
+    })
+  ) {
+    return { error: "Approve required chapters before freezing the programme" }
+  }
+
   const [runs, measures, reports, jobs] = await Promise.all([
     supabase.from("generation_runs").select("id, kind, created_at, source_document_ids, unused_document_ids").eq("workspace_id", workspaceId),
     supabase.from("programme_measures").select("id, title, workflow_status, citations").eq("workspace_id", workspaceId),
