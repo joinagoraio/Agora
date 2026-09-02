@@ -59,7 +59,7 @@ export function UserMenu() {
           "User"
         setUserName(name)
         setUserEmail(user.email || null)
-        setAvatarUrl(profile?.avatar_url || user.user_metadata?.avatar_url || null)
+        setAvatarUrl(profile ? profile.avatar_url : user.user_metadata?.avatar_url || null)
       }
     }
     

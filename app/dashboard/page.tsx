@@ -85,7 +85,7 @@ export default async function DashboardPage() {
     }
   }
   const myProgrammes = [...programmeById.values()]
-  
+
   const hasSpaces = authorities.length > 0
   const hasProgrammes = myProgrammes.length > 0
   const creatableAuthorities = authorities

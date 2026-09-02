@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { isPlaceholderProfileName } from "@/lib/profile/display-name"
-import { AVATAR_APP_PREFIX, toAppAvatarUrl } from "@/lib/profile/avatar-url"
+import { AVATAR_APP_PREFIX, isAvatarStoragePath, toAppAvatarUrl } from "@/lib/profile/avatar-url"
 
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024
 const AVATAR_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
@@ -46,7 +46,7 @@ export async function getOwnProfile(): Promise<{ data?: OwnProfile; error?: stri
   return {
     data: {
       fullName: fullName?.trim() || null,
-      avatarUrl: toAppAvatarUrl(data?.avatar_url || fallback.avatarUrl),
+      avatarUrl: toAppAvatarUrl(data ? data.avatar_url : fallback.avatarUrl),
       setupDismissed: Boolean(data?.profile_setup_dismissed_at) || !isPlaceholderProfileName(fullName, user.email),
     },
   }
@@ -124,4 +124,31 @@ export async function uploadOwnAvatar(formData: FormData) {
 
   await supabase.auth.updateUser({ data: { avatar_url: avatarUrl } })
   return { data: { avatarUrl } }
+}
+
+export async function removeOwnAvatar() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: "Unauthorized" }
+
+  const admin = createAdminClient()
+  const { data: files } = await admin.storage.from("avatars").list(user.id)
+  const paths = (files ?? [])
+    .map((file) => `${user.id}/${file.name}`)
+    .filter(isAvatarStoragePath)
+  if (paths.length > 0) {
+    const { error: removeError } = await admin.storage.from("avatars").remove(paths)
+    if (removeError) return { error: removeError.message }
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ avatar_url: null, updated_at: new Date().toISOString() })
+    .eq("id", user.id)
+  if (error) return { error: error.message }
+
+  await supabase.auth.updateUser({ data: { avatar_url: null } })
+  return { data: { avatarUrl: null as string | null } }
 }

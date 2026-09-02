@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { UserAvatar } from "@/components/user-avatar"
 import { useI18n } from "@/lib/i18n/use-i18n"
-import { updateOwnProfile, uploadOwnAvatar } from "@/lib/actions/profile"
+import { updateOwnProfile, uploadOwnAvatar, removeOwnAvatar } from "@/lib/actions/profile"
 import { isPlaceholderProfileName, notifyProfileUpdated } from "@/lib/profile/display-name"
 
 type Props = {
@@ -37,9 +37,30 @@ export function ProfileSetupDialog({ open, initialName, email, avatarUrl }: Prop
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <UserAvatar name={name || email} url={photoUrl} className="h-14 w-14 text-sm" />
-            <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => fileRef.current?.click()}>
-              {t("profile.account.photoChange")}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => fileRef.current?.click()}>
+                {t("profile.account.photoChange")}
+              </Button>
+              {photoUrl ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={() => {
+                    startTransition(async () => {
+                      const result = await removeOwnAvatar()
+                      if (result.data) {
+                        setPhotoUrl(null)
+                        notifyProfileUpdated()
+                      }
+                    })
+                  }}
+                >
+                  {t("profile.account.photoRemove")}
+                </Button>
+              ) : null}
+            </div>
             <input
               ref={fileRef}
               type="file"

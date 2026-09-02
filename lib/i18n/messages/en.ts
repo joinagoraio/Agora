@@ -198,11 +198,13 @@ export const enMessages = {
       photoLabel: "Photo",
       photoHint: "Optional. JPG, PNG or WebP, up to 2 MB.",
       photoChange: "Change photo",
+      photoRemove: "Remove photo",
       save: "Save profile",
       saving: "Saving…",
       saved: "Profile saved",
       saveError: "Could not save your profile",
       photoError: "Could not upload that photo",
+      photoRemoveError: "Could not remove that photo",
     },
     setup: {
       title: "How should colleagues see you?",

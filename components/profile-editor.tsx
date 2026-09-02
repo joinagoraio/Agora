@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { UserAvatar } from "@/components/user-avatar"
 import { useI18n } from "@/lib/i18n/use-i18n"
-import { updateOwnProfile, uploadOwnAvatar } from "@/lib/actions/profile"
+import { updateOwnProfile, uploadOwnAvatar, removeOwnAvatar } from "@/lib/actions/profile"
 import { notifyProfileUpdated } from "@/lib/profile/display-name"
 
 type Props = {
@@ -50,9 +50,38 @@ export function ProfileEditor({ initialName, email, avatarUrl, memberSince }: Pr
           <div className="space-y-1">
             <p className="text-sm font-medium">{t("profile.account.photoLabel")}</p>
             <p className="text-sm text-muted-foreground">{t("profile.account.photoHint")}</p>
-            <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => fileRef.current?.click()}>
-              {t("profile.account.photoChange")}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => fileRef.current?.click()}>
+                {t("profile.account.photoChange")}
+              </Button>
+              {photoUrl ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={() => {
+                    startTransition(async () => {
+                      const result = await removeOwnAvatar()
+                      if (result.error) {
+                        toast.error(result.error || t("profile.account.photoRemoveError"))
+                        return
+                      }
+                      if (previewRef.current) {
+                        URL.revokeObjectURL(previewRef.current)
+                        previewRef.current = null
+                      }
+                      setPhotoUrl(null)
+                      notifyProfileUpdated()
+                      toast.success(t("profile.account.saved"))
+                      router.refresh()
+                    })
+                  }}
+                >
+                  {t("profile.account.photoRemove")}
+                </Button>
+              ) : null}
+            </div>
             <input
               ref={fileRef}
               type="file"

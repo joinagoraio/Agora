@@ -198,11 +198,13 @@ export const nlMessages = {
       photoLabel: "Foto",
       photoHint: "Optioneel. JPG, PNG of WebP, tot 2 MB.",
       photoChange: "Foto wijzigen",
+      photoRemove: "Foto verwijderen",
       save: "Profiel opslaan",
       saving: "Bezig…",
       saved: "Profiel opgeslagen",
       saveError: "Profiel opslaan mislukt",
       photoError: "Foto uploaden mislukt",
+      photoRemoveError: "Foto verwijderen mislukt",
     },
     setup: {
       title: "Hoe moeten collega’s je zien?",
