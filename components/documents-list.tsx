@@ -46,7 +46,7 @@ import { UploadDocumentDialog } from "@/components/upload-document-dialog"
 import { AddFromSourceDialog } from "@/components/add-from-source-dialog"
 import { CreateSourceDialog } from "@/components/create-source-dialog"
 import { ManageSourcesDialog } from "@/components/manage-sources-dialog"
-import { FileIcon, defaultStyles } from "react-file-icon"
+import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
 import { getDocumentFileExtension } from "@/lib/utils/document-files"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
@@ -526,16 +526,8 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
                   <Card key={doc.id} className={`shadow hover:shadow-md transition-shadow ${isArchived ? "opacity-70 bg-muted/30" : ""}`}>
               <CardHeader>
                 <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <div className="w-8 h-8 shrink-0 mt-0.5 flex items-center overflow-hidden [&>svg]:w-full [&>svg]:h-full [&>svg]:grayscale">
-                      <FileIcon
-                        extension={fileExtension}
-                        {...(defaultStyles[fileExtension as keyof typeof defaultStyles] || {})}
-                        label={false}
-                        glyphColor="#fff"
-                        color="#6b7280"
-                      />
-                    </div>
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <DocumentFileTypeIcon extension={fileExtension} className="mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start gap-2 min-w-0">
                         <CardTitle className="text-base font-semibold leading-tight line-clamp-2 break-words">

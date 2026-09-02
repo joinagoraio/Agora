@@ -5,11 +5,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Loader2, Search, CheckCircle2, ExternalLink, Plus, FileText, AlertCircle } from "lucide-react"
+import { Loader2, Search, CheckCircle2, ExternalLink, Plus, AlertCircle } from "lucide-react"
+import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { FileIcon, defaultStyles } from "react-file-icon"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { DebugPanel } from "@/components/debug-panel"
 
@@ -229,17 +229,10 @@ function OverheidSearchTab({ onDocumentsSelected, showSelection = true, initialL
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-start gap-4">
-                      {result.type?.toLowerCase() === "pdf" ? (
-                        <div className="w-5 h-5 shrink-0 mt-0.5 flex items-center overflow-hidden [&>svg]:w-full [&>svg]:h-full [&>svg]:grayscale">
-                          <FileIcon
-                            extension="pdf"
-                            {...(defaultStyles.pdf || {})}
-                            label={false}
-                            glyphColor="#fff"
-                            color="#6b7280"
-                          />
-                        </div>
-                      ) : null}
+                      <DocumentFileTypeIcon
+                        document={{ mimeType: result.type, fileName: result.url, title: result.title }}
+                        className="mt-0.5"
+                      />
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           {showSelection && isSelected && <CheckCircle2 className="h-5 w-5 text-green-600" />}
@@ -859,19 +852,10 @@ function SRUWebserviceTab({ onDocumentsSelected, showSelection = true }: Overhei
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-start gap-3">
-                      {record.type?.toLowerCase() === "pdf" ? (
-                        <div className="w-5 h-5 shrink-0 mt-0.5 flex items-center overflow-hidden [&>svg]:w-full [&>svg]:h-full [&>svg]:grayscale">
-                          <FileIcon
-                            extension="pdf"
-                            {...(defaultStyles.pdf || {})}
-                            label={false}
-                            glyphColor="#fff"
-                            color="#6b7280"
-                          />
-                        </div>
-                      ) : (
-                        <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
-                      )}
+                      <DocumentFileTypeIcon
+                        document={{ mimeType: record.type, fileName: record.url, title: record.title }}
+                        className="mt-0.5"
+                      />
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           {showSelection && isSelected && <CheckCircle2 className="h-5 w-5 text-green-600" />}
@@ -1177,19 +1161,10 @@ function OfficialPublicationsTab({ onDocumentsSelected, showSelection = true }: 
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-start gap-4">
-                      {pub.type?.toLowerCase() === "pdf" ? (
-                        <div className="w-5 h-5 shrink-0 mt-0.5 flex items-center overflow-hidden [&>svg]:w-full [&>svg]:h-full [&>svg]:grayscale">
-                          <FileIcon
-                            extension="pdf"
-                            {...(defaultStyles.pdf || {})}
-                            label={false}
-                            glyphColor="#fff"
-                            color="#6b7280"
-                          />
-                        </div>
-                      ) : (
-                        <FileText className="h-4 w-4 text-muted-foreground mt-0.5" />
-                      )}
+                      <DocumentFileTypeIcon
+                        document={{ mimeType: pub.type, fileName: pub.url, title: pub.title }}
+                        className="mt-0.5"
+                      />
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           {showSelection && isSelected && <CheckCircle2 className="h-5 w-5 text-green-600" />}

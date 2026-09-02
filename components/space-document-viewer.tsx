@@ -47,7 +47,7 @@ export function SpaceDocumentViewer({
 
   return (
     <HighlightProvider>
-      <WorkspaceChatWrapper spaceId={spaceId} workspaceName={spaceName} defaultOpen canManage={false}>
+      <WorkspaceChatWrapper spaceId={spaceId} workspaceName={spaceName} canManage={false}>
         <Suspense fallback={null}>
           <DocumentViewerClient
             documentId={item.id}

@@ -4,8 +4,10 @@ import { Layers2, FolderKanban } from "lucide-react"
 import { CreateSpaceDialog } from "@/components/create-space-dialog"
 import { CreateWorkspaceDialog } from "@/components/create-workspace-dialog"
 import { DashboardBoard } from "@/components/dashboard-board"
+import { DashboardMetrics } from "@/components/dashboard-metrics"
 import { UserMenu } from "@/components/user-menu"
 import { Card, CardContent } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
 import { getUserSpaces } from "@/lib/actions/space"
 import { listDashboardPins } from "@/lib/actions/dashboard-pins"
 import { createClient } from "@/lib/supabase/server"
@@ -113,7 +115,12 @@ export default async function DashboardPage() {
     return t(`space.common.roles.${normalized}`, role)
   }
 
-  const { data: pins } = await listDashboardPins()
+  const [{ data: pins }, conversationCountResult] = await Promise.all([
+    listDashboardPins(),
+    supabase.from("conversations").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+  ])
+  const conversationCount = conversationCountResult.count ?? 0
+  const showMetrics = hasSpaces || hasProgrammes || conversationCount > 0
 
   const welcomeCopy =
     hasProgrammes || hasSpaces ? t("dashboard.welcome.prompt") : t("dashboard.welcome.empty")
@@ -141,6 +148,17 @@ export default async function DashboardPage() {
             <DashboardGreeting name={displayName} />
             <p className="mt-2 text-muted-foreground">{welcomeCopy}</p>
           </div>
+
+          {showMetrics ? (
+            <>
+              <DashboardMetrics
+                authorities={authorities.length}
+                programmes={myProgrammes.length}
+                conversations={conversationCount}
+              />
+              <Separator className="my-8 shrink-0 bg-border" />
+            </>
+          ) : null}
 
           <DashboardBoard
             initialPins={pins ?? []}

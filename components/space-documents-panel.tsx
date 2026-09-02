@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { SpaceUploadDocumentDialog } from "@/components/space-upload-document-dialog"
 import { Download, ExternalLink, FileText, Loader2, MoreVertical, Trash2, Upload } from "lucide-react"
+import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -159,7 +160,12 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-4">
         <div>
-          <h3 className="text-xl font-semibold text-foreground">{t("space.documents.panel.title")}</h3>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-xl font-semibold text-foreground">{t("space.documents.panel.title")}</h3>
+            <span className="text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
+              ({safeDocuments.length})
+            </span>
+          </div>
           <p className="text-sm text-muted-foreground">
             {t("space.documents.panel.description", undefined, { space: spaceName })}
           </p>
@@ -215,6 +221,12 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
           const docCards = safeDocuments.map((doc) => {
             const docTitle = doc.payload?.title || doc.payload?.file_name || t("space.documents.panel.untitled")
             const href = `/spaces/${spaceId}/documents/${doc.id}`
+            const fileDocument = {
+              mimeType: doc.payload?.mime_type,
+              fileName: doc.payload?.file_name,
+              title: docTitle,
+              url: doc.payload?.file_url,
+            }
 
             return (
               <Card key={doc.id} className="group relative flex h-full flex-col shadow transition-all hover:shadow-md">
@@ -229,10 +241,13 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                 </div>
                 <Link href={href} className="flex min-h-0 flex-1 flex-col pr-10">
                   <CardHeader>
-                    <div className="flex items-center justify-between gap-2">
-                      <CardTitle className="text-base font-semibold">{docTitle}</CardTitle>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <DocumentFileTypeIcon document={fileDocument} className="mt-0.5" />
+                        <CardTitle className="text-base font-semibold">{docTitle}</CardTitle>
+                      </div>
                       {doc.classification && (
-                        <Badge variant="outline">
+                        <Badge variant="outline" className="shrink-0">
                           {t(`workspace.common.classification.${doc.classification}` as const)}
                         </Badge>
                       )}
@@ -275,6 +290,12 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                 <div className="divide-y divide-border">
                   {safeDocuments.map((doc) => {
                     const docTitle = doc.payload?.title || doc.payload?.file_name || t("space.documents.panel.untitled")
+                    const fileDocument = {
+                      mimeType: doc.payload?.mime_type,
+                      fileName: doc.payload?.file_name,
+                      title: docTitle,
+                      url: doc.payload?.file_url,
+                    }
 
                     return (
                       <div
@@ -285,12 +306,15 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                           href={`/spaces/${spaceId}/documents/${doc.id}`}
                           className="grid min-w-0 flex-1 grid-cols-[3fr_5fr_2fr_2fr] items-center gap-4 px-4 py-3 text-sm"
                         >
-                          <div className="min-w-0 font-medium text-foreground">
-                            <span className="block truncate">{docTitle}</span>
-                            <div className="text-xs text-muted-foreground">
-                              {t("space.documents.panel.uploadedLabel", undefined, {
-                                date: new Date(doc.created_at).toLocaleDateString(),
-                              })}
+                          <div className="flex min-w-0 items-start gap-3 font-medium text-foreground">
+                            <DocumentFileTypeIcon document={fileDocument} className="mt-0.5" />
+                            <div className="min-w-0">
+                              <span className="block truncate">{docTitle}</span>
+                              <div className="text-xs text-muted-foreground">
+                                {t("space.documents.panel.uploadedLabel", undefined, {
+                                  date: new Date(doc.created_at).toLocaleDateString(),
+                                })}
+                              </div>
                             </div>
                           </div>
                           <div className="text-muted-foreground">

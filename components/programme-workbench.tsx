@@ -111,6 +111,8 @@ import { UserAvatar } from "@/components/user-avatar"
 import { WorkspaceNotesPanel, type WorkspaceNote } from "@/components/workspace-notes-panel"
 import { Separator } from "@/components/ui/separator"
 import { ArrowLeft, Check, CircleHelp } from "lucide-react"
+import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
+import { getDocumentFileExtension } from "@/lib/utils/document-files"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 function StageHeading({ title, purpose }: { title: string; purpose: string }) {
@@ -275,7 +277,7 @@ export function ProgrammeWorkbench({
     Array<{ id: string; name: string; role: string; stage: string; provider: string }>
   >([])
   const [corpusDocs, setCorpusDocs] = useState<
-    Array<{ id: string; title: string; document_role: string | null; origin: DocumentOrigin }>
+    Array<{ id: string; title: string; document_role: string | null; origin: DocumentOrigin; fileExtension: string }>
   >([])
   const [notes, setNotes] = useState<WorkspaceNote[]>([])
   const [graph, setGraph] = useState<{ nodes: any[]; edges: any[] }>({ nodes: [], edges: [] })
@@ -396,11 +398,16 @@ export function ProgrammeWorkbench({
       setChapters(chapterResult.data || [])
       setCorpusDocs(
         (docs.data || []).map(
-          (d: { id: string; title: string; document_role?: string | null; metadata?: unknown }) => ({
+          (d: { id: string; title: string; document_role?: string | null; metadata?: unknown; url?: string | null }) => ({
             id: d.id,
             title: d.title,
             document_role: d.document_role ?? null,
             origin: documentOriginFromMetadata(d.metadata),
+            fileExtension: getDocumentFileExtension({
+              metadata: (d.metadata as Record<string, unknown> | null) ?? null,
+              title: d.title,
+              url: d.url,
+            }),
           }),
         ),
       )
@@ -852,6 +859,7 @@ export function ProgrammeWorkbench({
               .map((doc) => (
                 <li key={doc.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2">
                   <span className="flex min-w-0 flex-wrap items-center gap-2">
+                    <DocumentFileTypeIcon extension={doc.fileExtension} />
                     <span>{doc.title}</span>
                     <Badge variant="outline">
                       {doc.origin === "authority"

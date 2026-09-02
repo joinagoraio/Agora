@@ -49,7 +49,12 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-xl font-semibold text-foreground">{t("space.workspaces.title")}</h3>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-xl font-semibold text-foreground">{t("space.workspaces.title")}</h3>
+            <span className="text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
+              ({programmes.length})
+            </span>
+          </div>
           <p className="text-sm text-muted-foreground">
             {t("space.workspaces.subtitle", undefined, { space: spaceName })}
           </p>

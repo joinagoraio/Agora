@@ -20,6 +20,7 @@ import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, RotateCcw, Sparkles, Upload, Wand2, X, Search } from "lucide-react"
+import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { useI18n } from "@/lib/i18n/use-i18n"
@@ -932,13 +933,24 @@ export function SpaceSetupWizard({
                     const title = doc.payload?.title || doc.payload?.file_name || t("space.documents.panel.untitled")
                     return (
                       <div key={doc.id} className="flex items-center justify-between rounded-md border border-border/80 px-3 py-2">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium text-foreground">{title}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {t("space.wizard.documents.addedOn", undefined, {
-                              date: new Date(doc.created_at).toLocaleDateString(),
-                            })}
-                          </span>
+                        <div className="flex min-w-0 items-start gap-3">
+                          <DocumentFileTypeIcon
+                            document={{
+                              mimeType: doc.payload?.mime_type,
+                              fileName: doc.payload?.file_name,
+                              title,
+                              url: doc.payload?.file_url,
+                            }}
+                            className="mt-0.5"
+                          />
+                          <div className="flex min-w-0 flex-col">
+                            <span className="text-sm font-medium text-foreground">{title}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {t("space.wizard.documents.addedOn", undefined, {
+                                date: new Date(doc.created_at).toLocaleDateString(),
+                              })}
+                            </span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           {doc.classification && (

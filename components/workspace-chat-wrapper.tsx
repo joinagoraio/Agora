@@ -4,6 +4,7 @@ import { useState, useEffect, createContext, useContext } from "react"
 import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import { ChatSidebar } from "@/components/chat-sidebar"
 import { ChatToggleButton } from "@/components/chat-toggle-button"
+import { patchAskPanelPreference, readAskPanelPreference } from "@/lib/chat/ask-panel-preference"
 
 interface WorkspaceChatWrapperProps {
   workspaceId?: string
@@ -49,6 +50,13 @@ export function WorkspaceChatWrapper({
   const [sidebarWidth, setSidebarWidth] = useState<number | null>(null)
   const [isSidebarResizing, setIsSidebarResizing] = useState(false)
 
+  useEffect(() => {
+    const preference = readAskPanelPreference(spaceId, workspaceId)
+    if (preference.open) {
+      setIsChatOpen(true)
+    }
+  }, [spaceId, workspaceId])
+
   // Auto-open chat if conversationId is in URL
   // Only open if not already open to avoid closing/reopening loops
   useEffect(() => {
@@ -58,8 +66,13 @@ export function WorkspaceChatWrapper({
     }
   }, [searchParams, isChatOpen])
 
+  const persistOpen = (open: boolean) => {
+    setIsChatOpen(open)
+    patchAskPanelPreference(spaceId, workspaceId, { open })
+  }
+
   const handleClose = () => {
-    setIsChatOpen(false)
+    persistOpen(false)
     // Clear conversationId from URL when closing to prevent auto-reopening
     const conversationId = searchParams.get("conversationId")
     if (conversationId) {
@@ -72,7 +85,7 @@ export function WorkspaceChatWrapper({
   }
 
   const handleToggle = () => {
-    setIsChatOpen(!isChatOpen)
+    persistOpen(!isChatOpen)
   }
 
   // Get responsive default width for margin calculation
@@ -100,7 +113,7 @@ export function WorkspaceChatWrapper({
 
   return (
     <ChatContext.Provider
-      value={{ isChatOpen, setIsChatOpen, sidebarWidth, setSidebarWidth, isSidebarResizing, setIsSidebarResizing }}
+      value={{ isChatOpen, setIsChatOpen: persistOpen, sidebarWidth, setSidebarWidth, isSidebarResizing, setIsSidebarResizing }}
     >
       <div className="relative flex min-h-screen overflow-x-hidden">
         <div 

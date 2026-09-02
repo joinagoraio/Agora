@@ -4,11 +4,11 @@ import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Loader2, Search, CheckCircle2, ExternalLink, Plus, FileText, Folder, ArrowLeft, RefreshCw } from "lucide-react"
+import { Loader2, Search, CheckCircle2, ExternalLink, Plus, Folder, ArrowLeft, RefreshCw } from "lucide-react"
+import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { FileIcon, defaultStyles } from "react-file-icon"
 import { createClient } from "@/lib/supabase/client"
 import { getBaseUrl } from "@/lib/utils/get-base-url"
 
@@ -375,20 +375,11 @@ export function GoogleDriveSearch({ accessToken, onDocumentsSelected, showSelect
                         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
                           <Folder className="h-5 w-5 text-primary" />
                         </div>
-                      ) : getFileType(file.mimeType) === "PDF" ? (
-                        <div className="w-10 h-10 shrink-0 flex items-center overflow-hidden [&>svg]:w-full [&>svg]:h-full [&>svg]:grayscale">
-                          <FileIcon
-                            extension="pdf"
-                            {...(defaultStyles.pdf || {})}
-                            label={false}
-                            glyphColor="#fff"
-                            color="#6b7280"
-                          />
-                        </div>
                       ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                          <FileText className="h-5 w-5 text-primary" />
-                        </div>
+                        <DocumentFileTypeIcon
+                          document={{ mimeType: file.mimeType, fileName: file.name }}
+                          className="mt-0.5"
+                        />
                       )}
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">

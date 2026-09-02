@@ -12,7 +12,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, CheckCircle2, FileText, ExternalLink, Sparkles, Edit2, Search } from "lucide-react"
+import { Loader2, CheckCircle2, ExternalLink, Sparkles, Edit2, Search } from "lucide-react"
+import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -477,7 +478,14 @@ export function AddOverheidDocumentsDialog({
                       >
                         <CardHeader className="pb-3">
                           <div className="flex items-start gap-3">
-                            <FileText className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
+                            <DocumentFileTypeIcon
+                              document={{
+                                mimeType: result.type,
+                                fileName: result.url,
+                                title: result.title,
+                              }}
+                              className="mt-0.5"
+                            />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-2 flex-wrap">
                                 {isSelected && <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />}

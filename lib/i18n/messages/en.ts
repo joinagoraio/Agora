@@ -160,6 +160,20 @@ export const enMessages = {
       prompt: "What are you going to work on today?",
       empty: "Create an authority first. Your programmes will live underneath it.",
     },
+    metrics: {
+      authorities: {
+        title: "Authorities",
+        subtitle: "Organisations you work in",
+      },
+      programmes: {
+        title: "Programmes",
+        subtitle: "Official programmes you can draft",
+      },
+      conversations: {
+        title: "Conversations",
+        subtitle: "Your Ask chats",
+      },
+    },
     spaces: {
       title: "Authorities",
       subtitle: "Your municipality, province, or department",
@@ -1430,12 +1444,12 @@ export const enMessages = {
       panel: {
         title: "Shared library",
         description:
-          "Organisation-wide policies and references for {{space}}. Programmes and research folders inherit public documents from here.",
+          "Organisation-wide policies and references for {{space}}. Programmes inherit public documents from here.",
         untitled: "Untitled document",
         viewList: "Show as list",
         viewGrid: "Show as cards",
         emptyTitle: "No library documents yet",
-        emptyDescription: "Upload policies, directives, or briefing notes so every programme and research folder starts with the same foundation.",
+        emptyDescription: "Upload policies, directives, or briefing notes so every programme starts with the same foundation.",
         emptyUploadTrigger: "Upload a document",
         summaryPlaceholder: "No summary available yet.",
         uploadedLabel: "Uploaded {{date}}",

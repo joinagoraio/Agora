@@ -248,7 +248,7 @@ export default async function DocumentViewerPage({ params, searchParams }: Docum
 
   return (
     <HighlightProvider>
-      <WorkspaceChatWrapper workspaceId={workspaceId} workspaceName={workspace.name} defaultOpen>
+      <WorkspaceChatWrapper workspaceId={workspaceId} workspaceName={workspace.name}>
         <DocumentViewerClient
           workspaceId={workspaceId}
           documentId={documentId}

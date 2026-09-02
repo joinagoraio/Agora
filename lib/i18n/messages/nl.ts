@@ -160,6 +160,20 @@ export const nlMessages = {
       prompt: "Waar ga je vandaag aan werken?",
       empty: "Maak eerst een bevoegd gezag. Daaronder komen je programma’s.",
     },
+    metrics: {
+      authorities: {
+        title: "Bevoegd gezag",
+        subtitle: "Organisaties waar je in werkt",
+      },
+      programmes: {
+        title: "Programma’s",
+        subtitle: "Officiële programma’s die je kunt opstellen",
+      },
+      conversations: {
+        title: "Gesprekken",
+        subtitle: "Je Ask-chats",
+      },
+    },
     spaces: {
       title: "Bevoegd gezag",
       subtitle: "Je gemeente, provincie of afdeling",
@@ -1431,12 +1445,12 @@ export const nlMessages = {
       panel: {
         title: "Gedeelde bibliotheek",
         description:
-          "Organisatiebrede beleidsstukken en referenties voor {{space}}. Programma’s en onderzoekmappen erven hier openbare documenten.",
+          "Organisatiebrede beleidsstukken en referenties voor {{space}}. Programma’s erven hier openbare documenten.",
         untitled: "Naamloos document",
         viewList: "Weergave als lijst",
         viewGrid: "Weergave als raster",
         emptyTitle: "Nog geen bibliotheekdocumenten",
-        emptyDescription: "Upload beleid, richtlijnen of memo's zodat elk programma en elke onderzoekmap hetzelfde vertrekpunt heeft.",
+        emptyDescription: "Upload beleid, richtlijnen of memo's zodat elk programma hetzelfde vertrekpunt heeft.",
         emptyUploadTrigger: "Document uploaden",
         summaryPlaceholder: "Nog geen samenvatting beschikbaar.",
         uploadedLabel: "Geüpload op {{date}}",

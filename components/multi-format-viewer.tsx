@@ -1545,10 +1545,11 @@ export function MultiFormatViewer({
             </div>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-white" ref={containerRef}>
-          <div className="w-full min-h-full flex items-start justify-center" style={{ padding: '2rem' }}>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-100 p-4" ref={containerRef}>
+          <div className="flex min-h-full w-full items-start justify-center">
             <div
               ref={contentRef}
+              className="bg-white shadow-lg"
               style={{
                 // Fixed width container - width changes only in fit mode
                 maxWidth: fitMode ? "100%" : "896px",
@@ -1558,7 +1559,7 @@ export function MultiFormatViewer({
             >
               <div ref={innerContentRef} style={{ width: "100%" }}>
                 <TooltipProvider>
-                  <div className="font-mono whitespace-pre-wrap" style={textZoomStyles}>
+                  <div className="whitespace-pre-wrap p-8 font-mono" style={textZoomStyles}>
                     {renderTextWithHighlights()}
                   </div>
                 </TooltipProvider>

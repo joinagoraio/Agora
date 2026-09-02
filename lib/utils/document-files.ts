@@ -1,7 +1,9 @@
-type DocumentLike = {
+export type DocumentLike = {
   metadata?: Record<string, any> | null
   url?: string | null
   title?: string | null
+  fileName?: string | null
+  mimeType?: string | null
 }
 
 const VALID_EXTENSIONS = new Set([
@@ -27,49 +29,70 @@ const VALID_EXTENSIONS = new Set([
 function normalizeExtension(ext: string): string {
   if (ext === "htm") return "html"
   if (ext === "jpeg") return "jpg"
+  if (ext === "markdown") return "md"
   return ext
+}
+
+function extensionFromMime(typeValue: string): string | null {
+  const value = typeValue.toLowerCase()
+  if (!value) return null
+  if (value.includes("pdf")) return "pdf"
+  if (value.includes("msword")) return "doc"
+  if (value.includes("wordprocessingml") || value.includes("google-apps.document") || value.includes("word")) {
+    return "docx"
+  }
+  if (value.includes("html")) return "html"
+  if (value.includes("text/plain") || value === "txt" || value === "text") return "txt"
+  if (value.includes("text/markdown") || value.includes("markdown") || value === "md") return "md"
+  if (value.includes("spreadsheet") || value.includes("excel") || value.includes("google-apps.spreadsheet") || value.includes("sheet")) {
+    return "xlsx"
+  }
+  if (value.includes("presentation") || value.includes("powerpoint") || value.includes("google-apps.presentation") || value.includes("slides")) {
+    return "pptx"
+  }
+  if (value.includes("image/jpeg") || value.includes("jpeg") || value === "jpg") return "jpg"
+  if (value.includes("image/png") || value === "png") return "png"
+  if (value.includes("image/gif") || value === "gif") return "gif"
+  if (value.includes("image/svg") || value.includes("svg")) return "svg"
+  return null
+}
+
+function extensionFromName(name: string): string | null {
+  const filename = name.split("/").pop()?.split("?")[0] || ""
+  const ext = filename.split(".").pop()?.toLowerCase() || ""
+  if (ext && VALID_EXTENSIONS.has(ext)) {
+    return normalizeExtension(ext)
+  }
+  return null
 }
 
 export function getDocumentFileExtension(doc: DocumentLike): string {
   const metadata = doc.metadata || {}
-  const contentType = String(metadata.contentType || "").toLowerCase()
-  const typeValue = String(metadata.type || metadata.mime_type || contentType).toLowerCase()
-  if (typeValue.includes("pdf")) return "pdf"
-  if (typeValue.includes("msword")) return "doc"
-  if (typeValue.includes("wordprocessingml") || typeValue.includes("word")) return "docx"
-  if (typeValue.includes("html")) return "html"
-  if (typeValue.includes("text/plain")) return "txt"
-  if (typeValue.includes("text/markdown") || typeValue.includes("markdown")) return "md"
-  if (typeValue.includes("spreadsheet") || typeValue.includes("excel") || typeValue.includes("sheet")) return "xlsx"
-  if (typeValue.includes("presentation") || typeValue.includes("powerpoint") || typeValue.includes("slides")) return "pptx"
-  if (typeValue.includes("image/jpeg") || typeValue.includes("jpeg")) return "jpg"
-  if (typeValue.includes("image/png") || typeValue.includes("png")) return "png"
-  if (typeValue.includes("image/gif") || typeValue.includes("gif")) return "gif"
-  if (typeValue.includes("image/svg") || typeValue.includes("svg")) return "svg"
+  const mimeCandidates = [
+    doc.mimeType,
+    metadata.contentType,
+    metadata.type,
+    metadata.mime_type,
+  ]
 
-  if (contentType) {
-    if (contentType.includes("application/pdf")) return "pdf"
-    if (contentType.includes("application/msword")) return "doc"
-    if (contentType.includes("wordprocessingml")) return "docx"
-    if (contentType.includes("text/html")) return "html"
-    if (contentType.includes("text/plain")) return "txt"
-    if (contentType.includes("text/markdown")) return "md"
-    if (contentType.includes("spreadsheet") || contentType.includes("excel") || contentType.includes("sheet")) return "xlsx"
-    if (contentType.includes("presentation") || contentType.includes("powerpoint") || contentType.includes("slides")) return "pptx"
-    if (contentType.includes("image/jpeg")) return "jpg"
-    if (contentType.includes("image/png")) return "png"
-    if (contentType.includes("image/gif")) return "gif"
-    if (contentType.includes("image/svg")) return "svg"
+  for (const candidate of mimeCandidates) {
+    const ext = extensionFromMime(String(candidate || ""))
+    if (ext) return ext
   }
 
-  const url = doc.url || doc.title || ""
-  const filename = url.split("/").pop() || ""
-  const ext = filename.split(".").pop()?.toLowerCase() || ""
-  if (VALID_EXTENSIONS.has(ext)) {
-    return normalizeExtension(ext)
+  const nameCandidates = [
+    doc.fileName,
+    metadata.filename,
+    metadata.file_name,
+    metadata.originalName,
+    doc.url,
+    doc.title,
+  ]
+
+  for (const candidate of nameCandidates) {
+    const ext = extensionFromName(String(candidate || ""))
+    if (ext) return ext
   }
 
   return "file"
 }
-
-

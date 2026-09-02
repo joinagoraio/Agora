@@ -755,7 +755,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
           <SpaceWorkspaceList spaceId={spaceId} workspaces={workspaces} canCreate={canManage} spaceName={spaceTitle} />
         </div>
 
-        <Separator className="my-4 shrink-0 bg-border" />
+        <Separator className="my-8 shrink-0 bg-border" />
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <SpaceDocumentsPanel

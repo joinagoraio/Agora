@@ -40,10 +40,10 @@ export function HtmlViewer({
           </div>
         </div>
       )}
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="flex min-h-0 flex-1 flex-col bg-gray-100 p-4">
         <iframe
           srcDoc={sanitizedHtmlContent}
-          className="h-full w-full border-0"
+          className="min-h-0 w-full flex-1 border-0 bg-white shadow-lg"
           title={documentTitle}
           sandbox="allow-same-origin allow-scripts"
         />

@@ -8,8 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { FileIcon, defaultStyles } from "react-file-icon"
 import { FileText, Search } from "lucide-react"
+import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
 import { getDocumentFileExtension } from "@/lib/utils/document-files"
 import { useI18n } from "@/lib/i18n/use-i18n"
 
@@ -200,19 +200,11 @@ export function WorkspaceInheritedItems({ items, showEmptyState = true }: Worksp
                 )}
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 shrink-0 mt-0.5 flex items-center justify-center rounded-md border bg-muted">
-                      {isDocument ? (
-                        <FileIcon
-                          extension={iconExtension}
-                          {...(defaultStyles[iconExtension as keyof typeof defaultStyles] || {})}
-                          label={false}
-                          glyphColor="#fff"
-                          color="#6b7280"
-                        />
-                      ) : (
-                        <FileText className="h-5 w-5 text-muted-foreground" />
-                      )}
-                    </div>
+                    {isDocument ? (
+                      <DocumentFileTypeIcon extension={iconExtension} className="mt-0.5" />
+                    ) : (
+                      <FileText className="mt-0.5 h-8 w-8 text-muted-foreground" />
+                    )}
                     <div className="flex-1 min-w-0 space-y-2">
                       <CardTitle className="text-lg break-words">{title}</CardTitle>
                       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

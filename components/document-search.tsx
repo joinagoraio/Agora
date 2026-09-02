@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { Search, FileText, ExternalLink, Loader2, Filter, X } from "lucide-react"
+import { Search, ExternalLink, Loader2, Filter, X } from "lucide-react"
+import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
 import {
   Accordion,
   AccordionContent,
@@ -177,7 +178,16 @@ export function DocumentSearch({ workspaceId }: DocumentSearchProps) {
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-3">
-                        <FileText className="h-5 w-5 text-primary" />
+                        <DocumentFileTypeIcon
+                          document={{
+                            metadata: doc.metadata,
+                            mimeType: doc.type || doc.mime_type || doc.contentType,
+                            fileName: doc.filename || doc.file_name || doc.url,
+                            title: doc.title,
+                            url: doc.url || doc.external_url,
+                          }}
+                          className="mt-0.5"
+                        />
                         <div>
                           <CardTitle className="text-lg">{doc.title}</CardTitle>
                           <div className="mt-1 flex flex-wrap gap-2">

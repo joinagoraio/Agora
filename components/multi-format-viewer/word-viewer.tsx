@@ -49,10 +49,11 @@ export function WordViewer({
           </div>
         </div>
       )}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden bg-white" ref={containerRef}>
-        <div className="flex min-h-full w-full items-start justify-center" style={{ padding: "2rem" }}>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-100 p-4" ref={containerRef}>
+        <div className="flex min-h-full w-full items-start justify-center">
           <div
             ref={contentRef}
+            className="bg-white shadow-lg"
             style={{
               width: "100%",
               maxWidth: fitMode ? "100%" : "56rem",
@@ -69,7 +70,7 @@ export function WordViewer({
             >
               <div
                 dangerouslySetInnerHTML={{ __html: safeWordContent }}
-                className="word-document-content"
+                className="word-document-content p-8"
                 style={{
                   fontFamily: "system-ui, -apple-system, sans-serif",
                   lineHeight: "1.6",

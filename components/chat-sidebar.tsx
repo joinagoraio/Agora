@@ -39,6 +39,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { IconTooltip } from "@/components/icon-tooltip"
+import { patchAskPanelPreference, readAskPanelPreference } from "@/lib/chat/ask-panel-preference"
 
 interface ChatSidebarProps {
   workspaceId?: string
@@ -138,6 +139,15 @@ export function ChatSidebar({ workspaceId, spaceId, workspaceName, isOpen, onClo
   const isCreatingConversationRef = useRef(false)
   const isUpdatingUrlRef = useRef(false)
   const wasDocumentViewRef = useRef(isDocumentView)
+
+  const persistListExpanded = (expanded: boolean) => {
+    setIsListExpanded(expanded)
+    patchAskPanelPreference(spaceId, workspaceId, { list: expanded })
+  }
+
+  useEffect(() => {
+    setIsListExpanded(readAskPanelPreference(spaceId, workspaceId).list)
+  }, [spaceId, workspaceId])
 
   // Get conversationId from URL as a stable value for dependency array
   const conversationIdFromUrl = searchParams.get("conversationId")
@@ -395,14 +405,6 @@ export function ChatSidebar({ workspaceId, spaceId, workspaceName, isOpen, onClo
     }
   }, [isOpen])
 
-  // Expand list when there are conversations available
-  useEffect(() => {
-    if (conversations.length > 0) {
-      console.log("[ChatSidebar] Expanding list, conversations count:", conversations.length)
-      setIsListExpanded(true)
-    }
-  }, [conversations.length])
-
   const handleNewChat = async () => {
     if (isCreatingConversationRef.current) {
       return
@@ -438,9 +440,7 @@ export function ChatSidebar({ workspaceId, spaceId, workspaceName, isOpen, onClo
       // Load messages (will be empty for new conversation)
       await loadMessages(newConversationId)
       setHasLoadedInitial(true)
-      // Expand list when conversation is created
-      setIsListExpanded(true)
-      // Ensure chat sidebar is open
+      persistListExpanded(true)
       setIsChatOpen(true)
     } finally {
       isCreatingConversationRef.current = false
@@ -931,7 +931,7 @@ export function ChatSidebar({ workspaceId, spaceId, workspaceName, isOpen, onClo
                 }
                 
                 // Update states separately to avoid updating parent during render
-                setIsListExpanded(newState)
+                persistListExpanded(newState)
                 setSidebarWidth(newWidth)
                 
                 // Mark as manually adjusted so auto-update doesn't override

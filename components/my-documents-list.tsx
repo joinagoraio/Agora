@@ -26,6 +26,7 @@ import {
 import { CreateWorkspaceDocumentDialog } from "@/components/create-workspace-document-dialog"
 import { deleteDocument } from "@/lib/actions/document"
 import { Calendar, Edit3, FileText, MoreVertical, Search, Trash2 } from "lucide-react"
+import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { IconTooltip } from "@/components/icon-tooltip"
@@ -212,27 +213,33 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
                 <Card className="shadow transition-all hover:shadow-md cursor-pointer">
                   <CardHeader>
                     <div className="flex items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <CardTitle className="text-base truncate">{doc.title || t("workspace.sections.myDocuments.card.untitled")}</CardTitle>
-                          <Badge variant="secondary" className="shrink-0">
-                            {doc.classification
-                              ? t(`workspace.common.classification.${doc.classification}`)
-                              : t("workspace.common.classification.internal")}
-                          </Badge>
-                        </div>
-                        <CardDescription className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                          {lastEditedAt && (
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
+                        <DocumentFileTypeIcon
+                          document={{ metadata: doc.metadata, title: doc.title, url: doc.url }}
+                          className="mt-0.5"
+                        />
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <CardTitle className="truncate text-base">{doc.title || t("workspace.sections.myDocuments.card.untitled")}</CardTitle>
+                            <Badge variant="secondary" className="shrink-0">
+                              {doc.classification
+                                ? t(`workspace.common.classification.${doc.classification}`)
+                                : t("workspace.common.classification.internal")}
+                            </Badge>
+                          </div>
+                          <CardDescription className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                            {lastEditedAt && (
+                              <span className="inline-flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {t("workspace.sections.myDocuments.card.lastEdited", undefined, { date: new Date(lastEditedAt).toLocaleString() })}
+                              </span>
+                            )}
                             <span className="inline-flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {t("workspace.sections.myDocuments.card.lastEdited", undefined, { date: new Date(lastEditedAt).toLocaleString() })}
+                              <FileText className="h-3 w-3" />
+                              {t("workspace.sections.myDocuments.card.editableDraft")}
                             </span>
-                          )}
-                          <span className="inline-flex items-center gap-1">
-                            <FileText className="h-3 w-3" />
-                            {t("workspace.sections.myDocuments.card.editableDraft")}
-                          </span>
-                        </CardDescription>
+                          </CardDescription>
+                        </div>
                       </div>
                       {canManage && (
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
