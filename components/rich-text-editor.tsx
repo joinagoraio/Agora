@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils"
 import { useEffect } from "react"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { IconTooltip } from "@/components/icon-tooltip"
+import { BlockId } from "@/lib/programme/block-id"
 
 interface RichTextEditorProps {
   content: string
@@ -69,6 +70,7 @@ export function RichTextEditor({ content, onChange, placeholder, className }: Ri
       }),
       Color,
       TextStyle,
+      BlockId,
     ],
     content,
     onUpdate: ({ editor }) => {

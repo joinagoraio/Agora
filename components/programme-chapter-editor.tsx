@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition, type MouseEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -40,9 +40,10 @@ import {
   heartbeatSectionPresence,
   listSectionPresence,
 } from "@/lib/actions/collaboration"
-import { addProgrammeComment, listProgrammeComments } from "@/lib/actions/comments"
+import { addProgrammeComment, listProgrammeComments, setProgrammeCommentResolved } from "@/lib/actions/comments"
 import { UserAvatar } from "@/components/user-avatar"
 import { IconTooltip } from "@/components/icon-tooltip"
+import { ProgrammeCommentRail } from "@/components/programme-comment-rail"
 import type { ProgrammeBindings, ProgrammeOutlineNode } from "@/lib/programme/domain"
 import type { ChapterWorkflowStatus } from "@/lib/programme/review-policy"
 import {
@@ -53,6 +54,13 @@ import {
   writeProgrammeDocumentLayout,
   type ProgrammeDocumentLayout,
 } from "@/lib/programme/document-layout"
+import { BLOCK_ID_ATTR, ensureBlockIdsInHtml, quoteFromBlock } from "@/lib/programme/block-id"
+import {
+  paragraphArtefactId,
+  parseParagraphArtefactId,
+  toAnchoredComment,
+  type AnchoredProgrammeComment,
+} from "@/lib/programme/comment-anchor"
 import { ChevronDown, List, ZoomIn, ZoomOut } from "lucide-react"
 
 type ChapterBody = {
@@ -68,6 +76,7 @@ type Props = {
   onBindingsChange: (bindings: ProgrammeBindings) => void
   onMessage: (message: string | null) => void
   onGoOutline: () => void
+  canComment?: boolean
 }
 
 export function ProgrammeChapterEditor({
@@ -77,6 +86,7 @@ export function ProgrammeChapterEditor({
   onBindingsChange,
   onMessage,
   onGoOutline,
+  canComment = true,
 }: Props) {
   const { t } = useI18n()
   const [nodes, setNodes] = useState<ProgrammeOutlineNode[]>([])
@@ -97,10 +107,9 @@ export function ProgrammeChapterEditor({
   const [compareVersionB, setCompareVersionB] = useState("")
   const [versionDiff, setVersionDiff] = useState<Array<{ path: string; before: string; after: string }>>([])
   const [alsoOpen, setAlsoOpen] = useState<Array<{ name: string; avatarUrl: string | null }>>([])
-  const [chapterComment, setChapterComment] = useState("")
-  const [chapterComments, setChapterComments] = useState<
-    Array<{ id: string; body: string; resolved: boolean; authorName?: string | null; authorAvatarUrl?: string | null }>
-  >([])
+  const [commentDraft, setCommentDraft] = useState("")
+  const [activeBlockId, setActiveBlockId] = useState<string | null>(null)
+  const [railComments, setRailComments] = useState<AnchoredProgrammeComment[]>([])
   const [layout, setLayout] = useState<ProgrammeDocumentLayout>(DEFAULT_PROGRAMME_DOCUMENT_LAYOUT)
 
   useEffect(() => {
@@ -132,7 +141,7 @@ export function ProgrammeChapterEditor({
         if (!chapter.outlineNodeId) continue
         nextBodies[chapter.outlineNodeId] = {
           documentId: chapter.documentId,
-          content: chapter.content || "",
+          content: ensureBlockIdsInHtml(chapter.content || ""),
           workflowStatus: (chapter.workflowStatus as ChapterWorkflowStatus) || "generated",
         }
       }
@@ -258,18 +267,37 @@ export function ProgrammeChapterEditor({
       }
       const nextBody: ChapterBody = {
         documentId: result.data.documentId,
-        content: result.data.content,
+        content: ensureBlockIdsInHtml(result.data.content),
         workflowStatus: result.data.workflowStatus || "generated",
       }
       setBodies((prev) => ({ ...prev, [nodeId]: nextBody }))
       if (selectedId === nodeId) {
-        setContent(result.data.content)
+        setContent(ensureBlockIdsInHtml(result.data.content))
         setWorkflowStatus(result.data.workflowStatus || "generated")
         setDirty(false)
       }
-      const listed = await listProgrammeComments(workspaceId, "document", docId)
-      setChapterComments(listed.data || [])
     })
+  }
+
+  const refreshComments = () => {
+    startTransition(async () => {
+      const listed = await listProgrammeComments(workspaceId)
+      const chapters = nodes.map((node) => ({
+        documentId: bodies[node.id]?.documentId ?? bindings.chapterDocuments?.[node.id] ?? null,
+        title: node.title,
+      }))
+      setRailComments(
+        (listed.data || [])
+          .map((row) => toAnchoredComment(row, chapters, quoteForComment(row.artefact_id)))
+          .filter((row): row is AnchoredProgrammeComment => Boolean(row)),
+      )
+    })
+  }
+
+  const quoteForComment = (artefactId: string) => {
+    const parsed = parseParagraphArtefactId(artefactId)
+    if (!parsed) return ""
+    return quoteFromBlock(document.getElementById("programme-document-scroll"), parsed.blockId)
   }
 
   useEffect(() => {
@@ -290,14 +318,14 @@ export function ProgrammeChapterEditor({
     setDirty(false)
     setShowHistory(false)
     if (docId && !cached) loadExisting(selectedId, docId)
-    else if (docId) {
-      startTransition(async () => {
-        const listed = await listProgrammeComments(workspaceId, "document", docId)
-        setChapterComments(listed.data || [])
-      })
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
+
+  useEffect(() => {
+    if (nodes.length === 0) return
+    refreshComments()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, nodes, bodies])
 
   const chapterToolbar = selected ? (
     <div className="space-y-3 border-b pb-4">
@@ -595,51 +623,6 @@ export function ProgrammeChapterEditor({
           ))}
         </div>
       )}
-      {documentId && (
-        <div className="space-y-2 rounded-md border p-2">
-          <p className="text-xs font-medium">{t("workspace.programme.chapterComments")}</p>
-          <ul className="space-y-1 text-xs">
-            {chapterComments.map((comment) => (
-              <li key={comment.id} className="flex items-start gap-2">
-                <UserAvatar name={comment.authorName} url={comment.authorAvatarUrl} className="mt-0.5 h-5 w-5" />
-                <span>
-                  {comment.resolved ? "[done] " : ""}
-                  {comment.authorName ? `${comment.authorName}: ` : ""}
-                  {comment.body}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <div className="flex gap-2">
-            <Input
-              value={chapterComment}
-              onChange={(e) => setChapterComment(e.target.value)}
-              placeholder={t("workspace.programme.chapterCommentPlaceholder")}
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={pending || !chapterComment.trim()}
-              onClick={() =>
-                startTransition(async () => {
-                  const result = await addProgrammeComment({
-                    workspaceId,
-                    artefactType: "document",
-                    artefactId: documentId,
-                    body: chapterComment,
-                  })
-                  setChapterComment("")
-                  onMessage(result.error || t("workspace.programme.commentAdded"))
-                  const listed = await listProgrammeComments(workspaceId, "document", documentId)
-                  setChapterComments(listed.data || [])
-                })
-              }
-            >
-              {t("workspace.programme.addComment")}
-            </Button>
-          </div>
-        </div>
-      )}
       {nodeMeasures.length > 0 && (
         <ul className="text-xs">
           {nodeMeasures.map((m) => (
@@ -751,8 +734,45 @@ export function ProgrammeChapterEditor({
     </div>
   )
 
+  const onPreviewClick = (event: MouseEvent, nodeId: string) => {
+    const target = (event.target as HTMLElement).closest(`[${BLOCK_ID_ATTR}]`) as HTMLElement | null
+    if (!target) return
+    event.stopPropagation()
+    const blockId = target.getAttribute(BLOCK_ID_ATTR)
+    if (!blockId) return
+    if (selectedId !== nodeId) selectChapter(nodeId)
+    setActiveBlockId(blockId)
+  }
+
+  const addParagraphComment = () => {
+    if (!documentId || !activeBlockId) {
+      onMessage(t("workspace.programme.commentEmpty"))
+      return
+    }
+    startTransition(async () => {
+      const result = await addProgrammeComment({
+        workspaceId,
+        artefactType: "section",
+        artefactId: paragraphArtefactId(documentId, activeBlockId),
+        body: commentDraft,
+      })
+      setCommentDraft("")
+      onMessage(result.error || t("workspace.programme.commentAdded"))
+      refreshComments()
+    })
+  }
+
+  useEffect(() => {
+    const root = document.getElementById("programme-document-scroll")
+    if (!root) return
+    root.querySelectorAll(`[${BLOCK_ID_ATTR}]`).forEach((el) => {
+      el.classList.toggle("bg-amber-50", el.getAttribute(BLOCK_ID_ATTR) === activeBlockId)
+    })
+  }, [activeBlockId, bodies, content, nodes])
+
   return (
-    <div className="min-h-full bg-white">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 bg-white">
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto" id="programme-document-scroll">
       {!bindings.templateId ? (
         <div className="mx-auto w-full max-w-7xl space-y-2 px-8 py-8 md:px-14">
           <p className="text-sm">{t("workspace.programme.editorNeedOutline")} {t("workspace.programme.emptyNext.editor")}</p>
@@ -810,8 +830,11 @@ export function ProgrammeChapterEditor({
                   <h2 className="text-xl font-semibold tracking-tight">{node.title}</h2>
                   {hasDoc && body?.content ? (
                     <div
-                      className="text-sm leading-relaxed text-foreground [&_h1]:mb-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_p]:mb-2"
-                      dangerouslySetInnerHTML={{ __html: isSelected ? content || body.content : body.content }}
+                      className="text-sm leading-relaxed text-foreground [&_h1]:mb-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_p]:mb-2 [&_[data-block-id]]:cursor-pointer [&_[data-block-id]:hover]:bg-amber-50/70"
+                      onClick={(event) => onPreviewClick(event, node.id)}
+                      dangerouslySetInnerHTML={{
+                        __html: ensureBlockIdsInHtml(isSelected ? content || body.content : body.content),
+                      }}
                     />
                   ) : (
                     <p className="text-sm text-muted-foreground">
@@ -825,6 +848,48 @@ export function ProgrammeChapterEditor({
           </div>
         </>
       )}
+      </div>
+      {bindings.templateId ? (
+        <ProgrammeCommentRail
+          comments={railComments}
+          activeBlockId={activeBlockId}
+          draft={commentDraft}
+          canComment={canComment}
+          pending={pending}
+          emptyHint={t("workspace.programme.commentEmpty")}
+          addLabel={t("workspace.programme.addComment")}
+          resolveLabel={t("workspace.programme.commentResolve")}
+          reopenLabel={t("workspace.programme.commentReopen")}
+          placeholder={t("workspace.programme.chapterCommentPlaceholder")}
+          title={t("workspace.programme.chapterComments")}
+          onDraftChange={setCommentDraft}
+          onAdd={addParagraphComment}
+          onSelect={(blockId, commentId) => {
+            const comment = railComments.find((row) => row.id === commentId)
+            if (comment?.documentId) {
+              const node = nodes.find(
+                (item) => (bodies[item.id]?.documentId ?? bindings.chapterDocuments?.[item.id]) === comment.documentId,
+              )
+              if (node) selectChapter(node.id, true)
+            }
+            setActiveBlockId(blockId)
+            if (blockId) {
+              window.requestAnimationFrame(() => {
+                document
+                  .querySelector(`[${BLOCK_ID_ATTR}="${CSS.escape(blockId)}"]`)
+                  ?.scrollIntoView({ behavior: "smooth", block: "center" })
+              })
+            }
+          }}
+          onToggleResolved={(commentId, resolved) => {
+            startTransition(async () => {
+              const result = await setProgrammeCommentResolved(workspaceId, commentId, resolved)
+              if (result.error) onMessage(result.error)
+              refreshComments()
+            })
+          }}
+        />
+      ) : null}
     </div>
   )
 }

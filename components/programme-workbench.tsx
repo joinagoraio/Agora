@@ -713,7 +713,7 @@ export function ProgrammeWorkbench({
             />
           </div>
         ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto bg-white">
+          <div className="flex min-h-0 flex-1 overflow-hidden bg-white">
             <ProgrammeChapterEditor
               workspaceId={workspaceId}
               spaceId={spaceId}
@@ -721,6 +721,7 @@ export function ProgrammeWorkbench({
               onBindingsChange={setBindings}
               onMessage={setMessage}
               onGoOutline={() => setSection("outline")}
+              canComment
             />
           </div>
         )}
