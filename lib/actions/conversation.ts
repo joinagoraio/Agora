@@ -9,15 +9,17 @@ interface CreateConversationOptions {
   title?: string
   contextType?: ConversationContextType
   contextId?: string | null
+  spaceId?: string
 }
 
 interface ConversationQueryOptions {
   contextType?: ConversationContextType
   contextId?: string | null
+  spaceId?: string
 }
 
 export async function createConversation(
-  workspaceId: string,
+  workspaceId: string | null,
   options: CreateConversationOptions = {},
 ) {
   const supabase = await createClient()
@@ -29,12 +31,16 @@ export async function createConversation(
     return { error: "Unauthorized" }
   }
 
-  const { title, contextType = "workspace", contextId = null } = options
+  const { title, contextType = "workspace", contextId = null, spaceId } = options
+  if (!workspaceId && !spaceId) {
+    return { error: "Missing scope" }
+  }
 
   const { data, error } = await supabase
     .from("conversations")
     .insert({
-      workspace_id: workspaceId,
+      workspace_id: spaceId ? null : workspaceId,
+      space_id: spaceId ?? null,
       user_id: user.id,
       title: title || "New Conversation",
       context_type: contextType,
@@ -130,7 +136,7 @@ export async function addMessage(
 }
 
 export async function getUserConversations(
-  workspaceId: string,
+  workspaceId: string | null,
   options: ConversationQueryOptions = {},
 ) {
   const supabase = await createClient()
@@ -142,13 +148,17 @@ export async function getUserConversations(
     return { data: [], error: "Unauthorized" }
   }
 
-  const { contextType = "workspace", contextId } = options
+  const { contextType = "workspace", contextId, spaceId } = options
 
-  let query = supabase
-    .from("conversations")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("user_id", user.id)
+  let query = supabase.from("conversations").select("*").eq("user_id", user.id)
+
+  if (spaceId) {
+    query = query.eq("space_id", spaceId)
+  } else if (workspaceId) {
+    query = query.eq("workspace_id", workspaceId)
+  } else {
+    return { data: [], error: "Missing scope" }
+  }
 
   if (contextType === "workspace") {
     query = query.eq("context_type", "workspace").is("context_id", null)

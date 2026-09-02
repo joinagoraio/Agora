@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { isSupabaseStorageUrl } from "@/lib/utils/storage-url"
 
 const TEXT_CONTENT_TYPES = new Set([
   "text/plain",
@@ -76,7 +77,7 @@ export async function GET(
     }
 
       // Check if it's a Supabase Storage URL
-      const isSupabaseStorage = url.includes("supabase.co/storage") || url.includes("supabase.in/storage")
+      const isSupabaseStorage = isSupabaseStorageUrl(url)
       
       if (isSupabaseStorage) {
         // Extract file path from Supabase Storage URL

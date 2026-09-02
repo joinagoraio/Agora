@@ -6,7 +6,8 @@ import { ChatSidebar } from "@/components/chat-sidebar"
 import { ChatToggleButton } from "@/components/chat-toggle-button"
 
 interface WorkspaceChatWrapperProps {
-  workspaceId: string
+  workspaceId?: string
+  spaceId?: string
   workspaceName: string
   children: React.ReactNode
   defaultOpen?: boolean
@@ -35,6 +36,7 @@ export function useChatContext() {
 
 export function WorkspaceChatWrapper({
   workspaceId,
+  spaceId,
   workspaceName,
   children,
   defaultOpen = false,
@@ -102,7 +104,7 @@ export function WorkspaceChatWrapper({
     >
       <div className="relative flex min-h-screen overflow-x-hidden">
         <div 
-          className={`relative flex-1 ${isSidebarResizing ? "transition-none" : "transition-[margin-right] duration-300 ease-out"}`}
+          className={`relative min-w-0 flex-1 ${isSidebarResizing ? "transition-none" : "transition-[margin-right] duration-300 ease-out"}`}
           style={!isMobile ? { marginRight: `${effectiveMargin}px` } : undefined}
         >
           {children}
@@ -115,6 +117,7 @@ export function WorkspaceChatWrapper({
         </div>
         <ChatSidebar
           workspaceId={workspaceId}
+          spaceId={spaceId}
           workspaceName={workspaceName}
           isOpen={isChatOpen}
           onClose={handleClose}

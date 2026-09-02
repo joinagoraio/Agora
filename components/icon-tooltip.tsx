@@ -10,10 +10,11 @@ type Props = {
   children: ReactNode
   side?: "top" | "right" | "bottom" | "left"
   className?: string
+  contentClassName?: string
   style?: CSSProperties
 }
 
-export function IconTooltip({ label, children, side = "bottom", className, style }: Props) {
+export function IconTooltip({ label, children, side = "bottom", className, contentClassName, style }: Props) {
   if (!label) return children
   return (
     <Tooltip>
@@ -22,7 +23,9 @@ export function IconTooltip({ label, children, side = "bottom", className, style
           {children}
         </span>
       </TooltipTrigger>
-      <TooltipContent side={side}>{label}</TooltipContent>
+      <TooltipContent side={side} className={contentClassName}>
+        {label}
+      </TooltipContent>
     </Tooltip>
   )
 }

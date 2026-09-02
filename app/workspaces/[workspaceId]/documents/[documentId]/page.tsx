@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getDocumentPages } from "@/lib/actions/document"
 import { DocumentViewerClient } from "@/components/document-viewer-client"
-import { getHighlightCoordinates, findTextSpan, extractPdfPages } from "@/lib/utils/pdf-extraction"
+import { getHighlightCoordinates, findTextSpan } from "@/lib/utils/pdf-extraction"
 import { env } from "@/lib/env"
 import { WorkspaceChatWrapper } from "@/components/workspace-chat-wrapper"
 import { HighlightProvider } from "@/lib/contexts/highlight-context"
@@ -107,6 +107,10 @@ export default async function DocumentViewerPage({ params, searchParams }: Docum
     documentType.includes("msword") ||
     document.title?.toLowerCase().endsWith(".doc") ||
     document.title?.toLowerCase().endsWith(".docx")
+
+  const isPdfDocument =
+    documentType.includes("pdf") ||
+    document.title?.toLowerCase().endsWith(".pdf")
   
   const isTextDocument = (hasTextExtension || hasTextType || isWorkspaceText) && !isWordDocument
   
@@ -153,11 +157,12 @@ export default async function DocumentViewerPage({ params, searchParams }: Docum
     }
   })()
 
-  if (!isTextDocument && pagesMissingVectorData && resolvedDocumentUrl) {
+  if (isPdfDocument && pagesMissingVectorData && resolvedDocumentUrl) {
     try {
       const response = await fetch(resolvedDocumentUrl, { cache: "no-store" })
       if (response.ok) {
         const pdfBuffer = await response.arrayBuffer()
+        const { extractPdfPages } = await import("@/lib/utils/pdf-extraction.server")
         const extractedPages = await extractPdfPages(pdfBuffer)
         if (extractedPages.length > 0) {
           hydratedPages = extractedPages.map((page) => ({

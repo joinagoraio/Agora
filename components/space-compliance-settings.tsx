@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -58,12 +57,12 @@ export function SpaceComplianceSettings({ spaceId }: Props) {
   }
 
   return (
-    <Card className="shadow">
-      <CardHeader>
-        <CardTitle>{t("space.settings.compliance.title")}</CardTitle>
-        <CardDescription>{t("space.settings.compliance.description")}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-medium">{t("space.settings.compliance.title")}</h2>
+        <p className="text-sm text-muted-foreground">{t("space.settings.compliance.description")}</p>
+      </div>
+      <div className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="retain-gens">{t("space.settings.compliance.retainGenerations")}</Label>
@@ -211,7 +210,7 @@ export function SpaceComplianceSettings({ spaceId }: Props) {
             {t("space.settings.compliance.prune")}
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

@@ -18,7 +18,6 @@ type DocumentPage = {
 type DocumentData = {
   id: string
   title: string | null
-  workspace_id: string
   pages: DocumentPage[]
 }
 
@@ -29,12 +28,16 @@ type SourceDocument = {
 
 export async function resolveCitations(options: {
   content: string
-  workspaceId: string
+  workspaceId?: string | null
+  spaceId?: string | null
   supabase: SupabaseClient
   documents?: SourceDocument[]
 }): Promise<ResolvedCitation[]> {
-  const { content, workspaceId, supabase, documents = [] } = options
+  const { content, workspaceId, spaceId, supabase, documents = [] } = options
   if (!content || typeof content !== "string") {
+    return []
+  }
+  if (!workspaceId && !spaceId) {
     return []
   }
 
@@ -65,6 +68,41 @@ export async function resolveCitations(options: {
       return documentCache.get(documentId) || null
     }
 
+    if (spaceId) {
+      const { data: item, error: itemError } = await supabase
+        .from("space_items")
+        .select("id, payload")
+        .eq("id", documentId)
+        .eq("space_id", spaceId)
+        .eq("item_type", "document")
+        .maybeSingle()
+
+      if (itemError || !item) {
+        documentCache.set(documentId, null)
+        return null
+      }
+
+      const payload = (item.payload ?? {}) as {
+        title?: string
+        file_name?: string
+        full_text?: string
+        summary?: string
+      }
+      const text = (payload.full_text || payload.summary || "").trim()
+      const docData: DocumentData = {
+        id: documentId,
+        title: payload.title || payload.file_name || null,
+        pages: text ? [{ page_number: 1, text_content: text }] : [],
+      }
+      documentCache.set(documentId, docData)
+      return docData
+    }
+
+    if (!workspaceId) {
+      documentCache.set(documentId, null)
+      return null
+    }
+
     const { data: document, error: documentError } = await supabase
       .from("documents")
       .select("id, title, workspace_id")
@@ -90,7 +128,6 @@ export async function resolveCitations(options: {
     const docData: DocumentData = {
       id: documentId,
       title: document.title || null,
-      workspace_id: document.workspace_id,
       pages: pages || [],
     }
 
@@ -126,7 +163,7 @@ export async function resolveCitations(options: {
       documentData = await loadDocumentData(resolvedDocumentId)
     }
 
-    if (!documentData) {
+    if (!documentData && workspaceId) {
       const normalizedTitleKey = normalizeTitle(normalizedIdentifier)
       const { data: candidateDocuments, error: candidateError } = await supabase
         .from("documents")

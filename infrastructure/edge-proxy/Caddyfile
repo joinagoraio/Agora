@@ -1,0 +1,18 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$AGORA_APP_DOMAIN} {
+	encode gzip
+	request_body {
+		max_size 200MB
+	}
+	reverse_proxy agora-app:3000
+}
+
+{$AGORA_API_DOMAIN} {
+	request_body {
+		max_size 200MB
+	}
+	reverse_proxy kong:8000
+}

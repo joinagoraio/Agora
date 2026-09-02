@@ -45,14 +45,20 @@ export const documentUploadSchema = z.object({
     .nullable(),
 })
 
-export const chatMessageSchema = z.object({
-  message: z.string().min(1, "Message cannot be empty").max(10000, "Message too long"),
-  conversationId: z.string().uuid("conversationId must be a valid UUID").optional(),
-  workspaceId: z.string().uuid("workspaceId must be a valid UUID"),
-  excludedDocumentIds: z.array(z.string().uuid()).default([]),
-  excludedNoteIds: z.array(z.string().uuid()).default([]),
-  excludedEvidenceIds: z.array(z.string().uuid()).default([]),
-})
+export const chatMessageSchema = z
+  .object({
+    message: z.string().min(1, "Message cannot be empty").max(10000, "Message too long"),
+    conversationId: z.string().uuid("conversationId must be a valid UUID").optional(),
+    workspaceId: z.string().uuid("workspaceId must be a valid UUID").optional(),
+    spaceId: z.string().uuid("spaceId must be a valid UUID").optional(),
+    excludedDocumentIds: z.array(z.string().uuid()).default([]),
+    excludedNoteIds: z.array(z.string().uuid()).default([]),
+    excludedEvidenceIds: z.array(z.string().uuid()).default([]),
+  })
+  .refine((data) => Boolean(data.workspaceId) !== Boolean(data.spaceId), {
+    message: "Provide either workspaceId or spaceId",
+    path: ["workspaceId"],
+  })
 
 export const searchQuerySchema = z.object({
   workspaceId: z.string().uuid("workspaceId must be a valid UUID"),

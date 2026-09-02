@@ -6,11 +6,11 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { SpaceUploadDocumentDialog } from "@/components/space-upload-document-dialog"
-import { Download, ExternalLink, FileText, LayoutGrid, List, Loader2, MoreVertical, Trash2, Upload } from "lucide-react"
+import { Download, ExternalLink, FileText, Loader2, MoreVertical, Trash2, Upload } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +21,7 @@ import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { IconTooltip } from "@/components/icon-tooltip"
+import { ViewModeToggle, useCollectionViewMode } from "@/components/view-mode-toggle"
 
 export type SpaceDocumentItem = {
   id: string
@@ -49,14 +50,14 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
   const router = useRouter()
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<"grid" | "list">("list")
   const { t } = useI18n()
   // Internal state for when onDocumentsChange is not provided (server component usage)
   const [internalDocuments, setInternalDocuments] = useState<SpaceDocumentItem[]>(documents ?? [])
   
   // Use internal state if no callback is provided, otherwise use prop
   const safeDocuments = onDocumentsChange ? (documents ?? []) : internalDocuments
-  
+  const { viewMode, setViewMode } = useCollectionViewMode(safeDocuments.length, `space.${spaceId}.documents`)
+
   // Update internal state when documents prop changes (for server component usage)
   useEffect(() => {
     if (!onDocumentsChange && documents) {
@@ -154,8 +155,8 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-4">
         <div>
           <h3 className="text-xl font-semibold text-foreground">{t("space.documents.panel.title")}</h3>
           <p className="text-sm text-muted-foreground">
@@ -163,34 +164,12 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 rounded-md bg-background p-1">
-            <IconTooltip label={t("space.documents.panel.viewList")}>
-              <Button
-                type="button"
-                variant={viewMode === "list" ? "secondary" : "ghost"}
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setViewMode("list")}
-                aria-pressed={viewMode === "list"}
-              >
-                <List className="h-4 w-4" />
-                <span className="sr-only">{t("space.documents.panel.viewList")}</span>
-              </Button>
-            </IconTooltip>
-            <IconTooltip label={t("space.documents.panel.viewGrid")}>
-              <Button
-                type="button"
-                variant={viewMode === "grid" ? "secondary" : "ghost"}
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setViewMode("grid")}
-                aria-pressed={viewMode === "grid"}
-              >
-                <LayoutGrid className="h-4 w-4" />
-                <span className="sr-only">{t("space.documents.panel.viewGrid")}</span>
-              </Button>
-            </IconTooltip>
-          </div>
+          <ViewModeToggle
+            viewMode={viewMode}
+            onChange={setViewMode}
+            listLabel={t("space.documents.panel.viewList")}
+            gridLabel={t("space.documents.panel.viewGrid")}
+          />
           {canUpload && (
             <SpaceUploadDocumentDialog
               spaceId={spaceId}
@@ -206,11 +185,12 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
         </div>
       </div>
 
-      {error && <p className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">{error}</p>}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-4">
+      {error && <p className="mb-2 shrink-0 rounded-md bg-destructive/10 p-2 text-sm text-destructive">{error}</p>}
 
       {safeDocuments.length === 0 ? (
         <Card className="border-dashed shadow">
-          <CardContent className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+          <CardContent className="flex flex-col items-center justify-center gap-3 py-8 text-center">
             <FileText className="h-10 w-10 text-muted-foreground" />
             <div>
               <h4 className="text-base font-semibold text-foreground">{t("space.documents.panel.emptyTitle")}</h4>
@@ -233,115 +213,63 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
         (() => {
           const docCards = safeDocuments.map((doc) => {
             const docTitle = doc.payload?.title || doc.payload?.file_name || t("space.documents.panel.untitled")
+            const href = `/spaces/${spaceId}/documents/${doc.id}`
 
             return (
-              <Card key={doc.id} className="flex h-full flex-col shadow">
-                <CardHeader>
-                  <div className="flex items-center justify-between gap-2">
-                    <CardTitle className="text-base font-semibold">{docTitle}</CardTitle>
-                    {doc.classification && (
-                      <Badge variant="outline">
-                        {t(`workspace.common.classification.${doc.classification}` as const)}
-                      </Badge>
+              <Card key={doc.id} className="group relative flex h-full flex-col shadow transition-all hover:shadow-md">
+                <div className="absolute right-2 top-2 z-10">
+                  <DocumentMenu
+                    doc={doc}
+                    spaceId={spaceId}
+                    canManage={canManage}
+                    isDeleting={isDeleting === doc.id}
+                    onDelete={handleDelete}
+                  />
+                </div>
+                <Link href={href} className="flex min-h-0 flex-1 flex-col pr-10">
+                  <CardHeader>
+                    <div className="flex items-center justify-between gap-2">
+                      <CardTitle className="text-base font-semibold">{docTitle}</CardTitle>
+                      {doc.classification && (
+                        <Badge variant="outline">
+                          {t(`workspace.common.classification.${doc.classification}` as const)}
+                        </Badge>
+                      )}
+                    </div>
+                    <CardDescription>
+                      {t("space.documents.panel.uploadedLabel", undefined, {
+                        date: new Date(doc.created_at).toLocaleDateString(),
+                      })}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-1 flex-col gap-3">
+                    {doc.payload?.summary ? (
+                      <p className="line-clamp-5 whitespace-pre-wrap text-sm text-muted-foreground">
+                        {doc.payload.summary}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        {t("space.documents.panel.summaryPlaceholder")}
+                      </p>
                     )}
-                  </div>
-                  <CardDescription>
-                    {t("space.documents.panel.uploadedLabel", undefined, {
-                      date: new Date(doc.created_at).toLocaleDateString(),
-                    })}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-1 flex-col gap-3">
-                  {doc.payload?.summary ? (
-                    <p className="text-sm text-muted-foreground line-clamp-5 whitespace-pre-wrap">
-                      {doc.payload.summary}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      {t("space.documents.panel.summaryPlaceholder")}
-                    </p>
-                  )}
-                  <Separator />
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    {doc.payload?.file_name && <Badge variant="secondary">{doc.payload.file_name}</Badge>}
-                    {doc.payload?.mime_type && <span>{doc.payload.mime_type}</span>}
-                  </div>
-                </CardContent>
-                {canManage && (
-                  <CardFooter className="flex items-center justify-end gap-2">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <span className="inline-flex">
-                          <IconTooltip label={t("space.documents.panel.dropdownMenuSr")}>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreVertical className="h-4 w-4" />
-                              <span className="sr-only">{t("space.documents.panel.dropdownMenuSr")}</span>
-                            </Button>
-                          </IconTooltip>
-                        </span>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-40">
-                        {doc.payload?.file_url ? (
-                          <DropdownMenuItem asChild className="cursor-pointer">
-                            <Link
-                              href={doc.payload.file_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-2"
-                            >
-                              <Download className="h-4 w-4" />
-                              {t("space.documents.panel.dropdownDownload")}
-                            </Link>
-                          </DropdownMenuItem>
-                        ) : doc.source_url ? (
-                          <DropdownMenuItem asChild className="cursor-pointer">
-                            <Link
-                              href={doc.source_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-2"
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                              {t("space.documents.panel.dropdownOpenPage")}
-                            </Link>
-                          </DropdownMenuItem>
-                        ) : (
-                          <DropdownMenuItem disabled>
-                            {t("space.documents.panel.dropdownNoUrl")}
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                          className="group cursor-pointer focus:bg-destructive/10 focus:text-destructive"
-                          disabled={isDeleting === doc.id}
-                          onSelect={(event) => {
-                            event.preventDefault()
-                            if (isDeleting !== doc.id) {
-                              handleDelete(doc)
-                            }
-                          }}
-                        >
-                          {isDeleting === doc.id ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" />
-                          ) : (
-                            <Trash2 className="mr-2 h-4 w-4 text-muted-foreground transition-colors group-hover:text-destructive group-focus:text-destructive" />
-                          )}
-                          <span className="transition-colors group-hover:text-destructive group-focus:text-destructive">
-                            Delete
-                          </span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </CardFooter>
-                )}
+                    <Separator />
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      {doc.payload?.file_name && <Badge variant="secondary">{doc.payload.file_name}</Badge>}
+                      {doc.payload?.mime_type && <span>{doc.payload.mime_type}</span>}
+                    </div>
+                  </CardContent>
+                </Link>
               </Card>
             )
           })
 
           return viewMode === "grid" ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{docCards}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{docCards}</div>
+            </div>
           ) : (
-            <Card className="shadow">
-              <CardContent className="p-0">
+            <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0 shadow">
+              <CardContent className="min-h-0 flex-1 overflow-y-auto p-0">
                 <div className="divide-y divide-border">
                   {safeDocuments.map((doc) => {
                     const docTitle = doc.payload?.title || doc.payload?.file_name || t("space.documents.panel.untitled")
@@ -349,103 +277,51 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                     return (
                       <div
                         key={doc.id}
-                        className="grid grid-cols-[3fr_5fr_2fr_2fr_auto] items-center gap-4 px-4 py-3 text-sm"
+                        className="group relative flex items-stretch transition-colors hover:bg-muted/50"
                       >
-                        <div className="font-medium text-foreground">
-                          {docTitle}
-                          <div className="text-xs text-muted-foreground">
-                            {t("space.documents.panel.uploadedLabel", undefined, {
-                              date: new Date(doc.created_at).toLocaleDateString(),
-                            })}
+                        <Link
+                          href={`/spaces/${spaceId}/documents/${doc.id}`}
+                          className="grid min-w-0 flex-1 grid-cols-[3fr_5fr_2fr_2fr] items-center gap-4 px-4 py-3 text-sm"
+                        >
+                          <div className="min-w-0 font-medium text-foreground">
+                            <span className="block truncate">{docTitle}</span>
+                            <div className="text-xs text-muted-foreground">
+                              {t("space.documents.panel.uploadedLabel", undefined, {
+                                date: new Date(doc.created_at).toLocaleDateString(),
+                              })}
+                            </div>
                           </div>
-                        </div>
-                        <div className="text-muted-foreground">
-                          {doc.payload?.summary ? (
-                            <p className="line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground">
-                              {doc.payload.summary}
-                            </p>
-                          ) : (
-                            <p className="text-xs text-muted-foreground">
-                              {t("space.documents.panel.summaryPlaceholder")}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          {doc.classification && (
-                            <Badge variant="outline">
-                              {t(`workspace.common.classification.${doc.classification}` as const)}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          {doc.payload?.file_name && <Badge variant="secondary">{doc.payload.file_name}</Badge>}
-                        </div>
-                        {canManage && (
-                          <div className="flex justify-end">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <span className="inline-flex">
-                                  <IconTooltip label={t("space.documents.panel.dropdownMenuSr")}>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                      <MoreVertical className="h-4 w-4" />
-                                      <span className="sr-only">{t("space.documents.panel.dropdownMenuSr")}</span>
-                                    </Button>
-                                  </IconTooltip>
-                                </span>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-40">
-                                {doc.payload?.file_url ? (
-                                <DropdownMenuItem asChild className="cursor-pointer">
-                                  <Link
-                                    href={doc.payload.file_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-2"
-                                  >
-                                    <Download className="h-4 w-4" />
-                                    {t("space.documents.panel.dropdownDownload")}
-                                  </Link>
-                                </DropdownMenuItem>
-                              ) : doc.source_url ? (
-                                <DropdownMenuItem asChild className="cursor-pointer">
-                                  <Link
-                                    href={doc.source_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-2"
-                                  >
-                                    <ExternalLink className="h-4 w-4" />
-                                    {t("space.documents.panel.dropdownOpenPage")}
-                                  </Link>
-                                </DropdownMenuItem>
-                              ) : (
-                                <DropdownMenuItem disabled>
-                                  {t("space.documents.panel.dropdownNoUrl")}
-                                </DropdownMenuItem>
-                              )}
-                                <DropdownMenuItem
-                                  className="group cursor-pointer focus:bg-destructive/10 focus:text-destructive"
-                                  disabled={isDeleting === doc.id}
-                          onSelect={(event) => {
-                                    event.preventDefault()
-                                    if (isDeleting !== doc.id) {
-                              handleDelete(doc)
-                                    }
-                                  }}
-                                >
-                                  {isDeleting === doc.id ? (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" />
-                                  ) : (
-                                    <Trash2 className="mr-2 h-4 w-4 text-muted-foreground transition-colors group-hover:text-destructive group-focus:text-destructive" />
-                                  )}
-                                  <span className="transition-colors group-hover:text-destructive group-focus:text-destructive">
-                                    {t("space.documents.panel.dropdownDelete")}
-                                  </span>
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                          <div className="text-muted-foreground">
+                            {doc.payload?.summary ? (
+                              <p className="line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground">
+                                {doc.payload.summary}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">
+                                {t("space.documents.panel.summaryPlaceholder")}
+                              </p>
+                            )}
                           </div>
-                        )}
+                          <div>
+                            {doc.classification && (
+                              <Badge variant="outline">
+                                {t(`workspace.common.classification.${doc.classification}` as const)}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            {doc.payload?.file_name && <Badge variant="secondary">{doc.payload.file_name}</Badge>}
+                          </div>
+                        </Link>
+                        <div className="flex shrink-0 items-center pr-2">
+                          <DocumentMenu
+                            doc={doc}
+                            spaceId={spaceId}
+                            canManage={canManage}
+                            isDeleting={isDeleting === doc.id}
+                            onDelete={handleDelete}
+                          />
+                        </div>
                       </div>
                     )
                   })}
@@ -455,6 +331,78 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
           )
         })()
       )}
+      </div>
     </div>
+  )
+}
+
+function DocumentMenu({
+  doc,
+  spaceId,
+  canManage,
+  isDeleting,
+  onDelete,
+}: {
+  doc: SpaceDocumentItem
+  spaceId: string
+  canManage: boolean
+  isDeleting: boolean
+  onDelete: (doc: SpaceDocumentItem) => void
+}) {
+  const { t } = useI18n()
+  const fileHref = doc.payload?.file_url ? `/api/spaces/${spaceId}/items/${doc.id}/file` : doc.source_url
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <span className="inline-flex">
+          <IconTooltip label={t("space.documents.panel.dropdownMenuSr")}>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <MoreVertical className="h-4 w-4" />
+              <span className="sr-only">{t("space.documents.panel.dropdownMenuSr")}</span>
+            </Button>
+          </IconTooltip>
+        </span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        {fileHref ? (
+          <DropdownMenuItem asChild className="cursor-pointer">
+            <a
+              href={fileHref}
+              target={doc.payload?.file_url ? undefined : "_blank"}
+              rel="noopener noreferrer"
+              download={doc.payload?.file_url ? doc.payload.file_name || true : undefined}
+              className="flex items-center gap-2"
+            >
+              {doc.payload?.file_url ? <Download className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
+              {doc.payload?.file_url
+                ? t("space.documents.panel.dropdownDownload")
+                : t("space.documents.panel.dropdownOpenPage")}
+            </a>
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem disabled>{t("space.documents.panel.dropdownNoUrl")}</DropdownMenuItem>
+        )}
+        {canManage ? (
+          <DropdownMenuItem
+            className="group cursor-pointer focus:bg-destructive/10 focus:text-destructive"
+            disabled={isDeleting}
+            onSelect={(event) => {
+              event.preventDefault()
+              if (!isDeleting) onDelete(doc)
+            }}
+          >
+            {isDeleting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (
+              <Trash2 className="mr-2 h-4 w-4 text-muted-foreground transition-colors group-hover:text-destructive group-focus:text-destructive" />
+            )}
+            <span className="transition-colors group-hover:text-destructive group-focus:text-destructive">
+              {t("space.documents.panel.dropdownDelete")}
+            </span>
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

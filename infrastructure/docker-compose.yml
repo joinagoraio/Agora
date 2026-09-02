@@ -1,0 +1,47 @@
+name: agora
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: agora-app:latest
+    container_name: agora-app
+    restart: unless-stopped
+    env_file:
+      - path: ../.env.production
+        required: false
+    expose:
+      - "3000"
+    networks:
+      - supabase_default
+
+  caddy:
+    image: caddy:2.8.4-alpine
+    container_name: agora-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      AGORA_APP_DOMAIN: ${AGORA_APP_DOMAIN}
+      AGORA_API_DOMAIN: ${AGORA_API_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./edge-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - supabase_default
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  supabase_default:
+    external: true
+    name: supabase_default

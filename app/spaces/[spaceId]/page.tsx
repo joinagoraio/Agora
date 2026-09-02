@@ -1,15 +1,10 @@
-import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
 import { getWorkspacesBySpace } from "@/lib/actions/workspace"
 import { listSpacePublicationIds } from "@/lib/actions/publish"
 import { getSpaceItems } from "@/lib/actions/space-item"
-import { UserMenu } from "@/components/user-menu"
-import { Button } from "@/components/ui/button"
 import { SpacePageClient } from "@/components/space-page-client"
-import { ArrowLeft } from "lucide-react"
-import { getServerTranslator } from "@/lib/i18n/server"
 import { isSpaceHelpAiDisabled, resolveHelpAiEnabled } from "@/lib/guidance/help-flag"
 
 export default async function SpacePage({
@@ -67,8 +62,6 @@ export default async function SpacePage({
     publicationId: publicationIds?.[workspace.id] ?? null,
   }))
 
-  const { t } = await getServerTranslator()
-
   const { data: documents } = await getSpaceItems(spaceId, { item_type: "document" })
   const { data: profile } = await supabase
     .from("profiles")
@@ -78,62 +71,34 @@ export default async function SpacePage({
 
   const scopeMetadata = (space.metadata as Record<string, any> | null) ?? {}
   const scopeDetails = (scopeMetadata.scope as Record<string, any> | null) ?? {}
-  const userRole = membership.role
   // Members can do everything except access Settings
   const canManage = membership.role === "owner" || membership.role === "admin" || membership.role === "member"
   // Only owner and admin can access Settings
   const canAccessSettings = membership.role === "owner" || membership.role === "admin"
 
   return (
-    <div className="flex min-h-screen flex-col overflow-x-hidden bg-background">
-      <header className="sticky top-0 z-40 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75">
-        <div className="flex h-16 items-center justify-between px-4">
-          <Button variant="ghost" asChild>
-            <Link href="/dashboard">
-              <ArrowLeft className="mr-2 h-3 w-3" />
-              <span className="text-xs font-normal">{t("space.page.backToDashboard")}</span>
-            </Link>
-          </Button>
-          <div className="flex items-center gap-2">
-            {membership?.job === "administrator" && (
-              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium tracking-wide text-primary">
-                {t("guidance.jobs.administrator")}
-              </span>
-            )}
-            {membership?.role && (
-              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-primary">
-                {t(`space.common.roles.${membership.role.toLowerCase()}`, membership.role)}
-              </span>
-            )}
-            <UserMenu />
-          </div>
-        </div>
-      </header>
-
-      <main className="flex-1 bg-white">
-        <SpacePageClient
-          spaceId={spaceId}
-          spaceName={space.name}
-          initialSpaceType={space.space_type}
-          initialVisibility={space.visibility}
-          initialJurisdiction={space.jurisdiction}
-          initialScope={{
-            summary: space.description,
-            description: (scopeDetails.description as string | undefined) ?? "",
-            timeframe: (scopeDetails.timeframe as string | undefined) ?? "",
-          }}
-          initialDocuments={documents ?? []}
-          initialWorkspaces={workspacesWithPublication}
-          canManage={canManage}
-          canAccessSettings={canAccessSettings}
-          wizardState={(space.metadata as Record<string, any> | null)?.setupWizard ?? null}
-          spaceJob={membership.job ?? "none"}
-          guidanceMode={profile?.guidance_mode === "expert" ? "expert" : "guided"}
-          helpAiEnabled={resolveHelpAiEnabled({
-            spaceHelpAiDisabled: isSpaceHelpAiDisabled(space.metadata),
-          })}
-        />
-      </main>
-    </div>
+    <SpacePageClient
+      spaceId={spaceId}
+      spaceName={space.name}
+      userRole={membership.role}
+      initialSpaceType={space.space_type}
+      initialVisibility={space.visibility}
+      initialJurisdiction={space.jurisdiction}
+      initialScope={{
+        summary: space.description,
+        description: (scopeDetails.description as string | undefined) ?? "",
+        timeframe: (scopeDetails.timeframe as string | undefined) ?? "",
+      }}
+      initialDocuments={documents ?? []}
+      initialWorkspaces={workspacesWithPublication}
+      canManage={canManage}
+      canAccessSettings={canAccessSettings}
+      wizardState={(space.metadata as Record<string, any> | null)?.setupWizard ?? null}
+      spaceJob={membership.job ?? "none"}
+      guidanceMode={profile?.guidance_mode === "expert" ? "expert" : "guided"}
+      helpAiEnabled={resolveHelpAiEnabled({
+        spaceHelpAiDisabled: isSpaceHelpAiDisabled(space.metadata),
+      })}
+    />
   )
 }

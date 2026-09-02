@@ -73,6 +73,37 @@ function sanitizeScopeContent(text: string): string {
   return sanitized.trim()
 }
 
+function isMissingDocumentsUrlColumn(error: { code?: string; message?: string } | null) {
+  return error?.code === "PGRST204" && (error.message ?? "").includes("'url' column")
+}
+
+type InheritedDocumentRow = Record<string, unknown>
+
+async function insertInheritedDocument(
+  adminClient: ReturnType<typeof createAdminClient>,
+  row: InheritedDocumentRow,
+  fileUrl: string | null,
+) {
+  const first = await adminClient.from("documents").insert({ ...row, url: fileUrl }).select("id, metadata").single()
+  if (!isMissingDocumentsUrlColumn(first.error)) {
+    return first
+  }
+  return adminClient.from("documents").insert({ ...row, external_url: fileUrl }).select("id, metadata").single()
+}
+
+async function updateInheritedDocument(
+  adminClient: ReturnType<typeof createAdminClient>,
+  documentId: string,
+  row: InheritedDocumentRow,
+  fileUrl: string | null,
+) {
+  const first = await adminClient.from("documents").update({ ...row, url: fileUrl }).eq("id", documentId)
+  if (!isMissingDocumentsUrlColumn(first.error)) {
+    return first
+  }
+  return adminClient.from("documents").update({ ...row, external_url: fileUrl }).eq("id", documentId)
+}
+
 async function upsertWorkspaceDocumentForScope(
   spaceId: string,
   workspaceId: string,
@@ -182,17 +213,18 @@ async function upsertWorkspaceDocumentForScope(
       ...metadataExtras,
     }
 
-    const { error: updateError } = await adminClient
-      .from("documents")
-      .update({
+    const { error: updateError } = await updateInheritedDocument(
+      adminClient,
+      existingDoc.id,
+      {
         title,
         content,
         classification,
-        url: payload.file_url || null,
         metadata: mergedMetadata,
         updated_at: new Date().toISOString(),
-      })
-      .eq("id", existingDoc.id)
+      },
+      payload.file_url || null,
+    )
 
     if (updateError) {
         console.error("[ScopeDocuments] Failed to update existing document:", updateError)
@@ -251,22 +283,21 @@ async function upsertWorkspaceDocumentForScope(
     classification,
   })
 
-  const { data: newDoc, error: createError } = await adminClient
-    .from("documents")
-    .insert({
+  const { data: newDoc, error: createError } = await insertInheritedDocument(
+    adminClient,
+    {
       source_id: sourceId,
       workspace_id: workspaceId,
       tenant_id: workspaceRecord.space_id || null,
       external_id: randomUUID(),
       title,
       content,
-      url: payload.file_url || null,
       status: "active",
       classification: classification || "internal",
       metadata,
-    })
-    .select("id, metadata")
-    .single()
+    },
+    payload.file_url || null,
+  )
 
   if (createError || !newDoc) {
     console.error("[ScopeDocuments] Failed to create workspace document from scope:", {

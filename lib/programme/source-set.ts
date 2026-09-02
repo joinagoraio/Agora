@@ -38,14 +38,20 @@ export async function resolveAgentSourceDocuments(input: {
       .neq("status", "archived")
       .neq("status", "deleted")
 
-  const byId = wanted.size > 0 ? base().in("id", [...wanted]).limit(40) : Promise.resolve({ data: [] as SourceDocument[] })
-  const byRole =
-    roles.length > 0 ? base().in("document_role", roles).limit(40) : Promise.resolve({ data: [] as SourceDocument[] })
+  type DocumentRow = { id: string; title: string | null; content: string | null; document_role: string | null }
+  const empty = Promise.resolve({ data: [] as DocumentRow[] })
+  const byId = wanted.size > 0 ? base().in("id", [...wanted]).limit(40) : empty
+  const byRole = roles.length > 0 ? base().in("document_role", roles).limit(40) : empty
 
   const [idResult, roleResult] = await Promise.all([byId, byRole])
-  const merged = new Map<string, { id: string; title: string | null; content: string | null; document_role: string | null }>()
+  const merged = new Map<string, DocumentRow>()
   for (const row of [...(idResult.data || []), ...(roleResult.data || [])]) {
-    merged.set(row.id, row)
+    merged.set(row.id, {
+      id: String(row.id),
+      title: row.title ?? null,
+      content: row.content ?? null,
+      document_role: "document_role" in row ? row.document_role ?? null : null,
+    })
   }
   const data = [...merged.values()].slice(0, 40)
   const documents: SourceDocument[] = (data || []).map((row) => ({

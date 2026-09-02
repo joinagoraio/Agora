@@ -5,6 +5,7 @@ import { UserMenu } from "@/components/user-menu"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
+import { getServerTranslator } from "@/lib/i18n/server"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -16,6 +17,7 @@ export default async function SpaceSettingsPage({
 }) {
   const { spaceId } = await params
   const supabase = await createClient()
+  const { t } = await getServerTranslator()
 
   const {
     data: { user },
@@ -66,26 +68,26 @@ export default async function SpaceSettingsPage({
     .order("created_at", { ascending: false })
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="bg-card">
+    <div className="flex h-dvh flex-col overflow-hidden bg-background">
+      <header className="sticky top-0 z-40 shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75">
         <div className="flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" asChild>
-              <Link href={`/spaces/${spaceId}`}>
-                <ArrowLeft className="mr-2 h-3 w-3" />
-                <span className="text-xs font-normal">Back to {space.name}</span>
-              </Link>
-            </Button>
-          </div>
+          <Button variant="ghost" asChild>
+            <Link href={`/spaces/${spaceId}`}>
+              <ArrowLeft className="mr-2 h-3 w-3" />
+              <span className="text-xs font-normal">
+                {t("space.settings.back", undefined, { name: space.name })}
+              </span>
+            </Link>
+          </Button>
           <UserMenu />
         </div>
       </header>
 
-      <main className="flex-1 bg-white">
-        <div className="container mx-auto max-w-4xl py-8 px-8">
-          <div className="mb-6">
-            <h1 className="text-2xl font-semibold">{space.name} Settings</h1>
-          </div>
+      <main className="min-h-0 flex-1 overflow-hidden bg-white">
+        <div className="container mx-auto flex h-full min-h-0 flex-col px-8 pt-8 pb-6">
+          <h2 className="mb-6 shrink-0 text-2xl font-semibold text-foreground">
+            {t("space.settings.pageTitle", undefined, { name: space.name })}
+          </h2>
           <SpaceSettings
             space={space}
             members={members || []}

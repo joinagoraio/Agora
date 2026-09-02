@@ -19,10 +19,21 @@ yarn-error.log*
 
 # env files
 .env*
+!.env.example
+!.env.production.example
 
-# vercel
+/backups
+
+# vercel (legacy)
 .vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Copied from pdfjs-dist when Next starts
+/public/pdf.worker.min.mjs
+
+/test-results/
+/coverage/
+supabase/.temp/

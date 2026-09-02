@@ -1,349 +1,139 @@
 # Agora Deployment Guide
 
-## Overview
+Production is a Hetzner VPS: Caddy (TLS) → Next.js and self-hosted Supabase. Local development is unchanged (`supabase start` + `pnpm dev`).
 
-This guide covers deploying the Agora application to production using Vercel, Supabase, and other services.
+Do not deploy Agora onto the Sovern box. Use a dedicated CX server.
 
----
+## What runs on the box
 
-## Prerequisites
+| Piece | Role |
+|---|---|
+| Caddy | HTTPS for the app domain and the API domain |
+| `agora-app` | Next.js (`next start` in Docker) |
+| Self-hosted Supabase | Postgres, Auth (GoTrue), Storage, PostgREST, Kong |
+| OpenAI / Resend | Stay external |
 
-- Node.js 20+ installed
-- Vercel account
-- Supabase project
-- Upstash Redis account (optional, for caching/rate limiting)
-- OpenAI API key
-- GitHub repository (for CI/CD)
+Hosts:
 
----
+- `https://$AGORA_APP_DOMAIN` → Next.js
+- `https://$AGORA_API_DOMAIN` → Kong (`NEXT_PUBLIC_SUPABASE_URL`)
 
-## Environment Setup
+Studio is the Kong catch-all on the API host, behind the dashboard username/password in `infrastructure/supabase/.env`.
 
-### 1. Supabase Setup
+## 1. Create the VPS
 
-1. Create a new Supabase project at https://supabase.com
-2. Note your project URL and anon key
-3. Get your service role key (Settings → API)
-
-### 2. Database Migrations
-
-Run all migration scripts in order in the Supabase SQL Editor:
+1. Hetzner Cloud CX22 or larger, Ubuntu 22.04+, same region as users (FSN/HEL/NBG).
+2. DNS A records for the app and API hostnames to the VPS IP. Wait until they resolve before the first Caddy start.
+3. From your laptop:
 
 ```bash
-# Run these in order:
-scripts/010_extend_spaces_schema.sql
-scripts/011_extend_workspaces_schema.sql
-scripts/012_create_space_items.sql
-scripts/013_create_workspace_space_links.sql
-scripts/014_create_workspace_items.sql
-scripts/015_extend_documents_schema.sql
-scripts/016_create_collaboration_tables.sql
-scripts/017_update_rls_for_new_tables.sql
-scripts/018_create_search_queries_table.sql
-scripts/020_update_user_roles.sql
-scripts/027_optimize_query_indexes.sql
+AGORA_APP_DOMAIN=agora.example.com \
+AGORA_API_DOMAIN=api.agora.example.com \
+VPS_IP=1.2.3.4 \
+bash scripts/deploy/setup-vps.sh
 ```
 
-### 3. Upstash Redis Setup (Optional)
+That installs Docker, creates the `agora` user, and rsyncs the repo to `/home/agora/Agora`.
 
-1. Create a Redis database at https://upstash.com
-2. Note your REST URL and token
-3. Add to environment variables
+## 2. Secrets and env
 
-### 4. OpenAI Setup
-
-1. Get an API key from https://platform.openai.com
-2. Add to environment variables
-
----
-
-## Vercel Deployment
-
-### 1. Connect Repository
-
-1. Go to https://vercel.com
-2. Import your GitHub repository
-3. Vercel will auto-detect Next.js
-
-### 2. Configure Environment Variables
-
-Add these environment variables in Vercel:
-
-**Required:**
-```
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-OPENAI_API_KEY=sk-...
-```
-
-**Optional (for caching/rate limiting):**
-```
-UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-redis-token
-```
-
-**Optional (for error tracking):**
-```
-NEXT_PUBLIC_SENTRY_DSN=https://your-sentry-dsn
-```
-
-**Optional (for app URLs):**
-```
-NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
-NEXT_PUBLIC_BASE_URL=https://your-app.vercel.app
-```
-
-### 3. Build Settings
-
-Vercel will auto-detect:
-- **Framework Preset:** Next.js
-- **Build Command:** `npm run build` (or `pnpm build`)
-- **Output Directory:** `.next`
-- **Install Command:** `npm install` (or `pnpm install`)
-
-### 4. Deploy
-
-1. Click "Deploy"
-2. Wait for build to complete
-3. Your app will be live at `https://your-app.vercel.app`
-
----
-
-## Post-Deployment
-
-### 1. Verify Health Checks
+SSH in:
 
 ```bash
-curl https://your-app.vercel.app/api/health
-curl https://your-app.vercel.app/api/health/live
-curl https://your-app.vercel.app/api/health/ready
+ssh agora@1.2.3.4
+cd ~/Agora
+cp infrastructure/supabase/env.example infrastructure/supabase/.env
+cp .env.production.example .env.production
+node scripts/deploy/generate-keys.mjs
 ```
 
-### 2. Test Authentication
+Paste the first block into `infrastructure/supabase/.env` and the second into `.env.production`. Then set:
 
-1. Visit `https://your-app.vercel.app/auth/sign-up`
-2. Create a test account
-3. Verify login works
+- `SITE_URL`, `API_EXTERNAL_URL`, `SUPABASE_PUBLIC_URL`, `ADDITIONAL_REDIRECT_URLS` in the Supabase env
+- `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, domains, `ACME_EMAIL`, `OPENAI_API_KEY`, SMTP (`SMTP_PASS`) in `.env.production` / Supabase env
 
-### 3. Configure Supabase Auth
+Auth emails go through GoTrue SMTP (Resend SMTP works: host `smtp.resend.com`, user `resend`, pass = API key).
 
-1. Go to Supabase Dashboard → Authentication → URL Configuration
-2. Add your Vercel URL to:
-   - **Site URL:** `https://your-app.vercel.app`
-   - **Redirect URLs:** `https://your-app.vercel.app/auth/callback`
-
-### 4. Set Up Custom Domain (Optional)
-
-1. In Vercel, go to Settings → Domains
-2. Add your custom domain
-3. Update Supabase redirect URLs to use custom domain
-
----
-
-## CI/CD Pipeline
-
-### GitHub Actions
-
-The project includes a test workflow (`.github/workflows/test.yml`) that:
-- Runs unit tests
-- Runs integration tests
-- Runs E2E tests (if configured)
-
-### Vercel Integration
-
-Vercel automatically:
-- Deploys on push to main branch
-- Creates preview deployments for PRs
-- Runs build checks
-
----
-
-## Monitoring Setup
-
-### 1. Health Checks
-
-Set up monitoring for:
-- `/api/health/live` - Liveness probe (every 30s)
-- `/api/health/ready` - Readiness probe (every 30s)
-- `/api/health` - Full health check (every 5min)
-
-### 2. Metrics
-
-Access metrics at `/api/metrics` (protect this endpoint in production):
-- JSON format: `?format=json`
-- Prometheus format: `?format=prometheus`
-
-### 3. Error Tracking
-
-If using Sentry:
-1. Create Sentry project
-2. Add `NEXT_PUBLIC_SENTRY_DSN` to environment variables
-3. Errors will be automatically tracked
-
----
-
-## Database Migrations
-
-### Running Migrations
-
-1. Connect to Supabase SQL Editor
-2. Run migration scripts in order
-3. Verify migrations with:
-   ```sql
-   SELECT * FROM pg_migrations;
-   ```
-
-### Rollback Strategy
-
-1. Keep backup of database before migrations
-2. Test migrations in staging first
-3. Have rollback scripts ready
-
----
-
-## Backup & Recovery
-
-### Supabase Backups
-
-Supabase provides:
-- Daily automated backups
-- Point-in-time recovery (PITR) on paid plans
-- Manual backup exports
-
-### Manual Backup
+## 3. Deploy
 
 ```bash
-# Export database schema
-pg_dump -h your-db.supabase.co -U postgres -d postgres -s > schema.sql
-
-# Export data
-pg_dump -h your-db.supabase.co -U postgres -d postgres -a > data.sql
+bash scripts/deploy/deploy.sh
 ```
 
-### Recovery
+## 4. Data
 
-1. Restore from Supabase dashboard, or
-2. Run restore script:
-   ```bash
-   psql -h your-db.supabase.co -U postgres -d postgres < backup.sql
-   ```
+**Preferred if you already have a working database** (local or old cloud):
 
----
+```bash
+# From the source machine
+pg_dump "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+  --format=custom --no-owner -f agora.dump
 
-## Scaling
+# On the VPS
+bash scripts/deploy/restore-dump.sh /path/to/agora.dump
+```
 
-### Horizontal Scaling
+**Fresh empty database:** `bash scripts/deploy/apply-schema.sh` (numbered `scripts/0xx_*.sql` in order). Then create the first user through the app.
 
-Vercel automatically scales:
-- Serverless functions scale with traffic
-- No configuration needed
+Copy Storage objects separately if you are moving files: local Docker volume or `supabase storage` from cloud.
 
-### Database Scaling
+## 5. Backups
 
-Supabase scales automatically:
-- Connection pooling handles increased load
-- Upgrade plan for more resources
+```bash
+bash scripts/deploy/backup.sh /home/agora/backups
+```
 
-### Redis Scaling
+Cron (nightly 03:00 UTC):
 
-Upstash scales automatically:
-- No configuration needed
-- Pay for what you use
+```
+0 3 * * * /home/agora/Agora/scripts/deploy/backup.sh /home/agora/backups >> /home/agora/backups/cron.log 2>&1
+```
 
----
+Keep copies off-box. Restore Postgres with `restore-dump.sh`. Storage is `storage.tar.gz` in the same backup folder.
 
-## Security Checklist
+## 6. Redeploy app only
 
-- [ ] All environment variables set
-- [ ] Supabase RLS policies enabled
-- [ ] Rate limiting configured
-- [ ] CSRF protection enabled
-- [ ] HTTPS enforced (Vercel default)
-- [ ] Security headers configured
-- [ ] Error tracking configured
-- [ ] Monitoring set up
-- [ ] Backups configured
+After a git pull / rsync:
 
----
+```bash
+cd ~/Agora
+bash scripts/deploy/deploy.sh
+```
 
-## Troubleshooting
+Supabase stays up; Compose rebuilds the app image.
 
-### Build Failures
+## 7. Leave Vercel and Supabase Cloud
 
-1. Check build logs in Vercel
-2. Verify all environment variables are set
-3. Check Node.js version compatibility
+1. Confirm HTTPS app + login + a document open on Hetzner.
+2. Point the public domain at the VPS (if it still pointed at Vercel).
+3. Remove the Vercel project and Git integration so `main` no longer deploys there.
+4. Pause or delete the hosted Supabase project after you have a verified dump.
+5. GitHub Actions no longer deploys to Vercel.
 
-### Database Connection Issues
+## Local development
 
-1. Verify Supabase URL and keys
-2. Check firewall rules
-3. Verify RLS policies
+Unchanged:
 
-### Rate Limiting Issues
+```bash
+supabase start
+pnpm dev
+```
 
-1. Check Upstash Redis connection
-2. Verify rate limit configuration
-3. Check IP detection (x-forwarded-for header)
+The `infrastructure/` stack is production only.
 
-### Performance Issues
+## GitHub, Vercel, and Hetzner
 
-1. Check database indexes
-2. Verify caching is working
-3. Monitor API response times
-4. Check for N+1 queries
+- **Hetzner** is the new environment. Push to `feat/programme-workbench-guidance` (or `main`) runs `.github/workflows/deploy-hetzner.yml`, which rsyncs the repo and runs `scripts/deploy/deploy.sh`. Env files on the VPS are not overwritten.
+- **Vercel** stays as the old comparison site. `vercel.json` sets `git.deploymentEnabled: false` so this branch does not create new Vercel deployments. In the Vercel project, also turn off **Settings → Git → Auto-deploy** (or disconnect the GitHub repo) so a later merge to `main` cannot replace that URL. Do not merge this branch to `main` until that is off.
+- Cut over the public hostname to Hetzner when the new version is ready. Then disconnect the Vercel project.
 
----
+## Optional
 
-## Rollback Procedure
+Upstash Redis is optional. Without it, rate limits use in-memory fallbacks.
 
-### Vercel Rollback
+Health:
 
-1. Go to Vercel Dashboard → Deployments
-2. Find previous working deployment
-3. Click "..." → "Promote to Production"
-
-### Database Rollback
-
-1. Restore from backup
-2. Or run rollback migration scripts
-
----
-
-## Maintenance
-
-### Regular Tasks
-
-- **Weekly:** Review error logs
-- **Monthly:** Update dependencies
-- **Quarterly:** Review and optimize database indexes
-- **As needed:** Security patches
-
-### Updates
-
-1. Test in staging/preview deployment
-2. Run database migrations
-3. Deploy to production
-4. Monitor for issues
-
----
-
-## Support
-
-For deployment issues:
-1. Check Vercel logs
-2. Check Supabase logs
-3. Review error tracking (Sentry)
-4. Contact development team
-
----
-
-## Additional Resources
-
-- [Vercel Documentation](https://vercel.com/docs)
-- [Supabase Documentation](https://supabase.com/docs)
-- [Next.js Deployment](https://nextjs.org/docs/deployment)
-- [API Documentation](./API.md)
-- [Architecture Documentation](./ARCHITECTURE.md)
-
+```bash
+curl -fsS https://$AGORA_APP_DOMAIN/api/health
+curl -fsS https://$AGORA_API_DOMAIN/auth/v1/health
+```

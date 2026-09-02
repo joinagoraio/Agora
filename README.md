@@ -28,7 +28,7 @@ npm test -- --run
 
 ## Deployment
 
-Deploy to Vercel with the usual Next.js workflow (`vercel` CLI or Git-integrated deployments). Ensure build-time environment variables match the ones used locally.
+Production is a Hetzner VPS (Caddy + Next.js + self-hosted Supabase). See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md). Local development is `supabase start` and `pnpm dev`.
 
 ## Contributing
 

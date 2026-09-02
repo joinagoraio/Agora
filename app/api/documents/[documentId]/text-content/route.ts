@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { NextRequest, NextResponse } from "next/server"
+import { isSupabaseStorageUrl } from "@/lib/utils/storage-url"
 
 async function fetchDocumentTextFromSource(
   document: { url: string | null; metadata: Record<string, any> | null; title: string | null },
@@ -32,7 +33,7 @@ async function fetchDocumentTextFromSource(
   }
 
   try {
-    const isSupabaseStorage = url.includes("supabase.co/storage") || url.includes("supabase.in/storage")
+    const isSupabaseStorage = isSupabaseStorageUrl(url)
     if (isSupabaseStorage) {
       const urlMatch = url.match(/\/storage\/v1\/object\/public\/documents\/(.+)$/)
       if (urlMatch) {

@@ -1,11 +1,13 @@
-import Link from "next/link"
 import { redirect } from "next/navigation"
 import { Layers2, FolderKanban } from "lucide-react"
 
 import { CreateSpaceDialog } from "@/components/create-space-dialog"
+import { CreateWorkspaceDialog } from "@/components/create-workspace-dialog"
+import { DashboardBoard } from "@/components/dashboard-board"
 import { UserMenu } from "@/components/user-menu"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { getUserSpaces } from "@/lib/actions/space"
+import { listDashboardPins } from "@/lib/actions/dashboard-pins"
 import { createClient } from "@/lib/supabase/server"
 import { WelcomeUserDialog } from "@/components/welcome-user-dialog"
 import { ProfileSetupDialog } from "@/components/profile-setup-dialog"
@@ -14,6 +16,7 @@ import { isEnvironmentalProgrammeWorkspace, workspaceHomeHref } from "@/lib/prog
 import { getOwnProfile } from "@/lib/actions/profile"
 import { isPlaceholderProfileName } from "@/lib/profile/display-name"
 import { DashboardGreeting } from "@/components/dashboard-greeting"
+import { canManageWorkspaces, type Role } from "@/lib/rbac/permissions"
 
 export default async function DashboardPage() {
   const { t } = await getServerTranslator()
@@ -27,6 +30,12 @@ export default async function DashboardPage() {
   }
 
   const { data: spaces } = await getUserSpaces()
+  const authorities = (spaces ?? []) as Array<{
+    id: string
+    name: string
+    description?: string | null
+    role?: string | null
+  }>
   
   // Get user's space memberships to filter out workspaces where user is also a space member
   const { data: spaceMemberships } = await supabase
@@ -77,8 +86,11 @@ export default async function DashboardPage() {
   }
   const myProgrammes = [...programmeById.values()]
   
-  const hasSpaces = Boolean(spaces && spaces.length > 0)
+  const hasSpaces = authorities.length > 0
   const hasProgrammes = myProgrammes.length > 0
+  const creatableAuthorities = authorities
+    .filter((space) => Boolean(space.role && canManageWorkspaces(space.role as Role)))
+    .map((space) => ({ id: space.id, name: space.name }))
   const { data: ownProfile } = await getOwnProfile()
   const displayName =
     ownProfile?.fullName ||
@@ -101,11 +113,13 @@ export default async function DashboardPage() {
     return t(`space.common.roles.${normalized}`, role)
   }
 
+  const { data: pins } = await listDashboardPins()
+
   const welcomeCopy =
     hasProgrammes || hasSpaces ? t("dashboard.welcome.prompt") : t("dashboard.welcome.empty")
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex h-dvh flex-col overflow-hidden">
       {!showProfileSetup && (
         <WelcomeUserDialog userId={user.id} userName={displayName} hasSpaces={hasSpaces} hasWorkspaces={hasProgrammes} />
       )}
@@ -115,105 +129,74 @@ export default async function DashboardPage() {
         email={user.email ?? null}
         avatarUrl={ownProfile?.avatarUrl ?? null}
       />
-      <header className="bg-card">
+      <header className="shrink-0 bg-card">
         <div className="flex h-16 items-center justify-end px-4">
           <UserMenu />
         </div>
       </header>
 
-      <main className="flex-1 bg-white">
-        <div className="container mx-auto py-8 px-8">
-          <div className="mb-10 max-w-2xl">
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+        <div className="container mx-auto flex min-h-0 flex-1 flex-col px-8 pt-8 pb-6">
+          <div className="mb-6 max-w-2xl shrink-0">
             <DashboardGreeting name={displayName} />
             <p className="mt-2 text-muted-foreground">{welcomeCopy}</p>
           </div>
 
-          <div className="mb-12">
-            <div className="mb-8">
-              <h2 className="text-2xl font-semibold">{t("dashboard.workspaces.title")}</h2>
-              <p className="text-sm text-muted-foreground">{t("dashboard.workspaces.subtitle")}</p>
-            </div>
-            {hasProgrammes ? (
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {myProgrammes.map((workspace) => (
-                  <Link key={workspace.id} href={workspaceHomeHref(workspace)}>
-                    <Card className="transition-all hover:shadow-md">
-                      <CardHeader>
-                        <div className="flex items-center gap-3">
-                          <FolderKanban className="h-5 w-5 text-primary" />
-                          <CardTitle className="mt-0">{workspace.name}</CardTitle>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        {workspace.description && (
-                          <p className="text-sm text-muted-foreground line-clamp-2">{workspace.description}</p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))}
-              </div>
-            ) : (
+          <DashboardBoard
+            initialPins={pins ?? []}
+            programmeHeader={
+              creatableAuthorities.length > 0 ? (
+                <CreateWorkspaceDialog spaces={creatableAuthorities} />
+              ) : null
+            }
+            authorityHeader={<CreateSpaceDialog />}
+            programmes={myProgrammes.map((workspace) => ({
+              id: workspace.id,
+              href: workspaceHomeHref({
+                id: workspace.id,
+                kind: workspace.kind,
+                metadata:
+                  workspace.metadata && typeof workspace.metadata === "object"
+                    ? (workspace.metadata as Record<string, unknown>)
+                    : null,
+              }),
+              title: workspace.name,
+              description: workspace.description,
+              kind: "programme" as const,
+            }))}
+            authorities={authorities.map((space) => ({
+              id: space.id,
+              href: `/spaces/${space.id}`,
+              title: space.name,
+              description: space.description,
+              badge: translateRole(space.role),
+              kind: "authority" as const,
+            }))}
+            programmeEmpty={
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <FolderKanban className="mb-4 h-12 w-12 text-muted-foreground" />
                   <h3 className="mb-2 text-lg font-semibold">{t("dashboard.workspaces.emptyTitle")}</h3>
                   <p className="max-w-md text-center text-sm text-muted-foreground">
-                    {t("dashboard.workspaces.emptyDescription")}
+                    {hasSpaces
+                      ? t("dashboard.workspaces.emptyDescription")
+                      : t("dashboard.workspaces.emptyNeedsAuthority")}
                   </p>
                 </CardContent>
               </Card>
-            )}
-          </div>
-
-          <div className="mb-8">
-            <div className="flex items-center gap-1.5">
-              <h2 className="text-2xl font-semibold">{t("dashboard.spaces.title")}</h2>
-              <CreateSpaceDialog variant="icon" />
-            </div>
-            <p className="text-sm text-muted-foreground">{t("dashboard.spaces.subtitle")}</p>
-          </div>
-
-          {spaces && spaces.length > 0 ? (
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {spaces.map((space: any) => (
-                <Link key={space.id} href={`/spaces/${space.id}`}>
-                  <Card className="transition-all hover:shadow-md">
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <Layers2 className="h-5 w-5 text-primary" />
-                          <div>
-                            <CardTitle className="mt-0">{space.name}</CardTitle>
-                          </div>
-                        </div>
-                        <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                          {translateRole(space.role)}
-                        </span>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      {space.description && (
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {space.description}
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Layers2 className="mb-4 h-12 w-12 text-muted-foreground" />
-                <h3 className="mb-2 text-lg font-semibold">{t("dashboard.spaces.emptyTitle")}</h3>
-                <p className="text-center text-sm text-muted-foreground">
-                  {t("dashboard.spaces.emptyDescription")}
-                </p>
-              </CardContent>
-            </Card>
-          )}
+            }
+            authorityEmpty={
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <Layers2 className="mb-4 h-12 w-12 text-muted-foreground" />
+                  <h3 className="mb-2 text-lg font-semibold">{t("dashboard.spaces.emptyTitle")}</h3>
+                  <p className="text-center text-sm text-muted-foreground">
+                    {t("dashboard.spaces.emptyDescription")}
+                  </p>
+                </CardContent>
+              </Card>
+            }
+          />
         </div>
       </main>
     </div>

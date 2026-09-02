@@ -91,7 +91,7 @@ export function UserMenu() {
   // Prevent hydration mismatch by only rendering Radix UI components on client
   if (!mounted) {
     return (
-      <Button variant="ghost" size="icon" disabled>
+      <Button variant="ghost" size="icon" disabled className="rounded-full">
         <User className="h-5 w-5" />
       </Button>
     )

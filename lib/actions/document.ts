@@ -10,7 +10,7 @@ import { revalidatePath } from "next/cache"
 import { logger } from "@/lib/utils/logger"
 // PDF extraction now handled by pdf2json directly
 import { getRelevantContext, getAllWorkspaceKnowledge } from "@/lib/rag/search"
-import { extractPdfPages } from "@/lib/utils/pdf-extraction"
+import { extractPdfPages } from "@/lib/utils/pdf-extraction.server"
 import { compileSystemPrompt } from "@/lib/chat/playbook-compiler"
 import { recordGenerationRun, computeUnusedDocumentIds } from "@/lib/actions/generation-run"
 import { getLatestPlaybookBody } from "@/lib/actions/playbook"

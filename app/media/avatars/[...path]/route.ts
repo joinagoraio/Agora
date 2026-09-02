@@ -17,8 +17,7 @@ export async function GET(_request: Request, context: { params: Promise<{ path: 
 
   const ext = path.split(".").pop()?.toLowerCase()
   const contentType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg"
-  const body = Buffer.from(await data.arrayBuffer())
-  return new NextResponse(body, {
+  return new NextResponse(data, {
     headers: {
       "Content-Type": contentType,
       "Cache-Control": "public, max-age=3600",

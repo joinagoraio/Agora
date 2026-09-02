@@ -40,7 +40,7 @@ export async function POST(
 
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id, workspace_id")
+    .select("id, workspace_id, space_id")
     .eq("id", message.conversation_id)
     .maybeSingle()
 
@@ -60,6 +60,7 @@ export async function POST(
     const citations = await resolveCitations({
       content: message.content,
       workspaceId: conversation.workspace_id,
+      spaceId: conversation.space_id,
       supabase: adminSupabase,
       documents,
     })

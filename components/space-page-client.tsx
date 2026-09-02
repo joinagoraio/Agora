@@ -8,7 +8,7 @@ import { SpaceWorkspaceList, type SpaceWorkspace } from "@/components/space-work
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { PencilLine, X, Loader2, Wand2, RotateCcw, Save, MoreVertical, Settings } from "lucide-react"
+import { PencilLine, X, Loader2, Wand2, RotateCcw, Save, MoreVertical, Settings, ArrowLeft } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -26,6 +26,7 @@ import { updateSpaceScope, updateSpace, enhanceScopeText } from "@/lib/actions/s
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { GuidanceCoach } from "@/components/guidance-coach"
 import { IconTooltip } from "@/components/icon-tooltip"
+import { UserMenu } from "@/components/user-menu"
 import type { GuidanceMode } from "@/lib/guidance/jobs"
 
 type SpaceScope = {
@@ -53,6 +54,7 @@ interface SpacePageClientProps {
   canAccessSettings: boolean
   wizardState?: SetupWizardState | null
   spaceJob?: string | null
+  userRole?: string | null
   guidanceMode?: GuidanceMode
   helpAiEnabled?: boolean
 }
@@ -70,6 +72,7 @@ export function SpacePageClient({
   canAccessSettings,
   wizardState,
   spaceJob = "none",
+  userRole = null,
   guidanceMode = "guided",
   helpAiEnabled = false,
 }: SpacePageClientProps) {
@@ -180,7 +183,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
 
   const renderScopeOverview = () => {
     return (
-      <section className="space-y-6">
+      <section className="shrink-0 space-y-6">
         <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-2xl font-semibold text-foreground">{spaceTitle}</h2>
@@ -461,11 +464,35 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
   return (
     <>
     <div
-      className="guidance-content-shift min-h-screen"
+      className="guidance-content-shift flex h-dvh min-h-0 flex-col overflow-hidden bg-white"
       data-open={guidanceOpen ? "true" : undefined}
     >
-    <div className="container mx-auto flex flex-col gap-6 py-8 px-8">
-      <div className="min-w-0 flex-1">
+      <header className="shrink-0 bg-card">
+        <div className="flex h-16 items-center justify-between px-4">
+          <Button variant="ghost" asChild>
+            <Link href="/dashboard">
+              <ArrowLeft className="mr-2 h-3 w-3" />
+              <span className="text-xs font-normal">{t("space.page.backToDashboard")}</span>
+            </Link>
+          </Button>
+          <div className="flex items-center gap-2">
+            {spaceJob === "administrator" && (
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                {t("guidance.jobs.administrator")}
+              </span>
+            )}
+            {userRole ? (
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                {t(`space.common.roles.${userRole.toLowerCase()}`, userRole)}
+              </span>
+            ) : null}
+            <UserMenu />
+          </div>
+        </div>
+      </header>
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden contain-paint bg-white">
+    <div className="container mx-auto flex min-h-0 flex-1 flex-col overflow-hidden px-8 pt-8 pb-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {canManage && (
         <SpaceSetupWizard
           open={wizardOpen}
@@ -495,7 +522,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
       )}
 
       {isEditingScope ? (
-        <div className="space-y-4 rounded-lg border border-border bg-card/50 p-4 shadow-lg">
+        <div className="max-h-[42vh] shrink-0 space-y-4 overflow-y-auto rounded-lg border border-border bg-card/50 p-4 shadow-lg">
           <h2 className="text-lg font-semibold text-foreground">
             {t("common.labels.editing")}{" "}
             <span className="text-primary">{spaceTitle}</span>
@@ -723,12 +750,15 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
         renderScopeOverview()
       )}
 
-      <div className="mt-10 space-y-12">
-        <SpaceWorkspaceList spaceId={spaceId} workspaces={workspaces} canCreate={canManage} spaceName={spaceTitle} />
+      <div className="mt-6 flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <SpaceWorkspaceList spaceId={spaceId} workspaces={workspaces} canCreate={canManage} spaceName={spaceTitle} />
+        </div>
 
-        <Separator className="bg-border" />
+        <Separator className="my-4 shrink-0 bg-border" />
 
-        <SpaceDocumentsPanel
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <SpaceDocumentsPanel
           spaceId={spaceId}
           documents={documents}
           onDocumentsChange={setDocuments}
@@ -736,9 +766,11 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
           canUpload={canManage}
           canManage={canManage}
         />
+        </div>
       </div>
       </div>
     </div>
+      </main>
     </div>
       <GuidanceCoach
         surface="organisation"

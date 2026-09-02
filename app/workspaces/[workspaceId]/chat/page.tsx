@@ -151,13 +151,13 @@ export default async function ChatPage({
               <ShareConversationDialog conversationId={currentConversationId} />
             )}
             {userSpaceRole && (
-              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-primary">
-                {userSpaceRole}
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                {t(`space.common.roles.${userSpaceRole.toLowerCase()}`, userSpaceRole)}
               </span>
             )}
             {isWorkspaceOnlyMember && workspaceMembership && (
-              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-primary">
-                {workspaceMembership.role}
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                {t(`space.common.roles.${workspaceMembership.role.toLowerCase()}`, workspaceMembership.role)}
               </span>
             )}
             <UserMenu />

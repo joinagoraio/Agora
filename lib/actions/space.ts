@@ -7,7 +7,13 @@ import OpenAI from "openai"
 import { env } from "@/lib/env"
 import { requireAuth, requireAuthAndPermission } from "@/lib/middleware/authorization"
 import { getServerTranslator } from "@/lib/i18n/server"
-import { wouldLeaveLastAdministrator } from "@/lib/guidance/jobs"
+import { defaultSpaceJobForRole, wouldLeaveLastAdministrator } from "@/lib/guidance/jobs"
+
+type SpaceAccessRole = "owner" | "admin" | "member" | "viewer"
+
+function isSpaceAccessRole(value: string): value is SpaceAccessRole {
+  return value === "owner" || value === "admin" || value === "member" || value === "viewer"
+}
 
 export async function createSpace(
   name: string,
@@ -424,9 +430,14 @@ export async function updateSpaceSetupState(
 export async function updateSpaceMemberRole(
   spaceId: string,
   memberUserId: string,
-  newRole: "admin" | "member" | "viewer"
+  newRole: SpaceAccessRole
 ) {
   const supabase = await createClient()
+  const { t } = await getServerTranslator()
+
+  if (!isSpaceAccessRole(newRole)) {
+    return { error: "Invalid role" }
+  }
 
   const {
     data: { user },
@@ -435,7 +446,6 @@ export async function updateSpaceMemberRole(
     return { error: "Unauthorized" }
   }
 
-  // Check if current user is owner or admin
   const { data: currentMembership } = await supabase
     .from("space_members")
     .select("role")
@@ -447,22 +457,50 @@ export async function updateSpaceMemberRole(
     return { error: "You don't have permission to change member roles" }
   }
 
-  // Prevent changing owner's role
   const { data: targetMembership } = await supabase
     .from("space_members")
-    .select("role")
+    .select("role, job")
     .eq("space_id", spaceId)
     .eq("user_id", memberUserId)
     .single()
 
-  if (targetMembership?.role === "owner") {
-    return { error: "Cannot change the owner's role" }
+  if (!targetMembership) {
+    return { error: "Member not found" }
   }
 
-  // Update the member's role
+  if (targetMembership.role === "owner" && newRole !== "owner") {
+    const { data: owners } = await supabase
+      .from("space_members")
+      .select("id")
+      .eq("space_id", spaceId)
+      .eq("role", "owner")
+
+    if ((owners?.length ?? 0) <= 1) {
+      return { error: t("space.settings.members.lastOwner") }
+    }
+  }
+
+  const nextJob = defaultSpaceJobForRole(newRole)
+  if (targetMembership.job === "administrator" && nextJob === "none") {
+    const { count } = await supabase
+      .from("space_members")
+      .select("id", { count: "exact", head: true })
+      .eq("space_id", spaceId)
+      .eq("job", "administrator")
+    if (
+      wouldLeaveLastAdministrator({
+        currentJob: targetMembership.job,
+        nextJob,
+        administratorCount: count ?? 0,
+      })
+    ) {
+      return { error: t("guidance.jobs.lastAdministrator") }
+    }
+  }
+
   const { error } = await supabase
     .from("space_members")
-    .update({ role: newRole })
+    .update({ role: newRole, job: nextJob })
     .eq("space_id", spaceId)
     .eq("user_id", memberUserId)
 
@@ -524,9 +562,8 @@ export async function removeSpaceMember(spaceId: string, memberUserId: string) {
       .eq("role", "owner")
 
     if ((owners?.length ?? 0) <= 1) {
-      return {
-        error: "Spaces must always have at least one owner. Promote another member before removing this owner.",
-      }
+      const { t } = await getServerTranslator()
+      return { error: t("space.settings.members.lastOwner") }
     }
   }
 
@@ -566,6 +603,7 @@ export async function removeSpaceMember(spaceId: string, memberUserId: string) {
 
 export async function deleteSpace(spaceId: string) {
   const supabase = await createClient()
+  const { t } = await getServerTranslator()
 
   const {
     data: { user },
@@ -574,19 +612,25 @@ export async function deleteSpace(spaceId: string) {
     return { error: "Unauthorized" }
   }
 
-  // First verify the user is the owner of the space
+  const { data: membership } = await supabase
+    .from("space_members")
+    .select("role")
+    .eq("space_id", spaceId)
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  if (membership?.role !== "owner") {
+    return { error: t("space.settings.danger.onlyOwner") }
+  }
+
   const { data: space, error: spaceError } = await supabase
     .from("spaces")
-    .select("owner_id, metadata")
+    .select("metadata")
     .eq("id", spaceId)
     .single()
 
   if (spaceError || !space) {
     return { error: "Space not found or you don't have access to it" }
-  }
-
-  if (space.owner_id !== user.id) {
-    return { error: "Only the space owner can delete this space" }
   }
 
   const { parseRetentionPolicy, assertDestructiveAllowed } = await import("@/lib/programme/reliability")
@@ -595,8 +639,8 @@ export async function deleteSpace(spaceId: string) {
     return { error: hold.reason }
   }
 
-  // Proceed with deletion - cascade will handle workspaces and related data
-  const { error } = await supabase.from("spaces").delete().eq("id", spaceId)
+  const adminClient = createAdminClient()
+  const { error } = await adminClient.from("spaces").delete().eq("id", spaceId)
 
   if (error) {
     console.error("[deleteSpace] Error deleting space:", error)

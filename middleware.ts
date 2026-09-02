@@ -2,11 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { createCsrfProtect, CsrfError } from "@edge-csrf/nextjs"
 
 import { updateSession } from "@/lib/supabase/middleware"
-import { env } from "@/lib/env"
 
 const csrfProtect = createCsrfProtect({
   cookie: {
-    secure: env.NODE_ENV === "production",
+    secure: process.env.NODE_ENV === "production",
   },
 })
 

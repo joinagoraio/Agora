@@ -20,7 +20,7 @@ export default async function ProgrammeWorkbenchPage({
 
   const { data: workspace } = await supabase
     .from("workspaces")
-    .select("id, name, kind, metadata, space_id")
+        .select("id, name, summary, description, kind, metadata, space_id")
     .eq("id", workspaceId)
     .single()
 
@@ -66,6 +66,8 @@ export default async function ProgrammeWorkbenchPage({
       <ProgrammeWorkbench
         workspaceId={workspace.id}
         workspaceName={workspace.name}
+        workspaceSummary={workspace.summary ?? ""}
+        workspaceDescription={workspace.description ?? ""}
         spaceId={workspace.space_id}
         spaceName={space?.name || ""}
         kind={kind}

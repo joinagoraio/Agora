@@ -1,13 +1,21 @@
 "use client"
 
 import Link from "next/link"
+import { Layers, MoreVertical, Plus, Settings } from "lucide-react"
 
 import { CreateWorkspaceDialog } from "@/components/create-workspace-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Layers, Plus } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { IconTooltip } from "@/components/icon-tooltip"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { ViewModeToggle, useCollectionViewMode } from "@/components/view-mode-toggle"
 import {
   isEnvironmentalProgrammeWorkspace,
   workspaceHomeHref,
@@ -34,29 +42,41 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
   const { t } = useI18n()
   const programmes = workspaces.filter((workspace) => isEnvironmentalProgrammeWorkspace(workspace))
   const legacyResearch = workspaces.filter((workspace) => !isEnvironmentalProgrammeWorkspace(workspace))
+  const { viewMode, setViewMode } = useCollectionViewMode(programmes.length, `space.${spaceId}.programmes`)
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-xl font-semibold text-foreground">{t("space.workspaces.title")}</h3>
           <p className="text-sm text-muted-foreground">
             {t("space.workspaces.subtitle", undefined, { space: spaceName })}
           </p>
         </div>
-        {canCreate && (
-          <CreateWorkspaceDialog
-            spaceId={spaceId}
-            trigger={
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                {t("space.workspaces.newWorkspace")}
-              </Button>
-            }
-          />
-        )}
+        <div className="flex items-center gap-2">
+          {programmes.length > 0 && (
+            <ViewModeToggle
+              viewMode={viewMode}
+              onChange={setViewMode}
+              listLabel={t("space.workspaces.viewList")}
+              gridLabel={t("space.workspaces.viewGrid")}
+            />
+          )}
+          {canCreate && (
+            <CreateWorkspaceDialog
+              spaceId={spaceId}
+              trigger={
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  {t("space.workspaces.newWorkspace")}
+                </Button>
+              }
+            />
+          )}
+        </div>
       </div>
 
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {programmes.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center gap-3 py-12 text-center">
@@ -80,52 +100,88 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
             )}
           </CardContent>
         </Card>
-      ) : (
+      ) : viewMode === "grid" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {programmes.map((workspace) => {
             const href = workspaceHomeHref(workspace)
             return (
-            <Card key={workspace.id} className="flex h-full flex-col transition-shadow hover:shadow-md">
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold">
-                  <Link href={href} className="hover:underline">
-                    {workspace.name}
-                  </Link>
-                </CardTitle>
-                <CardDescription className="text-sm text-muted-foreground">
-                  {t("space.workspaces.createdLabel", undefined, {
-                    date: new Date(workspace.created_at).toLocaleDateString(),
-                  })}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col justify-between gap-4">
-                <p className="text-sm text-muted-foreground line-clamp-4">
-                  {workspace.description || t("space.workspaces.descriptionFallback")}
-                </p>
-                <p className="text-xs text-muted-foreground">{t("space.workspaces.kindProgrammeHint")}</p>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">{t("space.workspaces.kindProgramme")}</Badge>
+            <Card key={workspace.id} className="group relative flex h-full flex-col transition-shadow hover:shadow-md">
+              <div className="absolute right-2 top-2 z-10">
+                <ProgrammeMenu workspace={workspace} canManage={canCreate} />
+              </div>
+              <Link href={href} className="flex min-h-0 flex-1 flex-col pr-10">
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-2">
+                    <CardTitle className="text-lg font-semibold">{workspace.name}</CardTitle>
                     {workspace.publicationId ? (
-                      <Badge variant="outline" asChild>
-                        <Link href={`/published/${workspace.publicationId}`}>
-                          {t("space.workspaces.publishedBadge")}
-                        </Link>
-                      </Badge>
+                      <Badge variant="outline">{t("space.workspaces.publishedBadge")}</Badge>
                     ) : null}
-                  </span>
-                  <Button variant="ghost" size="sm" asChild className="px-2 text-primary hover:text-primary">
-                    <Link href={href}>{t("space.workspaces.goToWorkspace")}</Link>
-                  </Button>
-                </div>
-              </CardContent>
+                  </div>
+                  <CardDescription className="text-sm text-muted-foreground">
+                    {t("space.workspaces.createdLabel", undefined, {
+                      date: new Date(workspace.created_at).toLocaleDateString(),
+                    })}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-1 flex-col justify-between gap-4">
+                  <p className="text-sm text-muted-foreground line-clamp-4">
+                    {workspace.description || t("space.workspaces.descriptionFallback")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{t("space.workspaces.kindProgrammeHint")}</p>
+                </CardContent>
+              </Link>
             </Card>
             )
           })}
         </div>
+        </div>
+      ) : (
+        <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0 shadow">
+          <CardContent className="min-h-0 flex-1 overflow-y-auto p-0">
+            <div className="divide-y divide-border">
+              {programmes.map((workspace) => {
+                const href = workspaceHomeHref(workspace)
+                return (
+                  <div
+                    key={workspace.id}
+                    className="group relative flex items-stretch transition-colors hover:bg-muted/50"
+                  >
+                    <Link
+                      href={href}
+                      className="grid min-w-0 flex-1 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-center gap-4 px-4 py-3 text-sm"
+                    >
+                      <div className="min-w-0 font-medium text-foreground">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="truncate">{workspace.name}</span>
+                          {workspace.publicationId ? (
+                            <Badge variant="outline" className="shrink-0">
+                              {t("space.workspaces.publishedBadge")}
+                            </Badge>
+                          ) : null}
+                        </span>
+                        <div className="text-xs text-muted-foreground">
+                          {t("space.workspaces.createdLabel", undefined, {
+                            date: new Date(workspace.created_at).toLocaleDateString(),
+                          })}
+                        </div>
+                      </div>
+                      <p className="line-clamp-2 text-xs text-muted-foreground">
+                        {workspace.description || t("space.workspaces.descriptionFallback")}
+                      </p>
+                    </Link>
+                    <div className="flex shrink-0 items-center pr-2">
+                      <ProgrammeMenu workspace={workspace} canManage={canCreate} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
       )}
       {legacyResearch.length > 0 && (
-        <p className="text-xs text-muted-foreground">
+        <p className="mt-3 shrink-0 text-xs text-muted-foreground">
           {t("space.workspaces.legacyResearch", undefined, { count: String(legacyResearch.length) })}{" "}
           {legacyResearch.map((workspace, index) => (
             <span key={workspace.id}>
@@ -137,6 +193,46 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
           ))}
         </p>
       )}
+      </div>
     </div>
+  )
+}
+
+function ProgrammeMenu({
+  workspace,
+  canManage,
+}: {
+  workspace: SpaceWorkspace
+  canManage: boolean
+}) {
+  const { t } = useI18n()
+  if (!canManage) return null
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <span className="inline-flex">
+          <IconTooltip label={t("space.workspaces.dropdownMenuSr")}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              aria-label={t("space.workspaces.dropdownMenuSr")}
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </IconTooltip>
+        </span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuItem asChild className="cursor-pointer">
+          <Link href={`/workspaces/${workspace.id}/settings`} className="flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            {t("space.workspaces.menuSettings")}
+          </Link>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

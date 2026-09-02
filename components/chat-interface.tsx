@@ -31,6 +31,7 @@ import ReactMarkdown from "react-markdown"
 import Link from "next/link"
 import { buildDocumentUrlFromSource } from "@/lib/utils/document-linking"
 import { getWorkspaceDocuments } from "@/lib/actions/document"
+import { getSpaceItems } from "@/lib/actions/space-item"
 import { getWorkspaceNotesForContext } from "@/lib/actions/workspace-notes"
 import type { WorkspaceNoteForContext } from "@/lib/actions/workspace-notes"
 import { getWorkspaceItems } from "@/lib/actions/workspace-item"
@@ -183,14 +184,15 @@ function useChatWithInput(options: UseAiChatOptions) {
 }
 
 interface ChatInterfaceProps {
-  workspaceId: string
+  workspaceId?: string
+  spaceId?: string
   conversationId: string
   initialMessages?: any[]
   documentId?: string // Optional: when provided, only show this document
   canManage?: boolean
 }
 
-export function ChatInterface({ workspaceId, conversationId, initialMessages = [], documentId, canManage = true }: ChatInterfaceProps) {
+export function ChatInterface({ workspaceId, spaceId, conversationId, initialMessages = [], documentId, canManage = true }: ChatInterfaceProps) {
   const highlightContext = useOptionalHighlightContext()
   const canUseHighlights = Boolean(highlightContext)
   const [hasLoadedInitial, setHasLoadedInitial] = useState(false)
@@ -294,6 +296,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   )
   const requestBodyRef = useRef({
     workspaceId,
+    spaceId,
     conversationId,
     excludedDocumentIds: Array.from(excludedDocumentIds),
     excludedNoteIds: Array.from(excludedNoteIds),
@@ -311,13 +314,14 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
 
       requestBodyRef.current = {
         workspaceId,
+        spaceId,
         conversationId,
         excludedDocumentIds: Array.from(nextExcludedDocs),
         excludedNoteIds: Array.from(nextExcludedNotes),
         excludedEvidenceIds: Array.from(nextExcludedEvidence),
       }
     },
-    [workspaceId, conversationId, excludedDocumentIds, excludedNoteIds, excludedEvidenceIds],
+    [workspaceId, spaceId, conversationId, excludedDocumentIds, excludedNoteIds, excludedEvidenceIds],
   )
   const csrfTokenRef = useRef<string | null>(null)
   const processedAutoHighlightsRef = useRef<Set<string>>(new Set())
@@ -385,6 +389,32 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     setIsLoadingEvidence((prev) => (prev ? prev : true))
 
     try {
+      if (spaceId) {
+        const result = await getSpaceItems(spaceId, { item_type: "document" })
+        if (result.error) {
+          clientLogger.error("[ChatInterface] Failed to fetch library documents:", result.error)
+        }
+        const mapped = (result.data ?? []).map((item: any) => ({
+          id: item.id,
+          title: item.payload?.title || item.payload?.file_name || "Untitled document",
+        }))
+        setDocuments(documentId ? mapped.filter((doc: { id: string }) => doc.id === documentId) : mapped)
+        setContextNotes([])
+        setEvidenceItems([])
+        setWorkspaceContextText(null)
+        setWorkspaceLocation(null)
+        setHasLoadedWorkspaceMetadata(true)
+        return
+      }
+
+      if (!workspaceId) {
+        setDocuments([])
+        setContextNotes([])
+        setEvidenceItems([])
+        setHasLoadedWorkspaceMetadata(true)
+        return
+      }
+
       const documentsPromise = (async () => {
         const result = await getWorkspaceDocuments(workspaceId)
 
@@ -459,7 +489,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
       setIsLoadingNotes(false)
       setIsLoadingEvidence(false)
     }
-  }, [workspaceId, documentId])
+  }, [workspaceId, spaceId, documentId])
 
   useEffect(() => {
     loadContextItems()
@@ -467,6 +497,18 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
 
   // Incremental update functions for specific context items
   const updateDocuments = useCallback(async () => {
+    if (spaceId) {
+      const result = await getSpaceItems(spaceId, { item_type: "document" })
+      const mapped = (result.data ?? []).map((item: any) => ({
+        id: item.id,
+        title: item.payload?.title || item.payload?.file_name || "Untitled document",
+      }))
+      setDocuments(documentId ? mapped.filter((doc: { id: string }) => doc.id === documentId) : mapped)
+      return
+    }
+    if (!workspaceId) {
+      return
+    }
     try {
       const result = await getWorkspaceDocuments(workspaceId)
       if (result.error) {
@@ -483,9 +525,12 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
     } catch (error) {
       clientLogger.error("[ChatInterface] Failed to update documents:", error)
     }
-  }, [workspaceId, documentId])
+  }, [workspaceId, spaceId, documentId])
 
   const updateNotes = useCallback(async () => {
+    if (!workspaceId) {
+      return
+    }
     try {
       const notesResult = await getWorkspaceNotesForContext(workspaceId)
       if (notesResult.error) {
@@ -500,6 +545,9 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   }, [workspaceId])
 
   const updateEvidence = useCallback(async () => {
+    if (!workspaceId) {
+      return
+    }
     try {
       const result = await getWorkspaceItems(workspaceId, { inheritance: "local" })
       if (result.error) {
@@ -517,6 +565,9 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
   }, [workspaceId])
 
   const updateWorkspaceContext = useCallback(async () => {
+    if (!workspaceId) {
+      return
+    }
     try {
       const result = await getWorkspaceContextDetails(workspaceId)
       if (result.error) {
@@ -764,7 +815,12 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
         )
       }
 
-      const targetUrl = new URL(`/workspaces/${workspaceId}/documents/${citation.documentId}`, window.location.origin)
+      const targetUrl = new URL(
+        spaceId
+          ? `/spaces/${spaceId}/documents/${citation.documentId}`
+          : `/workspaces/${workspaceId}/documents/${citation.documentId}`,
+        window.location.origin,
+      )
       if (conversationId) {
         targetUrl.searchParams.set("conversationId", conversationId)
       }
@@ -785,7 +841,7 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
         }, 120)
       }
     },
-    [conversationId, deriveHighlightId, highlightContext, router, workspaceId],
+    [conversationId, deriveHighlightId, highlightContext, router, workspaceId, spaceId],
   )
 
   const hoverCitationHighlight = useCallback(
@@ -1780,12 +1836,18 @@ export function ChatInterface({ workspaceId, conversationId, initialMessages = [
                   <div className="space-y-3">
                     <div className="rounded-md border border-border/60 bg-secondary/10 px-3 py-2">
                       <p className="text-xs font-medium text-foreground/90">
-                        {t("workspace.chat.interface.context.scopeAlwaysIncluded")}
+                        {spaceId
+                          ? t("workspace.chat.interface.context.scopeAlwaysIncludedAuthority")
+                          : t("workspace.chat.interface.context.scopeAlwaysIncluded")}
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {documentId
-                        ? t("workspace.chat.interface.context.documentNotice")
+                        ? t(
+                            spaceId
+                              ? "workspace.chat.interface.context.documentNoticeAuthority"
+                              : "workspace.chat.interface.context.documentNotice",
+                          )
                         : t("workspace.chat.interface.context.selectionDescription")}
                     </p>
                     {documentId ? (

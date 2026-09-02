@@ -127,7 +127,7 @@ export function OrganizationSettings({ space }: OrganizationSettingsProps) {
                   {t("space.settings.compliance.profile.saving")}
                 </>
               ) : (
-                {t("space.settings.compliance.profile.save")}
+                <>{t("space.settings.compliance.profile.save")}</>
               )}
             </Button>
           </div>

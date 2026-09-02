@@ -228,12 +228,54 @@
 }
 
 .word-document-content table {
-  @apply border-collapse border border-border mb-4 w-full;
+  display: table;
+  width: 100% !important;
+  max-width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+
+.word-document-content colgroup,
+.word-document-content col {
+  width: auto !important;
+}
+
+.word-document-content thead {
+  display: table-header-group;
+}
+
+.word-document-content tbody {
+  display: table-row-group;
+}
+
+.word-document-content tr {
+  display: table-row;
 }
 
 .word-document-content th,
 .word-document-content td {
-  @apply border border-border p-2;
+  display: table-cell;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 100%;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  @apply border border-border p-2 align-top;
+}
+
+.word-document-content th p,
+.word-document-content td p {
+  margin-bottom: 0.35rem;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.word-document-content th p:last-child,
+.word-document-content td p:last-child {
+  margin-bottom: 0;
 }
 
 .word-document-content th {

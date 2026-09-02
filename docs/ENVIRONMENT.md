@@ -31,8 +31,8 @@ UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
 UPSTASH_REDIS_REST_TOKEN=your-redis-token
 
 # App URLs
-NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
-NEXT_PUBLIC_BASE_URL=https://your-app.vercel.app
+NEXT_PUBLIC_APP_URL=https://agora.example.com
+NEXT_PUBLIC_BASE_URL=https://agora.example.com
 NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=http://localhost:3000/auth/callback
 
 # Email (Resend)
@@ -42,11 +42,8 @@ INVITE_EMAIL_FROM="Agora <no-reply@agora.example>"
 # Error Tracking
 NEXT_PUBLIC_SENTRY_DSN=https://your-sentry-dsn
 
-# Vercel
-VERCEL_URL=your-app.vercel.app
-
 # Testing
-E2E_BASE_URL=https://your-test-env.vercel.app
+E2E_BASE_URL=https://agora.example.com
 E2E_TEST_EMAIL=test@example.com
 E2E_TEST_PASSWORD=test-password
 E2E_WORKSPACE_PATH=/workspaces/test-workspace-id
@@ -68,25 +65,21 @@ NEXT_PUBLIC_BASE_URL=http://localhost:3000
 
 ### Staging
 
-**Vercel Environment Variables:**
-- Set in Vercel Dashboard → Settings → Environment Variables
-- Apply to "Preview" environment
-
-```bash
-NODE_ENV=production
-NEXT_PUBLIC_APP_URL=https://staging.agora.example.com
-```
+Use a second VPS or a separate compose project if you need a preview. GitHub Actions no longer deploys Vercel previews.
 
 ### Production
 
-**Vercel Environment Variables:**
-- Set in Vercel Dashboard → Settings → Environment Variables
-- Apply to "Production" environment
+**Files on the Hetzner VPS (not Vercel):**
+- `/home/agora/Agora/.env.production`
+- `/home/agora/Agora/infrastructure/supabase/.env`
 
 ```bash
 NODE_ENV=production
 NEXT_PUBLIC_APP_URL=https://agora.example.com
+NEXT_PUBLIC_SUPABASE_URL=https://api.agora.example.com
 ```
+
+See [Deployment Guide](./DEPLOYMENT.md).
 
 ---
 
@@ -117,13 +110,13 @@ All environment variables are validated at startup using Zod schemas in `lib/env
 
 ### CI/CD
 
-- Store secrets in GitHub Secrets
-- Use Vercel Environment Variables for deployments
+- Store secrets in GitHub Secrets for tests/builds
+- Deploy by rsync + `scripts/deploy/deploy.sh` on the VPS
 - Never log secrets in CI/CD output
 
 ### Production
 
-- Use Vercel Environment Variables
+- Store `infrastructure/supabase/.env` and `.env.production` only on the VPS and an offline copy
 - Rotate secrets regularly
 - Use different secrets per environment
 
@@ -136,18 +129,18 @@ All environment variables are validated at startup using Zod schemas in `lib/env
 1. Add to `lib/env.ts` schema
 2. Add to `.env.example`
 3. Update this documentation
-4. Set in Vercel for staging/production
+4. Set in `.env.production` / `infrastructure/supabase/.env` on the VPS
 
 ### Updating Variables
 
-1. Update in Vercel Dashboard
-2. Redeploy application
+1. Edit `.env.production` or `infrastructure/supabase/.env` on the VPS
+2. `bash scripts/deploy/deploy.sh`
 3. Verify changes
 
 ### Rotating Secrets
 
-1. Generate new secret
-2. Update in Vercel
+1. Generate new secret (`node scripts/deploy/generate-keys.mjs` for a full set)
+2. Update the env files on the VPS
 3. Redeploy
 4. Verify application works
 5. Revoke old secret
@@ -161,7 +154,7 @@ All environment variables are validated at startup using Zod schemas in `lib/env
 3. **Rotate regularly** - Update secrets periodically
 4. **Validate at startup** - Ensure all required variables present
 5. **Document all variables** - Keep this doc updated
-6. **Use secure storage** - Vercel Secrets or similar
+6. **Use secure storage** - env files on the VPS plus an offline copy
 7. **Limit access** - Only necessary team members
 
 ---
@@ -192,10 +185,10 @@ All environment variables are validated at startup using Zod schemas in `lib/env
 **Error:** Application fails in production
 
 **Solution:**
-1. Check Vercel Environment Variables
-2. Verify variables set for correct environment
+1. Check `.env.production` and `infrastructure/supabase/.env` on the VPS
+2. Verify variables set for the running containers
 3. Check variable values are correct
-4. Review deployment logs
+4. Review `docker compose logs`
 
 ---
 
@@ -211,13 +204,13 @@ All environment variables are validated at startup using Zod schemas in `lib/env
 
 ## Migration Guide
 
-### Moving from .env to Vercel
+### Moving from Vercel env vars to the VPS
 
-1. Export current `.env.local` values
-2. Add to Vercel Environment Variables
-3. Remove from `.env.local` (keep local dev vars)
-4. Redeploy
-5. Verify
+1. Copy current production values into `.env.production` and `infrastructure/supabase/.env`
+2. Generate new JWT/database secrets if you are not restoring a cloud dump that must keep the old keys
+3. Deploy with `bash scripts/deploy/deploy.sh`
+4. Verify login and document open
+5. Remove the Vercel project
 
 ---
 

@@ -54,8 +54,8 @@ export function WordViewer({
           <div
             ref={contentRef}
             style={{
-              maxWidth: fitMode ? "100%" : "896px",
-              width: fitMode ? "100%" : "896px",
+              width: "100%",
+              maxWidth: fitMode ? "100%" : "56rem",
               overflow: "hidden",
             }}
           >

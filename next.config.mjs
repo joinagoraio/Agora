@@ -1,30 +1,73 @@
+import { copyFileSync, mkdirSync } from "node:fs"
+import { createRequire } from "node:module"
+import path from "node:path"
+
+const require = createRequire(import.meta.url)
+
+function resolvePdfWorker() {
+  try {
+    const reactPdfDir = path.dirname(require.resolve("react-pdf/package.json"))
+    return require.resolve("pdfjs-dist/build/pdf.worker.min.mjs", { paths: [reactPdfDir] })
+  } catch {
+    return require.resolve("pdfjs-dist/build/pdf.worker.min.mjs")
+  }
+}
+
+try {
+  mkdirSync(path.join(process.cwd(), "public"), { recursive: true })
+  copyFileSync(resolvePdfWorker(), path.join(process.cwd(), "public/pdf.worker.min.mjs"))
+} catch (error) {
+  console.warn("[next.config] Could not copy pdf.worker.min.mjs into public/", error)
+}
+
+function supabaseConnectSources() {
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!raw || raw.includes("PLACEHOLDER") || raw.includes("placeholder")) return []
+  try {
+    const url = new URL(raw)
+    return [url.origin, `wss://${url.host}`, `ws://${url.host}`]
+  } catch {
+    return []
+  }
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: "standalone",
+  typescript: {
+    ignoreBuildErrors: process.env.DOCKER_BUILD === "1",
+  },
+  serverExternalPackages: ["pdfjs-dist"],
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "200mb",
+    },
+    proxyClientMaxBodySize: "200mb",
+  },
   images: {
     unoptimized: true,
   },
-  // Security headers
   async headers() {
     const isDev = process.env.NODE_ENV !== "production"
-    
-    const scriptSources = ["'self'", "https://va.vercel-scripts.com", "'unsafe-inline'"]
+
+    const scriptSources = ["'self'", "'unsafe-inline'"]
     if (isDev) {
-      scriptSources.push("'unsafe-eval'", "https://vercel.live")
+      scriptSources.push("'unsafe-eval'", "https://vercel.live", "https://va.vercel-scripts.com")
     }
-    
+
     const styleSources = ["'self'", "'unsafe-inline'"]
     if (isDev) {
       styleSources.push("https://vercel.live")
     }
-    
+
     const connectSources = [
       "'self'",
       "https://*.supabase.co",
       "https://*.openai.com",
       "https://*.upstash.io",
+      ...supabaseConnectSources(),
     ]
     if (isDev) {
-      // Local Supabase (supabase start) — required for browser auth/API calls
       connectSources.push(
         "http://localhost:54321",
         "http://127.0.0.1:54321",

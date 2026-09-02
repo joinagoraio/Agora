@@ -106,6 +106,8 @@ const rolePermissions: Record<NewRole, Permission[]> = {
     "source:create",
     "source:update",
     "source:delete",
+    "space_item:publish",
+    "space_item:update",
     "workspace_item:create",
     "workspace_item:update",
     "evidence:save",

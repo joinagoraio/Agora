@@ -23,6 +23,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  ZOOM_PRESETS,
+  type Highlight,
+  type ViewerControls,
+  type ViewerFitMode,
+} from "@/components/pdf-viewer-types"
+
+export type { Highlight, ViewerControls, ViewerFitMode }
+export { ZOOM_PRESETS }
 
 // Import react-pdf CSS for TextLayer and AnnotationLayer
 import "react-pdf/dist/Page/AnnotationLayer.css"
@@ -32,41 +41,11 @@ import "react-pdf/dist/Page/TextLayer.css"
 // Use the worker file from the public folder (served at /pdf.worker.min.mjs)
 // Set it immediately and also in useEffect to ensure it's set on client
 if (typeof window !== "undefined") {
-  pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs"
-}
-
-export type ViewerFitMode = "width" | "height"
-
-export const ZOOM_PRESETS = [0.5, 0.75, 0.9, 1, 1.25, 1.5, 2]
-
-export interface ViewerControls {
-  pageNumber: number
-  numPages: number | null
-  scale: number
-  minScale?: number
-  maxScale?: number
-  fitMode?: ViewerFitMode | null
-  changePage: (offset: number) => void
-  goToPage: (page: number) => void
-  zoomIn: () => void
-  zoomOut: () => void
-  rotate: () => void
-  fitToWidth?: () => void
-  fitToHeight?: () => void
-  setScale?: (value: number) => void
+  pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs?v=${pdfjs.version}`
 }
 
 const MIN_SCALE = 0.5
 const MAX_SCALE = 5.0
-
-export interface Highlight {
-  id: string
-  pageNumber: number
-  textSpan: { start: number; end: number }
-  coordinates?: { x: number; y: number; width: number; height: number }
-  color?: string
-  quote?: string
-}
 
 interface PDFViewerProps {
   url: string
@@ -107,11 +86,17 @@ export function PDFViewer({
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const pageNumberRef = useRef(pageNumber)
   const pageDimensionsRef = useRef<{ width: number; height: number } | null>(null)
+  const fitModeRef = useRef<ViewerFitMode | null>(null)
+  const scaleRef = useRef(scale)
+  const scaleBeforeFitRef = useRef(1.0)
+
+  fitModeRef.current = fitMode
+  scaleRef.current = scale
 
   // Ensure PDF.js worker is configured on mount
   useEffect(() => {
     if (typeof window !== "undefined" && !pdfjs.GlobalWorkerOptions.workerSrc) {
-      pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs"
+      pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs?v=${pdfjs.version}`
     }
   }, [])
 
@@ -452,14 +437,30 @@ export function PDFViewer({
   )
 
   const fitToWidth = useCallback(() => {
+    if (fitModeRef.current === "width") {
+      setFitMode(null)
+      setScale(clampScale(scaleBeforeFitRef.current))
+      return
+    }
+    if (fitModeRef.current == null) {
+      scaleBeforeFitRef.current = scaleRef.current
+    }
     setFitMode("width")
     applyFit("width")
-  }, [applyFit])
+  }, [applyFit, clampScale])
 
   const fitToHeight = useCallback(() => {
+    if (fitModeRef.current === "height") {
+      setFitMode(null)
+      setScale(clampScale(scaleBeforeFitRef.current))
+      return
+    }
+    if (fitModeRef.current == null) {
+      scaleBeforeFitRef.current = scaleRef.current
+    }
     setFitMode("height")
     applyFit("height")
-  }, [applyFit])
+  }, [applyFit, clampScale])
 
   useEffect(() => {
     if (fitMode) {
@@ -503,7 +504,7 @@ export function PDFViewer({
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageNumber, numPages, scale, fitMode])
+  }, [pageNumber, numPages, scale, fitMode, fitToWidth, fitToHeight])
 
   return (
     <div className={`flex flex-col ${className}`}>

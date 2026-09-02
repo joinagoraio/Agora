@@ -1,13 +1,39 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
+import { canPublishSpaceItems, type Role } from "@/lib/rbac/permissions"
 import {
   removeScopeDocumentFromAllWorkspaces,
   syncScopeDocumentToAllWorkspaces,
   type SpaceDocumentItem,
 } from "@/lib/services/scope-documents"
 import { resolveSpaceItemClassification, shouldSyncSpaceDocument } from "@/lib/utils/space-items"
+
+async function requireSpaceItemPublisher(spaceId: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "Unauthorized" as const }
+  }
+
+  const adminClient = createAdminClient()
+  const { data: membership } = await adminClient
+    .from("space_members")
+    .select("role")
+    .eq("space_id", spaceId)
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  if (!membership?.role || !canPublishSpaceItems(membership.role as Role)) {
+    return { error: "You don't have permission to change documents in this authority" as const }
+  }
+
+  return { user, adminClient }
+}
 
 export async function updateSpaceType(
   spaceId: string,
@@ -62,18 +88,15 @@ export async function publishSpaceItem(
     source_page?: number
   },
 ) {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    return { error: "Unauthorized" }
+  const access = await requireSpaceItemPublisher(spaceId)
+  if ("error" in access) {
+    return { error: access.error }
   }
 
+  const { user, adminClient } = access
   const resolvedClassification = resolveSpaceItemClassification(itemData.item_type, itemData.classification)
 
-  const { data, error } = await supabase
+  const { data, error } = await adminClient
     .from("space_items")
     .insert({
       space_id: spaceId,
@@ -95,9 +118,7 @@ export async function publishSpaceItem(
       await syncScopeDocumentToAllWorkspaces(spaceId, data as SpaceDocumentItem)
     } catch (syncError) {
       console.error("[SpaceItems] Failed to sync document to linked workspaces:", syncError)
-      warnings.push(
-        "Document uploaded, but we could not sync it to linked workspaces. Try re-linking the space or contact support if it keeps failing.",
-      )
+      warnings.push("sync_failed")
     }
   }
 
@@ -109,17 +130,8 @@ export async function publishSpaceItem(
 }
 
 export async function unpublishSpaceItem(itemId: string) {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    return { error: "Unauthorized" }
-  }
-
-  // Get space_id first to check permissions
-  const { data: item } = await supabase
+  const adminClient = createAdminClient()
+  const { data: item } = await adminClient
     .from("space_items")
     .select("space_id, item_type, classification")
     .eq("id", itemId)
@@ -129,19 +141,12 @@ export async function unpublishSpaceItem(itemId: string) {
     return { error: "Item not found" }
   }
 
-  // Check if user has permission to delete (owner or admin)
-  const { data: membership } = await supabase
-    .from("space_members")
-    .select("role")
-    .eq("space_id", item.space_id)
-    .eq("user_id", user.id)
-    .single()
-
-  if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
-    return { error: "You don't have permission to delete items in this space" }
+  const access = await requireSpaceItemPublisher(item.space_id)
+  if ("error" in access) {
+    return { error: "You don't have permission to delete items in this authority" }
   }
 
-  const { error } = await supabase.from("space_items").delete().eq("id", itemId)
+  const { error } = await access.adminClient.from("space_items").delete().eq("id", itemId)
 
   if (error) {
     console.error("[unpublishSpaceItem] Delete error:", error)
@@ -172,9 +177,21 @@ export async function getSpaceItems(
     return { data: [], error: "Unauthorized" }
   }
 
-  let query = supabase
+  const adminClient = createAdminClient()
+  const { data: membership } = await adminClient
+    .from("space_members")
+    .select("role")
+    .eq("space_id", spaceId)
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  if (!membership) {
+    return { data: [], error: "Unauthorized" }
+  }
+
+  let query = adminClient
     .from("space_items")
-    .select("*, created_by:profiles(id, email, full_name), source_doc:documents(id, title, url)")
+    .select("*")
     .eq("space_id", spaceId)
     .order("created_at", { ascending: false })
 
@@ -189,10 +206,23 @@ export async function getSpaceItems(
   const { data, error } = await query
 
   if (error) {
+    console.error("[getSpaceItems]", error)
     return { data: [], error: error.message }
   }
 
   return { data: data || [] }
+}
+
+export async function getSpaceItem(spaceId: string, itemId: string) {
+  const { data, error } = await getSpaceItems(spaceId)
+  if (error) {
+    return { data: null, error }
+  }
+  const item = (data ?? []).find((row) => row.id === itemId) ?? null
+  if (!item) {
+    return { data: null, error: "Not found" as const }
+  }
+  return { data: item }
 }
 
 export async function getPublicSpaceItems(spaceId: string) {
@@ -214,7 +244,7 @@ export async function getPublicSpaceItems(spaceId: string) {
 
   const { data, error } = await supabase
     .from("space_items")
-    .select("*, created_by:profiles(id, email, full_name), source_doc:documents(id, title, url)")
+    .select("*, created_by:profiles(id, email, full_name), source_doc:documents(id, title)")
     .eq("space_id", spaceId)
     .eq("classification", "public")
     .order("created_at", { ascending: false })
@@ -233,16 +263,8 @@ export async function updateSpaceItem(
     payload?: Record<string, any>
   },
 ) {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    return { error: "Unauthorized" }
-  }
-
-  const { data: existingItem } = await supabase
+  const adminClient = createAdminClient()
+  const { data: existingItem } = await adminClient
     .from("space_items")
     .select("space_id, item_type, classification")
     .eq("id", itemId)
@@ -252,7 +274,12 @@ export async function updateSpaceItem(
     return { error: "Item not found" }
   }
 
-  const { data, error } = await supabase
+  const access = await requireSpaceItemPublisher(existingItem.space_id)
+  if ("error" in access) {
+    return { error: access.error }
+  }
+
+  const { data, error } = await access.adminClient
     .from("space_items")
     .update(updates)
     .eq("id", itemId)
@@ -279,9 +306,7 @@ export async function updateSpaceItem(
         await syncScopeDocumentToAllWorkspaces(existingItem.space_id, spaceDocument)
       } catch (syncError) {
         console.error("[SpaceItems] Failed to sync updated document to linked workspaces:", syncError)
-        warnings.push(
-          "Updated document, but syncing to linked workspaces failed. Try re-linking the space or contact support if the issue persists.",
-        )
+        warnings.push("sync_failed")
       }
     } else {
       await removeScopeDocumentFromAllWorkspaces(existingItem.space_id, itemId)

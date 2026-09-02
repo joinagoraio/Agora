@@ -303,16 +303,21 @@ export function GuidanceCoach({
   return (
     <>
       {!open && (
-        <Button
-          type="button"
-          size="lg"
-          onClick={reopen}
+        <IconTooltip
+          label={t("guidance.header.help")}
+          className="fixed z-[60]"
           style={{ right: surface === "research" ? 84 : 24, bottom: 24 }}
-          className="guidance-help-fab fixed z-[60] h-10 gap-2 rounded-full px-4 shadow-lg"
         >
-          <HelpCircle className="h-4 w-4" />
-          {t("guidance.header.help")}
-        </Button>
+          <Button
+            type="button"
+            size="icon"
+            onClick={reopen}
+            className="guidance-help-fab h-10 w-10 rounded-full shadow-lg"
+            aria-label={t("guidance.header.help")}
+          >
+            <HelpCircle className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
       )}
 
       <aside

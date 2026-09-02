@@ -58,7 +58,6 @@
     "@tiptap/starter-kit": "3.10.7",
     "@upstash/ratelimit": "2.0.7",
     "@upstash/redis": "1.35.6",
-    "@vercel/analytics": "1.5.0",
     "ai": "5.0.93",
     "autoprefixer": "10.4.20",
     "canvas": "3.2.0",
@@ -81,7 +80,7 @@
     "openai": "6.8.1",
     "pdf-parse": "2.4.5",
     "pdf2json": "4.0.0",
-    "pdfjs-dist": "5.4.394",
+    "pdfjs-dist": "5.4.296",
     "react": "19.2.2",
     "react-day-picker": "9.8.0",
     "react-dom": "19.2.2",
@@ -100,6 +99,11 @@
     "vaul": "0.9.9",
     "ws": "8.18.3",
     "zod": "3.25.76"
+  },
+  "pnpm": {
+    "overrides": {
+      "pdfjs-dist": "5.4.296"
+    }
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

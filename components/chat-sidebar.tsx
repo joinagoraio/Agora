@@ -41,7 +41,8 @@ import { useI18n } from "@/lib/i18n/use-i18n"
 import { IconTooltip } from "@/components/icon-tooltip"
 
 interface ChatSidebarProps {
-  workspaceId: string
+  workspaceId?: string
+  spaceId?: string
   workspaceName: string
   isOpen: boolean
   onClose: () => void
@@ -50,7 +51,7 @@ interface ChatSidebarProps {
 
 const DEFAULT_CONVERSATION_TITLE_KEY = "new conversation"
 
-export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canManage = true }: ChatSidebarProps) {
+export function ChatSidebar({ workspaceId, spaceId, workspaceName, isOpen, onClose, canManage = true }: ChatSidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -75,6 +76,12 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
       return { type: "workspace" as ConversationContextType, contextId: null, documentId: undefined }
     }
 
+    const spaceDocumentMatch = pathname.match(/\/spaces\/[^/]+\/documents\/([^/]+)/)
+    if (spaceDocumentMatch) {
+      const docId = spaceDocumentMatch[1]
+      return { type: "document_view" as ConversationContextType, contextId: docId, documentId: docId }
+    }
+
     const documentViewMatch = pathname.match(/\/workspaces\/[^/]+\/documents\/([^/]+)/)
     if (documentViewMatch) {
       const docId = documentViewMatch[1]
@@ -95,7 +102,10 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
   const contextKey = useMemo(() => `${contextType}:${contextId ?? ""}`, [contextType, contextId])
   const previousContextKeyRef = useRef(contextKey)
 
-  const storageKey = useMemo(() => `workspace:${workspaceId}:activeConversation`, [workspaceId])
+  const storageKey = useMemo(
+    () => (spaceId ? `space:${spaceId}:activeConversation` : `workspace:${workspaceId}:activeConversation`),
+    [spaceId, workspaceId],
+  )
   const initialConversationId = searchParams.get("conversationId")
   const [conversationIdParam, setConversationIdParam] = useState<string | null>(() => {
     if (initialConversationId) {
@@ -233,9 +243,10 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
   }, [])
 
   const loadConversations = useCallback(async () => {
-    const result = await getUserConversations(workspaceId, {
+    const result = await getUserConversations(workspaceId ?? null, {
       contextType,
       contextId,
+      spaceId,
     })
     if (result.data) {
       setConversations(result.data)
@@ -243,7 +254,7 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
     }
     setConversations([])
     return []
-  }, [workspaceId, contextType, contextId])
+  }, [workspaceId, spaceId, contextType, contextId])
 
   const lastCreatedConversationRef = useRef<string | null>(null)
 
@@ -398,9 +409,10 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
     }
     isCreatingConversationRef.current = true
     try {
-      const result = await createConversation(workspaceId, {
+      const result = await createConversation(workspaceId ?? null, {
         contextType,
         contextId,
+        spaceId,
       })
       if (result.error || !result.data) {
         toast.error(t("workspace.chat.toast.createError"), {
@@ -945,10 +957,11 @@ export function ChatSidebar({ workspaceId, workspaceName, isOpen, onClose, canMa
           {currentConversationId ? (
             <ChatInterface
               workspaceId={workspaceId}
+              spaceId={spaceId}
               conversationId={currentConversationId}
               initialMessages={formattedMessages}
               documentId={activeDocumentId}
-              canManage={canManage}
+              canManage={Boolean(workspaceId) && canManage}
             />
           ) : (
             <div className="flex h-full items-center justify-center">

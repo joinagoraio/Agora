@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef, type CSSProperties } from "react"
 import { useSearchParams } from "next/navigation"
 import { MultiFormatViewer } from "@/components/multi-format-viewer"
 import { useHighlightContext, type Highlight as HighlightRecord } from "@/lib/contexts/highlight-context"
-import { ZOOM_PRESETS, type ViewerControls } from "@/components/pdf-viewer"
+import { ZOOM_PRESETS, type ViewerControls } from "@/components/pdf-viewer-types"
 import { getHighlightCoordinates, findTextSpan } from "@/lib/utils/pdf-extraction"
 import { Button } from "@/components/ui/button"
 import {
@@ -35,9 +35,10 @@ import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { IconTooltip } from "@/components/icon-tooltip"
+import { isAllowedDocumentHost } from "@/lib/utils/storage-url"
 
 interface DocumentViewerClientProps {
-  workspaceId: string
+  workspaceId?: string
   documentId: string
   documentTitle: string
   documentUrl: string | null
@@ -45,8 +46,12 @@ interface DocumentViewerClientProps {
   highlights: any[]
   initialPage: number
   documentMetadata?: Record<string, any>
-  pages?: any[] // Pass pages data for client-side highlight computation
+  pages?: any[]
   workspaceName?: string
+  backHref?: string
+  backLabel?: string
+  previewUrl?: string
+  className?: string
 }
 
 const DOCUMENT_VIEWER_HEADER_HEIGHT = 64
@@ -70,6 +75,75 @@ type PendingHighlightFocus = {
   clearStorage?: boolean
 }
 
+function DocumentViewerTitle({ title }: { title: string }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const textRef = useRef<HTMLHeadingElement>(null)
+  const [overflowPx, setOverflowPx] = useState(0)
+
+  const updateOverflow = useCallback(() => {
+    const container = containerRef.current
+    const text = textRef.current
+    if (!container || !text) {
+      setOverflowPx(0)
+      return
+    }
+    setOverflowPx(Math.max(0, text.scrollWidth - container.clientWidth))
+  }, [])
+
+  useEffect(() => {
+    updateOverflow()
+    const container = containerRef.current
+    if (!container || typeof ResizeObserver === "undefined") {
+      return
+    }
+    const observer = new ResizeObserver(updateOverflow)
+    observer.observe(container)
+    const pane = container.closest("header")?.parentElement
+    if (pane) {
+      observer.observe(pane)
+    }
+    window.addEventListener("resize", updateOverflow)
+    const timeoutId = window.setTimeout(updateOverflow, 350)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener("resize", updateOverflow)
+      window.clearTimeout(timeoutId)
+    }
+  }, [title, updateOverflow])
+
+  const overflowing = overflowPx > 1
+  const durationMs = Math.min(4000, Math.max(700, overflowPx * 16))
+
+  return (
+    <div
+      ref={containerRef}
+      className={cn(
+        "group/title min-w-0 max-w-full overflow-hidden",
+        overflowing && "hover:[mask-image:none]",
+        overflowing && "[mask-image:linear-gradient(to_right,black_88%,transparent)]",
+      )}
+      style={
+        {
+          "--title-overflow": `${overflowPx}px`,
+          "--title-duration": `${durationMs}ms`,
+        } as CSSProperties
+      }
+    >
+      <h1
+        ref={textRef}
+        className={cn(
+          "text-sm font-normal whitespace-nowrap transition-transform ease-linear",
+          overflowing ? "w-max cursor-default text-left group-hover/title:-translate-x-[var(--title-overflow)]" : "w-full text-center",
+        )}
+        style={{ transitionDuration: overflowing ? "var(--title-duration)" : "220ms" }}
+        aria-label={title}
+      >
+        {title}
+      </h1>
+    </div>
+  )
+}
+
 export function DocumentViewerClient({
   workspaceId,
   documentId,
@@ -81,11 +155,18 @@ export function DocumentViewerClient({
   documentMetadata,
   pages,
   workspaceName,
+  backHref,
+  backLabel,
+  previewUrl,
+  className,
 }: DocumentViewerClientProps) {
   const { t } = useI18n()
-  const backToWorkspaceLabel = workspaceName
-    ? t("workspace.navigation.backToWorkspace", undefined, { name: workspaceName })
-    : t("workspace.navigation.backToDashboard")
+  const resolvedBackHref = backHref ?? (workspaceId ? `/workspaces/${workspaceId}` : "/dashboard")
+  const backToWorkspaceLabel =
+    backLabel ??
+    (workspaceName
+      ? t("workspace.navigation.backToWorkspace", undefined, { name: workspaceName })
+      : t("workspace.navigation.backToDashboard"))
   const highlightContext = useHighlightContext()
   const { 
     highlights: highlightsMap,
@@ -259,35 +340,23 @@ export function DocumentViewerClient({
   }, [viewerMetadata, documentTitle])
 
   const viewerUrl = useMemo(() => {
-    console.log("[DocumentViewerClient] Computing viewerUrl", {
-      documentId,
-      documentUrl,
-      isTextDocument,
-      documentTitle,
-      viewerMetadata,
-    })
-    
+    if (previewUrl) {
+      return previewUrl
+    }
+
     // Text/markdown documents are rendered via text endpoint regardless of source URL
     if (isTextDocument) {
-      const textContentUrl = `/api/documents/${documentId}/text-content`
-      console.log("[DocumentViewerClient] Using text-content URL", textContentUrl)
-      return textContentUrl
+      return `/api/documents/${documentId}/text-content`
     }
 
-    // Always fall back to our proxy route if we don't have a source URL
     if (!documentUrl) {
-      const pdfUrl = `/api/documents/${documentId}/pdf`
-      console.log("[DocumentViewerClient] No source URL, using PDF proxy", pdfUrl)
-      return pdfUrl
+      return `/api/documents/${documentId}/pdf`
     }
 
-    // Already pointing to our API - no changes needed
     if (documentUrl.startsWith("/api/")) {
       return documentUrl
     }
 
-    // During SSR we can't inspect window. Return original URL for now and
-    // let the client-side render recompute immediately after hydration.
     if (typeof window === "undefined") {
       return documentUrl
     }
@@ -295,14 +364,7 @@ export function DocumentViewerClient({
     try {
       const parsedUrl = new URL(documentUrl, window.location.origin)
       const sameOrigin = parsedUrl.origin === window.location.origin
-      const allowedHostSuffixes = [
-        ".supabase.co",
-        ".supabase.in",
-        ".vercel.live",
-      ]
-      const isAllowedHost = allowedHostSuffixes.some((suffix) =>
-        parsedUrl.hostname.endsWith(suffix)
-      )
+      const isAllowedHost = isAllowedDocumentHost(parsedUrl.hostname)
 
       if (sameOrigin || isAllowedHost) {
         return documentUrl
@@ -316,7 +378,7 @@ export function DocumentViewerClient({
     }
 
     return `/api/documents/${documentId}/pdf`
-  }, [documentUrl, documentId, isTextDocument])
+  }, [previewUrl, documentUrl, documentId, isTextDocument])
 
   const canRenderDocument = Boolean(viewerUrl)
   
@@ -744,28 +806,30 @@ export function DocumentViewerClient({
 
   return (
     <TooltipProvider>
-    <div className="flex h-screen flex-col">
+    <div className={cn("flex min-w-0 flex-col overflow-hidden @container/doc-viewer", className ?? "h-screen")}>
       {/* Header */}
-      <header className="border-b bg-card">
-        <div className="flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-4 flex-1">
-            <Link href={`/workspaces/${workspaceId}`}>
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="mr-2 h-3 w-3" />
-                <span className="text-xs">{backToWorkspaceLabel}</span>
+      <header className="min-w-0 shrink-0 overflow-hidden border-b bg-card">
+        <div className="grid h-16 min-w-0 grid-cols-[max-content_minmax(7rem,1fr)_auto] items-center gap-2 px-3">
+          <div className="min-w-0">
+            <Link href={resolvedBackHref} className="block min-w-0 max-w-full">
+              <Button variant="ghost" size="sm" className="max-w-full px-2">
+                <ArrowLeft className="h-3 w-3 shrink-0 @[40rem]/doc-viewer:mr-2" />
+                <span className="hidden min-w-0 truncate text-xs @[40rem]/doc-viewer:inline">
+                  {backToWorkspaceLabel}
+                </span>
               </Button>
             </Link>
           </div>
-          <div className="flex-1 flex flex-col items-center justify-center">
-            <h1 className="text-sm font-normal">{documentTitle}</h1>
+          <div className="min-w-0 overflow-hidden">
+            <DocumentViewerTitle title={documentTitle} />
             {pageCount !== null && pageCount > 0 && (
-              <p className="text-xs text-muted-foreground">{pageCount} pages</p>
+              <p className="truncate text-center text-xs text-muted-foreground">{pageCount} pages</p>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-1 justify-end">
+          <div className="flex items-center gap-1">
             {controls && (
               <>
-                <span className="text-sm text-muted-foreground">
+                <span className="whitespace-nowrap px-2.5 text-sm text-muted-foreground">
                   {controls.pageNumber} of {controls.numPages || "?"}
                 </span>
                 <div className="h-6 w-px bg-border" />
@@ -782,7 +846,7 @@ export function DocumentViewerClient({
                 </IconTooltip>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="gap-2 px-2">
+                    <Button variant="ghost" size="sm" className="gap-1 px-1.5 tabular-nums">
                       <span>{Math.round(controls.scale * 100)}%</span>
                       <ChevronDown className="h-4 w-4 opacity-60" />
                     </Button>
@@ -896,27 +960,34 @@ export function DocumentViewerClient({
                 )}
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button
-                      variant={autoHighlight ? "secondary" : "ghost"}
-                      size="sm"
-                      onClick={() => setAutoHighlight(!autoHighlight)}
-                      aria-label={
-                        autoHighlight
-                          ? t("workspace.documents.viewer.hideHighlights")
-                          : t("workspace.documents.viewer.showHighlights")
-                      }
-                    >
-                      <Highlighter className={cn(
-                        "h-4 w-4",
-                        autoHighlight && "text-primary"
-                      )} />
-                    </Button>
+                    <span className="inline-flex">
+                      <Button
+                        variant={autoHighlight && contextHighlights.length > 0 ? "secondary" : "ghost"}
+                        size="sm"
+                        onClick={() => setAutoHighlight(!autoHighlight)}
+                        disabled={contextHighlights.length === 0}
+                        aria-label={
+                          contextHighlights.length === 0
+                            ? t("workspace.documents.viewer.highlightsUnavailable")
+                            : autoHighlight
+                              ? t("workspace.documents.viewer.hideHighlights")
+                              : t("workspace.documents.viewer.showHighlights")
+                        }
+                      >
+                        <Highlighter className={cn(
+                          "h-4 w-4",
+                          autoHighlight && contextHighlights.length > 0 && "text-primary"
+                        )} />
+                      </Button>
+                    </span>
                   </TooltipTrigger>
-                  <TooltipContent>
+                  <TooltipContent side="top" className="max-w-xs">
                     <p>
-                      {autoHighlight
-                        ? t("workspace.documents.viewer.hideHighlights")
-                        : t("workspace.documents.viewer.showHighlights")}
+                      {contextHighlights.length === 0
+                        ? t("workspace.documents.viewer.highlightsUnavailable")
+                        : autoHighlight
+                          ? t("workspace.documents.viewer.hideHighlights")
+                          : t("workspace.documents.viewer.showHighlights")}
                     </p>
                   </TooltipContent>
                 </Tooltip>

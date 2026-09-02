@@ -152,12 +152,17 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
       onUploaded?.(payload.data)
 
       if (payload.warnings && payload.warnings.length > 0) {
-        setSyncWarning(payload.warnings.join(" "))
+        const description = payload.warnings
+          .map((warning: string) =>
+            warning === "sync_failed" ? t("space.documents.upload.syncFailed") : warning,
+          )
+          .join(" ")
+        setSyncWarning(description)
         setFile(null)
         setTitle("")
         setNotes("")
         toast.warning(t("space.documents.upload.warningToast"), {
-          description: payload.warnings.join(" "),
+          description,
         })
         setIsUploading(false)
         return

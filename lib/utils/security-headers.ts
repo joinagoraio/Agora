@@ -28,9 +28,9 @@ export function getSecurityHeaders(): SecurityHeaders {
 function getCSP(): string {
   const isDev = process.env.NODE_ENV !== "production"
 
-  const scriptSources = ["'self'", "https://va.vercel-scripts.com"]
+  const scriptSources = ["'self'", "'unsafe-inline'"]
   if (isDev) {
-    scriptSources.push("'unsafe-eval'", "'unsafe-inline'", "https://vercel.live")
+    scriptSources.push("'unsafe-eval'", "https://vercel.live", "https://va.vercel-scripts.com")
   }
 
   const styleSources = ["'self'"]
@@ -44,6 +44,15 @@ function getCSP(): string {
     "https://*.openai.com",
     "https://*.upstash.io",
   ]
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (supabaseUrl) {
+    try {
+      const parsed = new URL(supabaseUrl)
+      connectSources.push(parsed.origin, `wss://${parsed.host}`, `ws://${parsed.host}`)
+    } catch {
+      // ignore invalid URL in headers helper
+    }
+  }
   if (isDev) {
     connectSources.push(
       "http://localhost:54321",

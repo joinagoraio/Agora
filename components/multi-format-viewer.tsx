@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from "react"
+import dynamic from "next/dynamic"
 import DOMPurify from "dompurify"
-import { PDFViewer, Highlight, type ViewerControls, type ViewerFitMode } from "@/components/pdf-viewer"
+import type { Highlight, ViewerControls, ViewerFitMode } from "@/components/pdf-viewer-types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -13,13 +14,14 @@ import type { Highlight as ContextHighlight } from "@/lib/contexts/highlight-con
 import { WordViewer } from "@/components/multi-format-viewer/word-viewer"
 import { HtmlViewer } from "@/components/multi-format-viewer/html-viewer"
 import { clientLogger } from "@/lib/utils/client-logger"
+import { WORD_HTML_SANITIZE_OPTIONS } from "@/lib/utils/word-html-sanitize"
+
+const PDFViewer = dynamic(
+  () => import("@/components/pdf-viewer").then((mod) => mod.PDFViewer),
+  { ssr: false },
+)
 
 export type DocumentType = "pdf" | "word" | "html" | "text" | "unknown"
-
-const WORD_HTML_SANITIZE_OPTIONS = {
-  ALLOWED_TAGS: ["p", "span", "div", "strong", "em", "u", "br", "h1", "h2", "h3"] as string[],
-  ALLOWED_ATTR: ["class", "style"] as string[],
-}
 
 const GENERIC_HTML_SANITIZE_OPTIONS = {
   ALLOWED_ATTR: ["class", "style", "href", "target", "rel", "download"] as string[],

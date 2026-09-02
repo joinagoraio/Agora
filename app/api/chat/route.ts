@@ -132,7 +132,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
-    const { messages, workspaceId, conversationId, excludedDocumentIds = [], excludedNoteIds = [], excludedEvidenceIds = [] } = body
+    const { messages, workspaceId, spaceId, conversationId, excludedDocumentIds = [], excludedNoteIds = [], excludedEvidenceIds = [] } = body
 
     // Get the last user message for validation
     if (!messages || messages.length === 0) {
@@ -186,7 +186,7 @@ export async function POST(req: Request) {
 
     const { data: conversation, error: conversationError } = await supabase
       .from("conversations")
-      .select("id, workspace_id, user_id, context_type, context_id, title")
+      .select("id, workspace_id, space_id, user_id, context_type, context_id, title")
       .eq("id", conversationId)
       .single()
 
@@ -209,8 +209,8 @@ export async function POST(req: Request) {
 
     if (
       !conversation ||
-      conversation.workspace_id !== workspaceId ||
-      conversation.user_id !== user.id
+      conversation.user_id !== user.id ||
+      (spaceId ? conversation.space_id !== spaceId : conversation.workspace_id !== workspaceId)
     ) {
       return withRateLimit(new Response("Conversation not found", { status: 404 }))
     }
@@ -225,13 +225,10 @@ export async function POST(req: Request) {
     let includedDocumentIds: string[] | undefined
     
     if (shouldRestrictToDocument) {
-      // Document preview/edit mode: only include the specific document
       includedDocumentIds = contextId ? [contextId] : []
+    } else if (spaceId) {
+      includedDocumentIds = undefined
     } else {
-      // Workspace mode: include all workspace documents except excluded ones
-      // This ensures documents shown in "AI Context" are actually included in the search
-      // Without this, the search requires text matching and may return no results
-      // Filter to match getWorkspaceDocuments: exclude deleted and archived documents
       const { data: workspaceDocuments } = await supabase
         .from("documents")
         .select("id")
@@ -281,39 +278,77 @@ export async function POST(req: Request) {
       assistantMessageId = placeholderMessage.id
     }
 
-    // Get workspace to fetch additional context
-    const { data: workspace } = await supabase
-      .from("workspaces")
-      .select("name, context, location, summary, description, metadata, space_id")
-      .eq("id", workspaceId)
-      .single()
-
-    // Get space details if workspace has a space_id
+    let workspace = null
     let space = null
-    if (workspace?.space_id) {
+    let context = ""
+    let documentSources: any[] = []
+
+    if (spaceId) {
       const { data: spaceData } = await supabase
         .from("spaces")
         .select("name, description, metadata, jurisdiction")
-        .eq("id", workspace.space_id)
+        .eq("id", spaceId)
         .single()
       space = spaceData
-    }
 
-    // Get relevant context from documents, excluding specified document IDs
-    const contextStartTime = Date.now()
-    console.log(`[Chat API] Starting RAG search for ${includedDocumentIds?.length || 0} documents...`)
-    
-    const { context, sources: documentSources } = await getRelevantContext(
-      workspaceId,
-      userQuery,
-      excludedDocumentIds,
-      includedDocumentIds,
-      excludedNoteIds,
-      excludedEvidenceIds,
-    )
-    
-    const contextDuration = (Date.now() - contextStartTime) / 1000
-    console.log(`[Chat API] RAG search completed in ${contextDuration.toFixed(2)}s`)
+      const { data: items } = await adminSupabase
+        .from("space_items")
+        .select("id, payload")
+        .eq("space_id", spaceId)
+        .eq("item_type", "document")
+        .order("created_at", { ascending: false })
+
+      const excludedSet = new Set(excludedDocumentIds as string[])
+      const wanted = (items ?? []).filter((item: { id: string }) => {
+        if (shouldRestrictToDocument && contextId) {
+          return item.id === contextId
+        }
+        return !excludedSet.has(item.id)
+      })
+
+      documentSources = wanted.map((item: any) => ({
+        id: item.id,
+        title: item.payload?.title || item.payload?.file_name || "Untitled document",
+      }))
+
+      const parts: string[] = []
+      for (const item of wanted) {
+        const payload = (item.payload ?? {}) as { title?: string; full_text?: string; summary?: string }
+        const text = (payload.full_text || payload.summary || "").trim()
+        if (!text) continue
+        const label = item.id === contextId ? "OPEN DOCUMENT" : "LIBRARY DOCUMENT"
+        const clipped = text.length > (item.id === contextId ? 24000 : 4000) ? `${text.slice(0, item.id === contextId ? 24000 : 4000)}\n…` : text
+        parts.push(`${label} (${payload.title || item.id}, id ${item.id}):\n${clipped}`)
+      }
+      context = parts.join("\n\n").slice(0, 60000)
+    } else {
+      const { data: workspaceRecord } = await supabase
+        .from("workspaces")
+        .select("name, context, location, summary, description, metadata, space_id")
+        .eq("id", workspaceId)
+        .single()
+      workspace = workspaceRecord
+
+      if (workspace?.space_id) {
+        const { data: spaceData } = await supabase
+          .from("spaces")
+          .select("name, description, metadata, jurisdiction")
+          .eq("id", workspace.space_id)
+          .single()
+        space = spaceData
+      }
+
+      const rag = await getRelevantContext(
+        workspaceId,
+        userQuery,
+        excludedDocumentIds,
+        includedDocumentIds,
+        excludedNoteIds,
+        excludedEvidenceIds,
+      )
+      context = rag.context
+      documentSources = rag.sources
+    }
     
     // Check if this is a continuation of a conversation (has previous messages)
     const hasPreviousMessages = messages && messages.length > 1
@@ -334,7 +369,7 @@ export async function POST(req: Request) {
       }
       
       // Get excluded document titles
-      if (excludedDocumentIds.length > 0) {
+      if (workspaceId && excludedDocumentIds.length > 0) {
         const { data: excludedDocs } = await supabase
           .from("documents")
           .select("id, title")
@@ -348,7 +383,7 @@ export async function POST(req: Request) {
       }
       
       // Get excluded note titles/content previews
-      if (excludedNoteIds.length > 0) {
+      if (workspaceId && excludedNoteIds.length > 0) {
         const { data: excludedNotes } = await supabase
           .from("workspace_notes")
           .select("id, content")
@@ -367,7 +402,7 @@ export async function POST(req: Request) {
       }
       
       // Get excluded evidence items
-      if (excludedEvidenceIds.length > 0) {
+      if (workspaceId && excludedEvidenceIds.length > 0) {
         const { data: excludedEvidence } = await supabase
           .from("workspace_items")
           .select("id, payload")
@@ -582,12 +617,15 @@ ${context}`
           // Resolve structured citations from the full response
           let resolvedCitations: Awaited<ReturnType<typeof resolveCitations>> = []
           try {
-            resolvedCitations = await resolveCitations({
-              content: fullResponse,
-              workspaceId,
-              supabase: adminSupabase,
-              documents: documentSources,
-            })
+            resolvedCitations = workspaceId || spaceId
+              ? await resolveCitations({
+                  content: fullResponse,
+                  workspaceId,
+                  spaceId,
+                  supabase: adminSupabase,
+                  documents: documentSources,
+                })
+              : []
           } catch (citationError) {
             console.error("[Chat API] Failed to resolve citations:", citationError)
           }
@@ -595,7 +633,7 @@ ${context}`
           let finalResponse = fullResponse
           let finalCitations = resolvedCitations
 
-          if (documentSources.length > 0 && resolvedCitations.length === 0) {
+          if ((workspaceId || spaceId) && documentSources.length > 0 && resolvedCitations.length === 0) {
             console.warn("[Chat API] No structured citations found, attempting regeneration with stricter instructions")
             const regenerationResult = await regenerateResponseWithCitations({
               openai,
@@ -603,6 +641,7 @@ ${context}`
               conversationMessages: openaiMessages,
               previousAnswer: fullResponse,
               workspaceId,
+              spaceId,
               supabase: adminSupabase,
               documents: documentSources,
             })
@@ -923,7 +962,8 @@ async function regenerateResponseWithCitations(params: {
   model: string
   conversationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
   previousAnswer: string
-  workspaceId: string
+  workspaceId?: string | null
+  spaceId?: string | null
   supabase: ReturnType<typeof createAdminClient>
   documents: any[]
 }): Promise<{ content: string; citations: Awaited<ReturnType<typeof resolveCitations>> } | null> {
@@ -933,6 +973,7 @@ async function regenerateResponseWithCitations(params: {
     conversationMessages,
     previousAnswer,
     workspaceId,
+    spaceId,
     supabase,
     documents,
   } = params
@@ -971,6 +1012,7 @@ Restate the full answer with the required quotes and citations.`,
     const regenCitations = await resolveCitations({
       content: regenContent,
       workspaceId,
+      spaceId,
       supabase,
       documents,
     })
