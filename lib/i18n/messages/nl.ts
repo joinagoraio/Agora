@@ -144,10 +144,10 @@ export const nlMessages = {
   dashboard: {
     viewList: "Weergave als lijst",
     viewGrid: "Weergave als kaarten",
-    pin: "Vastzetten",
-    unpin: "Losmaken",
+    pin: "Toevoegen aan favorieten",
+    unpin: "Verwijderen uit favorieten",
     pinned: {
-      title: "Vastgezet",
+      title: "Favorieten",
       subtitle: "Programma’s en bevoegd gezag die je bij de hand wilt houden",
     },
     welcome: {

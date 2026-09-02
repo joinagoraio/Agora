@@ -180,6 +180,58 @@
   background-color: var(--scrollbar-thumb-hover);
 }
 
+.scrollbar-on-hover {
+  --agora-scrollbar-size: 10px;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.scrollbar-on-hover:hover,
+.scrollbar-on-hover:focus-within {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.scrollbar-on-hover::-webkit-scrollbar {
+  width: var(--agora-scrollbar-size);
+  height: var(--agora-scrollbar-size);
+}
+
+.scrollbar-on-hover::-webkit-scrollbar-track,
+.scrollbar-on-hover::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-color: transparent;
+}
+
+.scrollbar-on-hover:hover::-webkit-scrollbar-track,
+.scrollbar-on-hover:focus-within::-webkit-scrollbar-track {
+  background-color: var(--scrollbar-track);
+}
+
+.scrollbar-on-hover:hover::-webkit-scrollbar-thumb,
+.scrollbar-on-hover:focus-within::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+}
+
+.scrollbar-on-hover:hover::-webkit-scrollbar-thumb:hover,
+.scrollbar-on-hover:focus-within::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+@media (hover: none) {
+  .scrollbar-on-hover {
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  .scrollbar-on-hover::-webkit-scrollbar-track {
+    background-color: var(--scrollbar-track);
+  }
+
+  .scrollbar-on-hover::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+  }
+}
+
 /* Word document content styling */
 .word-document-content {
   @apply text-foreground;

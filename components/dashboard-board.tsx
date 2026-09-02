@@ -71,12 +71,12 @@ export function DashboardBoard({
           <DashboardCollection
             title={t("dashboard.pinned.title")}
             subtitle={t("dashboard.pinned.subtitle")}
-            kind="pinned"
+            kind="favorites"
             fill={false}
             items={pinnedItems}
             onTogglePin={handleTogglePin}
           />
-          <Separator className="my-4 shrink-0 bg-border" />
+          <Separator className="my-8 shrink-0 bg-border" />
         </>
       ) : null}
 
@@ -92,7 +92,7 @@ export function DashboardBoard({
         empty={programmeEmpty}
       />
 
-      <Separator className="my-4 shrink-0 bg-border" />
+      <Separator className="my-8 shrink-0 bg-border" />
 
       <DashboardCollection
         title={t("dashboard.spaces.title")}

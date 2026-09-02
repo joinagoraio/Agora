@@ -2,10 +2,11 @@
 
 import { type ReactNode } from "react"
 import Link from "next/link"
-import { FolderKanban, Info, Layers2, Pin } from "lucide-react"
+import { FolderKanban, Info, Layers2, Star } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { ViewModeToggle, useCollectionViewMode } from "@/components/view-mode-toggle"
 import { useI18n } from "@/lib/i18n/use-i18n"
@@ -40,7 +41,7 @@ export function DashboardCollection({
   titleHint?: string
   titleHintLabel?: string
   items: DashboardCollectionItem[]
-  kind: DashboardCollectionKind | "pinned"
+  kind: DashboardCollectionKind | "pinned" | "favorites"
   headerAction?: ReactNode
   empty?: ReactNode
   fill?: boolean
@@ -86,26 +87,31 @@ export function DashboardCollection({
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {items.length === 0 ? (
-          empty ? <div className="min-h-0 flex-1 overflow-y-auto">{empty}</div> : null
+          empty ? <div className="scrollbar-on-hover min-h-0 flex-1 overflow-y-auto">{empty}</div> : null
         ) : viewMode === "grid" ? (
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="scrollbar-on-hover min-h-0 flex-1 overflow-y-auto">
             <div className="grid gap-6 pb-2 sm:grid-cols-2 lg:grid-cols-3">
               {items.map((item) => {
                 const Icon = item.kind === "authority" ? Layers2 : item.kind === "programme" ? FolderKanban : defaultIcon
                 return (
                   <Card key={`${item.kind ?? kind}-${item.id}`} className="group relative transition-all hover:shadow-md">
                     {onTogglePin ? (
-                      <div className="absolute right-2 top-2 z-10 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100">
-                        <PinToggle item={item} onTogglePin={onTogglePin} />
+                      <div
+                        className={cn(
+                          "absolute right-6 top-3 z-10 transition-opacity",
+                          item.pinned
+                            ? "opacity-100"
+                            : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100",
+                        )}
+                      >
+                        <FavoriteToggle item={item} onTogglePin={onTogglePin} />
                       </div>
                     ) : null}
-                    <Link href={item.href} className={cn("block", onTogglePin && "pr-10")}>
+                    <Link href={item.href} className="block">
                       <CardHeader>
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <Icon className="h-5 w-5 shrink-0 text-primary" />
-                            <CardTitle className="mt-0">{item.title}</CardTitle>
-                          </div>
+                        <div className={cn("flex min-w-0 items-center gap-3", onTogglePin && "pr-7")}>
+                          <Icon className="h-5 w-5 shrink-0 text-primary" />
+                          <CardTitle className="mt-0 min-w-0">{item.title}</CardTitle>
                           {item.badge ? (
                             <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
                               {item.badge}
@@ -126,7 +132,8 @@ export function DashboardCollection({
           </div>
         ) : (
           <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0 shadow">
-            <CardContent className="min-h-0 flex-1 overflow-y-auto p-0">
+            <CardContent className="relative min-h-0 flex-1 overflow-hidden p-0">
+              <ScrollArea type="hover" scrollHideDelay={0} className="h-full">
               <div className="divide-y divide-border">
                 {items.map((item) => {
                   const Icon = item.kind === "authority" ? Layers2 : item.kind === "programme" ? FolderKanban : defaultIcon
@@ -151,14 +158,22 @@ export function DashboardCollection({
                         <p className="line-clamp-2 text-xs text-muted-foreground">{item.description ?? ""}</p>
                       </Link>
                       {onTogglePin ? (
-                        <div className="absolute right-2 top-1/2 z-10 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100">
-                          <PinToggle item={item} onTogglePin={onTogglePin} />
+                        <div
+                          className={cn(
+                            "absolute right-4 top-1/2 z-10 -translate-y-1/2 transition-opacity",
+                            item.pinned
+                              ? "opacity-100"
+                              : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100",
+                          )}
+                        >
+                          <FavoriteToggle item={item} onTogglePin={onTogglePin} />
                         </div>
                       ) : null}
                     </div>
                   )
                 })}
               </div>
+              </ScrollArea>
             </CardContent>
           </Card>
         )}
@@ -167,7 +182,7 @@ export function DashboardCollection({
   )
 }
 
-function PinToggle({
+function FavoriteToggle({
   item,
   onTogglePin,
 }: {
@@ -182,7 +197,7 @@ function PinToggle({
         type="button"
         variant="ghost"
         size="icon"
-        className="h-8 w-8"
+        className="h-5 w-5"
         aria-label={label}
         aria-pressed={Boolean(item.pinned)}
         onClick={(event) => {
@@ -191,7 +206,7 @@ function PinToggle({
           onTogglePin(item)
         }}
       >
-        <Pin className={cn("h-4 w-4", item.pinned && "fill-current text-primary")} />
+        <Star className={cn("h-4 w-4", item.pinned && "fill-current text-primary")} />
       </Button>
     </IconTooltip>
   )

@@ -7,6 +7,7 @@ import { CreateWorkspaceDialog } from "@/components/create-workspace-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -101,7 +102,7 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
           </CardContent>
         </Card>
       ) : viewMode === "grid" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="scrollbar-on-hover min-h-0 flex-1 overflow-y-auto">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {programmes.map((workspace) => {
             const href = workspaceHomeHref(workspace)
@@ -138,7 +139,8 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
         </div>
       ) : (
         <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0 shadow">
-          <CardContent className="min-h-0 flex-1 overflow-y-auto p-0">
+          <CardContent className="relative min-h-0 flex-1 overflow-hidden p-0">
+            <ScrollArea type="hover" scrollHideDelay={0} className="h-full">
             <div className="divide-y divide-border">
               {programmes.map((workspace) => {
                 const href = workspaceHomeHref(workspace)
@@ -177,6 +179,7 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
                 )
               })}
             </div>
+            </ScrollArea>
           </CardContent>
         </Card>
       )}

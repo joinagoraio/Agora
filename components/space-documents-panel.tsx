@@ -7,6 +7,7 @@ import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { SpaceUploadDocumentDialog } from "@/components/space-upload-document-dialog"
@@ -264,12 +265,13 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
           })
 
           return viewMode === "grid" ? (
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="scrollbar-on-hover min-h-0 flex-1 overflow-y-auto">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{docCards}</div>
             </div>
           ) : (
             <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0 shadow">
-              <CardContent className="min-h-0 flex-1 overflow-y-auto p-0">
+              <CardContent className="relative min-h-0 flex-1 overflow-hidden p-0">
+                <ScrollArea type="hover" scrollHideDelay={0} className="h-full">
                 <div className="divide-y divide-border">
                   {safeDocuments.map((doc) => {
                     const docTitle = doc.payload?.title || doc.payload?.file_name || t("space.documents.panel.untitled")
@@ -326,6 +328,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                     )
                   })}
                 </div>
+                </ScrollArea>
               </CardContent>
             </Card>
           )

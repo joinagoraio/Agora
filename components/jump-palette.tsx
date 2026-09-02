@@ -11,7 +11,7 @@ import {
 } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { Command } from "cmdk"
-import { FolderKanban, Layers2 } from "lucide-react"
+import { FolderKanban, Layers2, Star } from "lucide-react"
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { listJumpTargets, type JumpTarget } from "@/lib/actions/jump"
@@ -142,7 +142,7 @@ function JumpPaletteDialog() {
             {pinned.length > 0 && (
               <Command.Group heading={t("dashboard.pinned.title")} className={GROUP_HEADING}>
                 {pinned.map((target) => (
-                  <JumpItem key={`pinned-${target.kind}-${target.id}`} target={target} onSelect={goTo} />
+                  <JumpItem key={`pinned-${target.kind}-${target.id}`} target={target} onSelect={goTo} favorite />
                 ))}
               </Command.Group>
             )}
@@ -170,9 +170,11 @@ function JumpPaletteDialog() {
 function JumpItem({
   target,
   onSelect,
+  favorite = false,
 }: {
   target: JumpTarget
   onSelect: (href: string) => void
+  favorite?: boolean
 }) {
   const Icon = target.kind === "programme" ? FolderKanban : Layers2
   return (
@@ -190,6 +192,7 @@ function JumpItem({
           <span className="block truncate text-xs text-muted-foreground">{target.subtitle}</span>
         ) : null}
       </span>
+      {favorite ? <Star className="h-3.5 w-3.5 shrink-0 fill-current text-primary" /> : null}
     </Command.Item>
   )
 }

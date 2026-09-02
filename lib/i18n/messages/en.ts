@@ -144,10 +144,10 @@ export const enMessages = {
   dashboard: {
     viewList: "Show as list",
     viewGrid: "Show as cards",
-    pin: "Pin",
-    unpin: "Unpin",
+    pin: "Add to favorites",
+    unpin: "Remove from favorites",
     pinned: {
-      title: "Pinned",
+      title: "Favorites",
       subtitle: "Programmes and authorities you want at hand",
     },
     welcome: {
