@@ -263,6 +263,7 @@ export function ProgrammeWorkbench({
 
   const sectionParam = searchParams.get("section")
   const viewParam = searchParams.get("view")
+  const chapterParam = searchParams.get("chapter")
   const isKnowledgeView = viewParam === "knowledge"
   const activeSection: ProgrammeWorkbenchSection = isProgrammeWorkbenchSection(sectionParam)
     ? sectionParam
@@ -321,6 +322,18 @@ export function ProgrammeWorkbench({
       params.set("view", "document")
     })
   }, [replaceParams])
+
+  const setFocusChapter = useCallback(
+    (chapterId: string | null) => {
+      replaceParams((params) => {
+        params.delete("section")
+        params.set("view", "document")
+        if (chapterId) params.set("chapter", chapterId)
+        else params.delete("chapter")
+      })
+    },
+    [replaceParams],
+  )
 
   const [bindings, setBindings] = useState<ProgrammeBindings>(emptyProgrammeBindings())
   const [measures, setMeasures] = useState<any[]>([])
@@ -722,6 +735,8 @@ export function ProgrammeWorkbench({
               onMessage={setMessage}
               onGoOutline={() => setSection("outline")}
               canComment
+              focusChapterId={chapterParam}
+              onFocusChapter={setFocusChapter}
             />
           </div>
         )}

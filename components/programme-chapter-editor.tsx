@@ -77,6 +77,8 @@ type Props = {
   onMessage: (message: string | null) => void
   onGoOutline: () => void
   canComment?: boolean
+  focusChapterId?: string | null
+  onFocusChapter?: (chapterId: string | null) => void
 }
 
 export function ProgrammeChapterEditor({
@@ -87,6 +89,8 @@ export function ProgrammeChapterEditor({
   onMessage,
   onGoOutline,
   canComment = true,
+  focusChapterId = null,
+  onFocusChapter,
 }: Props) {
   const { t } = useI18n()
   const [nodes, setNodes] = useState<ProgrammeOutlineNode[]>([])
@@ -126,6 +130,7 @@ export function ProgrammeChapterEditor({
 
   const selected = nodes.find((n) => n.id === selectedId) || null
   const documentId = selectedId ? bodies[selectedId]?.documentId ?? bindings.chapterDocuments?.[selectedId] ?? null : null
+  const isFocus = Boolean(focusChapterId)
 
   const loadNodes = (templateId: string) => {
     startTransition(async () => {
@@ -220,6 +225,12 @@ export function ProgrammeChapterEditor({
       })
     }
   }
+
+  useEffect(() => {
+    if (!focusChapterId || nodes.length === 0) return
+    if (focusChapterId !== selectedId) selectChapter(focusChapterId, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusChapterId, nodes.length])
 
   const openOrCreate = (node: ProgrammeOutlineNode) => {
     startTransition(async () => {
@@ -655,7 +666,13 @@ export function ProgrammeChapterEditor({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-h-80 overflow-y-auto">
           {nodes.map((node) => (
-            <DropdownMenuItem key={node.id} onClick={() => selectChapter(node.id, true)}>
+            <DropdownMenuItem
+              key={node.id}
+              onClick={() => {
+                if (onFocusChapter) onFocusChapter(node.id)
+                else selectChapter(node.id, true)
+              }}
+            >
               {node.title}
               {bodies[node.id]?.documentId || bindings.chapterDocuments?.[node.id] ? " · ✓" : ""}
             </DropdownMenuItem>
@@ -804,6 +821,11 @@ export function ProgrammeChapterEditor({
         <>
           <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b bg-white px-4 py-1.5">
             {outlineJump}
+            {isFocus ? (
+              <Button type="button" variant="ghost" size="sm" onClick={() => onFocusChapter?.(null)}>
+                {t("workspace.programme.readAll")}
+              </Button>
+            ) : null}
             {layoutToolbar}
           </div>
           {nodes.length === 0 && (
@@ -818,17 +840,62 @@ export function ProgrammeChapterEditor({
               const body = bodies[node.id]
               const hasDoc = Boolean(body?.documentId || bindings.chapterDocuments?.[node.id])
               const isSelected = selectedId === node.id
+              const isFocusedChapter = focusChapterId === node.id
+              const showEditor = isFocus && isFocusedChapter
               return (
                 <article
                   key={node.id}
                   id={`chapter-${node.id}`}
-                  className={`scroll-mt-8 space-y-3 ${isSelected ? "rounded-md ring-1 ring-border ring-offset-4" : ""}`}
+                  className={`scroll-mt-8 space-y-3 ${isSelected ? "rounded-md ring-1 ring-border ring-offset-4" : ""} ${
+                    isFocus && !isFocusedChapter ? "opacity-50" : ""
+                  }`}
                   onClick={() => {
+                    if (isFocus && !isFocusedChapter) {
+                      onFocusChapter?.(node.id)
+                      return
+                    }
                     if (!isSelected) selectChapter(node.id)
                   }}
                 >
-                  <h2 className="text-xl font-semibold tracking-tight">{node.title}</h2>
-                  {hasDoc && body?.content ? (
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <h2 className="text-xl font-semibold tracking-tight">{node.title}</h2>
+                    {!isFocus ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onFocusChapter?.(node.id)
+                        }}
+                      >
+                        {t("workspace.programme.focusEdit")}
+                      </Button>
+                    ) : null}
+                  </div>
+                  {showEditor ? (
+                    hasDoc ? (
+                      <>
+                        {chapterToolbar}
+                        <RichTextEditor
+                          key={documentId || node.id}
+                          content={content}
+                          onChange={(html) => {
+                            setContent(html)
+                            setDirty(true)
+                          }}
+                          placeholder={t("workspace.programme.editorPlaceholder")}
+                        />
+                      </>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-sm">{t("workspace.programme.editorNoDraft", undefined, { title: node.title })}</p>
+                        <Button disabled={pending} onClick={() => openOrCreate(node)}>
+                          {t("workspace.programme.editorCreateStub")}
+                        </Button>
+                      </div>
+                    )
+                  ) : hasDoc && body?.content ? (
                     <div
                       className="text-sm leading-relaxed text-foreground [&_h1]:mb-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_p]:mb-2 [&_[data-block-id]]:cursor-pointer [&_[data-block-id]:hover]:bg-amber-50/70"
                       onClick={(event) => onPreviewClick(event, node.id)}

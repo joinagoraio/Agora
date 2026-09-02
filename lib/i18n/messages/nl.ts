@@ -269,6 +269,8 @@ export const nlMessages = {
       layoutNarrow: "Smal",
       zoomIn: "Inzoomen",
       zoomOut: "Uitzoomen",
+      focusEdit: "Bewerken",
+      readAll: "Alles lezen",
       nav: {
         overview: "Status",
         setup: "Configuratie",

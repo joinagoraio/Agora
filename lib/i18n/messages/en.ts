@@ -269,6 +269,8 @@ export const enMessages = {
       layoutNarrow: "Narrow",
       zoomIn: "Zoom in",
       zoomOut: "Zoom out",
+      focusEdit: "Edit",
+      readAll: "Read all",
       nav: {
         overview: "Status",
         setup: "Configuration",
