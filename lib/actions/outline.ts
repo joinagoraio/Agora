@@ -173,3 +173,84 @@ export async function reorderProgrammeOutlineNodes(input: {
   revalidatePath(`/workspaces/${input.workspaceId}/programme`)
   return { data: nodes.data }
 }
+
+export async function updateProgrammeOutlineNode(input: {
+  workspaceId: string
+  templateId: string
+  nodeId: string
+  title?: string
+  purpose?: string | null
+}) {
+  try {
+    await requireAuthAndPermission("workspace:update", { workspaceId: input.workspaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+
+  const title = input.title?.trim()
+  if (title !== undefined && !title) return { error: "Chapter title is required" }
+
+  const patch: Record<string, unknown> = {}
+  if (title !== undefined) patch.title = title
+  if (input.purpose !== undefined) patch.purpose = input.purpose?.trim() || null
+  if (Object.keys(patch).length === 0) {
+    const nodes = await listProgrammeOutlineNodes(input.templateId)
+    return { data: nodes.data }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from("programme_outline_nodes")
+    .update(patch)
+    .eq("id", input.nodeId)
+    .eq("template_id", input.templateId)
+  if (error) return { error: error.message }
+
+  const nodes = await listProgrammeOutlineNodes(input.templateId)
+  revalidatePath(`/workspaces/${input.workspaceId}/programme`)
+  return { data: nodes.data }
+}
+
+export async function insertProgrammeOutlineNode(input: {
+  workspaceId: string
+  templateId: string
+  afterId?: string | null
+  title: string
+}) {
+  try {
+    await requireAuthAndPermission("workspace:update", { workspaceId: input.workspaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+
+  const title = input.title.trim() || "New chapter"
+  const listed = await listProgrammeOutlineNodes(input.templateId)
+  if (listed.error) return { error: listed.error }
+  const ordered = [...listed.data].sort((a, b) => a.sortOrder - b.sortOrder)
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("programme_outline_nodes")
+    .insert({
+      template_id: input.templateId,
+      title,
+      purpose: null,
+      required: true,
+      sort_order: ordered.length + 1,
+      parent_id: null,
+    })
+    .select("id")
+    .single()
+  if (error || !data) return { error: error?.message || "Insert failed" }
+
+  const afterIndex = input.afterId ? ordered.findIndex((node) => node.id === input.afterId) : ordered.length - 1
+  const insertAt = Math.max(0, afterIndex + 1)
+  const orderedIds = ordered.map((node) => node.id)
+  orderedIds.splice(insertAt, 0, data.id)
+
+  return reorderProgrammeOutlineNodes({
+    workspaceId: input.workspaceId,
+    templateId: input.templateId,
+    orderedIds,
+  })
+}

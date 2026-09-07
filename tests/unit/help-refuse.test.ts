@@ -7,14 +7,14 @@ import { resolveProgrammeLandingSection } from "@/lib/guidance/jobs"
 
 describe("help AI flag", () => {
   it("stays off in production unless explicitly enabled", () => {
-    expect(isHelpAiEnabled(undefined, { nodeEnv: "production", hasOpenAiKey: true })).toBe(false)
-    expect(isHelpAiEnabled("true", { nodeEnv: "production", hasOpenAiKey: true })).toBe(true)
-    expect(isHelpAiEnabled("false", { nodeEnv: "development", hasOpenAiKey: true })).toBe(false)
+    expect(isHelpAiEnabled(undefined, { nodeEnv: "production" })).toBe(false)
+    expect(isHelpAiEnabled("true", { nodeEnv: "production" })).toBe(true)
+    expect(isHelpAiEnabled("false", { nodeEnv: "development" })).toBe(false)
   })
 
-  it("turns on in development when an OpenAI key is present", () => {
-    expect(isHelpAiEnabled(undefined, { nodeEnv: "development", hasOpenAiKey: true })).toBe(true)
-    expect(isHelpAiEnabled(undefined, { nodeEnv: "development", hasOpenAiKey: false })).toBe(false)
+  it("turns on outside production by default", () => {
+    expect(isHelpAiEnabled(undefined, { nodeEnv: "development" })).toBe(true)
+    expect(isHelpAiEnabled(undefined, { nodeEnv: "test" })).toBe(true)
   })
 })
 describe("help refuse classifier", () => {
@@ -43,13 +43,15 @@ describe("help route isolation", () => {
   it("teaches the document layers Help must describe", () => {
     expect(HELP_SYSTEM_PROMPT).toMatch(/document menu/)
     expect(HELP_SYSTEM_PROMPT).toMatch(/not as header icons/)
-    expect(HELP_SYSTEM_PROMPT).toMatch(/Read all/)
+    expect(HELP_SYSTEM_PROMPT).toMatch(/Read vs Edit vs Focus/)
     expect(HELP_SYSTEM_PROMPT).toMatch(/Focus/)
     expect(HELP_SYSTEM_PROMPT).toMatch(/Document owner/)
     expect(HELP_SYSTEM_PROMPT).toMatch(/Chapter owner/)
     expect(HELP_SYSTEM_PROMPT).toMatch(/does not write chapters/)
     expect(HELP_SYSTEM_PROMPT).toMatch(/Ask may draft/)
     expect(HELP_SYSTEM_PROMPT).toMatch(/comments on the right/i)
+    expect(HELP_SYSTEM_PROMPT).toMatch(/own members and invitations/)
+    expect(HELP_SYSTEM_PROMPT).toMatch(/Nobody is added silently/)
   })
 })
 

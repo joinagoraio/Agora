@@ -16,6 +16,8 @@ export type PromptKind = "chat" | "draft" | "measures" | "analysis" | "vision" |
 export type CompileSystemPromptInput = {
   kind: PromptKind
   userLanguage: "Dutch" | "English"
+  /** Identity layer. Omit to use the built-in default for `kind`. */
+  identity?: string
   /** Domain/style layer. Omit to use the built-in default for `kind`. */
   playbookBody?: string
   /** Dynamic sections already built by the caller (context, notices, workspace frame). */
@@ -37,25 +39,25 @@ export type CompiledSystemPrompt = {
 }
 
 const PROGRAMME_LAYER_LINE =
-  "Programme layers: the scrolling document is the work (Read all to comment; Focus to save or generate if you own the chapter). Complementary tools open from the document menu. Ask may draft; Help may not. Analysis agents write reports only, never chapters."
+  "Programme layers: the scrolling document is the work (Read to comment; Edit to write while seeing the whole text; Focus to show only chapters you may write). Complementary tools open from the document menu. Ask may draft; Help may not. Analysis agents write reports only, never chapters."
 
-const CHAT_IDENTITY = `You are AGORA, an intelligent policy assistant. You help users find and understand information from their organization's documents.
+export const CHAT_IDENTITY = `You are AGORA, an intelligent policy assistant. You help users find and understand information from their organization's documents.
 ${PROGRAMME_LAYER_LINE}`
 
-const DRAFT_IDENTITY = `You are AGORA, an expert municipal policy assistant. Your task is to write long-form, substantive documents that thoroughly explore and synthesize the provided context.
+export const DRAFT_IDENTITY = `You are AGORA, an expert municipal policy assistant. Your task is to write long-form, substantive documents that thoroughly explore and synthesize the provided context.
 ${PROGRAMME_LAYER_LINE}`
 
-const MEASURES_IDENTITY = `You are AGORA, an expert environmental-programme assistant. Your task is to propose structured programme measures grounded in the provided workspace evidence and outline.
+export const MEASURES_IDENTITY = `You are AGORA, an expert environmental-programme assistant. Your task is to propose structured programme measures grounded in the provided workspace evidence and outline.
 ${PROGRAMME_LAYER_LINE}`
 
-const ANALYSIS_IDENTITY = `You are AGORA, an expert policy analyst. Your task is to produce structured existing-policy analysis findings grounded only in the provided sources.
+export const ANALYSIS_IDENTITY = `You are AGORA, an expert policy analyst. Your task is to produce structured existing-policy analysis findings grounded only in the provided sources.
 ${PROGRAMME_LAYER_LINE}`
 
-const VISION_IDENTITY = `You are AGORA, an expert environmental-vision analyst. Your task is to link ambitions, provincial interests, challenges, goals, and measures.`
+export const VISION_IDENTITY = `You are AGORA, an expert environmental-vision analyst. Your task is to link ambitions, provincial interests, challenges, goals, and measures.`
 
-const OER_IDENTITY = `You are AGORA, an environmental effects specialist. Your task is to assess measures against the environmental effects report.`
+export const OER_IDENTITY = `You are AGORA, an environmental effects specialist. Your task is to assess measures against the environmental effects report.`
 
-const QC_IDENTITY = `You are AGORA, a programme quality controller. Your task is to find inconsistencies, overlaps, gaps, conflicts, and coverage issues.`
+export const QC_IDENTITY = `You are AGORA, a programme quality controller. Your task is to find inconsistencies, overlaps, gaps, conflicts, and coverage issues.`
 
 export const DEFAULT_ANALYSIS_PLAYBOOK = `ANALYSIS RULES:
 - Classify each policy fragment as adopt, adapt, drop, or missing relative to the vision
@@ -73,7 +75,7 @@ export const DEFAULT_VISION_PLAYBOOK = `VISION GRAPH RULES:
 - Each finding MUST include id, disposition (adopt|adapt|drop|missing), and summary
 - Output ONLY valid JSON: { "reportType": "coverage", "findings": [ ${FINDING_JSON_SHAPE} ] }`
 
-export const DEFAULT_OER_PLAYBOOK = `OER RULES:
+export const DEFAULT_OER_PLAYBOOK = `ENVIRONMENTAL EFFECTS RULES:
 - For each measure, state effectsDirection: positive | negative | neutral | unknown
 - Set effectsDeviation true when the measure worsens or diverges from the effects report
 - Require effectsJustification when deviation is true
@@ -140,7 +142,7 @@ export const DEFAULT_CHAT_PLAYBOOK = `PLAYBOOK (default):
 export const DEFAULT_DRAFT_PLAYBOOK = `STYLE AND FORMAT:
 - Prefer continuous prose and full paragraphs over bullet points and lists. Use narrative, analytical text that develops ideas in depth.
 - Be as extensive as the available knowledge allows: draw on all relevant evidence, quote and discuss specific passages, and explore implications and connections. Do not summarize briefly when the context supports a fuller treatment.
-- Use Markdown headings to structure the document. Use bullet points or tables only when they genuinely add clarity (e.g. discrete options, criteria, or short factual lists). The body of each section should be flowing text, not bullet summaries.
+- Use Markdown headings for subsections only. Do not open a chapter with a heading that repeats the outline title; the document already displays that title. Use bullet points or tables only when they genuinely add clarity (e.g. discrete options, criteria, or short factual lists). The body of each section should be flowing text, not bullet summaries.
 - Emphasize clarity, actionable insights, and relevance to policy stakeholders, but express them in developed paragraphs rather than telegraphic lists.`
 
 const JSON_KINDS: PromptKind[] = ["measures", "analysis", "vision", "oer", "qc"]
@@ -247,7 +249,7 @@ export function compileSystemPrompt(input: CompileSystemPromptInput): CompiledSy
   const playbookBody =
     input.playbookBody !== undefined ? input.playbookBody : defaultPlaybookForKind(input.kind)
 
-  const identity = identityForKind(input.kind)
+  const identity = input.identity ?? identityForKind(input.kind)
   const language = languageBlock(input.userLanguage, input.kind)
   const safety =
     input.kind === "chat"

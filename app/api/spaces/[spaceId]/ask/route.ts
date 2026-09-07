@@ -2,7 +2,6 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { compileSystemPrompt } from "@/lib/chat/playbook-compiler"
-import { env } from "@/lib/env"
 import { completeLlm } from "@/lib/llm/complete"
 import { applyRateLimitHeaders, chatRateLimit, checkRateLimit, type RateLimitStatus } from "@/lib/rate-limit"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -81,10 +80,6 @@ export async function POST(
       return withRateLimit(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
     }
 
-    if (!env.OPENAI_API_KEY) {
-      return withRateLimit(NextResponse.json({ error: "Ask is not available." }, { status: 503 }))
-    }
-
     let payload: unknown
     try {
       payload = await req.json()
@@ -140,9 +135,13 @@ export async function POST(
     }
 
     const library = buildLibraryContext(docs, parsed.data.itemId)
+    const { loadPromptLayers } = await import("@/lib/llm/prompts")
+    const layers = await loadPromptLayers("chat")
     const compiled = compileSystemPrompt({
       kind: "chat",
       userLanguage: parsed.data.language === "nl" ? "Dutch" : "English",
+      identity: layers.identity,
+      playbookBody: layers.playbook,
       isDocumentPreview: Boolean(parsed.data.itemId),
       runtimeSections: [
         `Authority: ${space?.name ?? "this authority"}.`,
@@ -151,10 +150,15 @@ export async function POST(
       ].join("\n\n"),
     })
 
+    const { resolvePlatformTaskLlm } = await import("@/lib/llm/resolve")
+    const resolved = await resolvePlatformTaskLlm("space_ask")
+
     const history = (parsed.data.history ?? []).slice(-12)
     const result = await completeLlm({
-      provider: "openai",
-      model: "gpt-4o-mini",
+      provider: resolved.provider,
+      model: resolved.model,
+      apiKey: resolved.apiKey,
+      endpoint: resolved.endpoint,
       messages: [
         { role: "system", content: compiled.systemPrompt },
         ...history.map((entry) => ({ role: entry.role, content: entry.content })),

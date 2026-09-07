@@ -24,7 +24,8 @@ export async function listJumpTargets(): Promise<{ data: JumpTarget[] } | { erro
   }
 
   const { data: spaces } = await getUserSpaces()
-  const authorities: JumpTarget[] = ((spaces ?? []) as Array<{ id: string; name: string }>).map((space) => ({
+  const spaceRows = (spaces ?? []) as Array<{ id: string; name: string; role?: string | null }>
+  const authorities: JumpTarget[] = spaceRows.map((space) => ({
     kind: "authority" as const,
     id: space.id,
     name: space.name,
@@ -32,7 +33,9 @@ export async function listJumpTargets(): Promise<{ data: JumpTarget[] } | { erro
   }))
   const spaceNameById = new Map(authorities.map((authority) => [authority.id, authority.name]))
 
-  const spaceIds = [...spaceNameById.keys()]
+  const adminSpaceIds = spaceRows
+    .filter((space) => space.role === "owner" || space.role === "admin")
+    .map((space) => space.id)
   const programmeById = new Map<string, JumpTarget>()
 
   const rememberProgramme = (row: {
@@ -52,11 +55,11 @@ export async function listJumpTargets(): Promise<{ data: JumpTarget[] } | { erro
     })
   }
 
-  if (spaceIds.length > 0) {
+  if (adminSpaceIds.length > 0) {
     const { data: spaceProgrammes } = await supabase
       .from("workspaces")
       .select("id, name, space_id, kind, metadata")
-      .in("space_id", spaceIds)
+      .in("space_id", adminSpaceIds)
       .order("name", { ascending: true })
 
     for (const row of spaceProgrammes ?? []) {

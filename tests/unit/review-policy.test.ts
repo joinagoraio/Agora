@@ -3,6 +3,7 @@ import {
   evaluateDistinctReviewerApproval,
   mergeCitationSets,
   parseChapterWorkflow,
+  chapterListStatus,
   parseFillJob,
   parseFillJobRecord,
   parseProgrammePolicies,
@@ -94,6 +95,10 @@ describe("citation merge and fill job", () => {
     })
     expect(parseChapterWorkflow({ programmeWorkflowStatus: "in_review" })).toBe("in_review")
     expect(parseChapterWorkflow({})).toBe("generated")
+    expect(chapterListStatus({ hasDocument: false })).toBe("empty")
+    expect(chapterListStatus({ hasDocument: true, workflowStatus: null })).toBe("generated")
+    expect(chapterListStatus({ hasDocument: true, workflowStatus: "in_review" })).toBe("in_review")
+    expect(chapterListStatus({ hasDocument: true, workflowStatus: "approved" })).toBe("approved")
     const job = parseFillJob({
       fillJob: {
         id: "job-1",

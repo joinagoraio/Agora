@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import OpenAI from "openai"
 import { applyRateLimitHeaders, checkRateLimit, searchRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { deduplicateRequest, generateRequestKey } from "@/lib/utils/request-deduplication"
 import { env } from "@/lib/env"
@@ -22,8 +21,7 @@ async function generateSearchQueries(
   context: string,
   location?: string,
 ): Promise<{ queries: string[]; error?: string }> {
-  if (!env.OPENAI_API_KEY) {
-    // Fallback: extract key terms from context
+  const fallbackQueries = () => {
     const words = context
       .split(/\s+/)
       .filter((w) => w.length > 3)
@@ -32,49 +30,31 @@ async function generateSearchQueries(
   }
 
   try {
-    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
-
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const { completePlatformTask } = await import("@/lib/llm/resolve")
+    const { getPlatformPrompt } = await import("@/lib/llm/prompts")
+    const system = await getPlatformPrompt("overheid_search")
+    const result = await completePlatformTask("overheid_search", {
       messages: [
-        {
-          role: "system",
-          content: `You are a search query generator for Dutch government documents. Your job is to convert workspace scope descriptions into effective search queries for Overheid.nl APIs.
-
-Rules:
-- Generate 3-5 distinct search queries that would find relevant Dutch government documents
-- Each query should focus on different aspects or keywords from the scope
-- Use Dutch government terminology and official document types (e.g., "bestemmingsplan", "verordening", "beleidsnota")
-- Keep queries concise (2-5 key terms each)
-- Include location-specific terms if location is provided
-- Return queries as a JSON array of strings
-
-Examples:
-- Scope: "Municipal policy for public space management" → ["openbare ruimte beheer", "gemeentelijk beleid openbare ruimte", "verordening openbare ruimte"]
-- Scope: "Building permits and zoning regulations" → ["bouwvergunning", "bestemmingsplan", "ruimtelijke ordening"]`,
-        },
+        { role: "system", content: system },
         {
           role: "user",
           content: `Workspace scope: ${context}${location ? `\nLocation: ${location}` : ""}`,
         },
       ],
-      response_format: { type: "json_object" },
+      json: true,
       temperature: 0.7,
     })
 
-    const content = response.choices[0]?.message?.content
-    if (!content) {
+    if (!result.text) {
       throw new Error("No response from AI")
     }
 
-    const parsed = JSON.parse(content)
+    const parsed = JSON.parse(result.text)
     const queries = parsed.queries || parsed.query || [context.substring(0, 100)]
-
     return { queries: Array.isArray(queries) ? queries : [queries] }
   } catch (error) {
     console.error("[IntelligentSearch] Error generating queries:", error)
-    // Fallback to simple query
-    return { queries: [context.substring(0, 100)] }
+    return fallbackQueries()
   }
 }
 
@@ -185,19 +165,17 @@ async function rankResultsByRelevance(
   context: string,
   location?: string,
 ): Promise<SearchResult[]> {
-  if (!env.OPENAI_API_KEY || results.length === 0) {
+  if (results.length === 0) {
     return results
   }
 
-  // Deduplicate ranking requests (same results + context = same ranking)
   const rankingKey = generateRequestKey("rank-results", {
     context,
     location,
-    resultIds: results.map(r => r.identifier || r.title).sort().join(","),
+    resultIds: results.map((r) => r.identifier || r.title).sort().join(","),
   })
 
   return deduplicateRequest(rankingKey, async () => {
-    // Remove duplicates based on identifier
     const uniqueResults = Array.from(
       new Map(results.map((r) => [r.identifier || r.title, r])).values(),
     )
@@ -206,62 +184,43 @@ async function rankResultsByRelevance(
       return []
     }
 
-    // Limit to top 50 for ranking (to avoid token limits)
     const resultsToRank = uniqueResults.slice(0, 50)
 
     try {
-      const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
-
-      const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `You are a relevance ranking assistant. Your job is to rank search results by how relevant they are to a workspace scope.
-
-Rules:
-- Score each result from 0.0 to 1.0 based on relevance
-- 1.0 = highly relevant, directly matches the scope
-- 0.5 = somewhat relevant, related topic
-- 0.0 = not relevant
-- Consider title, description, and type when scoring
-- Return a JSON object with identifiers/titles as keys and scores as values
-
-Return format: {"identifier_or_title": score, ...}`,
-        },
-        {
-          role: "user",
-          content: `Workspace scope: ${context}${location ? `\nLocation: ${location}` : ""}
+      const { completePlatformTask } = await import("@/lib/llm/resolve")
+      const { getPlatformPrompt } = await import("@/lib/llm/prompts")
+      const system = await getPlatformPrompt("overheid_rank")
+      const result = await completePlatformTask("overheid_search", {
+        messages: [
+          { role: "system", content: system },
+          {
+            role: "user",
+            content: `Workspace scope: ${context}${location ? `\nLocation: ${location}` : ""}
 
 Results to rank:
 ${resultsToRank.map((r, i) => `${i + 1}. ${r.title} (${r.identifier || "no-id"}) - ${r.description || "no description"}`).join("\n")}`,
-        },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.3,
-    })
+          },
+        ],
+        json: true,
+        temperature: 0.3,
+      })
 
-      const content = response.choices[0]?.message?.content
-      if (!content) {
+      if (!result.text) {
         return uniqueResults
       }
 
-      const scores = JSON.parse(content)
+      const scores = JSON.parse(result.text)
 
-      // Add scores to results
-      const scoredResults = resultsToRank.map((result) => {
-        const key = result.identifier || result.title
-        const score = scores[key] || scores[result.title] || 0.5
+      const scoredResults = resultsToRank.map((entry) => {
+        const key = entry.identifier || entry.title
+        const score = scores[key] || scores[entry.title] || 0.5
         return {
-          ...result,
+          ...entry,
           relevanceScore: typeof score === "number" ? score : 0.5,
         }
       })
 
-      // Sort by relevance score (highest first)
       scoredResults.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0))
-
-      // Add remaining results (not ranked) at the end
       const remainingResults = uniqueResults.slice(50)
       return [...scoredResults, ...remainingResults]
     } catch (error) {

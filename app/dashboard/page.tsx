@@ -5,6 +5,7 @@ import { CreateSpaceDialog } from "@/components/create-space-dialog"
 import { CreateWorkspaceDialog } from "@/components/create-workspace-dialog"
 import { DashboardBoard } from "@/components/dashboard-board"
 import { DashboardMetrics } from "@/components/dashboard-metrics"
+import { ProgrammeInviteInbox } from "@/components/programme-invite-inbox"
 import { UserMenu } from "@/components/user-menu"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
@@ -16,9 +17,12 @@ import { ProfileSetupDialog } from "@/components/profile-setup-dialog"
 import { getServerTranslator } from "@/lib/i18n/server"
 import { isEnvironmentalProgrammeWorkspace, workspaceHomeHref } from "@/lib/programme/domain"
 import { getOwnProfile } from "@/lib/actions/profile"
+import { getPrimaryTenantForUser } from "@/lib/actions/tenant"
+import { listMyPendingProgrammeInvites } from "@/lib/actions/workspace-invitation"
 import { isPlaceholderProfileName } from "@/lib/profile/display-name"
 import { DashboardGreeting } from "@/components/dashboard-greeting"
 import { canManageWorkspaces, type Role } from "@/lib/rbac/permissions"
+import { isTenantAdminRole } from "@/lib/tenant/domain"
 
 export default async function DashboardPage() {
   const { t } = await getServerTranslator()
@@ -42,17 +46,20 @@ export default async function DashboardPage() {
   // Get user's space memberships to filter out workspaces where user is also a space member
   const { data: spaceMemberships } = await supabase
     .from("space_members")
-    .select("space_id")
+    .select("space_id, role")
     .eq("user_id", user.id)
   
   const userSpaceIds = new Set(spaceMemberships?.map(sm => sm.space_id) ?? [])
+  const adminSpaceIds = [...new Set((spaceMemberships ?? [])
+    .filter((row) => row.role === "owner" || row.role === "admin")
+    .map((row) => row.space_id))]
 
   const { data: spaceProgrammes } =
-    userSpaceIds.size > 0
+    adminSpaceIds.length > 0
       ? await supabase
           .from("workspaces")
           .select("id, name, description, space_id, kind, metadata")
-          .in("space_id", [...userSpaceIds])
+          .in("space_id", adminSpaceIds)
           .eq("kind", "environmental_programme")
           .order("updated_at", { ascending: false })
       : { data: [] as Array<{ id: string; name: string; description?: string | null; space_id: string; kind?: string | null; metadata?: unknown }> }
@@ -115,12 +122,18 @@ export default async function DashboardPage() {
     return t(`space.common.roles.${normalized}`, role)
   }
 
-  const [{ data: pins }, conversationCountResult] = await Promise.all([
+  const spaceIds = authorities.map((space) => space.id)
+  const [{ data: pins }, agentCountResult, pendingInvitesResult, tenantMembership] = await Promise.all([
     listDashboardPins(),
-    supabase.from("conversations").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    spaceIds.length > 0
+      ? supabase.from("agents").select("id", { count: "exact", head: true }).in("space_id", spaceIds)
+      : Promise.resolve({ count: 0 }),
+    listMyPendingProgrammeInvites(),
+    getPrimaryTenantForUser(),
   ])
-  const conversationCount = conversationCountResult.count ?? 0
-  const showMetrics = hasSpaces || hasProgrammes || conversationCount > 0
+  const agentCount = agentCountResult.count ?? 0
+  const canManageModels = isTenantAdminRole(tenantMembership.data?.role)
+  const showMetrics = hasSpaces || hasProgrammes || agentCount > 0 || canManageModels
 
   const welcomeCopy =
     hasProgrammes || hasSpaces ? t("dashboard.welcome.prompt") : t("dashboard.welcome.empty")
@@ -149,12 +162,16 @@ export default async function DashboardPage() {
             <p className="mt-2 text-muted-foreground">{welcomeCopy}</p>
           </div>
 
+          <ProgrammeInviteInbox invites={pendingInvitesResult.data ?? []} />
+
           {showMetrics ? (
             <>
               <DashboardMetrics
                 authorities={authorities.length}
                 programmes={myProgrammes.length}
-                conversations={conversationCount}
+                agents={agentCount}
+                tenantId={tenantMembership.data?.tenantId}
+                canManageModels={canManageModels}
               />
               <Separator className="my-8 shrink-0 bg-border" />
             </>

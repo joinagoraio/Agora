@@ -1,8 +1,9 @@
 "use client"
 
-import { FileIcon, defaultStyles } from "react-file-icon"
+import { FileIcon } from "react-file-icon"
 import { cn } from "@/lib/utils"
 import { getDocumentFileExtension, type DocumentLike } from "@/lib/utils/document-files"
+import { resolveFileIconAppearance } from "@/lib/utils/file-icon-appearance"
 
 const SIZE_CLASS = {
   sm: "h-5 w-5",
@@ -21,23 +22,21 @@ export function DocumentFileTypeIcon({
   className?: string
 }) {
   const fileExtension = (extension || (document ? getDocumentFileExtension(document) : "file")).toLowerCase()
-  const styles = defaultStyles[fileExtension] || {}
+  const appearance = resolveFileIconAppearance(fileExtension)
 
   return (
     <div
-      className={cn(
-        "flex shrink-0 items-center overflow-hidden [&>svg]:h-full [&>svg]:w-full [&>svg]:grayscale",
-        SIZE_CLASS[size],
-        className,
-      )}
+      className={cn("flex shrink-0 items-center overflow-hidden [&>svg]:h-full [&>svg]:w-full", SIZE_CLASS[size], className)}
       aria-hidden
     >
       <FileIcon
-        extension={fileExtension}
-        {...styles}
-        label={false}
-        glyphColor="#fff"
-        color="#6b7280"
+        extension={fileExtension === "file" ? undefined : fileExtension}
+        color={appearance.color}
+        foldColor={appearance.foldColor}
+        glyphColor={appearance.glyphColor}
+        type={appearance.type}
+        labelUppercase
+        gradientOpacity={0.18}
       />
     </div>
   )

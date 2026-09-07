@@ -3,12 +3,19 @@
 import { useEffect, useMemo, useState, useTransition } from "react"
 
 import { SpaceSetupWizard } from "@/components/space-setup-wizard"
+import { SpaceAgentsPanel } from "@/components/space-agents-panel"
+import type { AgentRecord, AgentVersionRecord } from "@/lib/programme/domain"
 import { SpaceDocumentsPanel, type SpaceDocumentItem } from "@/components/space-documents-panel"
 import { SpaceWorkspaceList, type SpaceWorkspace } from "@/components/space-workspace-list"
+import {
+  AuthorityAccessDialogs,
+  AuthorityAccessMenuItems,
+  type AuthorityAccessPanel,
+} from "@/components/space-access-menu"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { PencilLine, X, Loader2, Wand2, RotateCcw, Save, MoreVertical, Settings, ArrowLeft } from "lucide-react"
+import { PencilLine, X, Loader2, Wand2, RotateCcw, Save, MoreVertical, ArrowLeft } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -43,6 +50,7 @@ type SetupWizardState = {
 
 interface SpacePageClientProps {
   spaceId: string
+  tenantId: string
   spaceName: string
   initialSpaceType?: string | null
   initialVisibility?: string | null
@@ -50,6 +58,7 @@ interface SpacePageClientProps {
   initialScope: SpaceScope
   initialDocuments: SpaceDocumentItem[]
   initialWorkspaces: SpaceWorkspace[]
+  initialAgents?: Array<AgentRecord & { latestVersion: AgentVersionRecord | null }>
   canManage: boolean
   canAccessSettings: boolean
   wizardState?: SetupWizardState | null
@@ -61,6 +70,7 @@ interface SpacePageClientProps {
 
 export function SpacePageClient({
   spaceId,
+  tenantId,
   spaceName,
   initialSpaceType,
   initialVisibility,
@@ -68,6 +78,7 @@ export function SpacePageClient({
   initialScope,
   initialDocuments,
   initialWorkspaces,
+  initialAgents = [],
   canManage,
   canAccessSettings,
   wizardState,
@@ -91,6 +102,7 @@ export function SpacePageClient({
   const [wizardOpen, setWizardOpen] = useState(
     canManage && !(wizardState?.completed || wizardState?.dismissed),
   )
+  const [accessPanel, setAccessPanel] = useState<AuthorityAccessPanel>(null)
   const [isEditingScope, setIsEditingScope] = useState(false)
   const formatJurisdiction = (jurisdiction?: Record<string, any> | null) => {
     if (!jurisdiction) {
@@ -177,7 +189,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
       if (prev.some((item) => item.id === workspace.id)) {
         return prev
       }
-      return [workspace, ...prev]
+      return [{ ...workspace, canManageAccess: true }, ...prev]
     })
   }
 
@@ -216,23 +228,17 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
                   </IconTooltip>
                 </span>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem onClick={handleEditClick}>
                   <PencilLine className="h-4 w-4" />
                   {t("space.overview.menu.edit")}
                 </DropdownMenuItem>
                 {canAccessSettings && (
-                  <DropdownMenuItem asChild>
-                    <Link href={`/spaces/${spaceId}/settings`}>
-                      <Settings className="h-4 w-4" />
-                      {t("space.overview.menu.settings")}
-                    </Link>
-                  </DropdownMenuItem>
+                  <AuthorityAccessMenuItems
+                    canDelete={userRole === "owner"}
+                    onPick={setAccessPanel}
+                  />
                 )}
-                <DropdownMenuItem onClick={() => setWizardOpen(true)}>
-                  <Wand2 className="h-4 w-4" />
-                  {t("guidance.coach.reopenWizard")}
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -497,6 +503,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
         <SpaceSetupWizard
           open={wizardOpen}
           spaceId={spaceId}
+          tenantId={tenantId}
           spaceName={spaceTitle}
           spaceType={spaceDetails.spaceType}
           visibility={spaceDetails.visibility}
@@ -520,6 +527,11 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
           }
         />
       )}
+      <AuthorityAccessDialogs
+        space={{ id: spaceId, name: spaceTitle }}
+        panel={accessPanel}
+        onClose={() => setAccessPanel(null)}
+      />
 
       {isEditingScope ? (
         <div className="max-h-[42vh] shrink-0 space-y-4 overflow-y-auto rounded-lg border border-border bg-card/50 p-4 shadow-lg">
@@ -751,14 +763,18 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
       )}
 
       <div className="mt-6 flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <SpaceWorkspaceList spaceId={spaceId} workspaces={workspaces} canCreate={canManage} spaceName={spaceTitle} />
-        </div>
+        <SpaceWorkspaceList spaceId={spaceId} workspaces={workspaces} canCreate={canManage} spaceName={spaceTitle} />
 
-        <Separator className="my-8 shrink-0 bg-border" />
+        {canAccessSettings ? (
+          <>
+            <Separator className="my-4 shrink-0 bg-border" />
+            <SpaceAgentsPanel spaceId={spaceId} tenantId={tenantId} initialAgents={initialAgents} />
+          </>
+        ) : null}
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <SpaceDocumentsPanel
+        <Separator className="my-4 shrink-0 bg-border" />
+
+        <SpaceDocumentsPanel
           spaceId={spaceId}
           documents={documents}
           onDocumentsChange={setDocuments}
@@ -766,7 +782,6 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
           canUpload={canManage}
           canManage={canManage}
         />
-        </div>
       </div>
       </div>
     </div>
@@ -779,8 +794,6 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
         job={spaceJob === "administrator" ? "administrator" : "author"}
         guidanceMode={guidanceMode}
         helpAiEnabled={helpAiEnabled}
-        canReopenWizard={canManage}
-        onReopenWizard={() => setWizardOpen(true)}
         onOpenChange={setGuidanceOpen}
       />
     </>

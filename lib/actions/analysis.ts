@@ -276,6 +276,7 @@ async function executeBoundAgentAnalysis(input: {
 }) {
   const { completeLlm } = await import("@/lib/llm")
   const { compileSystemPrompt } = await import("@/lib/chat/playbook-compiler")
+  const { loadPromptLayers } = await import("@/lib/llm/prompts")
   const { parseProgrammeBindings, boundAgentId } = await import("@/lib/programme/domain")
   const { getLatestAgentVersion, getAgentVersionById } = await import("@/lib/actions/agent")
   const { resolveAgentSourceDocuments, formatSourcePreview } = await import("@/lib/programme/source-set")
@@ -292,7 +293,7 @@ async function executeBoundAgentAnalysis(input: {
   } = await supabase.auth.getUser()
   const { data: workspace } = await supabase
     .from("workspaces")
-    .select("name, metadata")
+    .select("name, metadata, space_id")
     .eq("id", input.workspaceId)
     .single()
   if (!workspace) return { error: "Workspace not found" }
@@ -339,22 +340,27 @@ async function executeBoundAgentAnalysis(input: {
           ? "effects"
           : "quality"
 
+  const layers = await loadPromptLayers(input.kind)
   const { systemPrompt } = compileSystemPrompt({
     kind: input.kind,
     userLanguage,
-    playbookBody: agentVersion?.instructions,
+    identity: layers.identity,
+    playbookBody: agentVersion?.instructions || layers.playbook,
     runInstructions: input.instructions,
     runtimeSections: `AGENT SOURCE SET:\n${formatSourcePreview(documents)}\n\nOUTLINE:\n${outlineBlock || "(none)"}\n\nMEASURES:\n${measureBlock || "(none)"}\n\nEVIDENCE:\n${formatSectionEvidence(documents, sections)}`,
   })
 
   let raw = ""
-  const model = agentVersion?.model || "gpt-4o-mini"
-  const provider = agentVersion?.provider || "openai-compatible"
+  const { getTenantIdForSpace, resolveAgentVersionLlm } = await import("@/lib/llm/resolve")
+  const tenantId = workspace.space_id ? await getTenantIdForSpace(workspace.space_id) : null
+  const llm = await resolveAgentVersionLlm({ tenantId, spaceId: workspace.space_id, agentVersion })
+  const model = llm.model
+  const provider = llm.provider
   try {
     const completion = await completeLlm({
       provider,
-      endpoint: agentVersion?.endpoint,
-      credentialsRef: agentVersion?.credentialsRef,
+      endpoint: llm.endpoint,
+      apiKey: llm.apiKey,
       model,
       messages: [
         { role: "system", content: systemPrompt },

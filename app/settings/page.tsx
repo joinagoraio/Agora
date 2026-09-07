@@ -2,8 +2,12 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { UserMenu } from "@/components/user-menu"
 import { OrganizationSettings } from "@/components/organization-settings"
+import { getPrimaryTenantForUser } from "@/lib/actions/tenant"
+import { isTenantAdminRole } from "@/lib/tenant/domain"
+import { getServerTranslator } from "@/lib/i18n/server"
 
 export default async function SettingsPage() {
+  const { t } = await getServerTranslator()
   const supabase = await createClient()
 
   const {
@@ -14,24 +18,8 @@ export default async function SettingsPage() {
     redirect("/auth/login")
   }
 
-  // Get user's primary space (tenant)
-  const { data: members } = await supabase
-    .from("space_members")
-    .select("space_id, role, spaces(*)")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true })
-    .limit(1)
-
-  const spacesRelation = members?.[0]?.spaces
-  const space = Array.isArray(spacesRelation) ? spacesRelation[0] : spacesRelation
-
-  if (!space) {
-    redirect("/dashboard")
-  }
-
-  // Check if user has permission to manage settings
-  const member = members?.[0]
-  if (!member || !["owner", "admin", "tenant_admin", "org_manager"].includes(member.role)) {
+  const membership = await getPrimaryTenantForUser()
+  if (!membership.data || !isTenantAdminRole(membership.data.role)) {
     redirect("/dashboard")
   }
 
@@ -40,15 +28,20 @@ export default async function SettingsPage() {
       <header className="bg-card">
         <div className="flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-4">
-            <h1 className="text-xl font-semibold">Organization Settings</h1>
+            <h1 className="text-xl font-semibold">{t("admin.settings.title")}</h1>
           </div>
           <UserMenu />
         </div>
       </header>
 
       <main className="flex-1 bg-white">
-        <div className="container mx-auto max-w-4xl py-8 px-8">
-          <OrganizationSettings space={space} />
+        <div className="container mx-auto max-w-4xl px-8 py-8">
+          <OrganizationSettings
+            tenant={{
+              id: membership.data.tenantId,
+              name: membership.data.tenant?.name ?? "Organisation",
+            }}
+          />
         </div>
       </main>
     </div>

@@ -7,6 +7,7 @@ export type LlmCompleteInput = {
   provider: string
   endpoint?: string | null
   credentialsRef?: string | null
+  apiKey?: string | null
   model: string
   messages: LlmMessage[]
   temperature?: number

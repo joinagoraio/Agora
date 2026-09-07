@@ -84,7 +84,7 @@ export const HANDBOOK_SEED_NODES: HandbookSeedNode[] = [
     fieldSpecs: [{ key: "constraints", label: "Binding constraints", required: true }],
     qualityRules: "Effects-report deviations must be flagged, not hidden.",
     outputForm: "Constraint list with citations.",
-    relationHints: "Sources: vision + OER. Downstream: effects chapter.",
+    relationHints: "Sources: vision + effects report. Downstream: effects chapter.",
   },
   {
     title: "Measures programme",
@@ -108,7 +108,7 @@ export const HANDBOOK_SEED_NODES: HandbookSeedNode[] = [
     fieldSpecs: [{ key: "deviations", label: "Open deviations", required: false }],
     qualityRules: "Deviation without justification is incomplete.",
     outputForm: "Table of measure × direction × justification.",
-    relationHints: "Sources: OER + measures. Feeds QC and approval.",
+    relationHints: "Sources: effects report + measures. Feeds quality control and approval.",
   },
   {
     title: "Implementation, monitoring and governance",

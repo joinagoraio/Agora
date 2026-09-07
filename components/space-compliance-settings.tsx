@@ -24,6 +24,7 @@ import { useRouter } from "next/navigation"
 
 type Props = {
   spaceId: string
+  hideIntro?: boolean
 }
 
 function downloadJson(filename: string, payload: unknown) {
@@ -36,7 +37,7 @@ function downloadJson(filename: string, payload: unknown) {
   URL.revokeObjectURL(url)
 }
 
-export function SpaceComplianceSettings({ spaceId }: Props) {
+export function SpaceComplianceSettings({ spaceId, hideIntro = false }: Props) {
   const { t } = useI18n()
   const router = useRouter()
   const [policy, setPolicy] = useState<RetentionPolicy | null>(null)
@@ -58,10 +59,12 @@ export function SpaceComplianceSettings({ spaceId }: Props) {
 
   return (
     <div className="space-y-4">
+      {hideIntro ? null : (
       <div>
         <h2 className="text-lg font-medium">{t("space.settings.compliance.title")}</h2>
         <p className="text-sm text-muted-foreground">{t("space.settings.compliance.description")}</p>
       </div>
+      )}
       <div className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">

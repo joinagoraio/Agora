@@ -5,6 +5,7 @@ import { ProgrammeWorkbench } from "@/components/programme-workbench"
 import { WorkspaceChatWrapper } from "@/components/workspace-chat-wrapper"
 import { parseDocumentOwnerId } from "@/lib/programme/ownership"
 import { isEnvironmentalProgrammeWorkspace, resolveWorkspaceKind } from "@/lib/programme/domain"
+import { canAccessProgramme, canManageProgrammeAccess, isAuthorityAdministrator } from "@/lib/programme/membership"
 import { isSpaceHelpAiDisabled, resolveHelpAiEnabled } from "@/lib/guidance/help-flag"
 import type { GuidanceMode } from "@/lib/guidance/jobs"
 
@@ -61,9 +62,24 @@ export default async function ProgrammeWorkbenchPage({
     ])
 
   const guidanceMode: GuidanceMode = profile?.guidance_mode === "expert" ? "expert" : "guided"
-  const canAccessSettings = spaceMembership?.role === "owner" || spaceMembership?.role === "admin"
+  const isCreator = workspace.created_by === user.id
+  if (
+    !canAccessProgramme({
+      isWorkspaceMember: Boolean(workspaceMembership),
+      isCreator,
+      spaceRole: spaceMembership?.role ?? null,
+    })
+  ) {
+    redirect(`/spaces/${workspace.space_id}`)
+  }
+
+  const canAccessSettings = canManageProgrammeAccess({
+    workspaceRole: workspaceMembership?.role ?? null,
+    isCreator,
+    spaceRole: spaceMembership?.role ?? null,
+  })
   const accessRole =
-    workspace.created_by === user.id
+    isCreator
       ? spaceMembership?.role === "owner"
         ? "owner"
         : "admin"
@@ -71,11 +87,9 @@ export default async function ProgrammeWorkbenchPage({
         ? spaceMembership.role
         : workspaceMembership?.role || "viewer"
   const canManage =
-    spaceMembership?.role === "owner" ||
-    spaceMembership?.role === "admin" ||
-    spaceMembership?.role === "member" ||
-    workspaceMembership?.role === "admin" ||
-    workspaceMembership?.role === "member"
+    canAccessSettings ||
+    workspaceMembership?.role === "member" ||
+    isAuthorityAdministrator(spaceMembership?.role)
 
   return (
     <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>

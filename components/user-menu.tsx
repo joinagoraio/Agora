@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { LogOut, User, UserCircle, Languages, Loader2 } from "lucide-react"
+import { LogOut, User, UserCircle, Languages, Loader2, Shield } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -19,10 +19,12 @@ import {
 import { createClient } from "@/lib/supabase/client"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage, isSupportedLanguage } from "@/lib/i18n/config"
+import Link from "next/link"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { UserAvatar } from "@/components/user-avatar"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { PROFILE_UPDATED_EVENT } from "@/lib/profile/display-name"
+import { getUserAdminMenuState } from "@/lib/actions/tenant"
 
 export function UserMenu() {
   const router = useRouter()
@@ -31,6 +33,7 @@ export function UserMenu() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
   const [isUpdatingLanguage, setIsUpdatingLanguage] = useState(false)
+  const [adminMenu, setAdminMenu] = useState({ isTenantAdmin: false, isSuperAdmin: false })
   const { language, setLanguage: setLanguageFn, t } = useI18n()
   const setLanguage = setLanguageFn!
 
@@ -64,6 +67,9 @@ export function UserMenu() {
     }
     
     void fetchUser()
+    void getUserAdminMenuState().then((result) => {
+      if (result.data) setAdminMenu(result.data)
+    })
     window.addEventListener(PROFILE_UPDATED_EVENT, fetchUser)
     return () => window.removeEventListener(PROFILE_UPDATED_EVENT, fetchUser)
   }, [])
@@ -177,6 +183,23 @@ export function UserMenu() {
           <UserCircle className="mr-2 h-3.5 w-3.5" />
           <span>{t("common.actions.profile")}</span>
         </DropdownMenuItem>
+
+        {adminMenu.isSuperAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs uppercase tracking-wide text-muted-foreground">
+              {t("admin.menu.label")}
+            </DropdownMenuLabel>
+            {adminMenu.isSuperAdmin ? (
+              <DropdownMenuItem asChild>
+                <Link href="/admin/platform">
+                  <Shield className="mr-2 h-3.5 w-3.5" />
+                  <span>{t("admin.menu.platform")}</span>
+                </Link>
+              </DropdownMenuItem>
+            ) : null}
+          </>
+        )}
 
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">

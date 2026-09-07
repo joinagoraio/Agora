@@ -2,13 +2,12 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
-import OpenAI from "openai"
-import { env } from "@/lib/env"
 
 import { syncAllScopeDocumentsToWorkspace } from "@/lib/services/scope-documents"
 import { withCache, workspaceCacheKey } from "@/lib/cache/api-cache"
 import { requireAuthAndPermission } from "@/lib/middleware/authorization"
 import { getServerTranslator } from "@/lib/i18n/server"
+import { canManageProgrammeAccess } from "@/lib/programme/membership"
 
 export async function createWorkspace(
   spaceId: string,
@@ -144,6 +143,7 @@ export async function updateWorkspace(
   }
 
   revalidatePath(`/workspaces/${workspaceId}`)
+  if (data.space_id) revalidatePath(`/spaces/${data.space_id}`)
   return { data }
 }
 
@@ -185,7 +185,117 @@ export async function deleteWorkspace(workspaceId: string) {
   }
 
   revalidatePath("/dashboard")
+  if (workspace.space_id) revalidatePath(`/spaces/${workspace.space_id}`)
   return { success: true }
+}
+
+export async function getWorkspaceAccessSettings(workspaceId: string) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  const { data: workspace, error: workspaceError } = await supabase
+    .from("workspaces")
+    .select("id, name, space_id, created_by")
+    .eq("id", workspaceId)
+    .single()
+
+  if (workspaceError || !workspace) {
+    return { error: "Programme not found" }
+  }
+
+  const { data: workspaceMembership } = await supabase
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  const { data: spaceMembership } = await supabase
+    .from("space_members")
+    .select("role")
+    .eq("space_id", workspace.space_id)
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  if (
+    !canManageProgrammeAccess({
+      workspaceRole: workspaceMembership?.role ?? null,
+      isCreator: workspace.created_by === user.id,
+      spaceRole: spaceMembership?.role ?? null,
+    })
+  ) {
+    return { error: "Unauthorized" }
+  }
+
+  const { data: workspaceMembers } = await supabase
+    .from("workspace_members")
+    .select("*, profiles(*)")
+    .eq("workspace_id", workspaceId)
+    .order("created_at", { ascending: false })
+
+  const { data: spaceMembers } = await supabase
+    .from("space_members")
+    .select("user_id, role, profiles(*)")
+    .eq("space_id", workspace.space_id)
+    .order("created_at", { ascending: false })
+
+  const { data: invitations } = await supabase
+    .from("workspace_invitations")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .order("created_at", { ascending: false })
+
+  const pendingInvitations = (invitations ?? []).filter((invite) => invite.status === "pending")
+  const memberIds = new Set((workspaceMembers ?? []).map((row) => row.user_id))
+  const authorityEmails = new Set<string>()
+  for (const row of spaceMembers ?? []) {
+    const email = String((row.profiles as { email?: string } | null)?.email || "").toLowerCase()
+    if (email) authorityEmails.add(email)
+  }
+  const pendingEmails = new Set(pendingInvitations.map((invite) => String(invite.email || "").toLowerCase()))
+
+  const authorityCandidates = (spaceMembers ?? [])
+    .filter((row) => {
+      if (memberIds.has(row.user_id)) return false
+      const email = String((row.profiles as { email?: string } | null)?.email || "").toLowerCase()
+      if (email && pendingEmails.has(email)) return false
+      return true
+    })
+    .map((row) => {
+      const profile = row.profiles as { full_name?: string | null; email?: string | null } | null
+      return {
+        userId: row.user_id as string,
+        name: profile?.full_name || profile?.email || "",
+        email: profile?.email || "",
+      }
+    })
+    .filter((row) => row.email)
+
+  const members = (workspaceMembers ?? []).map((row) => ({
+    ...row,
+    source: "workspace",
+    workspace_role: row.role,
+    workspace_job: row.job,
+  }))
+
+  return {
+    data: {
+      workspace,
+      members,
+      invitations: pendingInvitations.map((invite) => ({
+        ...invite,
+        channel: authorityEmails.has(String(invite.email || "").toLowerCase()) ? "in_app" : "email",
+      })),
+      authorityCandidates,
+      currentUserId: user.id,
+    },
+  }
 }
 
 export async function removeWorkspaceMember(workspaceId: string, memberUserId: string) {
@@ -360,52 +470,24 @@ export async function enhanceContextText(text: string): Promise<{ enhanced?: str
   
   const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
 
-  if (!env.OPENAI_API_KEY) {
-    return { error: "OpenAI API key not configured" }
-  }
-
   if (!text || text.trim().length === 0) {
     return { error: "Text is empty" }
   }
 
   try {
-    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
-
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const { completePlatformTask } = await import("@/lib/llm/resolve")
+    const { applyPromptLanguage, getPlatformPrompt } = await import("@/lib/llm/prompts")
+    const system = applyPromptLanguage(await getPlatformPrompt("enhance_workspace"), userLanguage)
+    const result = await completePlatformTask("enhance", {
       messages: [
-        {
-          role: "system",
-          content: `You are a helpful assistant that enhances workspace context descriptions. Your job is to improve the clarity, completeness, and usefulness of workspace context descriptions that will help AI search and understand documents better.
-
-LANGUAGE REQUIREMENT:
-- The user's preferred language is ${userLanguage}
-- You MUST write the enhanced text in ${userLanguage}
-- All output must be in ${userLanguage}
-
-Rules:
-- Keep the enhanced text concise but comprehensive
-- Maintain the original meaning and intent
-- Add relevant details that would help with document search and understanding
-- Use clear, professional language
-- Focus on domain, document types, and key information
-- Do not add information that wasn't implied in the original text
-- Return only the enhanced text in ${userLanguage}, no explanations or meta-commentary`,
-        },
-        {
-          role: "user",
-          content: text,
-        },
+        { role: "system", content: system },
+        { role: "user", content: text },
       ],
-      max_tokens: 500,
+      maxTokens: 500,
       temperature: 0.7,
     })
-
-    const enhanced = response.choices[0]?.message?.content?.trim()
-    if (enhanced && enhanced.length > 0) {
-      return { enhanced }
-    }
-
+    const enhanced = result.text.trim()
+    if (enhanced) return { enhanced }
     return { error: "Failed to generate enhanced text" }
   } catch (error) {
     console.error("[enhanceContextText] Error:", error)
@@ -443,10 +525,6 @@ export async function enhanceWorkspaceText(
   
   const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
 
-  if (!env.OPENAI_API_KEY) {
-    return { error: "OpenAI API key not configured" }
-  }
-
   if (!text || text.trim().length === 0) {
     return { error: "Text is empty" }
   }
@@ -455,77 +533,34 @@ export async function enhanceWorkspaceText(
   const isSummary = field === "summary"
 
   try {
-    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
-
-    // Build context for the prompt
-    let contextParts: string[] = []
+    const contextParts: string[] = []
     if (isSummary && options?.workspaceName) {
       contextParts.push(`Workspace name: ${options.workspaceName}`)
     }
     if (!isSummary && options?.summary) {
       contextParts.push(`Summary: ${options.summary}`)
     }
-
     const contextText = contextParts.length > 0 ? `\n\nContext:\n${contextParts.join("\n")}` : ""
-
-    const systemPrompt = isSummary
-      ? `You are a helpful assistant that writes clear, concise summaries for policy workspaces.
-
-LANGUAGE REQUIREMENT:
-- The user's preferred language is ${userLanguage}
-- You MUST write the summary in ${userLanguage}
-- All output must be in ${userLanguage}
-
-The summary you return should:
-- Be very brief and concise (1-2 sentences maximum)
-- Capture the core purpose and scope of the workspace
-- Stay faithful to the original meaning
-- Use neutral, professional language
-- Be suitable as a high-level overview that appears at the top of the workspace
-
-Return ONLY the summary text in ${userLanguage}, nothing else.`
-      : `You are a helpful assistant that writes clear, comprehensive descriptions for policy workspaces.
-
-LANGUAGE REQUIREMENT:
-- The user's preferred language is ${userLanguage}
-- You MUST write the description in ${userLanguage}
-- All output must be in ${userLanguage}
-
-The description you return should:
-- Be longer than the summary but still concise (4-6 sentences)
-- Expand with specific details about the workspace's focus, documents, and objectives
-- Stay faithful to the original meaning
-- Use neutral, professional language
-- Provide enough detail for colleagues and AI assistants to understand the workspace's scope
-- Not be overly lengthy or verbose
-
-Return ONLY the description text in ${userLanguage}, nothing else.`
-
     const userPrompt = isSummary
       ? `Write a concise summary for this workspace:${contextText}\n\nCurrent text:\n${text}`
       : `Write a comprehensive but concise description for this workspace:${contextText}\n\nCurrent text:\n${text}`
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const { completePlatformTask } = await import("@/lib/llm/resolve")
+    const { applyPromptLanguage, getPlatformPrompt } = await import("@/lib/llm/prompts")
+    const system = applyPromptLanguage(
+      await getPlatformPrompt(isSummary ? "enhance_summary" : "enhance_description"),
+      userLanguage,
+    )
+    const result = await completePlatformTask("enhance", {
       messages: [
-        {
-          role: "system",
-          content: systemPrompt,
-        },
-        {
-          role: "user",
-          content: userPrompt,
-        },
+        { role: "system", content: system },
+        { role: "user", content: userPrompt },
       ],
-      max_tokens: isSummary ? 120 : 500,
+      maxTokens: isSummary ? 120 : 500,
       temperature: 0.7,
     })
-
-    const enhanced = response.choices[0]?.message?.content?.trim()
-    if (enhanced && enhanced.length > 0) {
-      return { enhanced }
-    }
-
+    const enhanced = result.text.trim()
+    if (enhanced) return { enhanced }
     return { error: "Failed to generate enhanced text" }
   } catch (error) {
     console.error("[enhanceWorkspaceText] Error:", error)

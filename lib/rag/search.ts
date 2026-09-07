@@ -2,57 +2,33 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { findTextSpan } from "@/lib/utils/pdf-extraction"
-import OpenAI from "openai"
-import { env } from "@/lib/env"
 import { deduplicateRequest, generateRequestKey } from "@/lib/utils/request-deduplication"
 import { withCache, workspaceCacheKey } from "@/lib/cache/api-cache"
 import { monitorPerformance } from "@/lib/utils/performance-monitor"
 
 // Helper function to rewrite/expand user query using AI for better search
 async function rewriteQueryForSearch(originalQuery: string): Promise<string> {
-  // Only use AI if OpenAI is configured and query is substantial
-  if (!env.OPENAI_API_KEY || originalQuery.length < 10) {
+  if (originalQuery.length < 10) {
     return originalQuery
   }
 
-  // Deduplicate query rewriting requests (same query = same rewrite)
   const rewriteKey = generateRequestKey("rewrite-query", { query: originalQuery })
-  
+
   return deduplicateRequest(rewriteKey, async () => {
     try {
-      const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
-      
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini", // Use cheaper model for query rewriting
+      const { completePlatformTask } = await import("@/lib/llm/resolve")
+      const { getPlatformPrompt } = await import("@/lib/llm/prompts")
+      const system = await getPlatformPrompt("query_rewrite")
+      const result = await completePlatformTask("query_rewrite", {
         messages: [
-          {
-            role: "system",
-            content: `You are a query rewriting assistant. Your job is to rewrite user questions into better search queries that will find relevant information in documents.
-
-Rules:
-- Extract key concepts, entities, and important terms from the question
-- Remove question words (what, which, how, etc.) and convert to searchable terms
-- Include synonyms or related terms that might appear in documents
-- Keep it concise (1-3 key phrases, max 20 words)
-- Focus on nouns and important verbs, remove filler words
-- If the question asks about a specific thing, include that thing as a search term
-
-Examples:
-- "which is the most critical issue?" → "critical issue"
-- "what are the security vulnerabilities?" → "security vulnerabilities"
-- "how do I configure the system?" → "configure system configuration`
-          },
-          {
-            role: "user",
-            content: originalQuery
-          }
+          { role: "system", content: system },
+          { role: "user", content: originalQuery },
         ],
-        max_tokens: 50,
-        temperature: 0.3, // Lower temperature for more consistent results
+        maxTokens: 50,
+        temperature: 0.3,
       })
-
-      const rewritten = response.choices[0]?.message?.content?.trim()
-      if (rewritten && rewritten.length > 0) {
+      const rewritten = result.text.trim()
+      if (rewritten) {
         console.log("[searchDocuments] Query rewritten:", {
           original: originalQuery,
           rewritten,
@@ -63,7 +39,6 @@ Examples:
       console.error("[searchDocuments] Error rewriting query:", error)
     }
 
-    // Fallback to original query if AI rewriting fails
     return originalQuery
   })
 }

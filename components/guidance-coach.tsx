@@ -30,8 +30,6 @@ type Props = {
   pipeline?: GuidancePipelineSnapshot | null
   helpAiEnabled?: boolean
   documentTitles?: Array<{ title: string; role: string | null }>
-  canReopenWizard?: boolean
-  onReopenWizard?: () => void
   onNavigate?: (section: string, target?: string) => void
   onModeChange?: (mode: GuidanceMode) => void
   onOpenChange?: (open: boolean) => void
@@ -70,8 +68,6 @@ export function GuidanceCoach({
   pipeline,
   helpAiEnabled = false,
   documentTitles = [],
-  canReopenWizard = false,
-  onReopenWizard,
   onNavigate,
   onModeChange,
   onOpenChange,
@@ -425,12 +421,6 @@ export function GuidanceCoach({
                 </dl>
               )}
             </div>
-
-            {canReopenWizard && onReopenWizard && (
-              <Button type="button" variant="outline" size="sm" className="mt-3" onClick={onReopenWizard}>
-                {t("guidance.coach.reopenWizard")}
-              </Button>
-            )}
 
             {showExpertPrompt && (
               <div className="mt-4 rounded-md border p-3">

@@ -1,32 +1,27 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import { revalidatePath } from "next/cache"
+import { getPrimaryTenantForUser, updateTenantName } from "@/lib/actions/tenant"
+import { isTenantAdminRole } from "@/lib/tenant/domain"
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const membership = await getPrimaryTenantForUser()
+    if (!membership.data) {
+      return NextResponse.json({ error: membership.error || "No organisation found" }, { status: 404 })
     }
-
-    // Get user's spaces (tenants)
-    const { data: spaces, error } = await supabase
-      .from("spaces")
-      .select("id, name, slug, logo_url, metadata")
-      .limit(1) // For MVP, assume single tenant per user
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!isTenantAdminRole(membership.data.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
-
-    // Return first space as tenant settings (MVP assumption)
-    return NextResponse.json({ data: spaces?.[0] || null })
+    return NextResponse.json({
+      data: {
+        id: membership.data.tenantId,
+        name: membership.data.tenant?.name ?? "Organisation",
+        llmKeyPolicy: membership.data.tenant?.llmKeyPolicy ?? "platform_only",
+      },
+    })
   } catch (error) {
-    console.error("[v0] Tenant settings API error:", error)
+    console.error("[Tenant settings API] GET error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -34,49 +29,38 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json()
-    const { spaceId, name, logo_url, metadata } = body
+    const { tenantId, name } = body
 
     const supabase = await createClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
-
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Verify user has permission to update space
-    const { data: member } = await supabase
-      .from("space_members")
-      .select("role")
-      .eq("space_id", spaceId)
-      .eq("user_id", user.id)
-      .single()
-
-    if (!member || !["owner", "admin", "tenant_admin", "org_manager"].includes(member.role)) {
+    const membership = await getPrimaryTenantForUser()
+    if (!membership.data || membership.data.tenantId !== tenantId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+    if (!isTenantAdminRole(membership.data.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const updateData: any = {}
-    if (name !== undefined) updateData.name = name
-    if (logo_url !== undefined) updateData.logo_url = logo_url
-    if (metadata !== undefined) updateData.metadata = metadata
-
-    const { data, error } = await supabase
-      .from("spaces")
-      .update(updateData)
-      .eq("id", spaceId)
-      .select()
-      .single()
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    const result = await updateTenantName(tenantId, name)
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
     revalidatePath("/settings")
-    return NextResponse.json({ data })
+    return NextResponse.json({
+      data: {
+        id: tenantId,
+        name: name.trim(),
+      },
+    })
   } catch (error) {
-    console.error("[v0] Tenant settings API error:", error)
+    console.error("[Tenant settings API] PUT error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

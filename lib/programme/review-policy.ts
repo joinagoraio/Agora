@@ -17,6 +17,16 @@ export function parseChapterWorkflow(metadata: unknown): ChapterWorkflowStatus {
   return isChapterWorkflowStatus(raw) ? raw : "generated"
 }
 
+export type ChapterListStatus = "empty" | ChapterWorkflowStatus
+
+export function chapterListStatus(input: {
+  hasDocument: boolean
+  workflowStatus?: string | null
+}): ChapterListStatus {
+  if (!input.hasDocument) return "empty"
+  return isChapterWorkflowStatus(input.workflowStatus) ? input.workflowStatus : "generated"
+}
+
 export type ProgrammePolicies = {
   distinctReviewer: boolean
   stakeholderExportRequiresFreeze: boolean

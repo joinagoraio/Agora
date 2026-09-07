@@ -56,6 +56,7 @@ export const PROGRAMME_PRIMARY_SECTIONS: Record<GuidanceJob, readonly string[]> 
   administrator: [
     "overview",
     "setup",
+    "agents",
     "corpus",
     "analysis",
     "outline",

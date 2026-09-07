@@ -42,6 +42,24 @@ describe("compose programme", () => {
     expect(markdown).toContain("Station housing pilots")
   })
 
+  it("does not repeat an outline title that the chapter HTML already opens with", () => {
+    const markdown = composeProgrammeMarkdown({
+      title: "Energy programme",
+      nodes: [nodes[0]!],
+      chapters: [
+        {
+          node: nodes[0]!,
+          title: nodes[0]!.title,
+          html: `<h1>${nodes[0]!.title}</h1><p>Body after the title.</p>`,
+        },
+      ],
+      measures: [],
+    })
+    const titleHits = markdown.split(nodes[0]!.title).length - 1
+    expect(titleHits).toBe(1)
+    expect(markdown).toContain("Body after the title.")
+  })
+
   it("emits a citation graph matching the registry", () => {
     const graph = composeCitationGraph([
       {

@@ -1,5 +1,3 @@
-import OpenAI from "openai"
-import { env } from "@/lib/env"
 import { logger } from "@/lib/utils/logger"
 
 export const PARSER_TIMEOUT_MS = 15_000
@@ -45,38 +43,40 @@ export async function generateDocumentSummary(
   title?: string,
   isMarkdown = false,
 ): Promise<string> {
-  if (!env.OPENAI_API_KEY || !content || content.length < 100) {
-    const fallback = content.substring(0, 150).trim() + (content.length > 150 ? "..." : "")
-    return isMarkdown ? stripMarkdown(fallback) : fallback
+  const fallback = () => {
+    const text = content.substring(0, 150).trim() + (content.length > 150 ? "..." : "")
+    return isMarkdown ? stripMarkdown(text) : text
   }
+  if (!content || content.length < 100) return fallback()
+
   try {
-    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
+    const { completePlatformTask } = await import("@/lib/llm/resolve")
+    const { getPlatformPrompt } = await import("@/lib/llm/prompts")
     const processedContent = isMarkdown ? stripMarkdown(content) : content
     const contentSample = processedContent.substring(0, 2000)
     logger.info("[Upload] Generating summary", { contentLength: content.length })
-    const response = await withTimeout(
-      openai.chat.completions.create({
-        model: "gpt-4o-mini",
+    const system = await getPlatformPrompt("summarize")
+    const result = await withTimeout(
+      completePlatformTask("summarize", {
         messages: [
+          { role: "system", content: system },
           {
-            role: "system",
-            content: `You are a document summarization assistant. Create a concise, informative summary (1-2 sentences, max 150 characters). Focus on the main topic or key information. Use clear, professional language.${isMarkdown ? " Content is markdown - focus on information, not formatting." : ""}`,
+            role: "user",
+            content: title ? `Document title: ${title}\n\nContent:\n${contentSample}` : `Content:\n${contentSample}`,
           },
-          { role: "user", content: title ? `Document title: ${title}\n\nContent:\n${contentSample}` : `Content:\n${contentSample}` },
         ],
-        max_tokens: 60,
+        maxTokens: 60,
         temperature: 0.3,
       }),
       SUMMARY_TIMEOUT_MS,
       "Summary generation timed out",
     )
-    const summary = response.choices[0]?.message?.content?.trim()
+    const summary = result.text.trim()
     if (summary && summary.length > 0 && summary.length <= 200) return summary
   } catch (error) {
     logger.error("[Upload] Error generating summary:", error)
   }
-  const fallback = content.substring(0, 150).trim() + (content.length > 150 ? "..." : "")
-  return isMarkdown ? stripMarkdown(fallback) : fallback
+  return fallback()
 }
 
 export function sanitizeContentForDatabase(text: string): string {

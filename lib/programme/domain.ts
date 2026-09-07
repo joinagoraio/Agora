@@ -53,6 +53,8 @@ export type ProgrammeBindings = {
   templateId?: string | null
   /** Per-stage agent id (analysis, measures, …). */
   agentBindings?: AgentBindings
+  /** outline node id → agent id for chapter draft generation */
+  chapterAgentBindings?: Record<string, string>
   /** outline node id → workspace document id (chapter drafts) */
   chapterDocuments?: Record<string, string>
 }
@@ -68,6 +70,7 @@ export function emptyProgrammeBindings(): ProgrammeBindings {
     playbookId: null,
     templateId: null,
     agentBindings: {},
+    chapterAgentBindings: {},
     chapterDocuments: {},
   }
 }
@@ -118,6 +121,16 @@ export function parseProgrammeBindings(metadata: Record<string, unknown> | null 
     }
   }
 
+  const chapterAgentBindings: Record<string, string> = {}
+  const rawChapterAgents = raw.chapterAgentBindings
+  if (rawChapterAgents && typeof rawChapterAgents === "object" && !Array.isArray(rawChapterAgents)) {
+    for (const [nodeId, agentId] of Object.entries(rawChapterAgents as Record<string, unknown>)) {
+      if (typeof nodeId === "string" && nodeId.length > 0 && typeof agentId === "string" && agentId.length > 0) {
+        chapterAgentBindings[nodeId] = agentId
+      }
+    }
+  }
+
   return {
     environmentalVisionDocumentIds: asIds(raw.environmentalVisionDocumentIds),
     environmentalEffectsReportDocumentIds: asIds(raw.environmentalEffectsReportDocumentIds),
@@ -128,6 +141,7 @@ export function parseProgrammeBindings(metadata: Record<string, unknown> | null 
     playbookId: typeof raw.playbookId === "string" ? raw.playbookId : null,
     templateId: typeof raw.templateId === "string" ? raw.templateId : null,
     agentBindings,
+    chapterAgentBindings,
     chapterDocuments,
   }
 }
@@ -167,6 +181,7 @@ export function workspaceHomeHref(workspace: {
 export const PROGRAMME_WORKBENCH_SECTIONS = [
   "overview",
   "setup",
+  "agents",
   "corpus",
   "analysis",
   "outline",
@@ -196,7 +211,7 @@ export type ProgrammeOutlineNode = {
   parentId: string | null
   title: string
   purpose: string | null
-  /** Per-section authoring / agent instructions. */
+  /** Per-chapter authoring / agent instructions. */
   instructions: string | null
   fieldSpecs: OutlineFieldSpec[]
   qualityRules: string | null
@@ -338,11 +353,45 @@ function escapeHtml(text: string): string {
     .replaceAll('"', "&quot;")
 }
 
-/** TipTap-friendly HTML: each section is H2 (+ optional purpose block). */
+export function outlinePurposePlainText(purpose: string | null | undefined): string {
+  if (!purpose) return ""
+  return purpose
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[^\S\n]+/g, " ")
+    .trim()
+}
+
+export function moveOutlineNodeId(orderedIds: string[], fromId: string, beforeId: string | null): string[] {
+  if (!orderedIds.includes(fromId) || fromId === beforeId) return orderedIds
+  const next = orderedIds.filter((id) => id !== fromId)
+  if (!beforeId || !next.includes(beforeId)) {
+    next.push(fromId)
+    return next
+  }
+  next.splice(next.indexOf(beforeId), 0, fromId)
+  return next
+}
+
+export function insertOutlineNodeAt(orderedIds: string[], fromId: string, index: number): string[] {
+  if (!orderedIds.includes(fromId)) return orderedIds
+  const rest = orderedIds.filter((id) => id !== fromId)
+  const clamped = Math.max(0, Math.min(index, rest.length))
+  return [...rest.slice(0, clamped), fromId, ...rest.slice(clamped)]
+}
+
+/** TipTap-friendly HTML: each chapter is H2 (+ optional purpose block). */
 export function outlineNodesToTipTapHtml(nodes: ProgrammeOutlineNode[]): string {
   const ordered = flattenOutlineTree(buildOutlineTree(nodes))
   if (ordered.length === 0) {
-    return "<h2>New section</h2><p></p>"
+    return "<h2>New chapter</h2><p></p>"
   }
   return ordered
     .map((node) => {
@@ -410,7 +459,59 @@ export type AgentRecord = {
   name: string
   role: string
   stage: AgentStage
+  permitted: boolean
   createdAt: string
+}
+
+export type DefaultSpaceAgentSpec = {
+  name: string
+  role: string
+  stage: AgentStage
+  sourceRoles: DocumentRole[]
+}
+
+export const DEFAULT_SPACE_AGENTS: readonly DefaultSpaceAgentSpec[] = [
+  {
+    name: "Policy analyst",
+    role: "Existing-policy analysis",
+    stage: "analysis",
+    sourceRoles: ["environmental_vision", "existing_policy"],
+  },
+  {
+    name: "Vision graph specialist",
+    role: "Vision and coverage",
+    stage: "vision",
+    sourceRoles: ["environmental_vision"],
+  },
+  {
+    name: "Measures author",
+    role: "Measure generation",
+    stage: "measures",
+    sourceRoles: ["environmental_vision", "existing_policy", "housing_programme", "programme_handbook"],
+  },
+  {
+    name: "Effects specialist",
+    role: "Environmental effects alignment",
+    stage: "oer",
+    sourceRoles: ["environmental_effects_report"],
+  },
+  {
+    name: "Quality controller",
+    role: "Programme quality control",
+    stage: "qc",
+    sourceRoles: ["quality_style_rules", "programme_handbook", "environmental_vision"],
+  },
+  {
+    name: "Chapter drafter",
+    role: "Structured chapter draft",
+    stage: "draft",
+    sourceRoles: ["environmental_vision", "programme_handbook", "quality_style_rules"],
+  },
+]
+
+export function hasAllDefaultSpaceAgents(agents: Array<{ name: string }>): boolean {
+  const names = new Set(agents.map((agent) => agent.name))
+  return DEFAULT_SPACE_AGENTS.every((spec) => names.has(spec.name))
 }
 
 export type AgentVersionRecord = {
@@ -425,9 +526,47 @@ export type AgentVersionRecord = {
   provider: string
   endpoint: string | null
   credentialsRef: string | null
+  catalogModelId: string | null
   model: string
   changelog: string | null
   createdAt: string
+}
+
+export type AgentHistoryVersionDeleteReason = "missing" | "only" | null
+
+export function agentHistoryVersionDeleteReason(
+  versions: Array<{ id: string }>,
+  versionId: string,
+): AgentHistoryVersionDeleteReason {
+  if (!versions.some((version) => version.id === versionId)) return "missing"
+  if (versions.length <= 1) return "only"
+  return null
+}
+
+export function isLatestAgentHistoryVersion(
+  versions: Array<{ id: string; version: number }>,
+  versionId: string,
+): boolean {
+  if (versions.length === 0) return false
+  const latest = versions.reduce((max, item) => (item.version > max.version ? item : max), versions[0])
+  return latest.id === versionId
+}
+
+export function matchingAgentVersionNumber(
+  versions: Array<{ version: number; instructions: string; qualityRules: string }>,
+  candidate: { instructions: string; qualityRules: string },
+): number | null {
+  let match: number | null = null
+  for (const version of versions) {
+    if (
+      version.instructions === candidate.instructions &&
+      version.qualityRules === candidate.qualityRules &&
+      (match == null || version.version > match)
+    ) {
+      match = version.version
+    }
+  }
+  return match
 }
 
 export function emptyAgentBindings(): AgentBindings {
@@ -436,6 +575,31 @@ export function emptyAgentBindings(): AgentBindings {
 
 export function boundAgentId(bindings: ProgrammeBindings, stage: AgentStage): string | null {
   return bindings.agentBindings?.[stage] || null
+}
+
+export function boundChapterAgentId(bindings: ProgrammeBindings, outlineNodeId: string | null | undefined): string | null {
+  if (!outlineNodeId) return null
+  return bindings.chapterAgentBindings?.[outlineNodeId] || null
+}
+
+export function resolveDraftAgentId(bindings: ProgrammeBindings, outlineNodeId?: string | null): string | null {
+  return boundChapterAgentId(bindings, outlineNodeId) || boundAgentId(bindings, "draft")
+}
+
+export function unbindAgentFromProgrammeBindings(
+  bindings: ProgrammeBindings,
+  agentId: string,
+): ProgrammeBindings {
+  if (!agentId) return bindings
+  const agentBindings: AgentBindings = { ...(bindings.agentBindings || {}) }
+  for (const [stage, boundId] of Object.entries(agentBindings)) {
+    if (boundId === agentId) delete agentBindings[stage as AgentStage]
+  }
+  const chapterAgentBindings = { ...(bindings.chapterAgentBindings || {}) }
+  for (const [nodeId, boundId] of Object.entries(chapterAgentBindings)) {
+    if (boundId === agentId) delete chapterAgentBindings[nodeId]
+  }
+  return { ...bindings, agentBindings, chapterAgentBindings }
 }
 
 export function moveOutlineSibling(

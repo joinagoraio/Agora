@@ -27,7 +27,8 @@ import {
 } from "@/components/ui/select"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { GuidanceCoach } from "@/components/guidance-coach"
-import { UserMenu } from "@/components/user-menu"
+import { ProgrammeAccessDialogs, ProgrammeAccessMenuItems, type ProgrammeAccessPanel } from "@/components/programme-list-menu"
+import { notify, notifyResult } from "@/lib/notify"
 import {
   canShowProgrammeConfiguration,
   effectiveJob,
@@ -36,8 +37,14 @@ import {
   resolveProgrammeLandingSection,
   type GuidanceMode,
 } from "@/lib/guidance/jobs"
-import { canAdministerProgramme, landingOwnedChapterId } from "@/lib/programme/ownership"
-import { deriveGuidancePipeline, pipelineInputFromWorkbench, STAGE_TO_SECTION } from "@/lib/guidance/pipeline"
+import { canAdministerProgramme } from "@/lib/programme/ownership"
+import {
+  nextProgrammeDocumentSearch,
+  resolveProgrammeDocumentSearch,
+  serializeFocusChapterIds,
+  type ProgrammeDocumentMode,
+} from "@/lib/programme/document-mode"
+import { deriveGuidancePipeline, pipelineInputFromWorkbench } from "@/lib/guidance/pipeline"
 import { listProgrammeOutlineNodes } from "@/lib/actions/outline"
 import {
   bindWorkspaceAgents,
@@ -108,16 +115,28 @@ import {
   type WorkspaceKind,
 } from "@/lib/programme/domain"
 import { splitAnchorList } from "@/lib/programme/vision-path"
-import { ProgrammeOutlineEditor } from "@/components/programme-outline-editor"
 import { ProgrammeChapterEditor } from "@/components/programme-chapter-editor"
 import { ProgrammeEffectsPanel } from "@/components/programme-effects-panel"
 import { ProgrammePolicyGraph } from "@/components/programme-policy-graph"
 import { ProgrammeDocumentRoles } from "@/components/programme-document-roles"
 import { ProgrammeKnowledgeView } from "@/components/programme-knowledge-view"
+import { ProgrammeDocumentChrome } from "@/components/programme-document-chrome"
+import { OverflowTitle } from "@/components/overflow-title"
+import { ProgrammeTextHistoryProvider } from "@/components/programme-text-history"
+import { IconTooltip } from "@/components/icon-tooltip"
+import {
+  DEFAULT_PROGRAMME_DOCUMENT_LAYOUT,
+  mergeProgrammeDocumentLayout,
+  programmeDocumentCanvasClass,
+  readProgrammeDocumentLayout,
+  writeProgrammeDocumentLayout,
+  type ProgrammeDocumentLayout,
+  type ProgrammeDocumentLayoutPatch,
+} from "@/lib/programme/document-layout"
 import { UserAvatar } from "@/components/user-avatar"
 import { WorkspaceNotesPanel, type WorkspaceNote } from "@/components/workspace-notes-panel"
 import { getDocumentFileExtension } from "@/lib/utils/document-files"
-import { ArrowLeft, CircleHelp, Menu } from "lucide-react"
+import { ArrowLeft, CircleHelp, MoreVertical } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 function StageHeading({ title, purpose }: { title: string; purpose: string }) {
@@ -144,9 +163,9 @@ function StageHeading({ title, purpose }: { title: string; purpose: string }) {
 const SHEET_SECTIONS = new Set<ProgrammeWorkbenchSection>([
   "overview",
   "setup",
+  "agents",
   "corpus",
   "analysis",
-  "outline",
   "measures",
   "effects",
   "provenance",
@@ -154,10 +173,9 @@ const SHEET_SECTIONS = new Set<ProgrammeWorkbenchSection>([
   "export",
 ])
 
-const MENU_GROUPS: { id: "work" | "skeleton" | "properties" | "output"; sections: ProgrammeWorkbenchSection[] }[] = [
+const MENU_GROUPS: { id: "work" | "properties" | "output"; sections: ProgrammeWorkbenchSection[] }[] = [
   { id: "work", sections: ["analysis", "measures", "effects", "provenance", "review"] },
-  { id: "skeleton", sections: ["outline"] },
-  { id: "properties", sections: ["overview", "setup"] },
+  { id: "properties", sections: ["overview", "setup", "agents"] },
   { id: "output", sections: ["export"] },
 ]
 
@@ -259,6 +277,7 @@ export function ProgrammeWorkbench({
 
   const [outlineNodeCount, setOutlineNodeCount] = useState(0)
   const [snapshotLoaded, setSnapshotLoaded] = useState(false)
+  const [accessPanel, setAccessPanel] = useState<ProgrammeAccessPanel>(null)
 
   const chromeJob = effectiveJob({ spaceJob, workspaceJob, pathname })
   const [documentOwnerId, setDocumentOwnerId] = useState<string | null>(initialDocumentOwnerId)
@@ -272,21 +291,44 @@ export function ProgrammeWorkbench({
   const showConfiguration =
     canShowProgrammeConfiguration({ spaceJob, canAccessSettings }) || canAdminister
   const primarySections = primaryNavSections(chromeJob).filter(
-    (section) => section !== "setup" || showConfiguration,
+    (section) => (section !== "setup" && section !== "agents") || showConfiguration,
   )
   const moreSections = moreNavSections(chromeJob, PROGRAMME_WORKBENCH_SECTIONS).filter(
-    (section) => section !== "setup" || showConfiguration,
+    (section) => (section !== "setup" && section !== "agents") || showConfiguration,
   )
 
   const sectionParam = searchParams.get("section")
   const viewParam = searchParams.get("view")
   const chapterParam = searchParams.get("chapter")
+  const structureOpen = searchParams.get("structure") === "1" || sectionParam === "outline"
   const isKnowledgeView = viewParam === "knowledge"
-  const activeSection: ProgrammeWorkbenchSection = isProgrammeWorkbenchSection(sectionParam)
-    ? sectionParam
-    : "editor"
+  const documentSearch = resolveProgrammeDocumentSearch({
+    mode: searchParams.get("mode"),
+    focus: searchParams.get("focus"),
+    chapter: chapterParam,
+  })
+  const documentMode = documentSearch.mode
+  const activeSection: ProgrammeWorkbenchSection = structureOpen
+    ? "outline"
+    : isProgrammeWorkbenchSection(sectionParam)
+      ? sectionParam
+      : "editor"
   const [sheetDismissed, setSheetDismissed] = useState(false)
+  const [documentLayout, setDocumentLayout] = useState<ProgrammeDocumentLayout>(DEFAULT_PROGRAMME_DOCUMENT_LAYOUT)
+  const [writableChapters, setWritableChapters] = useState<Array<{ id: string; title: string }>>([])
   const sheetOpen = !isKnowledgeView && SHEET_SECTIONS.has(activeSection) && !sheetDismissed
+
+  useEffect(() => {
+    setDocumentLayout(readProgrammeDocumentLayout())
+  }, [])
+
+  const patchDocumentLayout = useCallback((patch: ProgrammeDocumentLayoutPatch) => {
+    setDocumentLayout((current) => {
+      const next = mergeProgrammeDocumentLayout(current, patch)
+      writeProgrammeDocumentLayout(next)
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     setSheetDismissed(false)
@@ -306,6 +348,7 @@ export function ProgrammeWorkbench({
     (mode: "document" | "knowledge") => {
       replaceParams((params) => {
         params.delete("section")
+        params.delete("structure")
         if (mode === "knowledge") params.set("view", "knowledge")
         else params.delete("view")
       })
@@ -320,11 +363,21 @@ export function ProgrammeWorkbench({
       if (section === "editor") {
         replaceParams((params) => {
           params.delete("section")
+          params.delete("structure")
           params.set("view", "document")
         })
         return
       }
+      if (section === "outline") {
+        replaceParams((params) => {
+          params.delete("section")
+          params.set("view", "document")
+          params.set("structure", "1")
+        })
+        return
+      }
       replaceParams((params) => {
+        params.delete("structure")
         params.set("view", "document")
         params.set("section", section)
       })
@@ -340,16 +393,71 @@ export function ProgrammeWorkbench({
     })
   }, [replaceParams])
 
-  const setFocusChapter = useCallback(
+  const closeStructure = useCallback(() => {
+    replaceParams((params) => {
+      params.delete("section")
+      params.delete("structure")
+      params.set("view", "document")
+    })
+  }, [replaceParams])
+
+  const applyDocumentSearch = useCallback(
+    (next: { mode: ProgrammeDocumentMode | null; focusIds: string[]; chapterId: string | null }) => {
+      replaceParams((params) => {
+        params.delete("section")
+        params.set("view", "document")
+        if (next.mode) params.set("mode", next.mode)
+        else params.delete("mode")
+        if (next.focusIds.length > 0) params.set("focus", serializeFocusChapterIds(next.focusIds))
+        else params.delete("focus")
+        if (next.chapterId) params.set("chapter", next.chapterId)
+        else params.delete("chapter")
+      })
+    },
+    [replaceParams],
+  )
+
+  const setDocumentMode = useCallback(
+    (mode: ProgrammeDocumentMode) => {
+      applyDocumentSearch(
+        nextProgrammeDocumentSearch({
+          nextMode: mode,
+          writableIds: writableChapters.map((chapter) => chapter.id),
+          currentChapterId: documentSearch.chapterId,
+          currentFocusIds: documentSearch.focusIds,
+        }),
+      )
+    },
+    [applyDocumentSearch, documentSearch.chapterId, documentSearch.focusIds, writableChapters],
+  )
+
+  const setActiveChapter = useCallback(
     (chapterId: string | null) => {
       replaceParams((params) => {
         params.delete("section")
+        params.delete("structure")
         params.set("view", "document")
         if (chapterId) params.set("chapter", chapterId)
         else params.delete("chapter")
       })
     },
     [replaceParams],
+  )
+
+  const setFocusVisibleIds = useCallback(
+    (ids: string[]) => {
+      const focusIds = ids.filter((id) => writableChapters.some((chapter) => chapter.id === id))
+      const nextIds = focusIds.length > 0 ? focusIds : writableChapters.map((chapter) => chapter.id)
+      applyDocumentSearch({
+        mode: "focus",
+        focusIds: nextIds,
+        chapterId:
+          documentSearch.chapterId && nextIds.includes(documentSearch.chapterId)
+            ? documentSearch.chapterId
+            : null,
+      })
+    },
+    [applyDocumentSearch, documentSearch.chapterId, writableChapters],
   )
 
   const [bindings, setBindings] = useState<ProgrammeBindings>(emptyProgrammeBindings())
@@ -368,7 +476,6 @@ export function ProgrammeWorkbench({
   const [exportMd, setExportMd] = useState("")
   const [measureInstructions, setMeasureInstructions] = useState("")
   const [measureImportJson, setMeasureImportJson] = useState("")
-  const [message, setMessage] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const [guidanceOpen, setGuidanceOpen] = useState(guidanceMode === "guided")
   const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([])
@@ -487,13 +594,15 @@ export function ProgrammeWorkbench({
       ])
       setTemplates(tpl.data || [])
       setAgents(
-        (ag.data || []).map((a) => ({
-          id: a.id,
-          name: a.name,
-          role: a.role,
-          stage: a.stage,
-          provider: a.latestVersion?.provider || "n/a",
-        })),
+        (ag.data || [])
+          .filter((a) => a.permitted)
+          .map((a) => ({
+            id: a.id,
+            name: a.name,
+            role: a.role,
+            stage: a.stage,
+            provider: a.latestVersion?.provider || "n/a",
+          })),
       )
       setComments(cm.data || [])
       setChapters(chapterResult.data || [])
@@ -562,7 +671,7 @@ export function ProgrammeWorkbench({
 
   useEffect(() => {
     if (landingApplied) return
-    if (sectionParam || viewParam === "knowledge" || chapterParam) {
+    if (sectionParam || viewParam === "knowledge" || chapterParam || searchParams.get("mode") || searchParams.get("structure")) {
       setLandingApplied(true)
       return
     }
@@ -578,19 +687,7 @@ export function ProgrammeWorkbench({
       return
     }
     if (!snapshotLoaded) return
-    const owned = landingOwnedChapterId({
-      actorId: currentUserId,
-      chapters: chapters.map((chapter) => ({
-        outlineNodeId: chapter.outlineNodeId,
-        chapterOwnerId: chapter.chapterOwnerId ?? null,
-        workflowStatus: chapter.workflowStatus,
-      })),
-    })
     setLandingApplied(true)
-    if (owned) {
-      setFocusChapter(owned)
-      return
-    }
     const next = resolveProgrammeLandingSection({
       job: chromeJob,
       firstIncompleteSection: pipeline.firstIncompleteSection,
@@ -608,10 +705,14 @@ export function ProgrammeWorkbench({
     pipeline.firstIncompleteSection,
     guidanceMode,
     setSection,
-    currentUserId,
-    chapters,
-    setFocusChapter,
+    searchParams,
   ])
+
+  useEffect(() => {
+    if (isKnowledgeView || documentMode !== "focus") return
+    if (documentSearch.focusIds.length > 0 || writableChapters.length === 0) return
+    setFocusVisibleIds(writableChapters.map((chapter) => chapter.id))
+  }, [isKnowledgeView, documentMode, documentSearch.focusIds.length, writableChapters, setFocusVisibleIds])
 
   const boundTemplateName = templates.find((tpl) => tpl.id === bindings.templateId)?.name
   const setupSteps: Array<{
@@ -624,7 +725,7 @@ export function ProgrammeWorkbench({
       id: "agents",
       done: Object.keys(bindings.agentBindings || {}).length >= 2,
       label: t("workspace.programme.setupStepAgents"),
-      section: "setup",
+      section: "agents",
     },
     {
       id: "template",
@@ -660,19 +761,11 @@ export function ProgrammeWorkbench({
   const navSections = PROGRAMME_WORKBENCH_SECTIONS.filter(
     (section) => primarySections.includes(section) || moreSections.includes(section),
   )
-  const doneBySection: Record<string, boolean> = Object.fromEntries(
-    Object.entries(STAGE_TO_SECTION).map(([stage, section]) => [
-      section,
-      Boolean(pipeline.stages[stage as keyof typeof pipeline.stages]),
-    ]),
-  )
-  if (measures.length > 0) doneBySection.measures = true
-
   const navSet = new Set(navSections)
   const documentMenuGroups = MENU_GROUPS.map((group) => ({
     ...group,
     sections: group.sections.filter((section) => {
-      if (section === "setup") return showConfiguration && navSet.has(section)
+      if (section === "setup" || section === "agents") return showConfiguration && navSet.has(section)
       return navSet.has(section)
     }),
   })).filter((group) => group.sections.length > 0)
@@ -687,7 +780,7 @@ export function ProgrammeWorkbench({
       citePublicationId={citePublicationId}
       onCitePublicationIdChange={setCitePublicationId}
       onBindingsChange={setBindings}
-      onMessage={setMessage}
+      onMessage={notify}
       onRefresh={refresh}
       startTransition={startTransition}
     />
@@ -695,42 +788,44 @@ export function ProgrammeWorkbench({
   const coachSection = isKnowledgeView ? "knowledge" : activeSection
 
   return (
+    <ProgrammeTextHistoryProvider>
     <>
     <div
       className="guidance-content-shift flex h-dvh flex-col overflow-hidden bg-white"
       data-open={guidanceOpen ? "true" : undefined}
     >
       <header className="shrink-0 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75">
-        <div className="flex h-16 items-center gap-3 px-4">
-          <Button variant="ghost" asChild className="shrink-0">
+        <div className="grid h-16 min-w-0 grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto] items-center gap-3 px-4">
+          <Button variant="ghost" asChild className="justify-self-start min-w-0">
             <Link href={`/spaces/${spaceId}`}>
-              <ArrowLeft className="mr-2 h-3 w-3" />
-              <span className="text-xs font-normal">
+              <ArrowLeft className="mr-2 h-3 w-3 shrink-0" />
+              <span className="min-w-0 truncate text-xs font-normal">
                 {t("workspace.navigation.backToSpace")} {spaceName || t("workspace.programme.back")}
               </span>
             </Link>
           </Button>
-          <h1 className="min-w-0 truncate text-sm font-semibold">{workspaceName}</h1>
-          <div className="ml-auto flex items-center gap-2">
-            <div className="flex rounded-md border p-0.5" role="tablist" aria-label={t("workspace.programme.viewsAria")}>
-              <Button size="sm" variant={!isKnowledgeView ? "secondary" : "ghost"} asChild>
-                <Link href={`${pathname}?view=document`} scroll={false}>
-                  {t("workspace.programme.views.document")}
-                </Link>
-              </Button>
-              <Button size="sm" variant={isKnowledgeView ? "secondary" : "ghost"} asChild>
-                <Link href={`${pathname}?view=knowledge`} scroll={false}>
-                  {t("workspace.programme.views.knowledge")}
-                </Link>
-              </Button>
-            </div>
+          <OverflowTitle title={workspaceName} className="text-2xl font-semibold tracking-tight" />
+          <div className="flex shrink-0 items-center justify-end gap-1">
+            <ProgrammeDocumentChrome
+              isKnowledgeView={isKnowledgeView}
+              layout={documentLayout}
+              onLayoutChange={patchDocumentLayout}
+              documentMode={documentMode}
+              onDocumentModeChange={setDocumentMode}
+              onViewChange={setMode}
+              canWrite={writableChapters.length > 0}
+              writableChapters={writableChapters}
+              focusChapterIds={documentSearch.focusIds}
+              onFocusChapterIdsChange={setFocusVisibleIds}
+            />
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline" size="sm" aria-label={t("workspace.programme.navAria")}>
-                  <Menu className="mr-2 h-4 w-4" />
-                  {t("workspace.programme.menu")}
-                </Button>
-              </DropdownMenuTrigger>
+              <IconTooltip label={t("workspace.programme.navAria")}>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="ghost" size="icon" aria-label={t("workspace.programme.navAria")}>
+                    <MoreVertical className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </IconTooltip>
               <DropdownMenuContent align="end" className="w-56">
                 {documentMenuGroups.map((group, index) => (
                   <DropdownMenuGroup key={group.id}>
@@ -743,60 +838,77 @@ export function ProgrammeWorkbench({
                         className={sheetOpen && activeSection === section ? "bg-accent" : undefined}
                       >
                         {t(`workspace.programme.nav.${section}`)}
-                        {doneBySection[section] ? " · ✓" : ""}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuGroup>
                 ))}
-                {showConfiguration && (
+                {canAccessSettings && (
                   <>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href={`/spaces/${spaceId}/settings`}>{t("space.overview.menu.settings")}</Link>
-                    </DropdownMenuItem>
+                    <ProgrammeAccessMenuItems onPick={setAccessPanel} />
                   </>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-            <UserMenu />
           </div>
         </div>
       </header>
-
-      {message && (
-        <p className="shrink-0 border-b px-4 py-2 text-sm" role="status" aria-live="polite">
-          {message}
-        </p>
-      )}
+      <ProgrammeAccessDialogs
+        workspace={{ id: workspaceId, name: workspaceName }}
+        panel={accessPanel}
+        onClose={() => setAccessPanel(null)}
+        onDeleted={() => router.push(`/spaces/${spaceId}`)}
+      />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {isKnowledgeView ? (
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-            <ProgrammeKnowledgeView
-              workspaceId={workspaceId}
-              currentUserId={currentUserId}
-              canManage={chromeJob !== "reviewer"}
-              excludeDocumentIds={Object.values(bindings.chapterDocuments || {})}
-              filesExtra={documentRoleList}
-            />
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="container mx-auto py-8 px-8">
+              <ProgrammeKnowledgeView
+                workspaceId={workspaceId}
+                currentUserId={currentUserId}
+                canManage={chromeJob !== "reviewer"}
+                excludeDocumentIds={Object.values(bindings.chapterDocuments || {})}
+                filesExtra={documentRoleList}
+              />
+            </div>
           </div>
         ) : (
-          <div className="flex min-h-0 flex-1 overflow-hidden bg-white">
+          <div className={`flex min-h-0 flex-1 overflow-hidden ${programmeDocumentCanvasClass({ paged: documentLayout.paged && !structureOpen })}`}>
             <ProgrammeChapterEditor
               workspaceId={workspaceId}
               spaceId={spaceId}
               bindings={bindings}
               onBindingsChange={setBindings}
-              onMessage={setMessage}
+              onMessage={notify}
               onGoOutline={() => setSection("outline")}
+              onShowDocument={closeStructure}
+              structureOpen={structureOpen}
+              canEditOutline={accessRole !== "viewer"}
               canComment
-              focusChapterId={chapterParam}
-              onFocusChapter={setFocusChapter}
+              documentMode={documentMode}
+              activeChapterId={documentSearch.chapterId}
+              focusChapterIds={documentSearch.focusIds}
+              onActivateChapter={setActiveChapter}
+              onWritableChaptersChange={(next) => {
+                setWritableChapters((current) => {
+                  if (
+                    current.length === next.length &&
+                    current.every((chapter, index) => chapter.id === next[index]?.id && chapter.title === next[index]?.title)
+                  ) {
+                    return current
+                  }
+                  return next
+                })
+              }}
               currentUserId={currentUserId}
               accessRole={accessRole}
               documentOwnerId={documentOwnerId}
               reviewers={reviewers}
+              draftAgents={agents.filter((agent) => agent.stage === "draft" || agent.stage === "chat")}
               onChapterOwnerChange={refresh}
+              layout={documentLayout}
+              workspaceName={workspaceName}
             />
           </div>
         )}
@@ -869,24 +981,14 @@ export function ProgrammeWorkbench({
             ))}
           </ol>
           <div className="flex flex-wrap gap-2">
-            <Button
-              disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  const result = await ensureDefaultAgentsBound(workspaceId, spaceId)
-                  setMessage(result.error || t("workspace.programme.agentsBound"))
-                  if ("data" in result && result.data) setBindings(result.data)
-                  refresh()
-                })
-              }
-            >
-              {t("workspace.programme.bindDefaultAgents")}
-            </Button>
             {nextSetupStep && nextSetupStep.section !== "setup" && (
               <Button variant="outline" onClick={() => setSection(nextSetupStep.section)}>
                 {t("workspace.programme.setupNext", undefined, { step: nextSetupStep.label })}
               </Button>
             )}
+            <Button variant="outline" onClick={() => setSection("agents")}>
+              {t("workspace.programme.setupGoAgents")}
+            </Button>
             <Button variant="outline" onClick={() => setSection("outline")}>
               {t("workspace.programme.setupGoOutline")}
             </Button>
@@ -913,7 +1015,7 @@ export function ProgrammeWorkbench({
                     startTransition(async () => {
                       const saved = await bindWorkspaceTemplate(workspaceId, tpl.id)
                       if (saved.data) setBindings(saved.data)
-                      setMessage(saved.error || t("workspace.programme.templateBound", undefined, { name: tpl.name }))
+                      notifyResult(saved.error, t("workspace.programme.templateBound", undefined, { name: tpl.name }))
                     })
                   }
                 >
@@ -924,45 +1026,6 @@ export function ProgrammeWorkbench({
                 <p className="text-sm text-muted-foreground">{t("workspace.programme.noTemplates")}</p>
               )}
             </div>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {AGENT_STAGES.map((stage) => {
-              const options = agents.filter((agent) => agent.stage === stage)
-              if (options.length === 0) return null
-              const bound = bindings.agentBindings?.[stage] || ""
-              return (
-                <label key={stage} className="space-y-1 text-xs">
-                  <span className="text-muted-foreground">
-                    {t("workspace.programme.bindAgentStage", undefined, { stage })}
-                  </span>
-                  <Select
-                    value={bound || undefined}
-                    disabled={pending}
-                    onValueChange={(value) =>
-                      startTransition(async () => {
-                        const saved = await bindWorkspaceAgents(workspaceId, { [stage]: value })
-                        if (saved.data) setBindings(saved.data)
-                        setMessage(saved.error || t("workspace.programme.agentsBound"))
-                      })
-                    }
-                  >
-                    <SelectTrigger className="w-full" size="sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {options.map((agent) => (
-                        <SelectItem key={agent.id} value={agent.id}>
-                          {t("workspace.programme.agentProvider", undefined, {
-                            name: agent.name,
-                            provider: agent.provider,
-                          })}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </label>
-              )
-            })}
           </div>
           <p className="text-sm text-muted-foreground">
             {t("workspace.programme.bindingsSummary", undefined, {
@@ -980,7 +1043,7 @@ export function ProgrammeWorkbench({
                   if (value === "none") return
                   const result = await assignDocumentOwner(workspaceId, value)
                   if (result.data?.documentOwnerId) setDocumentOwnerId(result.data.documentOwnerId)
-                  setMessage(result.error || t("workspace.programme.ownerSaved"))
+                  notifyResult(result.error, t("workspace.programme.ownerSaved"))
                 })
               }
             >
@@ -1009,7 +1072,7 @@ export function ProgrammeWorkbench({
                   startTransition(async () => {
                     const result = await updateProgrammePolicies(workspaceId, { distinctReviewer: e.target.checked })
                     if (result.data) setPolicies((prev) => ({ ...prev, ...result.data }))
-                    setMessage(result.error || t("workspace.programme.policySaved"))
+                    notifyResult(result.error, t("workspace.programme.policySaved"))
                   })
                 }
               />
@@ -1026,13 +1089,84 @@ export function ProgrammeWorkbench({
                       stakeholderExportRequiresFreeze: e.target.checked,
                     })
                     if (result.data) setPolicies((prev) => ({ ...prev, ...result.data }))
-                    setMessage(result.error || t("workspace.programme.policySaved"))
+                    notifyResult(result.error, t("workspace.programme.policySaved"))
                   })
                 }
               />
               {t("workspace.programme.requireFreeze")}
             </label>
           </div>
+        </TabsContent>
+
+        <TabsContent value="agents" className="space-y-4">
+          <StageHeading
+            title={t("workspace.programme.nav.agents")}
+            purpose={t("workspace.programme.purpose.agents")}
+          />
+          <p className="text-sm text-muted-foreground">{t("workspace.programme.agentsHint")}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  const result = await ensureDefaultAgentsBound(workspaceId, spaceId)
+                  notifyResult(result.error, t("workspace.programme.agentsBound"))
+                  if ("data" in result && result.data) setBindings(result.data)
+                  refresh()
+                })
+              }
+            >
+              {t("workspace.programme.bindDefaultAgents")}
+            </Button>
+          </div>
+          {agents.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("workspace.programme.agentsEmpty")}</p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {AGENT_STAGES.map((stage) => {
+                const options = agents.filter((agent) => agent.stage === stage)
+                const bound = bindings.agentBindings?.[stage] || ""
+                return (
+                  <label key={stage} className="space-y-1 text-xs">
+                    <span className="text-muted-foreground">
+                      {t("workspace.programme.bindAgentStage", undefined, {
+                        stage: t(`space.agents.stages.${stage}`),
+                      })}
+                    </span>
+                    {options.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">{t("workspace.programme.bindAgentEmpty")}</p>
+                    ) : (
+                      <Select
+                        value={bound || undefined}
+                        disabled={pending}
+                        onValueChange={(value) =>
+                          startTransition(async () => {
+                            const saved = await bindWorkspaceAgents(workspaceId, { [stage]: value })
+                            if (saved.data) setBindings(saved.data)
+                            notifyResult(saved.error, t("workspace.programme.agentsBound"))
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-full" size="sm">
+                          <SelectValue placeholder={t("workspace.programme.bindAgentUnset")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {options.map((agent) => (
+                            <SelectItem key={agent.id} value={agent.id}>
+                              {t("workspace.programme.agentProvider", undefined, {
+                                name: agent.name,
+                                provider: agent.provider,
+                              })}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </label>
+                )
+              })}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="corpus" className="space-y-3">
@@ -1076,12 +1210,11 @@ export function ProgrammeWorkbench({
                       instructions: analysisInstructions.trim() || undefined,
                     })
                     setAnalysisJobStatus("")
-                    setMessage(
-                      "error" in result && result.error
-                        ? result.error
-                        : t("workspace.programme.analysisSaved", undefined, {
-                            id: "data" in result && result.data ? String(result.data.id) : "",
-                          }),
+                    notifyResult(
+                      "error" in result && result.error ? result.error : null,
+                      t("workspace.programme.analysisSaved", undefined, {
+                        id: "data" in result && result.data ? String(result.data.id) : "",
+                      }),
                     )
                     if ("data" in result && result.data?.id) setSelectedReportId(result.data.id)
                     refresh()
@@ -1097,7 +1230,7 @@ export function ProgrammeWorkbench({
               onClick={() =>
                 startTransition(async () => {
                   const result = await generateVisionSkeleton(workspaceId)
-                  setMessage(result.error || t("workspace.programme.visionSkeletonDone"))
+                  notifyResult(result.error, t("workspace.programme.visionSkeletonDone"))
                   refresh()
                 })
               }
@@ -1109,7 +1242,8 @@ export function ProgrammeWorkbench({
               disabled={pending || analysisJobStatus !== "running"}
               onClick={() =>
                 void cancelAnalysisJob(workspaceId, "analysis").then((result) => {
-                  setMessage(result.error || t("workspace.programme.analysisCancel"))
+                  if (result.error) notify(result.error, "error")
+                  else notify(t("workspace.programme.analysisCancel"), "info")
                 })
               }
             >
@@ -1154,7 +1288,7 @@ export function ProgrammeWorkbench({
                 startTransition(async () => {
                   const result = await compareAnalysisReports(workspaceId, compareA, compareB)
                   if (result.error || !result.data) {
-                    setMessage(result.error || t("workspace.programme.exportFailed"))
+                    notify(result.error || t("workspace.programme.exportFailed"), "error")
                     return
                   }
                   setCompareFindings(result.data)
@@ -1228,7 +1362,7 @@ export function ProgrammeWorkbench({
                       onClick={() =>
                         startTransition(async () => {
                           const result = await setFindingAddressed(workspaceId, f.reportId, f.id, !f.addressed)
-                          setMessage(result.error || t("workspace.programme.qcToggled"))
+                          notifyResult(result.error, t("workspace.programme.qcToggled"))
                           refresh()
                         })
                       }
@@ -1261,7 +1395,7 @@ export function ProgrammeWorkbench({
                       onClick={() =>
                         startTransition(async () => {
                           const result = await rerunAnalysisFromReport(workspaceId, r.id, analysisInstructions.trim() || undefined)
-                          setMessage(result.error || t("workspace.programme.analysisRerun"))
+                          notifyResult(result.error, t("workspace.programme.analysisRerun"))
                           refresh()
                         })
                       }
@@ -1298,28 +1432,6 @@ export function ProgrammeWorkbench({
               )
             })}
           </ul>
-        </TabsContent>
-
-        <TabsContent value="outline" className="space-y-3">
-          <StageHeading
-            title={t("workspace.programme.outlineTitle")}
-            purpose={t("workspace.programme.purpose.outline")}
-          />
-          <ProgrammeOutlineEditor
-            workspaceId={workspaceId}
-            spaceId={spaceId}
-            templateId={bindings.templateId ?? null}
-            onTemplateBound={(templateId) => setBindings((prev) => ({ ...prev, templateId }))}
-            onMessage={setMessage}
-          />
-          <p className="text-sm text-muted-foreground">
-            {t("workspace.programme.outlineTemplate", undefined, {
-              id: boundTemplateName || bindings.templateId || t("workspace.programme.none"),
-            })}
-          </p>
-          {outlineNodeCount === 0 && (
-            <p className="text-sm text-muted-foreground">{t("workspace.programme.emptyNext.outline")}</p>
-          )}
         </TabsContent>
 
         <TabsContent value="measures" className="space-y-3">
@@ -1363,15 +1475,16 @@ export function ProgrammeWorkbench({
                     count: 5,
                   })
                   if (result.error) {
-                    setMessage(result.error)
+                    notify(result.error, "error")
                     return
                   }
                   const errCount = result.data?.errors?.length ?? 0
-                  setMessage(
+                  notify(
                     t("workspace.programme.measuresGenerated", undefined, {
                       count: String(result.data?.saved ?? 0),
                       errors: String(errCount),
                     }),
+                    errCount > 0 ? "warning" : "success",
                   )
                   refresh()
                 })
@@ -1385,7 +1498,7 @@ export function ProgrammeWorkbench({
               onClick={() =>
                 startTransition(async () => {
                   const result = await convertPolicyProseToMeasures(workspaceId, measureInstructions)
-                  setMessage(result.error || t("workspace.programme.pipelineConverted", undefined, { count: String(result.data?.saved ?? 0) }))
+                  notifyResult(result.error, t("workspace.programme.pipelineConverted", undefined, { count: String(result.data?.saved ?? 0) }))
                   refresh()
                 })
               }
@@ -1412,10 +1525,10 @@ export function ProgrammeWorkbench({
                   startTransition(async () => {
                     const result = await mergeMeasureFragment(workspaceId, measureImportJson)
                     if (result.error) {
-                      setMessage(result.error)
+                      notify(result.error, "error")
                       return
                     }
-                    setMessage(
+                    notify(
                       t("workspace.programme.measuresImported", undefined, {
                         count: String(result.data?.merged ?? 0),
                       }),
@@ -1453,7 +1566,7 @@ export function ProgrammeWorkbench({
                                 const result = await mergeDuplicateMeasures(workspaceId, item.id, other.id)
                                 if (result.error) lastError = result.error
                               }
-                              setMessage(lastError || t("workspace.programme.mergeDone", undefined, { title: item.title }))
+                              notifyResult(lastError, t("workspace.programme.mergeDone", undefined, { title: item.title }))
                               refresh()
                             })
                           }
@@ -1548,8 +1661,9 @@ export function ProgrammeWorkbench({
                         onClick={() =>
                           startTransition(async () => {
                             const result = await approveProgrammeMeasure(workspaceId, m.id)
-                            setMessage(
-                              result.error || t("workspace.programme.measureApproved", undefined, { title: m.title }),
+                            notifyResult(
+                              result.error,
+                              t("workspace.programme.measureApproved", undefined, { title: m.title }),
                             )
                             refresh()
                           })
@@ -1677,7 +1791,7 @@ export function ProgrammeWorkbench({
                             outlineNodeId: m.outline_node_id,
                             workflowStatus: m.workflow_status === "generated" ? "revised" : m.workflow_status,
                           })
-                          setMessage(result.error || t("workspace.programme.measureEdited"))
+                          notifyResult(result.error, t("workspace.programme.measureEdited"))
                           setEditingMeasureId(null)
                           refresh()
                         })
@@ -1739,7 +1853,7 @@ export function ProgrammeWorkbench({
                             startTransition(async () => {
                               const result = await compareArtefactVersions(workspaceId, compareVersionA, compareVersionB)
                               if (result.error || !result.data) {
-                                setMessage(result.error || t("workspace.programme.exportFailed"))
+                                notify(result.error || t("workspace.programme.exportFailed"), "error")
                                 return
                               }
                               setMeasureDiff(result.data.diff)
@@ -1769,7 +1883,7 @@ export function ProgrammeWorkbench({
                             onClick={() =>
                               startTransition(async () => {
                                 const result = await restoreArtefactVersion(workspaceId, version.id, restoreReason)
-                                setMessage(result.error || t("workspace.programme.restoreDone"))
+                                notifyResult(result.error, t("workspace.programme.restoreDone"))
                                 refresh()
                               })
                             }
@@ -1795,7 +1909,7 @@ export function ProgrammeWorkbench({
             workspaceId={workspaceId}
             measures={measures}
             reports={reports}
-            onMessage={setMessage}
+            onMessage={notify}
             onRefresh={refresh}
             onGoMeasures={() => setSection("measures")}
           />
@@ -1874,7 +1988,7 @@ export function ProgrammeWorkbench({
                 startTransition(async () => {
                   const result = await updateProgrammePolicies(workspaceId, { distinctReviewer: e.target.checked })
                   if (result.data) setPolicies((prev) => ({ ...prev, ...result.data }))
-                  setMessage(result.error || t("workspace.programme.policySaved"))
+                  notifyResult(result.error, t("workspace.programme.policySaved"))
                 })
               }
             />
@@ -1888,11 +2002,11 @@ export function ProgrammeWorkbench({
             onClick={() =>
               startTransition(async () => {
                 const result = await seedLocalProgrammeReviewer(workspaceId)
-                setMessage(
-                  result.error ||
-                    t("workspace.programme.localReviewerSeeded", undefined, {
-                      email: result.data?.email || "reviewer.dev@example.com",
-                    }),
+                notifyResult(
+                  result.error,
+                  t("workspace.programme.localReviewerSeeded", undefined, {
+                    email: result.data?.email || "reviewer.dev@example.com",
+                  }),
                 )
                 refresh()
               })
@@ -1907,12 +2021,12 @@ export function ProgrammeWorkbench({
               startTransition(async () => {
                 const result = await approveAllProgrammeLocally(workspaceId)
                 if (result.error || !result.data) {
-                  setMessage(result.error || t("workspace.programme.approveAllFailed"))
+                  notify(result.error || t("workspace.programme.approveAllFailed"), "error")
                   return
                 }
                 setPolicies((prev) => ({ ...prev, distinctReviewer: false }))
                 const blocked = [...result.data.measures, ...result.data.chapters].filter((item) => item.status === "blocked")
-                setMessage(
+                notify(
                   blocked.length
                     ? t("workspace.programme.approveAllPartial", undefined, {
                         blocked: String(blocked.length),
@@ -1922,6 +2036,7 @@ export function ProgrammeWorkbench({
                         measures: String(result.data.measures.filter((item) => item.status === "approved").length),
                         chapters: String(result.data.chapters.filter((item) => item.status === "approved").length),
                       }),
+                  blocked.length ? "warning" : "success",
                 )
                 refresh()
               })
@@ -1982,8 +2097,9 @@ export function ProgrammeWorkbench({
                         onClick={() =>
                           startTransition(async () => {
                             const result = await approveProgrammeMeasure(workspaceId, m.id)
-                            setMessage(
-                              result.error || t("workspace.programme.measureApproved", undefined, { title: m.title }),
+                            notifyResult(
+                              result.error,
+                              t("workspace.programme.measureApproved", undefined, { title: m.title }),
                             )
                             refresh()
                           })
@@ -2001,7 +2117,7 @@ export function ProgrammeWorkbench({
                       onValueChange={(value) =>
                         startTransition(async () => {
                           const result = await assignMeasureReviewer(workspaceId, m.id, value === "none" ? null : value)
-                          setMessage(result.error || t("workspace.programme.reviewerAssigned"))
+                          notifyResult(result.error, t("workspace.programme.reviewerAssigned"))
                           refresh()
                         })
                       }
@@ -2038,7 +2154,7 @@ export function ProgrammeWorkbench({
                             artefactId: m.id,
                             body: commentBody,
                           })
-                          setMessage(result.error || t("workspace.programme.commentAdded"))
+                          notifyResult(result.error, t("workspace.programme.commentAdded"))
                           setCommentBody("")
                           refresh()
                         })
@@ -2093,7 +2209,7 @@ export function ProgrammeWorkbench({
                         onClick={() =>
                           startTransition(async () => {
                             const result = await setChapterWorkflowStatus(workspaceId, chapter.documentId, "approved")
-                            setMessage(result.error || t("workspace.programme.chapterApproved"))
+                            notifyResult(result.error, t("workspace.programme.chapterApproved"))
                             refresh()
                           })
                         }
@@ -2114,7 +2230,7 @@ export function ProgrammeWorkbench({
                             chapter.documentId,
                             value === "none" ? null : value,
                           )
-                          setMessage(result.error || t("workspace.programme.reviewerAssigned"))
+                          notifyResult(result.error, t("workspace.programme.reviewerAssigned"))
                           refresh()
                         })
                       }
@@ -2207,7 +2323,7 @@ export function ProgrammeWorkbench({
                     stakeholderExportRequiresFreeze: e.target.checked,
                   })
                   if (result.data) setPolicies((prev) => ({ ...prev, ...result.data }))
-                  setMessage(result.error || t("workspace.programme.policySaved"))
+                  notifyResult(result.error, t("workspace.programme.policySaved"))
                 })
               }
             />
@@ -2261,12 +2377,12 @@ export function ProgrammeWorkbench({
                       periodLabel: publishPeriod,
                     })
                     if (result.error || !result.data) {
-                      setMessage(result.error || t("workspace.programme.publishNeedFreeze"))
+                      notify(result.error || t("workspace.programme.publishNeedFreeze"), result.error ? "error" : "warning")
                       return
                     }
                     setPublication(result.data.publication)
                     setRevealedAccessCode(result.data.accessCode)
-                    setMessage(
+                    notify(
                       result.data.accessCode
                         ? t("workspace.programme.publishCodeOnce", undefined, { code: result.data.accessCode })
                         : t("workspace.programme.publishDone"),
@@ -2290,12 +2406,12 @@ export function ProgrammeWorkbench({
                       startTransition(async () => {
                         const result = await revokeProgrammePublication(workspaceId)
                         if (result.error) {
-                          setMessage(result.error)
+                          notify(result.error, "error")
                           return
                         }
                         setPublication(null)
                         setRevealedAccessCode(null)
-                        setMessage(t("workspace.programme.publishRevoked"))
+                        notify(t("workspace.programme.publishRevoked"))
                       })
                     }
                   >
@@ -2331,11 +2447,11 @@ export function ProgrammeWorkbench({
                     stakeholder: stakeholderExport,
                   })
                   if (result.error || !result.data) {
-                    setMessage(result.error || t("workspace.programme.exportFailed"))
+                    notify(result.error || t("workspace.programme.exportFailed"), "error")
                     return
                   }
                   downloadExportPayload(result.data)
-                  setMessage(t("workspace.programme.exportDocxDone", undefined, { jobId: result.data.jobId }))
+                  notify(t("workspace.programme.exportDocxDone", undefined, { jobId: result.data.jobId }))
                 })
               }
             >
@@ -2356,11 +2472,11 @@ export function ProgrammeWorkbench({
                     stakeholder: stakeholderExport,
                   })
                   if (result.error || !result.data) {
-                    setMessage(result.error || t("workspace.programme.exportFailed"))
+                    notify(result.error || t("workspace.programme.exportFailed"), "error")
                     return
                   }
                   downloadExportPayload(result.data)
-                  setMessage(t("workspace.programme.exportMdDone", undefined, { jobId: result.data.jobId }))
+                  notify(t("workspace.programme.exportMdDone", undefined, { jobId: result.data.jobId }))
                 })
               }
             >
@@ -2381,11 +2497,11 @@ export function ProgrammeWorkbench({
                     stakeholder: stakeholderExport,
                   })
                   if (result.error || !result.data) {
-                    setMessage(result.error || t("workspace.programme.exportFailed"))
+                    notify(result.error || t("workspace.programme.exportFailed"), "error")
                     return
                   }
                   openPrintPreview(result.data.content)
-                  setMessage(t("workspace.programme.exportPdfDone", undefined, { jobId: result.data.jobId }))
+                  notify(t("workspace.programme.exportPdfDone", undefined, { jobId: result.data.jobId }))
                 })
               }
             >
@@ -2405,11 +2521,11 @@ export function ProgrammeWorkbench({
                     stakeholder: stakeholderExport,
                   })
                   if (result.error || !result.data) {
-                    setMessage(result.error || t("workspace.programme.exportFailed"))
+                    notify(result.error || t("workspace.programme.exportFailed"), "error")
                     return
                   }
                   downloadExportPayload(result.data)
-                  setMessage(t("workspace.programme.exportJsonDone", undefined, { jobId: result.data.jobId }))
+                  notify(t("workspace.programme.exportJsonDone", undefined, { jobId: result.data.jobId }))
                 })
               }
             >
@@ -2425,14 +2541,17 @@ export function ProgrammeWorkbench({
                   const result = await fillProgrammeChapters(workspaceId, spaceId)
                   setFillProgress(result.data?.progress || [])
                   setFilling(false)
-                  setMessage(
-                    result.error ||
-                      (result.data?.cancelled
-                        ? t("workspace.programme.fillCancelled")
-                        : t("workspace.programme.fillDone", undefined, {
-                            count: String(result.data?.progress.filter((p) => p.status === "ok").length ?? 0),
-                          })),
-                  )
+                  if (result.error) {
+                    notify(result.error, "error")
+                  } else if (result.data?.cancelled) {
+                    notify(t("workspace.programme.fillCancelled"), "warning")
+                  } else {
+                    notify(
+                      t("workspace.programme.fillDone", undefined, {
+                        count: String(result.data?.progress.filter((p) => p.status === "ok").length ?? 0),
+                      }),
+                    )
+                  }
                   refresh()
                 })
               }}
@@ -2443,9 +2562,9 @@ export function ProgrammeWorkbench({
               disabled={!filling}
               variant="outline"
               onClick={() => {
-                setMessage(t("workspace.programme.fillCancelRequested"))
+                notify(t("workspace.programme.fillCancelRequested"), "info")
                 void cancelFillProgramme(workspaceId).then((result) => {
-                  if (result.error) setMessage(result.error)
+                  if (result.error) notify(result.error, "error")
                 })
               }}
             >
@@ -2460,16 +2579,19 @@ export function ProgrammeWorkbench({
                   const result = await retryFillProgramme(workspaceId, spaceId)
                   setFillProgress(result.data?.progress || [])
                   setFilling(false)
-                  setMessage(
-                    result.error ||
-                      (result.data?.cancelled
-                        ? t("workspace.programme.fillCancelled")
-                        : result.data?.skipped
-                          ? t("workspace.programme.fillNothingToRetry")
-                          : t("workspace.programme.fillDone", undefined, {
-                              count: String(result.data?.progress.filter((p) => p.status === "ok").length ?? 0),
-                            })),
-                  )
+                  if (result.error) {
+                    notify(result.error, "error")
+                  } else if (result.data?.cancelled) {
+                    notify(t("workspace.programme.fillCancelled"), "warning")
+                  } else if (result.data?.skipped) {
+                    notify(t("workspace.programme.fillNothingToRetry"), "info")
+                  } else {
+                    notify(
+                      t("workspace.programme.fillDone", undefined, {
+                        count: String(result.data?.progress.filter((p) => p.status === "ok").length ?? 0),
+                      }),
+                    )
+                  }
                   refresh()
                 })
               }}
@@ -2483,7 +2605,7 @@ export function ProgrammeWorkbench({
                 startTransition(async () => {
                   const pack = await buildAuditPackageJson(workspaceId)
                   if (pack.error || !pack.data) {
-                    setMessage(pack.error || t("workspace.programme.exportFailed"))
+                    notify(pack.error || t("workspace.programme.exportFailed"), "error")
                     return
                   }
                   const json = JSON.stringify(pack.data, null, 2)
@@ -2497,7 +2619,7 @@ export function ProgrammeWorkbench({
                     freezeId: pack.data.freezeId,
                     freezeAt: pack.data.generatedAt,
                   }))
-                  setMessage(
+                  notify(
                     t("workspace.programme.auditPackageDone", undefined, {
                       runs: pack.data.generationRuns.length,
                       measures: pack.data.measures.length,
@@ -2552,5 +2674,6 @@ export function ProgrammeWorkbench({
         expertPromptDismissed={expertPromptDismissed}
       />
     </>
+    </ProgrammeTextHistoryProvider>
   )
 }

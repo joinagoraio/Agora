@@ -164,45 +164,22 @@ async function syncGoogleDriveSource(
       const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, "")
       
       if (fileNameWithoutExt.length > 10 && !file.name.match(/^[A-Z0-9_-]+$/)) {
-        // Filename looks descriptive, try to create a summary
         try {
-          // Create a prompt that asks AI to describe what the document might be about based on filename
-          const openai = (await import("openai")).default
-          if (env.OPENAI_API_KEY) {
-            const ai = new openai({ apiKey: env.OPENAI_API_KEY })
-            const response = await ai.chat.completions.create({
-              model: "gpt-4o-mini",
-              messages: [
-                {
-                  role: "system",
-                  content: `You are a document description assistant. Based on a filename, create a concise 1-2 sentence description of what the document might contain.
-
-Rules:
-- Write 1-2 sentences (max 150 characters)
-- Focus on the document's likely purpose or content based on the filename
-- Use clear, professional language
-- If the filename is just a code/ID, describe it as a document with that identifier
-
-Examples:
-- "KORZ Studio Work Order KS001.pdf" → "Work order document for KORZ Studio project KS001."
-- "Q4_2024_Budget_Report.xlsx" → "Quarterly budget report for Q4 2024 with financial data and projections."`
-                },
-                {
-                  role: "user",
-                  content: `Filename: ${file.name}\nFile type: ${fileTypeDescription}`
-                }
-              ],
-              max_tokens: 60,
-              temperature: 0.3,
-            })
-            
-            const summary = response.choices[0]?.message?.content?.trim()
-            if (summary && summary.length > 0 && summary.length <= 200) {
-              documentSummary = summary
-              console.log("[GoogleDriveSync] Generated AI summary from filename:", summary.substring(0, 100))
-            } else {
-              documentSummary = `${fileTypeDescription} from Google Drive: ${fileNameWithoutExt}`
-            }
+          const { completePlatformTask } = await import("@/lib/llm/resolve")
+          const { getPlatformPrompt } = await import("@/lib/llm/prompts")
+          const system = await getPlatformPrompt("summarize")
+          const result = await completePlatformTask("summarize", {
+            messages: [
+              { role: "system", content: system },
+              { role: "user", content: `Filename: ${file.name}\nFile type: ${fileTypeDescription}` },
+            ],
+            maxTokens: 60,
+            temperature: 0.3,
+          })
+          const summary = result.text.trim()
+          if (summary && summary.length > 0 && summary.length <= 200) {
+            documentSummary = summary
+            console.log("[GoogleDriveSync] Generated AI summary from filename:", summary.substring(0, 100))
           } else {
             documentSummary = `${fileTypeDescription} from Google Drive: ${fileNameWithoutExt}`
           }
