@@ -23,7 +23,9 @@ import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { IconTooltip } from "@/components/icon-tooltip"
+import { SectionOpenToggle, useSectionOpen } from "@/components/section-open-toggle"
 import { ViewModeToggle, useCollectionViewMode } from "@/components/view-mode-toggle"
+import { cn } from "@/lib/utils"
 
 export type SpaceDocumentItem = {
   id: string
@@ -59,6 +61,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
   // Use internal state if no callback is provided, otherwise use prop
   const safeDocuments = onDocumentsChange ? (documents ?? []) : internalDocuments
   const { viewMode, setViewMode } = useCollectionViewMode(safeDocuments.length, `space.${spaceId}.documents`)
+  const { open, toggle } = useSectionOpen(`space.${spaceId}.documents`, true)
 
   // Update internal state when documents prop changes (for server component usage)
   useEffect(() => {
@@ -157,26 +160,33 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className={cn("flex min-h-0 flex-col overflow-hidden", open ? "flex-1" : "shrink-0")}>
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="flex items-baseline gap-2">
-            <h3 className="text-xl font-semibold text-foreground">{t("space.documents.panel.title")}</h3>
-            <span className="text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
-              ({safeDocuments.length})
-            </span>
+          <div className="flex items-center gap-1">
+            <SectionOpenToggle open={open} onToggle={toggle} label={t("space.documents.panel.title")} />
+            <div className="flex items-baseline gap-2">
+              <h3 className="text-xl font-semibold text-foreground">{t("space.documents.panel.title")}</h3>
+              <span className="text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
+                ({safeDocuments.length})
+              </span>
+            </div>
           </div>
-          <p className="text-sm text-muted-foreground">
-            {t("space.documents.panel.description", undefined, { space: spaceName })}
-          </p>
+          {open ? (
+            <p className="text-sm text-muted-foreground">
+              {t("space.documents.panel.description", undefined, { space: spaceName })}
+            </p>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
-          <ViewModeToggle
-            viewMode={viewMode}
-            onChange={setViewMode}
-            listLabel={t("space.documents.panel.viewList")}
-            gridLabel={t("space.documents.panel.viewGrid")}
-          />
+          {open ? (
+            <ViewModeToggle
+              viewMode={viewMode}
+              onChange={setViewMode}
+              listLabel={t("space.documents.panel.viewList")}
+              gridLabel={t("space.documents.panel.viewGrid")}
+            />
+          ) : null}
           {canUpload && (
             <SpaceUploadDocumentDialog
               spaceId={spaceId}
@@ -192,6 +202,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
         </div>
       </div>
 
+      {open ? (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-4">
       {error && <p className="mb-2 shrink-0 rounded-md bg-destructive/10 p-2 text-sm text-destructive">{error}</p>}
 
@@ -230,7 +241,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
 
             return (
               <Card key={doc.id} className="group relative flex h-full flex-col shadow transition-all hover:shadow-md">
-                <div className="absolute right-2 top-2 z-10">
+                <div className="absolute right-2 top-2 z-10 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100 max-md:opacity-100">
                   <DocumentMenu
                     doc={doc}
                     spaceId={spaceId}
@@ -339,7 +350,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                             {doc.payload?.file_name && <Badge variant="secondary">{doc.payload.file_name}</Badge>}
                           </div>
                         </Link>
-                        <div className="flex shrink-0 items-center pr-2">
+                        <div className="flex shrink-0 items-center pr-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100 max-md:opacity-100">
                           <DocumentMenu
                             doc={doc}
                             spaceId={spaceId}
@@ -359,6 +370,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
         })()
       )}
       </div>
+      ) : null}
     </div>
   )
 }

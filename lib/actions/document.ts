@@ -14,9 +14,8 @@ import { extractPdfPages } from "@/lib/utils/pdf-extraction.server"
 import { compileSystemPrompt } from "@/lib/chat/playbook-compiler"
 import { recordGenerationRun, computeUnusedDocumentIds } from "@/lib/actions/generation-run"
 import { getLatestPlaybookBody } from "@/lib/actions/playbook"
+import { stripDuplicateChapterHeading } from "@/lib/programme/chapter-heading"
 import { parseProgrammeBindings } from "@/lib/programme/domain"
-import OpenAI from "openai"
-import { env } from "@/lib/env"
 import MarkdownIt from "markdown-it"
 import markdownItFootnote from "markdown-it-footnote"
 import { requireAuthAndPermission } from "@/lib/middleware/authorization"
@@ -79,71 +78,35 @@ function stripMarkdown(text: string): string {
 
 // Helper function to generate a concise AI summary of document content
 export async function generateDocumentSummary(content: string, title?: string, isMarkdown = false): Promise<string> {
-  // Only use AI if OpenAI is configured and content is substantial
-  if (!env.OPENAI_API_KEY || !content || content.length < 100) {
-    // Fallback: return first 150 characters
-    const fallback = content.substring(0, 150).trim() + (content.length > 150 ? "..." : "")
-    return isMarkdown ? stripMarkdown(fallback) : fallback
+  const fallback = () => {
+    const text = content.substring(0, 150).trim() + (content.length > 150 ? "..." : "")
+    return isMarkdown ? stripMarkdown(text) : text
   }
+  if (!content || content.length < 100) return fallback()
 
   try {
-    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
-    
-    // For markdown, strip syntax for better AI understanding
-    let processedContent = isMarkdown ? stripMarkdown(content) : content
-    
-    // Take a sample of the content (first 2000 chars for efficiency)
+    const { completePlatformTask } = await import("@/lib/llm/resolve")
+    const { getPlatformPrompt } = await import("@/lib/llm/prompts")
+    const processedContent = isMarkdown ? stripMarkdown(content) : content
     const contentSample = processedContent.substring(0, 2000)
-    
-    logger.info("[Upload] Generating summary", {
-      documentType: isMarkdown ? "markdown" : "document",
-      contentLength: content.length,
-      processedLength: processedContent.length,
-    })
-    
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Use cheaper model for summarization
+    const system = await getPlatformPrompt("summarize")
+    const result = await completePlatformTask("summarize", {
       messages: [
-        {
-          role: "system",
-          content: `You are a document summarization assistant. Create a concise, informative summary of the document content.
-
-Rules:
-- Write 1-2 sentences (max 150 characters)
-- Focus on the main topic, purpose, or key information
-- Use clear, professional language
-- If the document title is provided, incorporate it naturally
-- Do not include meta-commentary like "This document discusses..." - just state the information directly
-${isMarkdown ? "- The content is from a markdown file - focus on the actual information, not the formatting" : ""}
-
-Examples:
-- "Security audit findings and recommendations for code quality improvements."
-- "Municipal policy guidelines for public space management and maintenance procedures."
-- "Annual budget report with financial projections and expenditure analysis."`
-        },
+        { role: "system", content: system },
         {
           role: "user",
-          content: title 
-            ? `Document title: ${title}\n\nContent:\n${contentSample}`
-            : `Content:\n${contentSample}`
-        }
+          content: title ? `Document title: ${title}\n\nContent:\n${contentSample}` : `Content:\n${contentSample}`,
+        },
       ],
-      max_tokens: 60, // Limit to keep it concise
-      temperature: 0.3, // Lower temperature for more consistent results
+      maxTokens: 60,
+      temperature: 0.3,
     })
-
-    const summary = response.choices[0]?.message?.content?.trim()
-    if (summary && summary.length > 0 && summary.length <= 200) {
-      logger.debug("[Upload] Generated AI summary", { preview: summary.substring(0, 100) })
-      return summary
-    }
+    const summary = result.text.trim()
+    if (summary && summary.length > 0 && summary.length <= 200) return summary
   } catch (error) {
     logger.error("[Upload] Error generating summary:", error)
   }
-
-  // Fallback: return first 150 characters (strip markdown if needed)
-  const fallback = content.substring(0, 150).trim() + (content.length > 150 ? "..." : "")
-  return isMarkdown ? stripMarkdown(fallback) : fallback
+  return fallback()
 }
 
 // Helper function to sanitize content for PostgreSQL
@@ -1226,44 +1189,20 @@ export async function addDocumentsFromSource(
         // Try to generate AI summary from filename (if it's descriptive)
         if (fileNameWithoutExt.length > 10 && !fileName.match(/^[A-Z0-9_-]+$/)) {
           try {
-            const openai = (await import("openai")).default
-            if (env.OPENAI_API_KEY) {
-              const ai = new openai({ apiKey: env.OPENAI_API_KEY })
-              const response = await ai.chat.completions.create({
-                model: "gpt-4o-mini",
-                messages: [
-                  {
-                    role: "system",
-                    content: `You are a document description assistant. Based on a filename, create a concise 1-2 sentence description of what the document might contain.
-
-Rules:
-- Write 1-2 sentences (max 150 characters)
-- Focus on the document's likely purpose or content based on the filename
-- Use clear, professional language
-- If the filename is just a code/ID, describe it as a document with that identifier
-
-Examples:
-- "KORZ Studio Work Order KS001.pdf" → "Work order document for KORZ Studio project KS001."
-- "Q4_2024_Budget_Report.xlsx" → "Quarterly budget report for Q4 2024 with financial data and projections."`
-                  },
-                  {
-                    role: "user",
-                    content: `Filename: ${fileName}\nFile type: ${fileTypeDescription}`
-                  }
-                ],
-                max_tokens: 60,
-                temperature: 0.3,
-              })
-              
-              const summary = response.choices[0]?.message?.content?.trim()
-              if (summary && summary.length > 0 && summary.length <= 200) {
-                documentSummary = summary
-                logger.debug("[AddFromSource] Generated AI summary from Google Drive filename:", {
-                  preview: summary.substring(0, 100),
-                })
-              } else {
-                documentSummary = `${fileTypeDescription} from Google Drive: ${fileNameWithoutExt}`
-              }
+            const { completePlatformTask } = await import("@/lib/llm/resolve")
+            const { getPlatformPrompt } = await import("@/lib/llm/prompts")
+            const system = await getPlatformPrompt("summarize")
+            const result = await completePlatformTask("summarize", {
+              messages: [
+                { role: "system", content: system },
+                { role: "user", content: `Filename: ${fileName}\nFile type: ${fileTypeDescription}` },
+              ],
+              maxTokens: 60,
+              temperature: 0.3,
+            })
+            const summary = result.text.trim()
+            if (summary && summary.length > 0 && summary.length <= 200) {
+              documentSummary = summary
             } else {
               documentSummary = `${fileTypeDescription} from Google Drive: ${fileNameWithoutExt}`
             }
@@ -1801,7 +1740,7 @@ export async function generateWorkspaceDocumentDraft(
 
   const { data: workspace, error: workspaceError } = await supabase
     .from("workspaces")
-    .select("name, context, location, metadata")
+    .select("name, context, location, metadata, space_id")
     .eq("id", workspaceId)
     .single()
 
@@ -1823,42 +1762,58 @@ export async function generateWorkspaceDocumentDraft(
   const { context, sources } = await getAllWorkspaceKnowledge(workspaceId, [documentId])
 
   const bindings = parseProgrammeBindings((workspace.metadata as Record<string, unknown>) || {})
-  const { boundAgentId } = await import("@/lib/programme/domain")
+  const { resolveDraftAgentId } = await import("@/lib/programme/domain")
   const { getLatestAgentVersion } = await import("@/lib/actions/agent")
   const { listProgrammeOutlineNodes } = await import("@/lib/actions/outline")
   const { listProgrammeMeasures } = await import("@/lib/actions/measures")
-  const draftAgentId = boundAgentId(bindings, "draft")
+  const { getTenantIdForSpace, resolveAgentVersionLlm } = await import("@/lib/llm/resolve")
+  const { loadPromptLayers } = await import("@/lib/llm/prompts")
+  const draftAgentId = resolveDraftAgentId(bindings, outlineNodeId)
   const agentVersion = draftAgentId ? (await getLatestAgentVersion(draftAgentId)).data : null
 
-  let playbookBody: string | undefined = agentVersion?.instructions
+  const layers = await loadPromptLayers("draft")
+  let playbookBody: string | undefined = agentVersion?.instructions || layers.playbook
   let playbookVersionId: string | undefined
   let playbookConfig: unknown = {}
-  if (!playbookBody && bindings.playbookId) {
+  if (!agentVersion?.instructions && bindings.playbookId) {
     const latest = await getLatestPlaybookBody(bindings.playbookId)
-    playbookBody = latest.body
+    if (latest.body) playbookBody = latest.body
     playbookVersionId = latest.versionId
     playbookConfig = latest.config ?? {}
   }
 
-  const { parsePlaybookRuntimeConfig, resolveModelForTask } = await import("@/lib/programme/model-tiers")
+  const { parsePlaybookRuntimeConfig } = await import("@/lib/programme/model-tiers")
   const runtimeConfig = parsePlaybookRuntimeConfig(playbookConfig)
   const effectiveCitationMode = citationMode ?? runtimeConfig.citationMode
-  const model = agentVersion?.model || resolveModelForTask("draft", runtimeConfig)
-  const provider = agentVersion?.provider || "openai-compatible"
+  const tenantId = workspace.space_id ? await getTenantIdForSpace(workspace.space_id) : null
+  const resolved = tenantId && agentVersion
+    ? await resolveAgentVersionLlm({
+        tenantId,
+        spaceId: workspace.space_id,
+        agentVersion,
+      })
+    : await import("@/lib/llm/resolve").then((m) => m.resolvePlatformTaskLlm("draft"))
+  const model = resolved.model
+  const provider = resolved.provider
+  const resolvedApiKey = resolved.apiKey
+  const resolvedEndpoint = resolved.endpoint
 
   let nodeConstraint = ""
+  let chapterTitle = ""
   if (outlineNodeId && bindings.templateId) {
     const outline = await listProgrammeOutlineNodes(bindings.templateId)
     const node = outline.data.find((n) => n.id === outlineNodeId)
     if (node) {
+      chapterTitle = node.title
       const nodeMeasures = (await listProgrammeMeasures(workspaceId)).data || []
       const placed = nodeMeasures.filter((m: { outline_node_id?: string }) => m.outline_node_id === node.id)
       nodeConstraint = [
         `TEMPLATE NODE CONSTRAINTS (mandatory):`,
         `Title: ${node.title}`,
+        `Do not start the chapter with a heading that repeats this title; the document already shows it.`,
         `Required: ${node.required ? "yes" : "no"}`,
         node.purpose ? `Purpose: ${node.purpose.replace(/<[^>]+>/g, " ").slice(0, 800)}` : "",
-        node.instructions ? `Section instructions: ${node.instructions}` : "",
+        node.instructions ? `Chapter instructions: ${node.instructions}` : "",
         node.qualityRules ? `Quality rules: ${node.qualityRules}` : "",
         node.outputForm ? `Output form: ${node.outputForm}` : "",
         node.relationHints ? `Relation hints: ${node.relationHints}` : "",
@@ -1874,6 +1829,7 @@ export async function generateWorkspaceDocumentDraft(
   const { systemPrompt } = compileSystemPrompt({
     kind: "draft",
     userLanguage,
+    identity: layers.identity,
     playbookBody,
     runInstructions: instructions.trim(),
     citationMode: effectiveCitationMode,
@@ -1918,8 +1874,8 @@ ${citationInstruction}`
     const { completeLlm } = await import("@/lib/llm")
     const completion = await completeLlm({
       provider,
-      endpoint: agentVersion?.endpoint,
-      credentialsRef: agentVersion?.credentialsRef,
+      endpoint: resolvedEndpoint || agentVersion?.endpoint,
+      apiKey: resolvedApiKey,
       model,
       messages: [
         { role: "system", content: systemPrompt },
@@ -1930,7 +1886,7 @@ ${citationInstruction}`
     })
 
     const markdownDraft = completion.text
-    generatedText = markdownToHtml(markdownDraft)
+    generatedText = stripDuplicateChapterHeading(markdownToHtml(markdownDraft), chapterTitle)
   } catch (error) {
     logger.error("[WorkspaceDocument] Failed to generate draft:", error)
     return {

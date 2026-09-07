@@ -3,11 +3,11 @@
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
-import OpenAI from "openai"
 import { env } from "@/lib/env"
 import { requireAuth, requireAuthAndPermission } from "@/lib/middleware/authorization"
 import { getServerTranslator } from "@/lib/i18n/server"
 import { defaultSpaceJobForRole, wouldLeaveLastAdministrator } from "@/lib/guidance/jobs"
+import { ensureTenantForUser } from "@/lib/actions/tenant"
 
 type SpaceAccessRole = "owner" | "admin" | "member" | "viewer"
 
@@ -94,10 +94,18 @@ export async function createSpace(
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "")
 
+  const displayName =
+    user.user_metadata?.full_name ||
+    user.user_metadata?.name ||
+    user.email?.split("@")[0] ||
+    "Organisation"
+  const { tenantId } = await ensureTenantForUser(user.id, displayName)
+
   const spaceData: any = {
     name,
     slug,
     owner_id: user.id,
+    tenant_id: tenantId,
     space_type: options?.spaceType || "municipal",
     visibility: options?.visibility || "internal",
     jurisdiction: options?.jurisdiction || {},
@@ -269,10 +277,6 @@ export async function enhanceScopeText(
   
   const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
 
-  if (!env.OPENAI_API_KEY) {
-    return { error: "OpenAI API key not configured" }
-  }
-
   if (!text || text.trim().length === 0) {
     return { error: "Text is empty" }
   }
@@ -281,77 +285,34 @@ export async function enhanceScopeText(
   const isMissionStatement = field === "summary"
 
   try {
-    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
-
-    // Build context for the prompt
-    let contextParts: string[] = []
+    const contextParts: string[] = []
     if (isMissionStatement && options?.spaceName) {
       contextParts.push(`Space name: ${options.spaceName}`)
     }
     if (!isMissionStatement && options?.missionStatement) {
       contextParts.push(`Mission statement: ${options.missionStatement}`)
     }
-
     const contextText = contextParts.length > 0 ? `\n\nContext:\n${contextParts.join("\n")}` : ""
-
-    const systemPrompt = isMissionStatement
-      ? `You are a helpful assistant that writes clear, concise mission statements for policy initiatives.
-
-LANGUAGE REQUIREMENT:
-- The user's preferred language is ${userLanguage}
-- You MUST write the mission statement in ${userLanguage}
-- All output must be in ${userLanguage}
-
-The mission statement you return should:
-- Be very brief and concise (1-2 sentences maximum)
-- Capture the core purpose and mandate of the initiative
-- Stay faithful to the original meaning
-- Use neutral, professional language
-- Be suitable as a high-level summary that appears at the top of a space overview
-
-Return ONLY the mission statement text in ${userLanguage}, nothing else.`
-      : `You are a helpful assistant that writes clear, comprehensive descriptions for policy initiatives.
-
-LANGUAGE REQUIREMENT:
-- The user's preferred language is ${userLanguage}
-- You MUST write the description in ${userLanguage}
-- All output must be in ${userLanguage}
-
-The description you return should:
-- Be longer than the mission statement but still concise (4-6 sentences)
-- Expand with specific details about policy domain, stakeholders, and key objectives
-- Stay faithful to the original meaning
-- Use neutral, professional language
-- Provide enough detail for colleagues and AI assistants to understand the scope and act accurately
-- Not be overly lengthy or verbose
-
-Return ONLY the description text in ${userLanguage}, nothing else.`
-
     const userPrompt = isMissionStatement
       ? `Write a concise mission statement for this initiative:${contextText}\n\nCurrent text:\n${text}`
       : `Write a comprehensive but concise description for this initiative:${contextText}\n\nCurrent text:\n${text}`
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const { completePlatformTask } = await import("@/lib/llm/resolve")
+    const { applyPromptLanguage, getPlatformPrompt } = await import("@/lib/llm/prompts")
+    const system = applyPromptLanguage(
+      await getPlatformPrompt(isMissionStatement ? "enhance_summary" : "enhance_description"),
+      userLanguage,
+    )
+    const result = await completePlatformTask("enhance", {
       messages: [
-        {
-          role: "system",
-          content: systemPrompt,
-        },
-        {
-          role: "user",
-          content: userPrompt,
-        },
+        { role: "system", content: system },
+        { role: "user", content: userPrompt },
       ],
-      max_tokens: isMissionStatement ? 120 : 500,
+      maxTokens: isMissionStatement ? 120 : 500,
       temperature: 0.7,
     })
-
-    const enhanced = response.choices[0]?.message?.content?.trim()
-    if (enhanced && enhanced.length > 0) {
-      return { enhanced }
-    }
-
+    const enhanced = result.text.trim()
+    if (enhanced) return { enhanced }
     return { error: "Failed to generate enhanced text" }
   } catch (error) {
     console.error("[enhanceScopeText] Error:", error)
@@ -509,8 +470,70 @@ export async function updateSpaceMemberRole(
     return { error: "Failed to update member role" }
   }
 
+  revalidatePath(`/spaces/${spaceId}`)
   revalidatePath(`/spaces/${spaceId}/settings`)
   return { success: true }
+}
+
+export async function getSpaceAccessSettings(spaceId: string) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  try {
+    await requireAuthAndPermission("space:invite", { spaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+
+  const { data: space, error: spaceError } = await supabase
+    .from("spaces")
+    .select("id, name")
+    .eq("id", spaceId)
+    .single()
+
+  if (spaceError || !space) {
+    return { error: "Authority not found" }
+  }
+
+  const { data: membership } = await supabase
+    .from("space_members")
+    .select("role")
+    .eq("space_id", spaceId)
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  const { data: members, error: membersError } = await supabase
+    .from("space_members")
+    .select("*, profiles(*)")
+    .eq("space_id", spaceId)
+    .order("created_at", { ascending: false })
+
+  if (membersError) {
+    return { error: membersError.message }
+  }
+
+  const { data: invitations } = await supabase
+    .from("invitations")
+    .select("*")
+    .eq("space_id", spaceId)
+    .is("accepted_at", null)
+    .order("created_at", { ascending: false })
+
+  return {
+    data: {
+      space,
+      members: members || [],
+      invitations: invitations || [],
+      currentUserId: user.id,
+      currentRole: membership?.role ?? null,
+    },
+  }
 }
 
 export async function removeSpaceMember(spaceId: string, memberUserId: string) {

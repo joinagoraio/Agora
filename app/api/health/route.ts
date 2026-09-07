@@ -103,22 +103,20 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Check OpenAI API (if configured)
-  if (env.OPENAI_API_KEY) {
-    try {
-      // Simple check - just verify the key is set (we don't want to make actual API calls on every health check)
-      checks.openai = {
-        status: "healthy",
-      }
-    } catch (error) {
-      logger.error("[Health Check] OpenAI check failed", error)
-      checks.openai = {
-        status: "unhealthy",
-        error: error instanceof Error ? error.message : "Unknown error",
-      }
-      if (overallStatus === "healthy") {
-        overallStatus = "degraded"
-      }
+  // Check platform LLM vault (if a key is stored)
+  try {
+    const { hasPlatformLlmCredentials } = await import("@/lib/llm/resolve")
+    if (await hasPlatformLlmCredentials()) {
+      checks.openai = { status: "healthy" }
+    }
+  } catch (error) {
+    logger.error("[Health Check] LLM vault check failed", error)
+    checks.openai = {
+      status: "unhealthy",
+      error: error instanceof Error ? error.message : "Unknown error",
+    }
+    if (overallStatus === "healthy") {
+      overallStatus = "degraded"
     }
   }
 

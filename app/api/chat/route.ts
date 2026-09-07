@@ -4,14 +4,12 @@ import { getRelevantContext } from "@/lib/rag/search"
 import { buildWorkspaceContext } from "@/lib/chat/context"
 import { analyzePromptInjection } from "@/lib/chat/prompt-guard"
 import { compileSystemPrompt } from "@/lib/chat/playbook-compiler"
+import { openaiClientForTarget } from "@/lib/llm/openai-client"
 import OpenAI from "openai"
 import { applyRateLimitHeaders, chatRateLimit, checkRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { chatMessageSchema } from "@/lib/validations/document"
-import { env } from "@/lib/env"
 import { resolveCitations } from "@/lib/chat/resolve-citations"
 import { getClientIdentifier } from "@/lib/utils/request"
-
-let cachedOpenAIClient: OpenAI | null = null
 
 function readMessageContent(message: any): string {
   if (!message || typeof message !== "object") {
@@ -71,19 +69,6 @@ function readMessageContent(message: any): string {
   return extractFromValue(parts)
 }
 
-function getOpenAIClient() {
-  const apiKey = env.OPENAI_API_KEY
-  if (!apiKey) {
-    return null
-  }
-
-  if (!cachedOpenAIClient) {
-    cachedOpenAIClient = new OpenAI({ apiKey })
-  }
-
-  return cachedOpenAIClient
-}
-
 // Increase timeout to 60 seconds to handle RAG search and OpenAI API calls
 // This is especially important when searching through multiple documents
 export const maxDuration = 60
@@ -109,25 +94,6 @@ export async function POST(req: Request) {
           status: 429,
           headers: { "Content-Type": "application/json" },
         }),
-      )
-    }
-
-    const openai = getOpenAIClient()
-
-    // Validate API key before processing
-    if (!openai) {
-      console.error("[Chat API] OPENAI_API_KEY is missing")
-      return withRateLimit(
-        new Response(
-        JSON.stringify({ 
-          error: "OpenAI API key not configured",
-          message: "Please set OPENAI_API_KEY in your environment variables"
-        }),
-        { 
-          status: 500,
-          headers: { "Content-Type": "application/json" }
-          },
-        ),
       )
     }
 
@@ -544,7 +510,10 @@ ${context}`
 
     const { parseProgrammeBindings } = await import("@/lib/programme/domain")
     const { getLatestPlaybookBody } = await import("@/lib/actions/playbook")
-    const { parsePlaybookRuntimeConfig, resolveModelForTask } = await import("@/lib/programme/model-tiers")
+    const { parsePlaybookRuntimeConfig } = await import("@/lib/programme/model-tiers")
+    const { resolvePlatformTaskLlm } = await import("@/lib/llm/resolve")
+    const { loadPromptLayers } = await import("@/lib/llm/prompts")
+    const { completePlatformTask } = await import("@/lib/llm/resolve")
     const bindings = parseProgrammeBindings((workspace?.metadata as Record<string, unknown>) || {})
     let playbookBody: string | undefined
     let playbookConfig: unknown = {}
@@ -554,11 +523,13 @@ ${context}`
       playbookConfig = latest.config ?? {}
     }
     const runtimeConfig = parsePlaybookRuntimeConfig(playbookConfig)
+    const layers = await loadPromptLayers("chat")
 
     const { systemPrompt } = compileSystemPrompt({
       kind: "chat",
       userLanguage,
-      playbookBody,
+      identity: layers.identity,
+      playbookBody: playbookBody ?? layers.playbook,
       runtimeSections,
       isDocumentPreview,
       contextMentionInstruction,
@@ -581,8 +552,22 @@ ${context}`
     // Create a streaming response
     // Note: maxDuration (60s) handles overall route timeout
     // The OpenAI SDK will handle connection timeouts internally
-    // Model tiers from playbook config (defaults preserve gpt-4o preview / gpt-4o-mini workspace)
-    const model = resolveModelForTask("chat", runtimeConfig, { isDocumentPreview })
+    const chatTask = isDocumentPreview ? "chat_preview" : "chat"
+    let resolvedChat
+    try {
+      resolvedChat = await resolvePlatformTaskLlm(chatTask)
+    } catch (error) {
+      console.error("[Chat API] Platform model resolution failed:", error)
+      return withRateLimit(
+        new Response(JSON.stringify({ error: "Chat model is not configured" }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+    }
+
+    const openai = openaiClientForTarget(resolvedChat)
+    const model = resolvedChat.model
     const stream = await openai.chat.completions.create({
       model,
       messages: openaiMessages,
@@ -693,25 +678,16 @@ ${context}`
             // Generate conversation title if it's still "New Conversation"
             if (conversation.title === "New Conversation") {
               try {
-                // Generate a short, descriptive title based on the user's question
-                // Using gpt-4o-mini for title generation (simpler task, cost-effective)
-                const titleResponse = await openai.chat.completions.create({
-                  model: "gpt-4o-mini",
+                const titlePrompt = await import("@/lib/llm/prompts").then((m) => m.getPlatformPrompt("chat_title"))
+                const titleResult = await completePlatformTask("chat_title", {
                   messages: [
-                    {
-                      role: "system",
-                      content: "Generate a very short, descriptive title (maximum 6 words) for a conversation based on the user's question. Return only the title, nothing else.",
-                    },
-                    {
-                      role: "user",
-                      content: userQuery,
-                    },
+                    { role: "system", content: titlePrompt },
+                    { role: "user", content: userQuery },
                   ],
                   temperature: 0.7,
-                  max_tokens: 20,
+                  maxTokens: 20,
                 })
-
-                const generatedTitle = titleResponse.choices[0]?.message?.content?.trim() || null
+                const generatedTitle = titleResult.text.trim() || null
                 if (generatedTitle) {
                   // Ensure title is not too long (max 64 characters)
                   const finalTitle = generatedTitle.length > 64 
@@ -870,7 +846,7 @@ ${context}`
           new Response(
             JSON.stringify({ 
               error: "OpenAI API authentication failed",
-              message: "Please check your OPENAI_API_KEY environment variable"
+              message: "Add a provider API key in Platform admin."
             }),
             { 
               status: 401,
@@ -929,7 +905,7 @@ ${context}`
           new Response(
             JSON.stringify({ 
               error: "OpenAI API authentication failed",
-              message: "Please check your OPENAI_API_KEY environment variable"
+              message: "Add a provider API key in Platform admin."
             }),
             { 
               status: 401,
@@ -946,7 +922,7 @@ ${context}`
         JSON.stringify({ 
           error: "Internal Server Error",
           message: error instanceof Error ? error.message : "Unknown error",
-          details: env.NODE_ENV === "development" ? (error instanceof Error ? error.stack : String(error)) : undefined
+          details: process.env.NODE_ENV === "development" ? (error instanceof Error ? error.stack : String(error)) : undefined
         }),
         { 
           status: 500,

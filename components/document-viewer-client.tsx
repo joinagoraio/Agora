@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, useRef, type CSSProperties } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { MultiFormatViewer } from "@/components/multi-format-viewer"
 import { useHighlightContext, type Highlight as HighlightRecord } from "@/lib/contexts/highlight-context"
@@ -32,6 +32,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { OverflowTitle } from "@/components/overflow-title"
 import Link from "next/link"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { IconTooltip } from "@/components/icon-tooltip"
@@ -73,75 +74,6 @@ type PendingHighlightFocus = {
   highlightId?: string
   textSpan?: { start: number; end: number }
   clearStorage?: boolean
-}
-
-function DocumentViewerTitle({ title }: { title: string }) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const textRef = useRef<HTMLHeadingElement>(null)
-  const [overflowPx, setOverflowPx] = useState(0)
-
-  const updateOverflow = useCallback(() => {
-    const container = containerRef.current
-    const text = textRef.current
-    if (!container || !text) {
-      setOverflowPx(0)
-      return
-    }
-    setOverflowPx(Math.max(0, text.scrollWidth - container.clientWidth))
-  }, [])
-
-  useEffect(() => {
-    updateOverflow()
-    const container = containerRef.current
-    if (!container || typeof ResizeObserver === "undefined") {
-      return
-    }
-    const observer = new ResizeObserver(updateOverflow)
-    observer.observe(container)
-    const pane = container.closest("header")?.parentElement
-    if (pane) {
-      observer.observe(pane)
-    }
-    window.addEventListener("resize", updateOverflow)
-    const timeoutId = window.setTimeout(updateOverflow, 350)
-    return () => {
-      observer.disconnect()
-      window.removeEventListener("resize", updateOverflow)
-      window.clearTimeout(timeoutId)
-    }
-  }, [title, updateOverflow])
-
-  const overflowing = overflowPx > 1
-  const durationMs = Math.min(4000, Math.max(700, overflowPx * 16))
-
-  return (
-    <div
-      ref={containerRef}
-      className={cn(
-        "group/title min-w-0 max-w-full overflow-hidden",
-        overflowing && "hover:[mask-image:none]",
-        overflowing && "[mask-image:linear-gradient(to_right,black_88%,transparent)]",
-      )}
-      style={
-        {
-          "--title-overflow": `${overflowPx}px`,
-          "--title-duration": `${durationMs}ms`,
-        } as CSSProperties
-      }
-    >
-      <h1
-        ref={textRef}
-        className={cn(
-          "text-sm font-normal whitespace-nowrap transition-transform ease-linear",
-          overflowing ? "w-max cursor-default text-left group-hover/title:-translate-x-[var(--title-overflow)]" : "w-full text-center",
-        )}
-        style={{ transitionDuration: overflowing ? "var(--title-duration)" : "220ms" }}
-        aria-label={title}
-      >
-        {title}
-      </h1>
-    </div>
-  )
 }
 
 export function DocumentViewerClient({
@@ -821,7 +753,7 @@ export function DocumentViewerClient({
             </Link>
           </div>
           <div className="min-w-0 overflow-hidden">
-            <DocumentViewerTitle title={documentTitle} />
+            <OverflowTitle title={documentTitle} className="text-sm font-normal" />
             {pageCount !== null && pageCount > 0 && (
               <p className="truncate text-center text-xs text-muted-foreground">{pageCount} pages</p>
             )}

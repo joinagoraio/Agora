@@ -1,15 +1,33 @@
 "use client"
 
 import { useMemo, useState, type ReactNode } from "react"
+import { Search } from "lucide-react"
 import { toast } from "sonner"
 
 import { DashboardCollection, type DashboardCollectionItem } from "@/components/dashboard-collection"
+import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { toggleDashboardPin, type DashboardPin, type DashboardPinKind } from "@/lib/actions/dashboard-pins"
+import {
+  reorderDashboardPins,
+  toggleDashboardPin,
+  type DashboardPin,
+  type DashboardPinKind,
+} from "@/lib/actions/dashboard-pins"
 import { useI18n } from "@/lib/i18n/use-i18n"
 
 function pinKey(kind: DashboardPinKind, id: string) {
   return `${kind}:${id}`
+}
+
+function matchesDashboardSearch(item: DashboardCollectionItem, query: string) {
+  const normalized = query.trim().toLowerCase()
+  if (!normalized) return true
+  const haystack = [item.title, item.description, item.badge]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .toLowerCase()
+  return haystack.includes(normalized)
 }
 
 export function DashboardBoard({
@@ -31,6 +49,7 @@ export function DashboardBoard({
 }) {
   const { t } = useI18n()
   const [pins, setPins] = useState(() => initialPins.map((pin) => pinKey(pin.kind, pin.id)))
+  const [searchQuery, setSearchQuery] = useState("")
 
   const pinSet = useMemo(() => new Set(pins), [pins])
 
@@ -45,6 +64,23 @@ export function DashboardBoard({
   const authorityItems = withPinState(authorities, "authority")
   const unpinnedProgrammes = programmeItems.filter((item) => !item.pinned)
   const unpinnedAuthorities = authorityItems.filter((item) => !item.pinned)
+  const filteredProgrammes = useMemo(
+    () => unpinnedProgrammes.filter((item) => matchesDashboardSearch(item, searchQuery)),
+    [unpinnedProgrammes, searchQuery],
+  )
+  const filteredAuthorities = useMemo(
+    () => unpinnedAuthorities.filter((item) => matchesDashboardSearch(item, searchQuery)),
+    [unpinnedAuthorities, searchQuery],
+  )
+  const hasSearchQuery = searchQuery.trim().length > 0
+  const showSearch = programmes.length > 0 || authorities.length > 0
+  const searchEmpty = (
+    <Card>
+      <CardContent className="py-10 text-center text-sm text-muted-foreground">
+        {t("dashboard.search.noResults")}
+      </CardContent>
+    </Card>
+  )
   const catalogue = [...programmeItems, ...authorityItems]
   const byKey = new Map(
     catalogue.map((item) => [pinKey((item.kind ?? "programme") as DashboardPinKind, item.id), item]),
@@ -64,6 +100,21 @@ export function DashboardBoard({
     }
   }
 
+  const handleReorderPins = async (nextItems: DashboardCollectionItem[]) => {
+    const previous = pins
+    const next = nextItems
+      .map((item) => (item.kind ? pinKey(item.kind, item.id) : null))
+      .filter((key): key is string => Boolean(key))
+    setPins(next)
+    const result = await reorderDashboardPins(
+      nextItems.flatMap((item) => (item.kind ? [{ kind: item.kind, id: item.id }] : [])),
+    )
+    if (result.error) {
+      setPins(previous)
+      toast.error(result.error)
+    }
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {pinnedItems.length > 0 ? (
@@ -75,9 +126,23 @@ export function DashboardBoard({
             fill={false}
             items={pinnedItems}
             onTogglePin={handleTogglePin}
+            onReorder={handleReorderPins}
           />
-          <Separator className="my-8 shrink-0 bg-border" />
+          <Separator className="my-4 shrink-0 bg-border" />
         </>
+      ) : null}
+
+      {showSearch ? (
+        <div className="relative mb-8 max-w-md shrink-0">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={t("dashboard.search.placeholder")}
+            aria-label={t("dashboard.search.label")}
+            className="pl-10"
+          />
+        </div>
       ) : null}
 
       <DashboardCollection
@@ -87,9 +152,9 @@ export function DashboardBoard({
         titleHintLabel={t("dashboard.workspaces.hintLabel")}
         kind="programme"
         headerAction={programmeHeader}
-        items={unpinnedProgrammes}
+        items={filteredProgrammes}
         onTogglePin={handleTogglePin}
-        empty={programmeEmpty}
+        empty={unpinnedProgrammes.length === 0 ? programmeEmpty : hasSearchQuery ? searchEmpty : programmeEmpty}
       />
 
       <Separator className="my-8 shrink-0 bg-border" />
@@ -101,9 +166,9 @@ export function DashboardBoard({
         titleHintLabel={t("dashboard.spaces.hintLabel")}
         kind="authority"
         headerAction={authorityHeader}
-        items={unpinnedAuthorities}
+        items={filteredAuthorities}
         onTogglePin={handleTogglePin}
-        empty={authorityEmpty}
+        empty={unpinnedAuthorities.length === 0 ? authorityEmpty : hasSearchQuery ? searchEmpty : authorityEmpty}
       />
     </div>
   )

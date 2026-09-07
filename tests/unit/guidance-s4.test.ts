@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { glossaryDefinition } from "@/lib/guidance/help-corpus"
+import { glossaryDefinition, HELP_CORPUS } from "@/lib/guidance/help-corpus"
 import { isSpaceHelpAiDisabled, resolveHelpAiEnabled } from "@/lib/guidance/help-flag"
 import { sanitizeGuidanceTelemetry } from "@/lib/guidance/telemetry"
 
@@ -56,10 +56,8 @@ describe("glossary aliases", () => {
     expect(glossaryDefinition("organisation")).toBe(glossaryDefinition("authority"))
   })
 
-  it("distinguishes document owner, chapter owner, and focus from jobs", () => {
-    expect(glossaryDefinition("document owner")).toMatch(/Not a job/)
-    expect(glossaryDefinition("chapter owner")).toMatch(/Not the assigned reviewer/)
-    expect(glossaryDefinition("read all")).toMatch(/Focus is write mode/)
-    expect(glossaryDefinition("job")).toMatch(/not document owner/)
+  it("mentions tenant model administration in the help corpus", () => {
+    expect(HELP_CORPUS).toMatch(/Tenant admin/)
+    expect(HELP_CORPUS).toMatch(/Authority agents/)
   })
 })

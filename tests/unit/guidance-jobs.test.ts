@@ -35,7 +35,10 @@ describe("guidance jobs", () => {
 
   it("hides configuration from author primary nav and centres review for reviewers", () => {
     expect(primaryNavSections("author")).not.toContain("setup")
+    expect(primaryNavSections("author")).not.toContain("agents")
     expect(moreNavSections("author", PROGRAMME_WORKBENCH_SECTIONS)).toContain("setup")
+    expect(moreNavSections("author", PROGRAMME_WORKBENCH_SECTIONS)).toContain("agents")
+    expect(primaryNavSections("administrator")).toContain("agents")
     expect(defaultProgrammeSection("reviewer")).toBe("review")
     expect(defaultProgrammeSection("author")).toBe("editor")
     expect(defaultProgrammeSection("administrator")).toBe("editor")

@@ -15,6 +15,7 @@ import { DOCUMENT_ROLES, type DocumentOrigin, type DocumentRole, type ProgrammeB
 import { isChapterDocumentId } from "@/lib/programme/source-set-bindings"
 import { bindProgrammeDocumentRole, seedProgrammeCorpusFixtures } from "@/lib/actions/programme"
 import { bindPublishedProgrammeAsPolicy, type ProgrammePublicationSummary } from "@/lib/actions/publish"
+import type { NotifyKind } from "@/lib/notify"
 
 type CorpusDoc = {
   id: string
@@ -34,7 +35,7 @@ type Props = {
   citePublicationId: string
   onCitePublicationIdChange: (id: string) => void
   onBindingsChange: (bindings: ProgrammeBindings) => void
-  onMessage: (message: string | null) => void
+  onMessage: (message: string | null, kind?: NotifyKind) => void
   onRefresh: () => void
   startTransition: (action: () => Promise<void> | void) => void
 }
@@ -79,6 +80,7 @@ export function ProgrammeDocumentRoles({
                   t("workspace.programme.corpusSeeded", undefined, {
                     count: String(result.data?.created ?? 0),
                   }),
+                result.error ? "error" : "success",
               )
               onRefresh()
             })
@@ -117,7 +119,7 @@ export function ProgrammeDocumentRoles({
                   startTransition(async () => {
                     const role = (value === "none" ? null : value) as DocumentRole | null
                     const result = await bindProgrammeDocumentRole(workspaceId, doc.id, role)
-                    onMessage(result.error || t("workspace.programme.corpusRole"))
+                    onMessage(result.error || t("workspace.programme.corpusRole"), result.error ? "error" : "success")
                     if (result.data && typeof result.data === "object" && "environmentalVisionDocumentIds" in result.data) {
                       onBindingsChange(result.data)
                     }
@@ -177,7 +179,7 @@ export function ProgrammeDocumentRoles({
               onClick={() =>
                 startTransition(async () => {
                   const result = await bindPublishedProgrammeAsPolicy(workspaceId, citePublicationId)
-                  onMessage(result.error || t("workspace.programme.citePublishedDone"))
+                  onMessage(result.error || t("workspace.programme.citePublishedDone"), result.error ? "error" : "success")
                   onRefresh()
                 })
               }

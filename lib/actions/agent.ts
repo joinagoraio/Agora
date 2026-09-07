@@ -8,11 +8,19 @@ import {
   type AgentStage,
   type AgentVersionRecord,
   type DocumentRole,
+  DEFAULT_SPACE_AGENTS,
+  agentHistoryVersionDeleteReason,
   isAgentStage,
   isDocumentRole,
+  matchingAgentVersionNumber,
+  parseProgrammeBindings,
+  unbindAgentFromProgrammeBindings,
 } from "@/lib/programme/domain"
 import { agentCreateSchema, agentVersionPayloadSchema } from "@/lib/programme/structured-artefacts"
-import { DEFAULT_ANALYSIS_PLAYBOOK, DEFAULT_MEASURES_PLAYBOOK, DEFAULT_OER_PLAYBOOK, DEFAULT_QC_PLAYBOOK, DEFAULT_VISION_PLAYBOOK, DEFAULT_DRAFT_PLAYBOOK } from "@/lib/chat/playbook-compiler"
+import { getPlatformPrompt } from "@/lib/llm/prompts"
+import { getTenantIdForSpace } from "@/lib/llm/resolve"
+import { listAuthorityModels } from "@/lib/actions/tenant-llm"
+import { providerAdapterId } from "@/lib/llm/catalog"
 
 function mapAgent(row: {
   id: string
@@ -20,6 +28,7 @@ function mapAgent(row: {
   name: string
   role: string
   stage: string
+  permitted?: boolean | null
   created_at: string
 }): AgentRecord {
   return {
@@ -28,6 +37,7 @@ function mapAgent(row: {
     name: row.name,
     role: row.role,
     stage: (isAgentStage(row.stage) ? row.stage : "draft") as AgentStage,
+    permitted: row.permitted !== false,
     createdAt: row.created_at,
   }
 }
@@ -44,6 +54,7 @@ function mapVersion(row: {
   provider: string
   endpoint: string | null
   credentials_ref: string | null
+  catalog_model_id?: string | null
   model: string
   changelog: string | null
   created_at: string
@@ -60,6 +71,7 @@ function mapVersion(row: {
     provider: row.provider,
     endpoint: row.endpoint,
     credentialsRef: row.credentials_ref,
+    catalogModelId: row.catalog_model_id ?? null,
     model: row.model,
     changelog: row.changelog,
     createdAt: row.created_at,
@@ -67,7 +79,9 @@ function mapVersion(row: {
 }
 
 const VERSION_SELECT =
-  "id, agent_id, version, instructions, source_roles, source_document_ids, output_contract, quality_rules, provider, endpoint, credentials_ref, model, changelog, created_at"
+  "id, agent_id, version, instructions, source_roles, source_document_ids, output_contract, quality_rules, provider, endpoint, credentials_ref, catalog_model_id, model, changelog, created_at"
+
+const AGENT_SELECT = "id, space_id, name, role, stage, permitted, created_at"
 
 export async function listSpaceAgents(spaceId: string): Promise<{
   data: Array<AgentRecord & { latestVersion: AgentVersionRecord | null }>
@@ -76,7 +90,7 @@ export async function listSpaceAgents(spaceId: string): Promise<{
   const supabase = await createClient()
   const { data: agents, error } = await supabase
     .from("agents")
-    .select("id, space_id, name, role, stage, created_at")
+    .select(AGENT_SELECT)
     .eq("space_id", spaceId)
     .order("created_at", { ascending: true })
   if (error) return { error: error.message, data: [] }
@@ -135,6 +149,7 @@ export async function createAgent(input: {
     provider?: string
     endpoint?: string | null
     credentialsRef?: string | null
+    catalogModelId?: string | null
     model: string
     changelog?: string | null
   }
@@ -167,7 +182,7 @@ export async function createAgent(input: {
       stage: parsed.data.stage,
       created_by: user?.id ?? null,
     })
-    .select("id, space_id, name, role, stage, created_at")
+    .select(AGENT_SELECT)
     .single()
   if (error || !agent) return { error: error?.message || "Failed to create agent" }
 
@@ -184,6 +199,7 @@ export async function createAgent(input: {
       provider: parsed.data.version.provider,
       endpoint: parsed.data.version.endpoint ?? null,
       credentials_ref: parsed.data.version.credentialsRef ?? null,
+      catalog_model_id: parsed.data.version.catalogModelId ?? null,
       model: parsed.data.version.model,
       changelog: parsed.data.version.changelog ?? "Initial version",
       created_by: user?.id ?? null,
@@ -200,6 +216,7 @@ export async function publishAgentVersion(input: {
   spaceId: string
   agentId: string
   payload: unknown
+  allowDuplicate?: boolean
 }) {
   try {
     await requireAuthAndPermission("space:update", { spaceId: input.spaceId })
@@ -209,6 +226,18 @@ export async function publishAgentVersion(input: {
 
   const parsed = agentVersionPayloadSchema.safeParse(input.payload)
   if (!parsed.success) return { error: parsed.error.errors.map((e) => e.message).join("; ") }
+
+  if (!input.allowDuplicate) {
+    const listed = await listAgentVersions(input.agentId)
+    if (listed.error) return { error: listed.error }
+    const duplicate = matchingAgentVersionNumber(listed.data, {
+      instructions: parsed.data.instructions,
+      qualityRules: parsed.data.qualityRules,
+    })
+    if (duplicate != null) {
+      return { error: `This is a duplicate of version ${duplicate}.` }
+    }
+  }
 
   const supabase = await createClient()
   const {
@@ -230,6 +259,7 @@ export async function publishAgentVersion(input: {
       provider: parsed.data.provider,
       endpoint: parsed.data.endpoint ?? null,
       credentials_ref: parsed.data.credentialsRef ?? null,
+      catalog_model_id: parsed.data.catalogModelId ?? null,
       model: parsed.data.model,
       changelog: parsed.data.changelog ?? `Version ${nextVersion}`,
       created_by: user?.id ?? null,
@@ -245,9 +275,11 @@ export async function publishAgentVersion(input: {
 export async function rollbackAgentVersion(spaceId: string, agentId: string, versionId: string) {
   const current = await getAgentVersionById(versionId)
   if (current.error || !current.data) return { error: current.error || "Version not found" }
+  if (current.data.agentId !== agentId) return { error: "Version not found" }
   return publishAgentVersion({
     spaceId,
     agentId,
+    allowDuplicate: true,
     payload: {
       instructions: current.data.instructions,
       sourceRoles: current.data.sourceRoles,
@@ -257,10 +289,98 @@ export async function rollbackAgentVersion(spaceId: string, agentId: string, ver
       provider: current.data.provider,
       endpoint: current.data.endpoint,
       credentialsRef: current.data.credentialsRef,
+      catalogModelId: current.data.catalogModelId,
       model: current.data.model,
       changelog: `Rollback to v${current.data.version}`,
     },
   })
+}
+
+export async function deleteAgent(spaceId: string, agentId: string) {
+  try {
+    await requireAuthAndPermission("space:update", { spaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+
+  const supabase = await createClient()
+  const { data: agent, error: agentError } = await supabase
+    .from("agents")
+    .select("id")
+    .eq("id", agentId)
+    .eq("space_id", spaceId)
+    .maybeSingle()
+  if (agentError || !agent) return { error: agentError?.message || "Agent not found" }
+
+  const { data: workspaces, error: workspaceError } = await supabase
+    .from("workspaces")
+    .select("id, metadata")
+    .eq("space_id", spaceId)
+  if (workspaceError) return { error: workspaceError.message }
+
+  for (const workspace of workspaces || []) {
+    const metadata = (workspace.metadata as Record<string, unknown> | null) || {}
+    const current = parseProgrammeBindings(metadata)
+    const next = unbindAgentFromProgrammeBindings(current, agentId)
+    if (JSON.stringify(current) === JSON.stringify(next)) continue
+    const { error } = await supabase
+      .from("workspaces")
+      .update({
+        metadata: { ...metadata, programmeBindings: next },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", workspace.id)
+      .eq("space_id", spaceId)
+    if (error) return { error: error.message }
+    revalidatePath(`/workspaces/${workspace.id}`)
+    revalidatePath(`/workspaces/${workspace.id}/programme`)
+  }
+
+  const { error } = await supabase.from("agents").delete().eq("id", agentId).eq("space_id", spaceId)
+  if (error) return { error: error.message }
+  revalidatePath(`/spaces/${spaceId}`)
+  return { success: true }
+}
+
+export async function deleteAgentVersion(spaceId: string, agentId: string, versionId: string) {
+  try {
+    await requireAuthAndPermission("space:update", { spaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+
+  const supabase = await createClient()
+  const { data: agent, error: agentError } = await supabase
+    .from("agents")
+    .select("id")
+    .eq("id", agentId)
+    .eq("space_id", spaceId)
+    .maybeSingle()
+  if (agentError || !agent) return { error: agentError?.message || "Agent not found" }
+
+  const listed = await listAgentVersions(agentId)
+  if (listed.error) return { error: listed.error }
+  const reason = agentHistoryVersionDeleteReason(listed.data, versionId)
+  if (reason === "missing") return { error: "Version not found" }
+  if (reason === "only") return { error: "Cannot delete the only version" }
+
+  const { error } = await supabase.from("agent_versions").delete().eq("id", versionId).eq("agent_id", agentId)
+  if (error) return { error: error.message }
+  revalidatePath(`/spaces/${spaceId}`)
+  return { success: true }
+}
+
+export async function setAgentPermitted(spaceId: string, agentId: string, permitted: boolean) {
+  try {
+    await requireAuthAndPermission("space:update", { spaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+  const supabase = await createClient()
+  const { error } = await supabase.from("agents").update({ permitted }).eq("id", agentId).eq("space_id", spaceId)
+  if (error) return { error: error.message }
+  revalidatePath(`/spaces/${spaceId}`)
+  return { success: true }
 }
 
 export async function updateAgentMeta(input: {
@@ -285,105 +405,11 @@ export async function updateAgentMeta(input: {
     .update(patch)
     .eq("id", input.agentId)
     .eq("space_id", input.spaceId)
-    .select("id, space_id, name, role, stage, created_at")
+    .select(AGENT_SELECT)
     .single()
   if (error || !data) return { error: error?.message || "Update failed" }
   return { data: mapAgent(data) }
 }
-
-type DefaultAgentSpec = {
-  name: string
-  role: string
-  stage: AgentStage
-  instructions: string
-  sourceRoles: DocumentRole[]
-  provider: string
-  model: string
-  qualityRules: string
-}
-
-const DEFAULT_AGENTS: DefaultAgentSpec[] = [
-  {
-    name: "Policy analyst",
-    role: "Existing-policy analysis",
-    stage: "analysis",
-    instructions: DEFAULT_ANALYSIS_PLAYBOOK,
-    sourceRoles: ["environmental_vision", "existing_policy"],
-    provider: "anthropic",
-    model: "claude-sonnet-4-5",
-    qualityRules: "Findings must cite both vision and policy when a contradiction is claimed.",
-  },
-  {
-    name: "Policy analyst (OpenAI-compatible)",
-    role: "Existing-policy analysis",
-    stage: "analysis",
-    instructions: DEFAULT_ANALYSIS_PLAYBOOK,
-    sourceRoles: ["environmental_vision", "existing_policy"],
-    provider: "openai-compatible",
-    model: "gpt-4o-mini",
-    qualityRules: "Findings must cite both vision and policy when a contradiction is claimed.",
-  },
-  {
-    name: "Vision graph specialist",
-    role: "Vision and coverage",
-    stage: "vision",
-    instructions: DEFAULT_VISION_PLAYBOOK,
-    sourceRoles: ["environmental_vision"],
-    provider: "openai-compatible",
-    model: "gpt-4o-mini",
-    qualityRules: "Every measure must have a contribution path.",
-  },
-  {
-    name: "Measures author",
-    role: "Measure generation",
-    stage: "measures",
-    instructions: DEFAULT_MEASURES_PLAYBOOK,
-    sourceRoles: ["environmental_vision", "existing_policy", "housing_programme", "programme_handbook"],
-    provider: "openai-compatible",
-    model: "gpt-4o-mini",
-    qualityRules: "Measures of type measure must be specific and cited.",
-  },
-  {
-    name: "Effects specialist",
-    role: "OER alignment",
-    stage: "oer",
-    instructions: DEFAULT_OER_PLAYBOOK,
-    sourceRoles: ["environmental_effects_report"],
-    provider: "openai-compatible",
-    model: "gpt-4o-mini",
-    qualityRules: "Deviations require justification.",
-  },
-  {
-    name: "Quality controller",
-    role: "Programme QC",
-    stage: "qc",
-    instructions: DEFAULT_QC_PLAYBOOK,
-    sourceRoles: ["quality_style_rules", "programme_handbook", "environmental_vision"],
-    provider: "anthropic",
-    model: "claude-sonnet-4-5",
-    qualityRules: "Produce an actionable finding list, not chat.",
-  },
-  {
-    name: "Quality controller (OpenAI-compatible)",
-    role: "Programme QC",
-    stage: "qc",
-    instructions: DEFAULT_QC_PLAYBOOK,
-    sourceRoles: ["quality_style_rules", "programme_handbook", "environmental_vision"],
-    provider: "openai-compatible",
-    model: "gpt-4o-mini",
-    qualityRules: "Produce an actionable finding list, not chat.",
-  },
-  {
-    name: "Chapter drafter",
-    role: "Structured chapter draft",
-    stage: "draft",
-    instructions: DEFAULT_DRAFT_PLAYBOOK,
-    sourceRoles: ["environmental_vision", "programme_handbook", "quality_style_rules"],
-    provider: "openai-compatible",
-    model: "gpt-4o-mini",
-    qualityRules: "Obey the outline node instructions and required flag.",
-  },
-]
 
 /** Idempotent default specialists. Safe to call twice. */
 export async function seedDefaultSpaceAgents(spaceId: string) {
@@ -395,30 +421,61 @@ export async function seedDefaultSpaceAgents(spaceId: string) {
 
   const existing = await listSpaceAgents(spaceId)
   if (existing.error) return { error: existing.error }
-  const byName = new Set(existing.data.map((a) => a.name))
   const byStage = new Map(existing.data.map((a) => [a.stage, a]))
   const created: AgentRecord[] = []
 
-  for (const spec of DEFAULT_AGENTS) {
-    if (byName.has(spec.name)) continue
+  const tenantId = await getTenantIdForSpace(spaceId)
+  if (!tenantId) return { error: "This authority has no organisation." }
+  const catalog = await listAuthorityModels(spaceId)
+  const firstModel = (catalog.data || [])
+    .map((row) => {
+      const model = Array.isArray(row.llm_models) ? row.llm_models[0] : row.llm_models
+      if (!model || typeof model !== "object") return null
+      const record = model as { id: string; provider_id: string; model_id: string }
+      return record
+    })
+    .find((row): row is { id: string; provider_id: string; model_id: string } => Boolean(row))
+  if (!firstModel) {
+    return { error: "Enable at least one model for this authority before seeding agents." }
+  }
+
+  for (const spec of DEFAULT_SPACE_AGENTS) {
+    const current = existing.data.find((agent) => agent.name === spec.name)
+    if (current) {
+      if (current.role !== spec.role || current.stage !== spec.stage) {
+        const updated = await updateAgentMeta({
+          spaceId,
+          agentId: current.id,
+          role: spec.role,
+          stage: spec.stage,
+        })
+        if (updated.error || !updated.data) return { error: updated.error || "Update agent failed" }
+        byStage.set(spec.stage, { ...current, ...updated.data })
+      }
+      continue
+    }
+    const [instructions, qualityRules] = await Promise.all([
+      getPlatformPrompt(`playbook.${spec.stage}`),
+      getPlatformPrompt(`agent.quality.${spec.stage}`),
+    ])
     const result = await createAgent({
       spaceId,
       name: spec.name,
       role: spec.role,
       stage: spec.stage,
       version: {
-        instructions: spec.instructions,
+        instructions,
         sourceRoles: spec.sourceRoles,
-        model: spec.model,
-        provider: spec.provider,
-        qualityRules: spec.qualityRules,
+        model: firstModel.model_id,
+        provider: providerAdapterId(firstModel.provider_id),
+        catalogModelId: firstModel.id,
+        qualityRules,
         outputContract: spec.stage === "draft" ? "prose" : "json",
         changelog: "Seeded default specialist",
       },
     })
     if (result.error || !result.data) return { error: result.error || "Seed agent failed" }
     created.push(result.data.agent)
-    byName.add(spec.name)
     byStage.set(spec.stage, { ...result.data.agent, latestVersion: result.data.version })
   }
 

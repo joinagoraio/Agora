@@ -75,7 +75,7 @@ export async function acquireSectionLock(workspaceId: string, sectionKey: string
   if (existing?.locked_by && existing.locked_by !== user.id) {
     const expiresAt = existing.expires_at ? new Date(existing.expires_at) : null
     if (expiresAt && expiresAt > now) {
-      return { error: "Section is locked by another member", data: existing }
+      return { error: "Chapter is locked by another member", data: existing }
     }
   }
 

@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { JumpPaletteProvider } from "@/components/jump-palette"
-import { Toaster } from "sonner"
+import { AppToaster } from "@/components/app-toaster"
 import { getServerDictionary } from "@/lib/i18n/server"
 import { I18nClientProvider } from "@/components/providers/i18n-client-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -42,7 +42,7 @@ export default async function RootLayout({
               <ErrorBoundary>{children}</ErrorBoundary>
             </JumpPaletteProvider>
           </TooltipProvider>
-        <Toaster position="bottom-center" richColors closeButton />
+        <AppToaster />
         </I18nClientProvider>
       </body>
     </html>

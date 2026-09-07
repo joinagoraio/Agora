@@ -3,10 +3,10 @@ import { z } from "zod"
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
-import { env, isHelpAiEnabled } from "@/lib/env"
+import { isHelpAiEnabled } from "@/lib/env"
 import { completeLlm } from "@/lib/llm/complete"
 import { HELP_REFUSAL_COPY_EN, shouldRefuseHelpQuery } from "@/lib/guidance/help-refuse"
-import { glossaryDefinition, HELP_SYSTEM_PROMPT } from "@/lib/guidance/help-corpus"
+import { glossaryDefinition } from "@/lib/guidance/help-corpus"
 import { isSpaceHelpAiDisabled, resolveHelpAiEnabled } from "@/lib/guidance/help-flag"
 import { applyRateLimitHeaders, checkRateLimit, helpRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { getClientIdentifier } from "@/lib/utils/request"
@@ -204,11 +204,18 @@ export async function POST(req: Request) {
       .filter(Boolean)
       .join("\n")
 
+    const { resolvePlatformTaskLlm } = await import("@/lib/llm/resolve")
+    const { getPlatformPrompt } = await import("@/lib/llm/prompts")
+    const resolved = await resolvePlatformTaskLlm("help")
+    const helpPrompt = await getPlatformPrompt("help")
+
     const result = await completeLlm({
-      provider: "openai",
-      model: "gpt-4o-mini",
+      provider: resolved.provider,
+      model: resolved.model,
+      apiKey: resolved.apiKey,
+      endpoint: resolved.endpoint,
       messages: [
-        { role: "system", content: HELP_SYSTEM_PROMPT },
+        { role: "system", content: helpPrompt },
         { role: "user", content: `${contextBlock}\n\nQuestion:\n${input.message}` },
       ],
       temperature: 0.2,
@@ -235,7 +242,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("[Help API]", error)
     return withRateLimit(
-      NextResponse.json({ error: env.OPENAI_API_KEY ? "Help could not answer" : "Help AI is not configured" }, { status: 500 }),
+      NextResponse.json({ error: "Help could not answer" }, { status: 500 }),
     )
   }
 }

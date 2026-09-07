@@ -341,7 +341,7 @@ export async function generateProgrammeMeasuresFromContext(
 
   const { data: workspace, error: workspaceError } = await supabase
     .from("workspaces")
-    .select("name, context, location, metadata")
+    .select("name, context, location, metadata, space_id")
     .eq("id", workspaceId)
     .single()
   if (workspaceError || !workspace) return { error: "Workspace not found" }
@@ -365,9 +365,14 @@ export async function generateProgrammeMeasuresFromContext(
   }
 
   const { assessMeasureCitations } = await import("@/lib/programme/reliability")
-  const model = agentVersion?.model || "gpt-4o-mini"
-  const provider = agentVersion?.provider || "openai-compatible"
-  const playbookBody = agentVersion?.instructions
+  const { getTenantIdForSpace, resolveAgentVersionLlm } = await import("@/lib/llm/resolve")
+  const tenantId = workspace.space_id ? await getTenantIdForSpace(workspace.space_id) : null
+  const llm = await resolveAgentVersionLlm({ tenantId, spaceId: workspace.space_id, agentVersion })
+  const model = llm.model
+  const provider = llm.provider
+  const { loadPromptLayers } = await import("@/lib/llm/prompts")
+  const layers = await loadPromptLayers("measures")
+  const playbookBody = agentVersion?.instructions || layers.playbook
 
   let outlineBlock = "(no outline bound yet)"
   if (bindings.templateId) {
@@ -389,6 +394,7 @@ export async function generateProgrammeMeasuresFromContext(
   const { systemPrompt } = compileSystemPrompt({
     kind: "measures",
     userLanguage,
+    identity: layers.identity,
     playbookBody,
     runInstructions: instructions,
     runtimeSections: `PROGRAMME OUTLINE:\n${outlineBlock}\n\nAGENT SOURCE SET:\n${sourcePreview}\n\nALLOWED DOCUMENT IDS FOR CITATIONS:\n${evidenceIdList}${
@@ -414,8 +420,8 @@ Return ONLY the JSON object with a "measures" array.`
   try {
     const completion = await completeLlm({
       provider,
-      endpoint: agentVersion?.endpoint,
-      credentialsRef: agentVersion?.credentialsRef,
+      endpoint: llm.endpoint,
+      apiKey: llm.apiKey,
       model,
       messages: [
         { role: "system", content: systemPrompt },

@@ -19,6 +19,7 @@ const VALID_EXTENSIONS = new Set([
   "xlsx",
   "ppt",
   "pptx",
+  "csv",
   "jpg",
   "jpeg",
   "png",
@@ -71,6 +72,8 @@ export function getDocumentFileExtension(doc: DocumentLike): string {
   const mimeCandidates = [
     doc.mimeType,
     metadata.contentType,
+    metadata.content_type,
+    metadata.mimeType,
     metadata.type,
     metadata.mime_type,
   ]

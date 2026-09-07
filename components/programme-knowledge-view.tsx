@@ -77,12 +77,26 @@ export function ProgrammeKnowledgeView({
     }
   }, [load])
 
+  const heading = (
+    <div className="space-y-1">
+      <h2 className="text-xl font-semibold tracking-tight">{t("workspace.programme.nav.knowledge")}</h2>
+      <p className="text-sm text-muted-foreground">{t("workspace.programme.purpose.knowledge")}</p>
+    </div>
+  )
+
   if (loading) {
-    return <p className="p-6 text-sm text-muted-foreground">{t("workspace.programme.knowledgeLoading")}</p>
+    return (
+      <div className="space-y-6">
+        {heading}
+        <p className="text-sm text-muted-foreground">{t("workspace.programme.knowledgeLoading")}</p>
+      </div>
+    )
   }
 
   return (
-    <Tabs defaultValue="sources" className="space-y-6">
+    <div className="space-y-6">
+      {heading}
+      <Tabs defaultValue="sources" className="space-y-6">
       <TabsList className="grid w-full max-w-2xl grid-cols-4">
         <TabsTrigger value="sources">
           {t("workspace.tabs.sources")} <span className="font-normal">({uploadedDocuments.length})</span>
@@ -159,5 +173,6 @@ export function ProgrammeKnowledgeView({
         )}
       </TabsContent>
     </Tabs>
+    </div>
   )
 }

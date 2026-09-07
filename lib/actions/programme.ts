@@ -115,6 +115,22 @@ export async function bindWorkspaceTemplate(workspaceId: string, templateId: str
   return updateProgrammeBindings(workspaceId, { ...current.data, templateId })
 }
 
+export async function bindWorkspaceChapterAgent(
+  workspaceId: string,
+  outlineNodeId: string,
+  agentId: string | null,
+) {
+  const current = await getProgrammeBindings(workspaceId)
+  if (current.error) return current
+  const chapterAgentBindings = { ...(current.data.chapterAgentBindings || {}) }
+  if (agentId) chapterAgentBindings[outlineNodeId] = agentId
+  else delete chapterAgentBindings[outlineNodeId]
+  return updateProgrammeBindings(workspaceId, {
+    ...current.data,
+    chapterAgentBindings,
+  })
+}
+
 export async function bindWorkspaceAgents(
   workspaceId: string,
   agentBindings: ProgrammeBindings["agentBindings"],

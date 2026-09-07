@@ -66,6 +66,7 @@ export async function listDashboardPins() {
     .from("dashboard_pins")
     .select("item_kind, item_id")
     .eq("user_id", access.userId)
+    .order("sort_order", { ascending: true })
     .order("created_at", { ascending: false })
 
   if (error) {
@@ -105,12 +106,68 @@ export async function toggleDashboardPin(kind: DashboardPinKind, itemId: string)
     return { pinned: false }
   }
 
+  const { data: first } = await admin
+    .from("dashboard_pins")
+    .select("sort_order")
+    .eq("user_id", access.userId)
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
   const { error } = await admin.from("dashboard_pins").insert({
     user_id: access.userId,
     item_kind: kind,
     item_id: itemId,
+    sort_order: (typeof first?.sort_order === "number" ? first.sort_order : 0) - 1,
   })
   if (error) return { error: error.message }
   revalidatePath("/dashboard")
   return { pinned: true }
+}
+
+export async function reorderDashboardPins(ordered: DashboardPin[]) {
+  const access = await requireUserId()
+  if ("error" in access) return { error: access.error }
+
+  const admin = createAdminClient()
+  const { data: existing, error: loadError } = await admin
+    .from("dashboard_pins")
+    .select("id, item_kind, item_id, sort_order")
+    .eq("user_id", access.userId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: false })
+  if (loadError) return { error: loadError.message }
+
+  const rows = existing ?? []
+  const byKey = new Map(rows.map((row) => [`${row.item_kind}:${row.item_id}`, row]))
+  const seen = new Set<string>()
+  const updates: Array<{ id: string; sort_order: number }> = []
+  let sortOrder = 0
+
+  for (const item of ordered) {
+    const key = `${item.kind}:${item.id}`
+    const row = byKey.get(key)
+    if (!row || seen.has(key)) continue
+    seen.add(key)
+    updates.push({ id: row.id, sort_order: sortOrder })
+    sortOrder += 1
+  }
+  for (const row of rows) {
+    const key = `${row.item_kind}:${row.item_id}`
+    if (seen.has(key)) continue
+    updates.push({ id: row.id, sort_order: sortOrder })
+    sortOrder += 1
+  }
+
+  for (const update of updates) {
+    const { error } = await admin
+      .from("dashboard_pins")
+      .update({ sort_order: update.sort_order })
+      .eq("id", update.id)
+      .eq("user_id", access.userId)
+    if (error) return { error: error.message }
+  }
+
+  revalidatePath("/dashboard")
+  return { success: true }
 }

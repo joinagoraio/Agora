@@ -7,6 +7,7 @@ import { updateSpace, updateSpaceScope, enhanceScopeText, updateSpaceSetupState 
 import { createWorkspace } from "@/lib/actions/workspace"
 import { workspaceHomeHref } from "@/lib/programme/domain"
 import { AddOverheidDocumentsDialog } from "@/components/add-overheid-documents-dialog"
+import { SpaceAgentsPanel } from "@/components/space-agents-panel"
 import { SpaceUploadDocumentDialog } from "@/components/space-upload-document-dialog"
 import { type SpaceDocumentItem } from "@/components/space-documents-panel"
 import { type SpaceWorkspace } from "@/components/space-workspace-list"
@@ -46,6 +47,7 @@ type SpaceDetailsUpdate = {
 interface SpaceSetupWizardProps {
   open: boolean
   spaceId: string
+  tenantId: string
   spaceName: string
   spaceType?: string | null
   visibility?: string | null
@@ -65,6 +67,7 @@ interface SpaceSetupWizardProps {
 export function SpaceSetupWizard({
   open,
   spaceId,
+  tenantId,
   spaceName,
   spaceType,
   visibility,
@@ -119,6 +122,11 @@ export function SpaceSetupWizard({
         description: t("space.wizard.steps.documents.description"),
       },
       {
+        key: "agents",
+        title: t("space.wizard.steps.agents.title"),
+        description: t("space.wizard.steps.agents.description"),
+      },
+      {
         key: "workspace",
         title: t("space.wizard.steps.workspace.title"),
         description: t("space.wizard.steps.workspace.description"),
@@ -144,6 +152,10 @@ export function SpaceSetupWizard({
       {
         title: t("space.wizard.welcome.coverItems.documents.title"),
         description: t("space.wizard.welcome.coverItems.documents.description"),
+      },
+      {
+        title: t("space.wizard.welcome.coverItems.agents.title"),
+        description: t("space.wizard.welcome.coverItems.agents.description"),
       },
       {
         title: t("space.wizard.welcome.coverItems.workspace.title"),
@@ -992,6 +1004,17 @@ export function SpaceSetupWizard({
                 </div>
               </div>
             )}
+          </div>
+        )
+      }
+      case "agents": {
+        return (
+          <div className="space-y-4">
+            <div className="flex flex-col gap-2">
+              <h3 className="text-base font-semibold text-foreground">{t("space.wizard.agents.title")}</h3>
+              <p className="text-sm text-muted-foreground">{t("space.wizard.agents.description")}</p>
+            </div>
+            <SpaceAgentsPanel spaceId={spaceId} tenantId={tenantId} compact />
           </div>
         )
       }

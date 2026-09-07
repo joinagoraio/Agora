@@ -16,6 +16,7 @@ import { updateMeasureEffects } from "@/lib/actions/measures"
 import { runBoundAgentAnalysis } from "@/lib/actions/analysis"
 import { effectsDirectionSchema } from "@/lib/programme/structured-artefacts"
 import { matchFindingToMeasure } from "@/lib/programme/analysis-reports"
+import type { NotifyKind } from "@/lib/notify"
 
 type MeasureRow = {
   id: string
@@ -31,7 +32,7 @@ type Props = {
   workspaceId: string
   measures: MeasureRow[]
   reports?: Array<{ report_type: string; findings: unknown; created_at: string }>
-  onMessage: (message: string | null) => void
+  onMessage: (message: string | null, kind?: NotifyKind) => void
   onRefresh: () => void
   onGoMeasures: () => void
 }
@@ -89,7 +90,8 @@ export function ProgrammeEffectsPanel({ workspaceId, measures, reports = [], onM
         onClick={() =>
           startTransition(async () => {
             const result = await runBoundAgentAnalysis({ workspaceId, kind: "oer" })
-            onMessage(result.error || t("workspace.programme.oerDone"))
+            if (result.error) onMessage(result.error, "error")
+            else onMessage(t("workspace.programme.oerDone"))
             onRefresh()
           })
         }
@@ -142,7 +144,7 @@ export function ProgrammeEffectsPanel({ workspaceId, measures, reports = [], onM
                         effectsJustification: draft.effectsJustification,
                       })
                       if (result.error) {
-                        onMessage(result.error)
+                        onMessage(result.error, "error")
                         return
                       }
                       onMessage(t("workspace.programme.effectsSaved", undefined, { title: m.title }))

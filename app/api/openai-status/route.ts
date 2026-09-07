@@ -1,64 +1,50 @@
-import { NextRequest, NextResponse } from "next/server"
-import OpenAI from "openai"
-import { env } from "@/lib/env"
+import { NextResponse } from "next/server"
+import { completePlatformTask, hasPlatformLlmCredentials } from "@/lib/llm/resolve"
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    // Check if API key is configured
-    if (!env.OPENAI_API_KEY) {
+    if (!(await hasPlatformLlmCredentials())) {
       return NextResponse.json(
         {
           status: "error",
-          message: "OpenAI API key is not configured",
-          details: "OPENAI_API_KEY environment variable is not set",
+          message: "No platform LLM API key is stored",
+          details: "Add a provider key in Platform admin",
         },
-        { status: 500 }
+        { status: 500 },
       )
     }
 
-    const openai = new OpenAI({
-      apiKey: env.OPENAI_API_KEY,
-    })
-
-    // Try a minimal API call to test the key and check for quota issues
     try {
-      const testResponse = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "user",
-            content: "Say 'OK' if you can read this.",
-          },
-        ],
-        max_tokens: 5,
+      const testResponse = await completePlatformTask("chat_title", {
+        messages: [{ role: "user", content: "Say OK" }],
+        maxTokens: 5,
       })
-
-      const responseText = testResponse.choices[0]?.message?.content || ""
 
       return NextResponse.json({
         status: "success",
-        message: "OpenAI API is working correctly",
+        message: "Platform LLM is working",
         details: {
-          model: "gpt-4o-mini",
-          response: responseText,
-          usage: testResponse.usage,
+          model: testResponse.model,
+          response: testResponse.text,
         },
       })
-    } catch (apiError: any) {
-      // Handle OpenAI API errors
-      const status = apiError?.status || apiError?.response?.status
-      const errorMessage = apiError?.message || String(apiError)
-      const errorCode = apiError?.code || apiError?.type
-      const errorDetails = apiError?.error || {}
+    } catch (apiError: unknown) {
+      const status =
+        typeof apiError === "object" && apiError && "status" in apiError
+          ? Number((apiError as { status?: number }).status)
+          : undefined
+      const errorMessage = apiError instanceof Error ? apiError.message : String(apiError)
+      const errorCode =
+        typeof apiError === "object" && apiError && "code" in apiError
+          ? String((apiError as { code?: string }).code)
+          : undefined
 
       console.error("[OpenAI Status] API Error:", {
         status,
         code: errorCode,
         message: errorMessage,
-        error: errorDetails,
       })
 
-      // Check for quota/credit issues
       if (
         status === 402 ||
         errorMessage.toLowerCase().includes("insufficient_quota") ||
@@ -72,35 +58,32 @@ export async function GET(req: NextRequest) {
         return NextResponse.json(
           {
             status: "quota_exceeded",
-            message: "OpenAI API quota exceeded or insufficient credits",
+            message: "LLM provider quota exceeded or insufficient credits",
             details: {
               error: errorMessage,
               code: errorCode,
-              suggestion:
-                "Please add credits to your OpenAI account at https://platform.openai.com/account/billing",
+              suggestion: "Check billing for the key stored in Platform admin",
             },
           },
-          { status: 402 }
+          { status: 402 },
         )
       }
 
-      // Check for rate limit
       if (status === 429 || errorMessage.toLowerCase().includes("rate limit")) {
         return NextResponse.json(
           {
             status: "rate_limited",
-            message: "OpenAI API rate limit exceeded",
+            message: "LLM provider rate limit exceeded",
             details: {
               error: errorMessage,
               code: errorCode,
               suggestion: "Please wait a moment and try again",
             },
           },
-          { status: 429 }
+          { status: 429 },
         )
       }
 
-      // Check for authentication errors
       if (
         status === 401 ||
         errorMessage.toLowerCase().includes("api key") ||
@@ -110,30 +93,28 @@ export async function GET(req: NextRequest) {
         return NextResponse.json(
           {
             status: "authentication_failed",
-            message: "OpenAI API authentication failed",
+            message: "LLM provider authentication failed",
             details: {
               error: errorMessage,
               code: errorCode,
-              suggestion: "Please check your OPENAI_API_KEY environment variable",
+              suggestion: "Rotate the provider key in Platform admin",
             },
           },
-          { status: 401 }
+          { status: 401 },
         )
       }
 
-      // Generic API error
       return NextResponse.json(
         {
           status: "api_error",
-          message: "OpenAI API error",
+          message: "LLM provider error",
           details: {
             error: errorMessage,
             code: errorCode,
             status,
-            fullError: errorDetails,
           },
         },
-        { status: status || 500 }
+        { status: status || 500 },
       )
     }
   } catch (error) {
@@ -141,12 +122,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         status: "error",
-        message: "Unexpected error checking OpenAI status",
+        message: "Unexpected error checking LLM status",
         details: {
           error: error instanceof Error ? error.message : String(error),
         },
       },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

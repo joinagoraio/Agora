@@ -98,6 +98,7 @@ export const agentVersionPayloadSchema = z.object({
     .optional()
     .transform((value) => (value ? value : null)),
   credentialsRef: z.string().optional().nullable(),
+  catalogModelId: z.string().uuid().optional().nullable(),
   model: z.string().min(1),
   changelog: z.string().optional().nullable(),
 })

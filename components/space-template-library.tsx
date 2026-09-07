@@ -17,9 +17,9 @@ import {
 } from "@/lib/actions/template"
 import type { ProgrammeOutlineNode, ProgrammeTemplate } from "@/lib/programme/domain"
 
-type Props = { spaceId: string }
+type Props = { spaceId: string; hideIntro?: boolean }
 
-export function SpaceTemplateLibrary({ spaceId }: Props) {
+export function SpaceTemplateLibrary({ spaceId, hideIntro = false }: Props) {
   const { t } = useI18n()
   const [templates, setTemplates] = useState<ProgrammeTemplate[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -67,10 +67,12 @@ export function SpaceTemplateLibrary({ spaceId }: Props) {
 
   return (
     <div className="space-y-4">
+      {hideIntro ? null : (
       <div>
         <h2 className="text-lg font-medium">{t("space.settings.templates.title")}</h2>
         <p className="text-sm text-muted-foreground">{t("space.settings.templates.hint")}</p>
       </div>
+      )}
       {message && <p className="text-sm">{message}</p>}
       <div className="flex flex-wrap gap-2">
         <Button

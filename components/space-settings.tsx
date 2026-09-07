@@ -31,18 +31,26 @@ import { UserAvatar } from "@/components/user-avatar"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { SpaceComplianceSettings } from "@/components/space-compliance-settings"
 import { SpaceTemplateLibrary } from "@/components/space-template-library"
-import { SpaceAgentAdmin } from "@/components/space-agent-admin"
 
 interface SpaceSettingsProps {
   space: any
   members: any[]
   invitations: any[]
   currentUserId: string
+  section?: "all" | "members" | "invitations" | "compliance" | "templates"
+  onMutated?: () => void
 }
 
 type SpaceAccessRole = "viewer" | "member" | "admin" | "owner"
 
-export function SpaceSettings({ space, members, invitations, currentUserId }: SpaceSettingsProps) {
+export function SpaceSettings({
+  space,
+  members,
+  invitations,
+  currentUserId,
+  section = "all",
+  onMutated,
+}: SpaceSettingsProps) {
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<SpaceAccessRole>("member")
   const [isInviting, setIsInviting] = useState(false)
@@ -60,6 +68,10 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
   const [isChangingRole, setIsChangingRole] = useState(false)
   const router = useRouter()
   const { t } = useI18n()
+  const notifyMutated = () => {
+    onMutated?.()
+    router.refresh()
+  }
 
   const translateRole = (role?: string | null) => {
     if (!role) return "—"
@@ -95,7 +107,7 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
     toast.success(t("space.settings.members.remove.success"), {
       description: t("space.settings.members.remove.successDescription"),
     })
-    router.refresh()
+    notifyMutated()
   }
 
   const handleRemoveDialogClose = (open: boolean) => {
@@ -153,7 +165,7 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
 
     setInviteEmail("")
     toast.success(t("space.settings.invitations.toastSent"), { description: email })
-    router.refresh()
+    notifyMutated()
   }
 
   const handleInvitationAction = async (invitation: { id: string; email: string }, type: "resend" | "revoke") => {
@@ -178,7 +190,7 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
     toast.success(type === "resend" ? t("space.settings.invitations.toastResend") : t("space.settings.invitations.toastRevoke"), {
       description: invitation.email,
     })
-    router.refresh()
+    notifyMutated()
   }
 
   const handleRoleChangeRequest = (
@@ -216,7 +228,7 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
       }),
     })
     setRoleChangeDialog({ isOpen: false, member: null, newRole: null })
-    router.refresh()
+    notifyMutated()
   }
 
   const formatStatusLabel = (status?: string | null) => translateStatus(status)
@@ -227,24 +239,32 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
 
   return (
     <>
-    <Tabs defaultValue="members" className="flex min-h-0 flex-1 flex-col gap-6">
+    <Tabs
+      defaultValue="members"
+      {...(section === "all" ? {} : { value: section })}
+      className="flex min-h-0 flex-1 flex-col gap-6"
+    >
+      {section === "all" ? (
       <TabsList className="shrink-0">
         <TabsTrigger value="members">{t("space.settings.tabs.members")}</TabsTrigger>
         <TabsTrigger value="invitations">{t("space.settings.tabs.invitations")}</TabsTrigger>
         <TabsTrigger value="compliance">{t("space.settings.tabs.compliance")}</TabsTrigger>
         <TabsTrigger value="templates">{t("space.settings.tabs.templates")}</TabsTrigger>
-        <TabsTrigger value="agents">{t("space.settings.tabs.agents")}</TabsTrigger>
         {canDeleteAuthority && (
           <TabsTrigger value="danger">{t("space.settings.tabs.danger")}</TabsTrigger>
         )}
       </TabsList>
+      ) : null}
 
-      <TabsContent value="members" className="min-h-0 flex-1 overflow-y-auto">
+      {(section === "all" || section === "members") && (
+      <TabsContent value="members" className={section === "all" ? "min-h-0 flex-1 overflow-y-auto" : "mt-0"}>
         <div className="space-y-4">
+          {section === "all" ? (
           <div>
             <h2 className="text-lg font-medium">{t("space.settings.members.title")}</h2>
             <p className="text-sm text-muted-foreground">{t("space.settings.members.description")}</p>
           </div>
+          ) : null}
           <Table>
               <TableHeader>
                 <TableRow>
@@ -370,13 +390,17 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
             </Table>
         </div>
       </TabsContent>
+      )}
 
-      <TabsContent value="invitations" className="min-h-0 flex-1 overflow-y-auto">
+      {(section === "all" || section === "invitations") && (
+      <TabsContent value="invitations" className={section === "all" ? "min-h-0 flex-1 overflow-y-auto" : "mt-0"}>
         <div className="space-y-4">
+          {section === "all" ? (
           <div>
             <h2 className="text-lg font-medium">{t("space.settings.invitations.title")}</h2>
             <p className="text-sm text-muted-foreground">{t("space.settings.invitations.description")}</p>
           </div>
+          ) : null}
           <div className="space-y-6">
             <form onSubmit={handleInvite} className="space-y-4">
               <div className="flex flex-wrap gap-2">
@@ -477,20 +501,21 @@ export function SpaceSettings({ space, members, invitations, currentUserId }: Sp
           </div>
         </div>
       </TabsContent>
+      )}
 
-      <TabsContent value="compliance" className="min-h-0 flex-1 overflow-y-auto">
-        <SpaceComplianceSettings spaceId={space.id} />
+      {(section === "all" || section === "compliance") && (
+      <TabsContent value="compliance" className={section === "all" ? "min-h-0 flex-1 overflow-y-auto" : "mt-0"}>
+        <SpaceComplianceSettings spaceId={space.id} hideIntro={section !== "all"} />
       </TabsContent>
+      )}
 
-      <TabsContent value="templates" className="min-h-0 flex-1 overflow-y-auto">
-        <SpaceTemplateLibrary spaceId={space.id} />
+      {(section === "all" || section === "templates") && (
+      <TabsContent value="templates" className={section === "all" ? "min-h-0 flex-1 overflow-y-auto" : "mt-0"}>
+        <SpaceTemplateLibrary spaceId={space.id} hideIntro={section !== "all"} />
       </TabsContent>
+      )}
 
-      <TabsContent value="agents" className="min-h-0 flex-1 overflow-y-auto">
-        <SpaceAgentAdmin spaceId={space.id} />
-      </TabsContent>
-
-      {canDeleteAuthority && (
+      {section === "all" && canDeleteAuthority && (
       <TabsContent value="danger" className="min-h-0 flex-1 overflow-y-auto">
         <div className="space-y-4">
           <div>

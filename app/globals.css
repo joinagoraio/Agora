@@ -385,6 +385,214 @@
   animation: accordion-up 0.2s ease-out;
 }
 
+/* Document zoom changes type size only; Wide/Narrow own the column width. */
+[data-programme-document-type] {
+  --programme-type-scale: 1;
+}
+
+[data-programme-document-page="a4"] {
+  --programme-a4-width: 210mm;
+  --programme-a4-height: 297mm;
+  --programme-a4-pad: 20mm;
+  --programme-a4-gap: 1.5rem;
+}
+
+[data-programme-document-page="a4"] [data-programme-document-type] {
+  padding: var(--programme-a4-pad);
+}
+
+.programme-a4-sheet {
+  position: absolute;
+  left: 0;
+  width: var(--programme-a4-width);
+  height: var(--programme-a4-height);
+}
+
+.programme-a4-chrome {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  height: var(--programme-a4-pad);
+  padding: 0 var(--programme-a4-pad);
+  color: var(--muted-foreground);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.programme-a4-chrome[data-programme-a4-chrome="header"] {
+  top: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.programme-a4-chrome[data-programme-a4-chrome="header"] [data-programme-chrome-slot] {
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  text-align: center;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+  white-space: normal;
+  max-height: 2.4em;
+}
+
+.programme-a4-chrome[data-programme-a4-chrome="footer"] {
+  bottom: 0;
+}
+
+.programme-a4-chrome[data-size="xs"] {
+  font-size: 0.625rem;
+}
+
+.programme-a4-chrome[data-size="sm"] {
+  font-size: 0.75rem;
+}
+
+.programme-a4-chrome[data-size="base"] {
+  font-size: 0.875rem;
+}
+
+[data-programme-document-type] .text-xs {
+  font-size: calc(0.75rem * var(--programme-type-scale));
+}
+
+[data-programme-document-type] .text-sm {
+  font-size: calc(0.875rem * var(--programme-type-scale));
+}
+
+[data-programme-document-type] .text-base {
+  font-size: calc(1rem * var(--programme-type-scale));
+}
+
+[data-programme-document-type] .text-lg {
+  font-size: calc(1.125rem * var(--programme-type-scale));
+  line-height: 1.4;
+}
+
+[data-programme-document-type] .text-xl {
+  font-size: calc(1.25rem * var(--programme-type-scale));
+  line-height: 1.375;
+}
+
+[data-programme-document-type] .text-2xl {
+  font-size: calc(1.5rem * var(--programme-type-scale));
+  line-height: 1.3;
+}
+
+[data-programme-document-type] .text-3xl {
+  font-size: calc(1.875rem * var(--programme-type-scale));
+  line-height: 1.2;
+}
+
+[data-programme-document-type] .text-4xl {
+  font-size: calc(2.25rem * var(--programme-type-scale));
+  line-height: 1.15;
+}
+
+[data-programme-document-type] .ProseMirror {
+  font-size: calc(0.875rem * var(--programme-type-scale));
+  line-height: 1.5;
+  padding: 0;
+  margin: 0;
+  min-height: 0;
+  white-space: normal;
+}
+
+[data-programme-document-type] .ProseMirror > :first-child {
+  margin-top: 0;
+}
+
+[data-programme-document-type] .ProseMirror h1 {
+  font-size: calc(1.25rem * var(--programme-type-scale));
+  line-height: 1.375;
+}
+
+[data-programme-document-type] .ProseMirror h2 {
+  font-size: calc(1.125rem * var(--programme-type-scale));
+  line-height: calc(1.75rem * var(--programme-type-scale));
+}
+
+[data-programme-document-type] .ProseMirror h3 {
+  font-size: calc(1rem * var(--programme-type-scale));
+  line-height: 1.5;
+}
+
+[data-programme-document-type] .text-sm h1 {
+  font-size: calc(1.25rem * var(--programme-type-scale));
+  line-height: 1.375;
+}
+
+[data-programme-document-type] .text-sm h2 {
+  font-size: calc(1.125rem * var(--programme-type-scale));
+  line-height: calc(1.75rem * var(--programme-type-scale));
+}
+
+[data-programme-document-type] .text-sm h3 {
+  font-size: calc(1rem * var(--programme-type-scale));
+  line-height: 1.5;
+}
+
+[data-programme-document-type] article[data-chapter-id] {
+  padding-bottom: 1.75rem;
+}
+
+[data-programme-document-type] article[data-chapter-id] + article[data-chapter-id] {
+  margin-top: 3.5rem;
+}
+
+[data-programme-document-type] p,
+[data-programme-document-type] h1,
+[data-programme-document-type] h2,
+[data-programme-document-type] h3,
+[data-programme-document-type] blockquote,
+.ProseMirror p,
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3,
+.ProseMirror blockquote {
+  line-height: 1.5;
+  margin-top: 0;
+  margin-bottom: 0.7em;
+}
+
+[data-programme-document-type] article[data-chapter-id] > div > h2 {
+  line-height: 1.3;
+  margin-bottom: 0.85rem;
+}
+
+[data-programme-document-type] :is(p, h1, h2, h3, blockquote)[data-line-height="1"],
+.ProseMirror :is(p, h1, h2, h3, blockquote)[data-line-height="1"] { line-height: 1; }
+[data-programme-document-type] :is(p, h1, h2, h3, blockquote)[data-line-height="1.15"],
+.ProseMirror :is(p, h1, h2, h3, blockquote)[data-line-height="1.15"] { line-height: 1.15; }
+[data-programme-document-type] :is(p, h1, h2, h3, blockquote)[data-line-height="1.5"],
+.ProseMirror :is(p, h1, h2, h3, blockquote)[data-line-height="1.5"] { line-height: 1.5; }
+[data-programme-document-type] :is(p, h1, h2, h3, blockquote)[data-line-height="2"],
+.ProseMirror :is(p, h1, h2, h3, blockquote)[data-line-height="2"] { line-height: 2; }
+[data-programme-document-type] :is(p, h1, h2, h3, blockquote)[data-line-height="2.5"],
+.ProseMirror :is(p, h1, h2, h3, blockquote)[data-line-height="2.5"] { line-height: 2.5; }
+[data-programme-document-type] :is(p, h1, h2, h3, blockquote)[data-line-height="3"],
+.ProseMirror :is(p, h1, h2, h3, blockquote)[data-line-height="3"] { line-height: 3; }
+
+[data-programme-document-type] :is(p, h1, h2, h3, blockquote)[data-space-after="0"],
+.ProseMirror :is(p, h1, h2, h3, blockquote)[data-space-after="0"] { margin-bottom: 0; }
+[data-programme-document-type] :is(p, h1, h2, h3, blockquote)[data-space-after="6"],
+.ProseMirror :is(p, h1, h2, h3, blockquote)[data-space-after="6"] { margin-bottom: 6pt; }
+[data-programme-document-type] :is(p, h1, h2, h3, blockquote)[data-space-after="8"],
+.ProseMirror :is(p, h1, h2, h3, blockquote)[data-space-after="8"] { margin-bottom: 8pt; }
+[data-programme-document-type] :is(p, h1, h2, h3, blockquote)[data-space-after="12"],
+.ProseMirror :is(p, h1, h2, h3, blockquote)[data-space-after="12"] { margin-bottom: 12pt; }
+[data-programme-document-type] :is(p, h1, h2, h3, blockquote)[data-space-after="18"],
+.ProseMirror :is(p, h1, h2, h3, blockquote)[data-space-after="18"] { margin-bottom: 18pt; }
+[data-programme-document-type] :is(p, h1, h2, h3, blockquote)[data-space-after="24"],
+.ProseMirror :is(p, h1, h2, h3, blockquote)[data-space-after="24"] { margin-bottom: 24pt; }
+
 /* Chat scrollable area - uses default browser scrollbar to match document viewer */
 .chat-scrollable {
   /* No custom scrollbar styling - uses default browser scrollbar */
@@ -392,6 +600,10 @@
 
 /* Rich Text Editor Styles */
 .ProseMirror {
+  outline: none;
+}
+
+.ProseMirror-selectednode {
   outline: none;
 }
 
@@ -405,6 +617,118 @@
 
 .ProseMirror-focused p.is-editor-empty:first-child::before {
   color: oklch(0.708 0 0);
+}
+
+[data-programme-document-type] table,
+.ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75em 0;
+  table-layout: auto;
+}
+
+[data-programme-document-type] .tableWrapper,
+.ProseMirror .tableWrapper {
+  margin: 0.75em 0;
+  overflow-x: auto;
+}
+
+[data-programme-document-page="a4"] [data-programme-document-type] .tableWrapper {
+  overflow: visible;
+}
+
+[data-programme-document-type] tr[data-programme-page-break-row] td,
+.ProseMirror tr[data-programme-page-break-row] td {
+  padding: 0;
+  border: none !important;
+  background: transparent;
+  line-height: 0;
+  font-size: 0;
+}
+
+[data-programme-document-page="a4"] [data-programme-document-type] table:not([data-table-borders="none"]) tr[data-programme-page-break-row] + tr > th,
+[data-programme-document-page="a4"] [data-programme-document-type] table:not([data-table-borders="none"]) tr[data-programme-page-break-row] + tr > td {
+  border-top: 1px solid color-mix(in oklch, var(--foreground) 22%, transparent);
+}
+
+[data-programme-document-type] th,
+[data-programme-document-type] td,
+.ProseMirror th,
+.ProseMirror td {
+  box-sizing: border-box;
+  min-width: 1em;
+  padding: 0.5em 0.75em;
+  position: relative;
+  vertical-align: top;
+}
+
+[data-programme-document-type] th,
+.ProseMirror th {
+  font-weight: 600;
+  text-align: left;
+}
+
+[data-programme-document-type] th p,
+[data-programme-document-type] td p,
+.ProseMirror th p,
+.ProseMirror td p {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+[data-programme-document-type] th p[data-space-after],
+[data-programme-document-type] td p[data-space-after],
+.ProseMirror th p[data-space-after],
+.ProseMirror td p[data-space-after] {
+  margin-bottom: 0;
+}
+
+[data-programme-document-type] th p + p,
+[data-programme-document-type] td p + p,
+.ProseMirror th p + p,
+.ProseMirror td p + p {
+  margin-top: 0.35em;
+}
+
+[data-programme-document-type] table:not([data-table-borders="none"]) th,
+[data-programme-document-type] table:not([data-table-borders="none"]) td,
+.ProseMirror table:not([data-table-borders="none"]) th,
+.ProseMirror table:not([data-table-borders="none"]) td {
+  border: 1px solid color-mix(in oklch, var(--foreground) 22%, transparent);
+}
+
+[data-programme-document-type] table[data-table-borders="none"] th,
+[data-programme-document-type] table[data-table-borders="none"] td,
+.ProseMirror table[data-table-borders="none"] th,
+.ProseMirror table[data-table-borders="none"] td {
+  border: none;
+}
+
+[data-programme-document-type] table[data-table-borders="body"] thead th,
+[data-programme-document-type] table[data-table-borders="body"] thead td,
+[data-programme-document-type] table[data-table-borders="body"]:not(:has(thead)) > tr:first-child > th,
+[data-programme-document-type] table[data-table-borders="body"]:not(:has(thead)) > tr:first-child > td,
+[data-programme-document-type] table[data-table-borders="body"]:not(:has(thead)) > tbody > tr:first-child > th,
+[data-programme-document-type] table[data-table-borders="body"]:not(:has(thead)) > tbody > tr:first-child > td,
+.ProseMirror table[data-table-borders="body"] thead th,
+.ProseMirror table[data-table-borders="body"] thead td,
+.ProseMirror table[data-table-borders="body"]:not(:has(thead)) > tr:first-child > th,
+.ProseMirror table[data-table-borders="body"]:not(:has(thead)) > tr:first-child > td,
+.ProseMirror table[data-table-borders="body"]:not(:has(thead)) > tbody > tr:first-child > th,
+.ProseMirror table[data-table-borders="body"]:not(:has(thead)) > tbody > tr:first-child > td {
+  border: none;
+}
+
+.ProseMirror .selectedCell::after {
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  bottom: 0;
+  content: "";
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 2;
 }
 
 .dark .ProseMirror p.is-editor-empty:first-child::before {

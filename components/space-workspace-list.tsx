@@ -1,22 +1,18 @@
 "use client"
 
 import Link from "next/link"
-import { Layers, MoreVertical, Plus, Settings } from "lucide-react"
+import { Layers, Plus } from "lucide-react"
 
 import { CreateWorkspaceDialog } from "@/components/create-workspace-dialog"
+import { ProgrammeListMenu } from "@/components/programme-list-menu"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { IconTooltip } from "@/components/icon-tooltip"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { SectionOpenToggle, useSectionOpen } from "@/components/section-open-toggle"
 import { ViewModeToggle, useCollectionViewMode } from "@/components/view-mode-toggle"
+import { cn } from "@/lib/utils"
 import {
   isEnvironmentalProgrammeWorkspace,
   workspaceHomeHref,
@@ -30,6 +26,8 @@ export type SpaceWorkspace = {
   kind?: string | null
   metadata?: Record<string, unknown> | null
   publicationId?: string | null
+  created_by?: string | null
+  canManageAccess?: boolean
 }
 
 interface SpaceWorkspaceListProps {
@@ -44,23 +42,29 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
   const programmes = workspaces.filter((workspace) => isEnvironmentalProgrammeWorkspace(workspace))
   const legacyResearch = workspaces.filter((workspace) => !isEnvironmentalProgrammeWorkspace(workspace))
   const { viewMode, setViewMode } = useCollectionViewMode(programmes.length, `space.${spaceId}.programmes`)
+  const { open, toggle } = useSectionOpen(`space.${spaceId}.programmes`, true)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
+    <div className={cn("flex min-h-0 flex-col overflow-hidden", open ? "flex-1" : "shrink-0")}>
+      <div className={cn("flex shrink-0 flex-wrap items-center justify-between gap-3", open && "mb-4")}>
         <div>
-          <div className="flex items-baseline gap-2">
-            <h3 className="text-xl font-semibold text-foreground">{t("space.workspaces.title")}</h3>
-            <span className="text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
-              ({programmes.length})
-            </span>
+          <div className="flex items-center gap-1">
+            <SectionOpenToggle open={open} onToggle={toggle} label={t("space.workspaces.title")} />
+            <div className="flex items-baseline gap-2">
+              <h3 className="text-xl font-semibold text-foreground">{t("space.workspaces.title")}</h3>
+              <span className="text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
+                ({programmes.length})
+              </span>
+            </div>
           </div>
-          <p className="text-sm text-muted-foreground">
-            {t("space.workspaces.subtitle", undefined, { space: spaceName })}
-          </p>
+          {open ? (
+            <p className="text-sm text-muted-foreground">
+              {t("space.workspaces.subtitle", undefined, { space: spaceName })}
+            </p>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
-          {programmes.length > 0 && (
+          {open && programmes.length > 0 && (
             <ViewModeToggle
               viewMode={viewMode}
               onChange={setViewMode}
@@ -82,6 +86,7 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
         </div>
       </div>
 
+      {open ? (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {programmes.length === 0 ? (
         <Card className="border-dashed">
@@ -113,8 +118,8 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
             const href = workspaceHomeHref(workspace)
             return (
             <Card key={workspace.id} className="group relative flex h-full flex-col transition-shadow hover:shadow-md">
-              <div className="absolute right-2 top-2 z-10">
-                <ProgrammeMenu workspace={workspace} canManage={canCreate} />
+              <div className="absolute right-2 top-2 z-10 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100 max-md:opacity-100">
+                <ProgrammeListMenu workspace={workspace} canManage={workspace.canManageAccess ?? canCreate} />
               </div>
               <Link href={href} className="flex min-h-0 flex-1 flex-col pr-10">
                 <CardHeader>
@@ -177,8 +182,8 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
                         {workspace.description || t("space.workspaces.descriptionFallback")}
                       </p>
                     </Link>
-                    <div className="flex shrink-0 items-center pr-2">
-                      <ProgrammeMenu workspace={workspace} canManage={canCreate} />
+                    <div className="flex shrink-0 items-center pr-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100 max-md:opacity-100">
+                      <ProgrammeListMenu workspace={workspace} canManage={workspace.canManageAccess ?? canCreate} />
                     </div>
                   </div>
                 )
@@ -202,45 +207,7 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
         </p>
       )}
       </div>
+      ) : null}
     </div>
-  )
-}
-
-function ProgrammeMenu({
-  workspace,
-  canManage,
-}: {
-  workspace: SpaceWorkspace
-  canManage: boolean
-}) {
-  const { t } = useI18n()
-  if (!canManage) return null
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <span className="inline-flex">
-          <IconTooltip label={t("space.workspaces.dropdownMenuSr")}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              aria-label={t("space.workspaces.dropdownMenuSr")}
-            >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </IconTooltip>
-        </span>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-40">
-        <DropdownMenuItem asChild className="cursor-pointer">
-          <Link href={`/workspaces/${workspace.id}/settings`} className="flex items-center gap-2">
-            <Settings className="h-4 w-4" />
-            {t("space.workspaces.menuSettings")}
-          </Link>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
   )
 }

@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { IconTooltip } from "@/components/icon-tooltip"
-import { MessageSquare, X } from "lucide-react"
+import { MessageCircle, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/use-i18n"
 
@@ -35,7 +35,7 @@ export function ChatToggleButton({
       style={{ right: offsetRight, bottom: offsetBottom }}
     >
       <Button onClick={onClick} size="lg" className="h-10 w-10 rounded-full" aria-label={label}>
-        {isOpen ? <X className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
+        {isOpen ? <X className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
       </Button>
     </IconTooltip>
   )

@@ -44,14 +44,27 @@ interface WorkspaceSettingsProps {
     name: string
     space_id: string
   }
-  space: any
+  space?: any
   members: any[]
   invitations: any[]
+  authorityCandidates?: Array<{ userId: string; name: string; email: string }>
   currentUserId: string
+  section?: "all" | "members" | "invitations"
+  onMutated?: () => void
 }
 
-export function WorkspaceSettings({ workspace, space: _space, members, invitations, currentUserId }: WorkspaceSettingsProps) {
+export function WorkspaceSettings({
+  workspace,
+  space: _space,
+  members,
+  invitations,
+  authorityCandidates = [],
+  currentUserId,
+  section = "all",
+  onMutated,
+}: WorkspaceSettingsProps) {
   const [inviteEmail, setInviteEmail] = useState("")
+  const [inviteFromAuthority, setInviteFromAuthority] = useState("")
   const [inviteRole, setInviteRole] = useState<"member" | "admin" | "viewer">("member")
   const [inviteJob, setInviteJob] = useState<"author" | "reviewer">("author")
   const [isInviting, setIsInviting] = useState(false)
@@ -61,6 +74,10 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null)
   const router = useRouter()
   const { t } = useI18n()
+  const notifyMutated = () => {
+    onMutated?.()
+    router.refresh()
+  }
 
   const translateRole = (role?: string | null) => {
     if (!role) return "—"
@@ -121,8 +138,28 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
     }
 
     setInviteEmail("")
-    toast.success(t("workspace.settings.invitations.toastSent"), { description: email })
-    router.refresh()
+    toast.success(
+      result.channel === "in_app"
+        ? t("workspace.settings.invitations.toastInApp")
+        : t("workspace.settings.invitations.toastSent"),
+      { description: email },
+    )
+    notifyMutated()
+  }
+
+  const handleInviteFromAuthority = async () => {
+    const selected = authorityCandidates.find((row) => row.userId === inviteFromAuthority)
+    if (!selected?.email) return
+    setIsInviting(true)
+    const result = await inviteUserToWorkspace(workspace.id, selected.email, inviteRole, inviteJob)
+    setIsInviting(false)
+    if (result.error) {
+      toast.error(t("workspace.settings.invitations.toastError"), { description: result.error })
+      return
+    }
+    setInviteFromAuthority("")
+    toast.success(t("workspace.settings.invitations.toastInApp"), { description: selected.name || selected.email })
+    notifyMutated()
   }
 
   const handleRemoveMember = async (memberId: string) => {
@@ -138,7 +175,7 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
     toast.success(t("workspace.settings.members.remove.success"), {
       description: t("workspace.settings.members.remove.successDescription"),
     })
-    router.refresh()
+    notifyMutated()
   }
 
   const handleWorkspaceRoleChange = async (userId: string, newRole: "admin" | "member" | "viewer") => {
@@ -154,7 +191,7 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
         role: translateRole(newRole),
       }),
     })
-    router.refresh()
+    notifyMutated()
   }
 
   const handleInvitationAction = async (invitation: { id: string; email: string }, type: "resend" | "revoke") => {
@@ -176,11 +213,13 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
 
     toast.success(
       type === "resend"
-        ? t("workspace.settings.invitations.toastResend")
+        ? "channel" in result && result.channel === "in_app"
+          ? t("workspace.settings.invitations.toastInApp")
+          : t("workspace.settings.invitations.toastResend")
         : t("workspace.settings.invitations.toastRevoke"),
       { description: invitation.email },
     )
-    router.refresh()
+    notifyMutated()
   }
 
   const handleWorkspaceJobChange = async (userId: string, nextJob: "author" | "reviewer") => {
@@ -189,24 +228,33 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
       toast.error(t("workspace.settings.members.updateRole.error"), { description: result.error })
       return
     }
-    router.refresh()
+    notifyMutated()
   }
 
   return (
-    <Tabs defaultValue="members" className="space-y-6">
-      <TabsList>
-        <TabsTrigger value="members">{t("workspace.settings.tabs.members")}</TabsTrigger>
-        <TabsTrigger value="invitations">{t("workspace.settings.tabs.invitations")}</TabsTrigger>
-        <TabsTrigger value="danger">{t("workspace.settings.tabs.danger")}</TabsTrigger>
-      </TabsList>
+    <Tabs
+      defaultValue="members"
+      {...(section === "all" ? {} : { value: section })}
+      className="space-y-6"
+    >
+      {section === "all" ? (
+        <TabsList>
+          <TabsTrigger value="members">{t("workspace.settings.tabs.members")}</TabsTrigger>
+          <TabsTrigger value="invitations">{t("workspace.settings.tabs.invitations")}</TabsTrigger>
+          <TabsTrigger value="danger">{t("workspace.settings.tabs.danger")}</TabsTrigger>
+        </TabsList>
+      ) : null}
 
-      <TabsContent value="members">
-        <Card className="shadow">
+      {(section === "all" || section === "members") && (
+      <TabsContent value="members" className={section === "all" ? undefined : "mt-0"}>
+        <Card className={section === "all" ? "shadow" : "border-0 shadow-none"}>
+          {section === "all" ? (
           <CardHeader>
             <CardTitle>{t("workspace.settings.members.title")}</CardTitle>
             <CardDescription>{t("workspace.settings.members.description")}</CardDescription>
           </CardHeader>
-          <CardContent>
+          ) : null}
+          <CardContent className={section === "all" ? undefined : "px-0"}>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -305,16 +353,63 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
           </CardContent>
         </Card>
       </TabsContent>
+      )}
 
-      <TabsContent value="invitations">
-        <Card className="shadow">
+      {(section === "all" || section === "invitations") && (
+      <TabsContent value="invitations" className={section === "all" ? undefined : "mt-0"}>
+        <Card className={section === "all" ? "shadow" : "border-0 shadow-none"}>
+          {section === "all" ? (
           <CardHeader>
             <CardTitle>{t("workspace.settings.invitations.title")}</CardTitle>
             <CardDescription>{t("workspace.settings.invitations.description")}</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
+          ) : null}
+          <CardContent className={section === "all" ? "space-y-6" : "space-y-6 px-0"}>
+            {authorityCandidates.length > 0 ? (
+              <div className="space-y-3">
+                <p className="text-sm font-medium">{t("workspace.settings.invitations.fromAuthorityTitle")}</p>
+                <p className="text-xs text-muted-foreground">{t("workspace.settings.invitations.fromAuthorityHint")}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Select value={inviteFromAuthority} onValueChange={setInviteFromAuthority}>
+                    <SelectTrigger className="min-w-56 flex-1">
+                      <SelectValue placeholder={t("workspace.settings.invitations.fromAuthorityPlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {authorityCandidates.map((candidate) => (
+                        <SelectItem key={candidate.userId} value={candidate.userId}>
+                          {candidate.name || candidate.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as "member" | "admin" | "viewer")}>
+                    <SelectTrigger className="min-w-28">
+                      <SelectValue placeholder={t("workspace.settings.members.selectPlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="viewer">{t("workspace.settings.members.selectOptions.viewer")}</SelectItem>
+                      <SelectItem value="member">{t("workspace.settings.members.selectOptions.member")}</SelectItem>
+                      <SelectItem value="admin">{t("workspace.settings.members.selectOptions.admin")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={inviteJob} onValueChange={(value) => setInviteJob(value as "author" | "reviewer")}>
+                    <SelectTrigger className="min-w-32">
+                      <SelectValue placeholder={t("guidance.jobs.workspaceJobLabel")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="author">{t("guidance.jobs.author")}</SelectItem>
+                      <SelectItem value="reviewer">{t("guidance.jobs.reviewer")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button type="button" disabled={isInviting || !inviteFromAuthority} onClick={() => void handleInviteFromAuthority()}>
+                    {t("workspace.settings.invitations.fromAuthorityButton")}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
             <form onSubmit={handleInvite} className="space-y-4">
-              <p className="text-xs text-muted-foreground">{t("guidance.jobs.accessHint")}</p>
+              <p className="text-sm font-medium">{t("workspace.settings.invitations.byEmailTitle")}</p>
+              <p className="text-xs text-muted-foreground">{t("workspace.settings.invitations.byEmailHint")}</p>
               <div className="flex flex-wrap gap-2">
                 <input
                   type="email"
@@ -374,6 +469,11 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary">{formatStatusLabel(invite.status)}</Badge>
+                          {invite.channel === "in_app" ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {t("workspace.settings.invitations.waitingAccept")}
+                            </p>
+                          ) : null}
                         </TableCell>
                         <TableCell className="text-sm">{new Date(invite.expires_at).toLocaleDateString()}</TableCell>
                         <TableCell className="text-right">
@@ -419,7 +519,9 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
           </CardContent>
         </Card>
       </TabsContent>
+      )}
 
+      {section === "all" ? (
       <TabsContent value="danger">
         <div className="space-y-4">
           <div>
@@ -485,6 +587,7 @@ export function WorkspaceSettings({ workspace, space: _space, members, invitatio
           </Card>
         </div>
       </TabsContent>
+      ) : null}
     </Tabs>
   )
 }

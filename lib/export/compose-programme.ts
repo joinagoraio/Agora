@@ -1,3 +1,4 @@
+import { stripDuplicateChapterHeading } from "@/lib/programme/chapter-heading"
 import type { ProgrammeOutlineNode } from "@/lib/programme/domain"
 
 export type ComposeChapter = {
@@ -46,7 +47,7 @@ export function composeProgrammeMarkdown(input: {
     if (node.required) parts.push("*Required section*")
     const chapter = chapterByNode.get(node.id)
     if (chapter?.html) {
-      parts.push(htmlToPlain(chapter.html))
+      parts.push(htmlToPlain(stripDuplicateChapterHeading(chapter.html, node.title)))
     } else if (node.purpose) {
       parts.push(htmlToPlain(node.purpose))
     } else {
