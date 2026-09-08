@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { HelpCircle, Loader2, Send, X } from "lucide-react"
-import ReactMarkdown from "react-markdown"
+import { FormattedMarkdown } from "@/components/formatted-markdown"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -246,7 +246,8 @@ export function GuidanceCoach({
       if (data?.conversationId) setConversationId(data.conversationId)
       if (data?.refused) void trackGuidanceEvent({ event: "help_refusal", job, mode, section })
       else void trackGuidanceEvent({ event: "help_ask", job, mode, section })
-      const reply = displayHelpText(data?.text || data?.error || t("guidance.coach.askError"))
+      const reply =
+        displayHelpText(data?.text || "") || data?.error || t("guidance.coach.askError")
       setMessages((current) => [
         ...current,
         { id: data?.conversationId ? `assistant-${data.conversationId}-${current.length}` : `assistant-${Date.now()}`, role: "assistant", content: reply },
@@ -422,9 +423,7 @@ export function GuidanceCoach({
                   isUser && "bg-primary/5 text-foreground",
                 )}
               >
-                <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-0 prose-pre:whitespace-pre-wrap prose-pre:break-words prose-pre:text-sm">
-                  <ReactMarkdown>{message.content}</ReactMarkdown>
-                </div>
+                <FormattedMarkdown>{message.content}</FormattedMarkdown>
               </div>
             </div>
           )

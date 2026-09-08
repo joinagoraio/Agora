@@ -71,7 +71,18 @@ describe("Help API refusal", () => {
         }),
       }
     })
-    adminFrom.mockReturnValue({ insert: vi.fn().mockResolvedValue({ error: null }) })
+    adminFrom.mockImplementation((table: string) => {
+      if (table === "help_conversations") {
+        return {
+          insert: vi.fn().mockReturnValue({
+            select: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: { id: "00000000-0000-0000-0000-000000000099" }, error: null }),
+            }),
+          }),
+        }
+      }
+      return { insert: vi.fn().mockResolvedValue({ error: null }) }
+    })
   })
 
   it("returns canned refusal for write chapter 3 and does not call completeLlm", async () => {

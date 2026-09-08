@@ -45,6 +45,7 @@ import {
   type ProgrammeDocumentMode,
 } from "@/lib/programme/document-mode"
 import { deriveGuidancePipeline, pipelineInputFromWorkbench } from "@/lib/guidance/pipeline"
+import { listBoundDocumentsForHelp } from "@/lib/programme/source-set-bindings"
 import { listProgrammeOutlineNodes } from "@/lib/actions/outline"
 import {
   bindWorkspaceAgents,
@@ -800,7 +801,7 @@ export function ProgrammeWorkbench({
       spaceId,
       pipeline,
       section: coachSection,
-      documentTitles: corpusDocs.map((doc) => ({ title: doc.title, role: doc.document_role })),
+      documentTitles: listBoundDocumentsForHelp(corpusDocs, bindings),
       onNavigate: (section, target) => {
         setSection(section)
         if (target) {
@@ -815,6 +816,7 @@ export function ProgrammeWorkbench({
     })
     return () => setGuidance(null)
   }, [
+    bindings,
     chromeJob,
     coachSection,
     corpusDocs,

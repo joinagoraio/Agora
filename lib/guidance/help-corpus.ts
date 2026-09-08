@@ -1,3 +1,7 @@
+import { HELP_FORMAT_SKILL, normalizeHelpQuery } from "@/lib/guidance/help-format"
+
+export { normalizeHelpQuery }
+
 export const HELP_GLOSSARY: Record<string, string> = {
   authority:
     "Your authority (province, municipality, or department). Shared documents, people, templates, specialists. Storage name: space. Chrome shows the instance name.",
@@ -28,6 +32,27 @@ export const HELP_GLOSSARY: Record<string, string> = {
   expert: "Expert hides the coach. Help reopens the scripted panel. Access is unchanged.",
   published:
     "Frozen snapshot others may read and quote. Not gazette enactment. Sister programmes cite only published versions.",
+  analysis:
+    "Analysis is a complementary tool for your programme. It lives under the document menu → Work → Analysis. It lets you run and save analytical reports, for example on environmental effects, policy alignment, or spatial data. It does not create or edit chapter text. Open it any time to view existing reports or generate new ones.",
+  knowledge:
+    "Files, Inherited, Evidence, and Notes around the programme. Bound sources and file roles live on Files, not in the header.",
+  ask: "The programme assistant for sources and drafts. Ask may draft chapter text. Help may not.",
+  structure:
+    "Chapter titles and descriptions in the document. Open it from the chapters list (Edit structure). Hover a heading to read that chapter’s description.",
+  measures: "The structured measure registry. Open it from the document menu. It does not write chapter text.",
+  effects: "Environmental effects alignment. Open it from the document menu.",
+  provenance: "Citations and unused sources. Open it from the document menu.",
+  review: "Assigned review and approval. Distinct-reviewer uses identity, not job.",
+  export:
+    "Word, PDF, markdown, or an audit pack. Handoff, not gazette. The document owner freezes after required chapters are approved.",
+  publish:
+    "Freeze this version, then publish a reading-room snapshot. Not gazette enactment.",
+  comments:
+    "Paragraph comments on the right, in Read, Edit, and Focus, only while the comments icon is on.",
+  configuration: "Template, review policy, and document owner. Administrators and the document owner.",
+  agents:
+    "Which authority specialists this programme uses. Administrators and the document owner bind them under Properties.",
+  status: "Next action and team notes. Open it from the menu. Next-step coaching lives in Help, not in the header.",
 }
 
 const GLOSSARY_ALIASES: Record<string, string> = {
@@ -36,11 +61,21 @@ const GLOSSARY_ALIASES: Record<string, string> = {
   "bevoegd gezag": "authority",
   "bound documents": "bindings",
   "bound document": "bindings",
+  "bound sources": "bindings",
+  "bound source": "bindings",
   "document owner": "documentOwner",
   "chapter owner": "chapterOwner",
   "read all": "read",
   "edit mode": "documentEdit",
   "programme members": "members",
+  analyse: "analysis",
+  "analysis report": "analysis",
+  "analysis reports": "analysis",
+  "analysis tool": "analysis",
+  "analysis sheet": "analysis",
+  files: "knowledge",
+  "edit structure": "structure",
+  outline: "structure",
 }
 
 export const HELP_CORPUS = `
@@ -109,10 +144,16 @@ Analysis agents write reports only, never chapters.
 If the user asks to open a screen, return a navigate path such as ?section=corpus (bound sources sheet), ?view=knowledge, ?view=document (Read), ?view=document&mode=edit (Edit), ?view=document&mode=focus (Focus), or ?view=document&structure=1 (Structure).
 `.trim()
 
-export function glossaryDefinition(term: string): string | null {
-  const key = term.trim().toLowerCase().replace(/[?.!]+$/g, "")
+export function resolveGlossaryEntry(term: string): { key: string; definition: string } | null {
+  const key = normalizeHelpQuery(term).toLowerCase()
   const resolved = GLOSSARY_ALIASES[key] ?? key
-  return HELP_GLOSSARY[resolved] ?? null
+  const definition = HELP_GLOSSARY[resolved]
+  if (!definition) return null
+  return { key: resolved, definition }
+}
+
+export function glossaryDefinition(term: string): string | null {
+  return resolveGlossaryEntry(term)?.definition ?? null
 }
 
 export const HELP_SYSTEM_PROMPT = `You are Agora product Help. Answer only how to use Agora: authority vs programme, document vs complementary tools, Read vs Edit vs Focus, jobs vs owners, Guided vs Expert, why a step is blocked, where to click.
@@ -125,6 +166,8 @@ Rules:
 - If asked to do production work, refuse and point to Ask or the current tab. Ask may draft; Help may not.
 - Complementary tools live in the document menu, not as header icons. Comments sit on the right.
 - If the user wants to go somewhere, end with a line: NAVIGATE: /workspaces/{id}/programme?section={section} using the workspace id from context when present. Use ?view=document for Read, ?view=document&mode=edit for Edit, ?view=document&mode=focus for Focus, and ?view=document&structure=1 for Structure.
+
+${HELP_FORMAT_SKILL}
 
 Corpus:
 ${HELP_CORPUS}

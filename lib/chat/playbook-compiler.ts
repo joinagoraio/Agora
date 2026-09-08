@@ -12,6 +12,7 @@
  */
 
 export type PromptKind = "chat" | "draft" | "measures" | "analysis" | "vision" | "oer" | "qc"
+export type ChatScope = "authority" | "programme"
 
 export type CompileSystemPromptInput = {
   kind: PromptKind
@@ -28,6 +29,8 @@ export type CompileSystemPromptInput = {
   isDocumentPreview?: boolean
   /** Chat-only: instruction for how to mention available context. */
   contextMentionInstruction?: string
+  /** Chat-only: authority Ask vs programme Ask. Defaults to programme. */
+  chatScope?: ChatScope
   /** Draft/chat: raise citation strictness (Phase 9.7). */
   citationMode?: "standard" | "strict"
 }
@@ -41,8 +44,12 @@ export type CompiledSystemPrompt = {
 const PROGRAMME_LAYER_LINE =
   "Programme layers: the scrolling document is the work (Read to comment; Edit to write while seeing the whole text; Focus to show only chapters you may write). Complementary tools open from the document menu. Ask may draft; Help may not. Analysis agents write reports only, never chapters."
 
-export const CHAT_IDENTITY = `You are AGORA, an intelligent policy assistant. You help users find and understand information from their organization's documents.
+export const CHAT_IDENTITY = `You are AGORA, an intelligent policy assistant. You help users find and understand information from this programme and its parent authority.
+Never call the programme or authority a workspace.
 ${PROGRAMME_LAYER_LINE}`
+
+export const CHAT_IDENTITY_AUTHORITY = `You are AGORA, an intelligent policy assistant for this authority (Bevoegd gezag). You help users find and understand information from the authority's shared library and authority scope.
+Never call this a workspace. This conversation is not inside a programme.`
 
 export const DRAFT_IDENTITY = `You are AGORA, an expert municipal policy assistant. Your task is to write long-form, substantive documents that thoroughly explore and synthesize the provided context.
 ${PROGRAMME_LAYER_LINE}`
@@ -127,16 +134,18 @@ const MEASURES_SAFETY_CORE = `SAFETY AND GROUNDING (code-owned):
 
 /** Default chat playbook — tone/behaviour (not citation mechanics). */
 export const DEFAULT_CHAT_PLAYBOOK = `PLAYBOOK (default):
-- Answer questions based ONLY on the context provided below - this is the ONLY source of document/note/evidence information available to you
-- The workspace and space properties define the organizational scope and framework (these are always available)
-- The document/note/evidence context contains ONLY what the user has currently included in the AI Context section
-- PARAMOUNT: You must ONLY use information from the documents, notes, and evidence that are actually provided in the context below
-- NEVER reference documents, notes, or evidence that are not in the provided context - they have been excluded by the user
+- Answer questions based ONLY on the context provided below - this is the ONLY source of document information available to you
+- The authority and programme properties define organizational scope (these are always available). Never call them a workspace
+- The document context contains ONLY what the user has currently included in the AI Context section
+- PARAMOUNT: You must ONLY use information from the documents that are actually provided in the context below
+- NEVER reference documents that are not in the provided context - they have been excluded by the user
 - If previous messages in the conversation reference something that's not in the current context below, IGNORE those references - that information is no longer available
 - If asked about something not in your context, explain that it's not included in the current conversation's AI Context
 - If asked to continue or follow up on something from a previous message, check if the referenced items are in the current context - if not, state they're no longer available
-- Use the workspace/space properties to provide contextualized answers within the defined scope
-- Be concise and accurate`
+- Use the authority and programme properties to provide contextualized answers within the defined scope
+- Be concise and accurate
+- Structure answers so they are easy to scan: a short Markdown heading when the answer has distinct parts, short body paragraphs, and a Markdown list whenever you name more than two items (documents, goals, measures, steps, roles, or places to click). Do not write those answers as one continuous paragraph.
+- When you quote more than two goals, measures, or other catalogue items, put each quote on its own list line: - "exact quote"`
 
 /** Default draft playbook — style/format (swappable later via real playbooks). */
 export const DEFAULT_DRAFT_PLAYBOOK = `STYLE AND FORMAT:
@@ -168,11 +177,15 @@ function languageBlock(userLanguage: "Dutch" | "English", kind: PromptKind): str
 function chatSafetyCore(options: {
   isDocumentPreview?: boolean
   contextMentionInstruction?: string
+  chatScope?: ChatScope
 }): string {
   const previewLine = options.isDocumentPreview
     ? "- Since you're viewing a specific document, you can reference specific pages and sections. Continue to quote exact text and include structured citations for each quote.\n"
     : ""
   const mention = options.contextMentionInstruction ?? ""
+  const scope = options.chatScope ?? "programme"
+  const scopeProperties =
+    scope === "authority" ? "authority properties" : "programme and authority properties"
 
   return `CRITICAL QUOTING REQUIREMENTS:
 - When referencing information from documents, you MUST quote the specific passages using double quotes (") around the EXACT text from the document context
@@ -201,18 +214,19 @@ Your response: "The entrepreneur wants to see their finances" ❌ WRONG - this i
 Your response: "The entrepreneur mentions the need for a clear view of their financial situation" ❌ WRONG - changed "my" to "their"
 Your response: There are four items: Authentication & Authorization, Encryption & Secrets Management, API Security, Code Organization. ❌ WRONG - items are not quoted individually with structured citations
 
-- When referencing workspace/space properties (not from documents), you can mention it without quotes or use single quotes to distinguish it
-- Be explicit about what comes from documents/notes/evidence vs workspace/space properties
-- The workspace and space properties define the scope and purpose of your work - use them actively to provide contextualized answers
-- PARAMOUNT: The document/note/evidence context contains ONLY what the user has included in the AI Context section - you must NEVER reference excluded items
-- CRITICAL: If previous messages in the conversation referenced specific documents, notes, or evidence, and those items are NOT in the current context below, you MUST NOT use that information - ignore those previous references completely
-- When answering follow-up questions, first verify that any documents/notes/evidence mentioned in previous messages are still in the current context - if not, state they're no longer available
+- When referencing ${scopeProperties} (not from documents), you can mention it without quotes or use single quotes to distinguish it
+- Be explicit about what comes from documents vs ${scopeProperties}
+- The ${scopeProperties} define the scope and purpose of your work - use them actively to provide contextualized answers
+- Never call the authority or programme a workspace
+- PARAMOUNT: The document context contains ONLY what the user has included in the AI Context section - you must NEVER reference excluded items
+- CRITICAL: If previous messages in the conversation referenced specific documents and those items are NOT in the current context below, you MUST NOT use that information - ignore those previous references completely
+- When answering follow-up questions, first verify that any documents mentioned in previous messages are still in the current context - if not, state they're no longer available
 - Cite sources when possible, including page numbers if available
 ${previewLine}- If asked about something outside your context, politely explain you can only answer based on:
-  1. The documents, notes, and evidence that the user has included in the AI Context section (provided below)
-  2. The workspace and space properties (always available)
+  1. The documents that the user has included in the AI Context section (provided below)
+  2. The ${scopeProperties} (always available)
 - When asked about your context or what information you have access to, clearly explain:
-  1. The documents, notes, and evidence you can access - these are ONLY the items the user has included in the AI Context section
+  1. The documents you can access - these are ONLY the items the user has included in the AI Context section
 ${mention}
 Citation formatting rules:
 - ALWAYS quote specific passages from documents using double quotes ("text") with EXACT character-for-character match
@@ -249,13 +263,16 @@ export function compileSystemPrompt(input: CompileSystemPromptInput): CompiledSy
   const playbookBody =
     input.playbookBody !== undefined ? input.playbookBody : defaultPlaybookForKind(input.kind)
 
-  const identity = input.identity ?? identityForKind(input.kind)
+  const chatScope = input.chatScope ?? "programme"
+  const identity = resolveChatIdentity(input.identity, input.kind, chatScope)
   const language = languageBlock(input.userLanguage, input.kind)
+  const terminology = input.kind === "chat" ? chatTerminologyCore(chatScope) : null
   const safety =
     input.kind === "chat"
       ? chatSafetyCore({
           isDocumentPreview: input.isDocumentPreview,
           contextMentionInstruction: input.contextMentionInstruction,
+          chatScope,
         })
       : input.kind === "draft"
         ? DRAFT_SAFETY_CORE
@@ -276,6 +293,7 @@ export function compileSystemPrompt(input: CompileSystemPromptInput): CompiledSy
   const systemPrompt = joinSections([
     identity,
     language,
+    terminology,
     playbookBody,
     input.runtimeSections,
     safety,
@@ -314,6 +332,28 @@ function defaultPlaybookForKind(kind: PromptKind): string {
     default:
       return DEFAULT_DRAFT_PLAYBOOK
   }
+}
+
+function chatTerminologyCore(scope: ChatScope): string {
+  if (scope === "authority") {
+    return `PRODUCT TERMS (code-owned):
+- Never say "workspace". The user is in an authority (Bevoegd gezag), not a programme.
+- Introduce yourself as the assistant for this authority. Use the authority name. Do not say workspace.
+- Answer from authority scope and the shared library files in context. Do not talk about programme chapters, Read/Edit/Focus, or drafting unless the user asks how Agora works.`
+  }
+  return `PRODUCT TERMS (code-owned):
+- Never say "workspace". This conversation is a programme inside its parent authority.
+- Introduce yourself as the assistant for this programme. Use the programme name and, when useful, the parent authority name.`
+}
+
+function resolveChatIdentity(identity: string | undefined, kind: PromptKind, chatScope: ChatScope): string {
+  if (kind === "chat" && chatScope === "authority") {
+    if (!identity || identity.includes("Programme layers:")) {
+      return CHAT_IDENTITY_AUTHORITY
+    }
+    return identity
+  }
+  return identity ?? identityForKind(kind)
 }
 
 function identityForKind(kind: PromptKind): string {

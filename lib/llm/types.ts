@@ -13,6 +13,7 @@ export type LlmCompleteInput = {
   temperature?: number
   maxTokens?: number
   json?: boolean
+  reasoningEffort?: "low" | "medium" | "high"
 }
 
 export type LlmCompleteResult = {

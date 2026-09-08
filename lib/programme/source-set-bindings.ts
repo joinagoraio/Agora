@@ -51,3 +51,24 @@ export function applyDocumentRoleToBindings(
 export function isChapterDocumentId(bindings: ProgrammeBindings, documentId: string): boolean {
   return Object.values(bindings.chapterDocuments || {}).includes(documentId)
 }
+
+export function roleFromBindings(bindings: ProgrammeBindings, documentId: string): DocumentRole | null {
+  for (const [role, key] of Object.entries(ROLE_TO_BINDING) as Array<[DocumentRole, keyof ProgrammeBindings]>) {
+    const list = bindings[key]
+    if (Array.isArray(list) && list.includes(documentId)) return role
+  }
+  return null
+}
+
+export function listBoundDocumentsForHelp(
+  documents: Array<{ id: string; title: string; document_role?: string | null }>,
+  bindings: ProgrammeBindings,
+): Array<{ title: string; role: string | null }> {
+  return documents
+    .filter((document) => !isChapterDocumentId(bindings, document.id))
+    .map((document) => ({
+      title: document.title,
+      role: document.document_role ?? roleFromBindings(bindings, document.id),
+    }))
+    .filter((document) => Boolean(document.role))
+}

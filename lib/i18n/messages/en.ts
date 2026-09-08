@@ -1455,6 +1455,7 @@ export const enMessages = {
           hint: "Press Enter to send, Shift+Enter for new line",
           send: "Send",
           stop: "Stop generating",
+          failed: "The assistant could not answer. Check that a chat model is assigned in platform AI settings.",
         },
         controls: {
           clear: "Clear chat",

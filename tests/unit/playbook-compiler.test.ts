@@ -113,4 +113,18 @@ describe("compileSystemPrompt (S1 spike)", () => {
       expect(result.systemPrompt).toContain("document menu")
     }
   })
+
+  it("keeps authority Ask out of workspace and programme-layer language", () => {
+    const result = compileSystemPrompt({
+      kind: "chat",
+      userLanguage: "English",
+      chatScope: "authority",
+      identity: "You are AGORA, an intelligent policy assistant. Programme layers: leftover.",
+    })
+    expect(result.systemPrompt).toContain("authority")
+    expect(result.systemPrompt).toContain("Never say \"workspace\"")
+    expect(result.systemPrompt).not.toContain("Programme layers:")
+    expect(result.systemPrompt).not.toContain("Ask may draft")
+    expect(result.systemPrompt).not.toContain("workspace and space")
+  })
 })

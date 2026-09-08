@@ -363,6 +363,17 @@ export async function completeResolved(
   })
 }
 
+export async function resolvePlatformTaskLlmWithFallback(
+  task: PlatformTask,
+  fallback: PlatformTask,
+): Promise<ResolvedLlmTarget> {
+  try {
+    return await resolvePlatformTaskLlm(task)
+  } catch {
+    return resolvePlatformTaskLlm(fallback)
+  }
+}
+
 export async function completePlatformTask(
   task: PlatformTask,
   input: Omit<LlmCompleteInput, "provider" | "model" | "apiKey" | "endpoint">,

@@ -4,6 +4,7 @@ import {
   applyDocumentRoleToBindings,
   bindingIdsForRoles,
   isChapterDocumentId,
+  listBoundDocumentsForHelp,
 } from "@/lib/programme/source-set-bindings"
 
 describe("programme source set bindings", () => {
@@ -41,5 +42,31 @@ describe("programme source set bindings", () => {
     }
     expect(isChapterDocumentId(bindings, "chapter-doc")).toBe(true)
     expect(isChapterDocumentId(bindings, "vis")).toBe(false)
+  })
+
+  it("lists only bound files with roles for Help, not chapter drafts", () => {
+    const bindings = applyDocumentRoleToBindings(
+      {
+        ...emptyProgrammeBindings(),
+        chapterDocuments: { "node-1": "chapter-doc" },
+      },
+      "vis",
+      "environmental_vision",
+    )
+    expect(
+      listBoundDocumentsForHelp(
+        [
+          { id: "vis", title: "Environmental vision — housing near nodes (fixture)", document_role: null },
+          { id: "chapter-doc", title: "Challenges and goals", document_role: null },
+          { id: "loose", title: "Unassigned upload", document_role: null },
+        ],
+        bindings,
+      ),
+    ).toEqual([
+      {
+        title: "Environmental vision — housing near nodes (fixture)",
+        role: "environmental_vision",
+      },
+    ])
   })
 })

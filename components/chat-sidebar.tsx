@@ -437,7 +437,7 @@ export function ChatSidebar({
       const result = await createConversation(workspaceId ?? null, {
         contextType,
         contextId,
-        spaceId,
+        spaceId: workspaceId ? undefined : spaceId,
       })
       if (result.error || !result.data) {
         toast.error(t("workspace.chat.toast.createError"), {

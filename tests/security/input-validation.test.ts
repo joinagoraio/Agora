@@ -100,6 +100,25 @@ describe("Security: Input Validation", () => {
       })
       expect(result.success).toBe(true)
     })
+
+    it("accepts authority chat scoped with spaceId only", () => {
+      const result = chatMessageSchema.safeParse({
+        message: "What is in the shared library?",
+        spaceId: "00000000-0000-0000-0000-000000000000",
+        conversationId: "00000000-0000-0000-0000-000000000000",
+      })
+      expect(result.success).toBe(true)
+    })
+
+    it("rejects chat scoped with both workspaceId and spaceId", () => {
+      const result = chatMessageSchema.safeParse({
+        message: "Hello",
+        workspaceId: "00000000-0000-0000-0000-000000000000",
+        spaceId: "11111111-1111-1111-1111-111111111111",
+        conversationId: "00000000-0000-0000-0000-000000000000",
+      })
+      expect(result.success).toBe(false)
+    })
   })
 
   describe("searchQuerySchema", () => {

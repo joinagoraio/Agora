@@ -42,28 +42,30 @@ describe("buildWorkspaceContext", () => {
   it("includes workspace summary data and spacing once data is present", () => {
     const result = buildWorkspaceContext({ workspace: baseWorkspace })
 
-    expect(result.workspaceContextSection).toContain("Workspace name: Climate Taskforce")
-    expect(result.workspaceContextSection).toContain("Workspace additional AI context:\nFocus on energy transition policies.")
-    expect(result.workspaceContextSection).toContain("Workspace jurisdiction: Amsterdam")
-    expect(result.workspaceContextSection).toContain("Workspace summary:\nImproving sustainability across the organization.")
+    expect(result.workspaceContextSection).toContain("Programme name: Climate Taskforce")
+    expect(result.workspaceContextSection).toContain("Programme additional AI context:\nFocus on energy transition policies.")
+    expect(result.workspaceContextSection).toContain("Programme location: Amsterdam")
+    expect(result.workspaceContextSection).toContain("Programme summary:\nImproving sustainability across the organization.")
     expect(result.workspaceContextSection).toContain(
-      "Workspace description:\nA detailed workspace focused on implementing climate policies",
+      "Programme description:\nA detailed workspace focused on implementing climate policies",
     )
     expect(result.workspaceContextSection).toContain(
-      "Workspace scope details:\nGuide municipalities in drafting climate action plans.",
+      "Programme scope details:\nGuide municipalities in drafting climate action plans.",
     )
-    expect(result.workspaceContextSection).toContain("Workspace programme timeframe: 2024-2026")
+    expect(result.workspaceContextSection).toContain("Programme timeframe: 2024-2026")
     expect(result.hasWorkspaceContext).toBe(true)
   })
 
   it("includes parent space metadata, dividers, and jurisdiction list", () => {
     const result = buildWorkspaceContext({ space: baseSpace })
 
-    expect(result.workspaceContextSection).toContain("---\n\nParent Space name: EU Climate Mandate")
-    expect(result.workspaceContextSection).toContain("Space mission statement:\nAlignment with EU directives.")
-    expect(result.workspaceContextSection).toContain("Space description:\nEnsure compliance with Fit for 55")
-    expect(result.workspaceContextSection).toContain("Space programme timeframe: 2024-2025")
-    expect(result.workspaceContextSection).toContain("Space jurisdiction: Netherlands • Noord-Holland")
+    expect(result.workspaceContextSection).toContain("Authority name: EU Climate Mandate")
+    expect(result.workspaceContextSection).not.toContain("Parent authority")
+    expect(result.workspaceContextSection).toContain("Authority mission statement:\nAlignment with EU directives.")
+    expect(result.workspaceContextSection).toContain("Authority description:\nEnsure compliance with Fit for 55")
+    expect(result.workspaceContextSection).toContain("Authority timeframe: 2024-2025")
+    expect(result.workspaceContextSection).toContain("Authority jurisdiction: Netherlands • Noord-Holland")
+    expect(result.workspaceContextSection).not.toMatch(/workspace/i)
   })
 
   it("returns context instructions for document preview mode", () => {
@@ -75,6 +77,8 @@ describe("buildWorkspaceContext", () => {
 
     expect(result.contextInstructions).toContain("document preview mode")
     expect(result.hasWorkspaceContext).toBe(true)
+    expect(result.workspaceContextSection).toContain("Programme name: Climate Taskforce")
+    expect(result.workspaceContextSection).toContain("Parent authority name: EU Climate Mandate")
   })
 })
 

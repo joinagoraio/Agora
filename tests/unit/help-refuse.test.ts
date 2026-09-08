@@ -37,6 +37,8 @@ describe("help route isolation", () => {
   it("grounds the help prompt without policy bodies", () => {
     expect(HELP_SYSTEM_PROMPT).toMatch(/titles and roles only/)
     expect(HELP_SYSTEM_PROMPT).toMatch(/Never quote or request policy document bodies/)
+    expect(HELP_SYSTEM_PROMPT).toMatch(/FORMAT \(code-owned/)
+    expect(HELP_SYSTEM_PROMPT).toMatch(/Markdown/)
     expect(HELP_SYSTEM_PROMPT).not.toMatch(/<p>/)
   })
 

@@ -140,6 +140,7 @@ export async function POST(
     const compiled = compileSystemPrompt({
       kind: "chat",
       userLanguage: parsed.data.language === "nl" ? "Dutch" : "English",
+      chatScope: "authority",
       identity: layers.identity,
       playbookBody: layers.playbook,
       isDocumentPreview: Boolean(parsed.data.itemId),

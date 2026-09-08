@@ -1457,6 +1457,7 @@ export const nlMessages = {
           hint: "Druk op Enter om te versturen, Shift+Enter voor een nieuwe regel",
           send: "Versturen",
           stop: "Genereren stoppen",
+          failed: "De assistent kon niet antwoorden. Controleer of er een chatmodel is toegewezen in de platform-AI-instellingen.",
         },
         controls: {
           clear: "Chat leegmaken",

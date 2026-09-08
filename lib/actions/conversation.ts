@@ -1,6 +1,9 @@
 "use server"
 
+import { resolveConversationScope } from "@/lib/chat/conversation-scope"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { userHasWorkspaceAccess } from "@/lib/utils/workspace-access"
 import { revalidatePath } from "next/cache"
 
 export type ConversationContextType = "workspace" | "document_view" | "document_edit"
@@ -33,15 +36,42 @@ export async function createConversation(
   }
 
   const { title, contextType = "workspace", contextId = null, spaceId } = options
-  if (!workspaceId && !spaceId) {
+  const scope = resolveConversationScope(workspaceId, spaceId)
+  if (!scope) {
     return { error: "Missing scope" }
   }
 
-  const { data, error } = await supabase
+  if (scope.workspaceId) {
+    const { data: workspace } = await supabase
+      .from("workspaces")
+      .select("space_id")
+      .eq("id", scope.workspaceId)
+      .maybeSingle()
+    if (!workspace?.space_id) {
+      return { error: "Programme not found" }
+    }
+    const allowed = await userHasWorkspaceAccess(supabase, scope.workspaceId, workspace.space_id, user.id)
+    if (!allowed) {
+      return { error: "Unauthorized" }
+    }
+  } else if (scope.spaceId) {
+    const { data: spaceMember } = await supabase
+      .from("space_members")
+      .select("id")
+      .eq("space_id", scope.spaceId)
+      .eq("user_id", user.id)
+      .maybeSingle()
+    if (!spaceMember) {
+      return { error: "Unauthorized" }
+    }
+  }
+
+  const admin = createAdminClient()
+  const { data, error } = await admin
     .from("conversations")
     .insert({
-      workspace_id: spaceId ? null : workspaceId,
-      space_id: spaceId ?? null,
+      workspace_id: scope.workspaceId,
+      space_id: scope.spaceId,
       user_id: user.id,
       title: title || "New Conversation",
       context_type: contextType,
@@ -90,7 +120,17 @@ export async function getConversationMessages(conversationId: string) {
     return { data: [], error: "Unauthorized" }
   }
 
-  const { data, error } = await supabase
+  const admin = createAdminClient()
+  const { data: conversation } = await admin
+    .from("conversations")
+    .select("id, user_id")
+    .eq("id", conversationId)
+    .maybeSingle()
+  if (!conversation || conversation.user_id !== user.id) {
+    return { data: [], error: "Unauthorized" }
+  }
+
+  const { data, error } = await admin
     .from("messages")
     .select("*")
     .eq("conversation_id", conversationId)
@@ -150,15 +190,43 @@ export async function getUserConversations(
   }
 
   const { contextType = "workspace", contextId, spaceId, allInScope } = options
-
-  let query = supabase.from("conversations").select("*").eq("user_id", user.id)
-
-  if (spaceId) {
-    query = query.eq("space_id", spaceId)
-  } else if (workspaceId) {
-    query = query.eq("workspace_id", workspaceId)
-  } else {
+  const scope = resolveConversationScope(workspaceId, spaceId)
+  if (!scope) {
     return { data: [], error: "Missing scope" }
+  }
+
+  if (scope.workspaceId) {
+    const { data: workspace } = await supabase
+      .from("workspaces")
+      .select("space_id")
+      .eq("id", scope.workspaceId)
+      .maybeSingle()
+    if (!workspace?.space_id) {
+      return { data: [], error: "Programme not found" }
+    }
+    const allowed = await userHasWorkspaceAccess(supabase, scope.workspaceId, workspace.space_id, user.id)
+    if (!allowed) {
+      return { data: [], error: "Unauthorized" }
+    }
+  } else if (scope.spaceId) {
+    const { data: spaceMember } = await supabase
+      .from("space_members")
+      .select("id")
+      .eq("space_id", scope.spaceId)
+      .eq("user_id", user.id)
+      .maybeSingle()
+    if (!spaceMember) {
+      return { data: [], error: "Unauthorized" }
+    }
+  }
+
+  const admin = createAdminClient()
+  let query = admin.from("conversations").select("*").eq("user_id", user.id)
+
+  if (scope.spaceId) {
+    query = query.eq("space_id", scope.spaceId)
+  } else if (scope.workspaceId) {
+    query = query.eq("workspace_id", scope.workspaceId)
   }
 
   if (!allInScope) {

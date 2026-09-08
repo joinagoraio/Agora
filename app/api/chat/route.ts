@@ -1,13 +1,16 @@
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getRelevantContext } from "@/lib/rag/search"
-import { buildWorkspaceContext } from "@/lib/chat/context"
+import { buildChatScopeAwareness, buildWorkspaceContext } from "@/lib/chat/context"
+import { CHAT_IDENTITY_AUTHORITY } from "@/lib/chat/playbook-compiler"
 import { analyzePromptInjection } from "@/lib/chat/prompt-guard"
 import { compileSystemPrompt } from "@/lib/chat/playbook-compiler"
 import { openaiClientForTarget } from "@/lib/llm/openai-client"
+import { chatCompletionSampling } from "@/lib/llm/model-params"
 import OpenAI from "openai"
 import { applyRateLimitHeaders, chatRateLimit, checkRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { chatMessageSchema } from "@/lib/validations/document"
+import { compileAskAnswer } from "@/lib/chat/ask-format"
 import { resolveCitations } from "@/lib/chat/resolve-citations"
 import { getClientIdentifier } from "@/lib/utils/request"
 
@@ -117,6 +120,7 @@ export async function POST(req: Request) {
       message: userQuery,
       conversationId,
       workspaceId,
+      spaceId,
       excludedDocumentIds: excludedDocumentIds || [],
       excludedNoteIds: excludedNoteIds || [],
       excludedEvidenceIds: excludedEvidenceIds || [],
@@ -150,7 +154,7 @@ export async function POST(req: Request) {
     
     const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
 
-    const { data: conversation, error: conversationError } = await supabase
+    const { data: conversation, error: conversationError } = await adminSupabase
       .from("conversations")
       .select("id, workspace_id, space_id, user_id, context_type, context_id, title")
       .eq("id", conversationId)
@@ -439,37 +443,10 @@ export async function POST(req: Request) {
         ? `${workspaceContextSection.trim()}\n\n`
         : ""
     
-    const contextMentionInstruction = hasWorkspaceContext 
-      ? "  2. The workspace and space properties (always included) - these define the purpose, scope, and jurisdiction of the work\n  3. That you ONLY have access to the documents, notes, and evidence that the user has included in the AI Context section - excluded items are not available to you"
-      : ""
-    
-    // Build a clear context awareness section
-    const contextAwarenessSection = hasWorkspaceContext
-      ? `CRITICAL CONTEXT AWARENESS - READ CAREFULLY:
-
-You have access to TWO types of context, and it is PARAMOUNT that you understand and respect the distinction:
-
-1. **Workspace and Space Properties (ALWAYS INCLUDED)**: 
-   - These are the workspace and space properties (name, description, scope, location, jurisdiction, etc.) that define the organizational context
-   - These are ALWAYS available and provide the scope, purpose, and jurisdiction of the work
-   - This context helps you understand the organizational and jurisdictional framework
-
-2. **User-Selected Document/Note/Evidence Context (USER-CONTROLLED)**:
-   - The user explicitly controls what documents, notes, and evidence items are included in this conversation via the "AI Context" section
-   - You ONLY have access to the documents, notes, and evidence that the user has INCLUDED
-   - You MUST NEVER reference, mention, or use information from documents, notes, or evidence that the user has EXCLUDED
-   - This is PARAMOUNT - the user's choices in the AI Context section must be FULLY respected
-
-The document context provided below contains ONLY the documents, notes, and evidence that the user has specifically included. You must:
-- ONLY use information from the documents/notes/evidence provided in the context below
-- NEVER reference documents, notes, or evidence that are not in the provided context
-- Understand that excluded items are intentionally not available to you
-- If asked about something not in your context, explain that it's not included in the current conversation's context
-
-The workspace and space properties provided below are always part of your knowledge. The document/note/evidence context reflects ONLY what the user has chosen to include.
-
-`
-      : ""
+    const chatScope = spaceId ? "authority" : "programme"
+    const scopeAwareness = buildChatScopeAwareness(chatScope)
+    const contextMentionInstruction = hasWorkspaceContext ? scopeAwareness.mentionInstruction : ""
+    const contextAwarenessSection = hasWorkspaceContext ? scopeAwareness.awarenessSection : ""
     
     const contextChangeNotice = hasPreviousMessages && excludedItemsList
       ? `\n\n⚠️ CRITICAL: CONTEXT HAS CHANGED ⚠️
@@ -528,7 +505,8 @@ ${context}`
     const { systemPrompt } = compileSystemPrompt({
       kind: "chat",
       userLanguage,
-      identity: layers.identity,
+      chatScope,
+      identity: chatScope === "authority" ? CHAT_IDENTITY_AUTHORITY : layers.identity,
       playbookBody: playbookBody ?? layers.playbook,
       runtimeSections,
       isDocumentPreview,
@@ -571,7 +549,7 @@ ${context}`
     const stream = await openai.chat.completions.create({
       model,
       messages: openaiMessages,
-      temperature: 0.7,
+      ...chatCompletionSampling(model, 0.7),
       stream: true,
     })
 
@@ -639,6 +617,8 @@ ${context}`
             }
           }
 
+          finalResponse = compileAskAnswer(finalResponse, { question: userQuery })
+
           const messageSourcesPayload = {
             documents: documentSources,
             citations: finalCitations,
@@ -694,7 +674,7 @@ ${context}`
                     ? `${generatedTitle.slice(0, 61).trimEnd()}...` 
                     : generatedTitle
 
-                  await supabase
+                  await adminSupabase
                     .from("conversations")
                     .update({
                       title: finalTitle,
@@ -712,7 +692,7 @@ ${context}`
                     ? `${cleanedTitle.slice(0, maxLength - 3).trimEnd()}...` 
                     : cleanedTitle
 
-                  await supabase
+                  await adminSupabase
                     .from("conversations")
                     .update({
                       title: autoTitle,
@@ -724,7 +704,7 @@ ${context}`
             }
 
             // Update conversation timestamp
-            await supabase
+            await adminSupabase
               .from("conversations")
               .update({ updated_at: new Date().toISOString() })
               .eq("id", conversationId)
@@ -976,7 +956,7 @@ Restate the full answer with the required quotes and citations.`,
     const regenResponse = await openai.chat.completions.create({
       model,
       messages: regenMessages,
-      temperature: 0.2,
+      ...chatCompletionSampling(model, 0.2),
     })
 
     const regenContent = regenResponse.choices[0]?.message?.content?.trim()

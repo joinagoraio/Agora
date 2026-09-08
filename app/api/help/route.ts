@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/server"
 import { isHelpAiEnabled } from "@/lib/env"
 import { completeLlm } from "@/lib/llm/complete"
 import { HELP_REFUSAL_COPY_EN, shouldRefuseHelpQuery } from "@/lib/guidance/help-refuse"
-import { glossaryDefinition } from "@/lib/guidance/help-corpus"
+import { resolveGlossaryEntry } from "@/lib/guidance/help-corpus"
+import { compileHelpAnswer, composeGlossaryHelp } from "@/lib/guidance/help-format"
 import { isSpaceHelpAiDisabled, resolveHelpAiEnabled } from "@/lib/guidance/help-flag"
 import { applyRateLimitHeaders, checkRateLimit, helpRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { getClientIdentifier } from "@/lib/utils/request"
@@ -128,11 +129,13 @@ export async function POST(req: Request) {
     }
 
     const refused = shouldRefuseHelpQuery(input.message)
-    const glossary = glossaryDefinition(input.message.replace(/^(what is|wat is)\s+/i, "").replace(/\?+$/, ""))
+    const glossary = resolveGlossaryEntry(input.message)
+    const helpLanguage = input.language === "nl" ? "nl" : "en"
 
+    const admin = createAdminClient()
     let conversationId = input.conversationId
     if (!conversationId) {
-      const { data: created, error } = await supabase
+      const { data: created, error } = await admin
         .from("help_conversations")
         .insert({
           user_id: user.id,
@@ -147,7 +150,7 @@ export async function POST(req: Request) {
       conversationId = created.id
     }
 
-    await supabase.from("help_messages").insert({
+    await admin.from("help_messages").insert({
       conversation_id: conversationId,
       role: "user",
       content: input.message,
@@ -155,7 +158,6 @@ export async function POST(req: Request) {
     })
 
     if (refused) {
-      const admin = createAdminClient()
       await admin.from("help_messages").insert({
         conversation_id: conversationId,
         role: "assistant",
@@ -172,16 +174,21 @@ export async function POST(req: Request) {
     }
 
     if (glossary) {
-      const admin = createAdminClient()
+      const glossaryText = composeGlossaryHelp(glossary.key, glossary.definition, {
+        documentTitles: input.documentTitles,
+        language: helpLanguage,
+        topic: glossary.key,
+        question: input.message,
+      })
       await admin.from("help_messages").insert({
         conversation_id: conversationId,
         role: "assistant",
-        content: glossary,
+        content: glossaryText,
         refused: false,
       })
       return withRateLimit(
         NextResponse.json({
-          text: glossary,
+          text: glossaryText,
           refused: false,
           conversationId,
           glossaryTerm: true,
@@ -204,9 +211,17 @@ export async function POST(req: Request) {
       .filter(Boolean)
       .join("\n")
 
-    const { resolvePlatformTaskLlm } = await import("@/lib/llm/resolve")
+    const { resolvePlatformTaskLlmWithFallback } = await import("@/lib/llm/resolve")
     const { getPlatformPrompt } = await import("@/lib/llm/prompts")
-    const resolved = await resolvePlatformTaskLlm("help")
+    let resolved
+    try {
+      resolved = await resolvePlatformTaskLlmWithFallback("help", "chat")
+    } catch (error) {
+      console.error("[Help API] Model resolution failed:", error)
+      return withRateLimit(
+        NextResponse.json({ error: "Help model is not configured" }, { status: 503 }),
+      )
+    }
     const helpPrompt = await getPlatformPrompt("help")
 
     const result = await completeLlm({
@@ -219,21 +234,33 @@ export async function POST(req: Request) {
         { role: "user", content: `${contextBlock}\n\nQuestion:\n${input.message}` },
       ],
       temperature: 0.2,
-      maxTokens: 600,
+      maxTokens: 2500,
+      reasoningEffort: "low",
     })
 
-    const navigate = parseNavigate(result.text)
-    const admin = createAdminClient()
+    if (!result.text.trim()) {
+      console.error("[Help API] Empty model response")
+      return withRateLimit(
+        NextResponse.json({ error: "Help could not answer" }, { status: 500 }),
+      )
+    }
+
+    const formatted = compileHelpAnswer(result.text, {
+      documentTitles: input.documentTitles,
+      language: helpLanguage,
+      question: input.message,
+    })
+    const navigate = parseNavigate(formatted)
     await admin.from("help_messages").insert({
       conversation_id: conversationId,
       role: "assistant",
-      content: result.text,
+      content: formatted,
       refused: false,
     })
 
     return withRateLimit(
       NextResponse.json({
-        text: result.text,
+        text: formatted,
         refused: false,
         conversationId,
         navigate,

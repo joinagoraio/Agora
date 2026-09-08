@@ -27,8 +27,9 @@ import {
 } from "@/components/ui/select"
 import { Send, Loader2, ExternalLink, FileText, X, Plus, CircleStop, Highlighter } from "lucide-react"
 import { IconTooltip } from "@/components/icon-tooltip"
-import ReactMarkdown from "react-markdown"
+import { FormattedMarkdown } from "@/components/formatted-markdown"
 import Link from "next/link"
+import { compileAskAnswer } from "@/lib/chat/ask-format"
 import { buildDocumentUrlFromSource } from "@/lib/utils/document-linking"
 import { getWorkspaceDocuments } from "@/lib/actions/document"
 import { getSpaceItems } from "@/lib/actions/space-item"
@@ -712,6 +713,7 @@ export function ChatInterface({ workspaceId, spaceId, conversationId, initialMes
     setMessages,
     stop,
     setInput,
+    error: chatError,
   } = useChatWithInput({
     transport: chatTransport,
     messages: hasLoadedInitial ? undefined : (normalizedInitialMessages as any),
@@ -1650,7 +1652,16 @@ export function ChatInterface({ workspaceId, spaceId, conversationId, initialMes
           const evidenceStatus = evidenceStatusEntry?.status ?? "idle"
           const { citations } = getMessageSourcesPayload(message)
           const rawContent = readMessageContent(message)
-          const displayContent = sanitizeMessageContent(rawContent)
+          const priorUserQuestion = isAssistant
+            ? [...messages.slice(0, index)]
+                .reverse()
+                .find((entry: { role?: string }) => entry.role === "user")
+            : null
+          const displayContent = isAssistant
+            ? compileAskAnswer(sanitizeMessageContent(rawContent), {
+                question: priorUserQuestion ? readMessageContent(priorUserQuestion) : null,
+              })
+            : sanitizeMessageContent(rawContent)
 
           const thinkingLabel = (() => {
             if (message.thinking_duration !== null && message.thinking_duration !== undefined) {
@@ -1702,9 +1713,7 @@ export function ChatInterface({ workspaceId, spaceId, conversationId, initialMes
                     isAssistant && "space-y-2",
                   )}
                 >
-                  <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-0 prose-pre:whitespace-pre-wrap prose-pre:break-words prose-pre:text-sm">
-                    <ReactMarkdown>{displayContent}</ReactMarkdown>
-                  </div>
+                  <FormattedMarkdown>{displayContent}</FormattedMarkdown>
 
                   {isAssistant && citations.length > 0 && canUseHighlights && (
                     <div className="pt-1 flex flex-wrap gap-1">
@@ -1786,6 +1795,11 @@ export function ChatInterface({ workspaceId, spaceId, conversationId, initialMes
       </div>
 
       <div className="border-t bg-card p-4 space-y-2">
+        {chatError && (
+          <p className="text-sm text-destructive pl-1" role="alert">
+            {t("workspace.chat.interface.input.failed")}
+          </p>
+        )}
         <form onSubmit={handleSubmit} className="relative">
           <Textarea
             ref={inputRef}
