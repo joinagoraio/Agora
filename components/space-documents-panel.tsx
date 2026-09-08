@@ -7,7 +7,6 @@ import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { SpaceUploadDocumentDialog } from "@/components/space-upload-document-dialog"
@@ -25,7 +24,7 @@ import { useI18n } from "@/lib/i18n/use-i18n"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { SectionOpenToggle, useSectionOpen } from "@/components/section-open-toggle"
 import { ViewModeToggle, useCollectionViewMode } from "@/components/view-mode-toggle"
-import { cn } from "@/lib/utils"
+import { cn, matchesTextSearch } from "@/lib/utils"
 
 export type SpaceDocumentItem = {
   id: string
@@ -48,9 +47,18 @@ interface SpaceDocumentsPanelProps {
   spaceName: string
   canUpload?: boolean
   canManage?: boolean
+  searchQuery?: string
 }
 
-export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spaceName, canUpload = true, canManage = true }: SpaceDocumentsPanelProps) {
+export function SpaceDocumentsPanel({
+  spaceId,
+  documents,
+  onDocumentsChange,
+  spaceName,
+  canUpload = true,
+  canManage = true,
+  searchQuery = "",
+}: SpaceDocumentsPanelProps) {
   const router = useRouter()
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -60,8 +68,20 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
   
   // Use internal state if no callback is provided, otherwise use prop
   const safeDocuments = onDocumentsChange ? (documents ?? []) : internalDocuments
-  const { viewMode, setViewMode } = useCollectionViewMode(safeDocuments.length, `space.${spaceId}.documents`)
+  const searching = searchQuery.trim().length > 0
+  const visibleDocuments = safeDocuments.filter((doc) =>
+    matchesTextSearch(
+      searchQuery,
+      doc.payload?.title,
+      doc.payload?.summary,
+      doc.payload?.file_name,
+      doc.source_url,
+      doc.classification,
+    ),
+  )
+  const { viewMode, setViewMode } = useCollectionViewMode(visibleDocuments.length, `space.${spaceId}.documents`)
   const { open, toggle } = useSectionOpen(`space.${spaceId}.documents`, true)
+  const listOpen = searching || open
 
   // Update internal state when documents prop changes (for server component usage)
   useEffect(() => {
@@ -160,26 +180,26 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
   }
 
   return (
-    <div className={cn("flex min-h-0 flex-col overflow-hidden", open ? "flex-1" : "shrink-0")}>
+    <div className={cn("flex min-h-0 flex-col overflow-hidden", listOpen ? "flex-1" : "shrink-0")}>
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-1">
-            <SectionOpenToggle open={open} onToggle={toggle} label={t("space.documents.panel.title")} />
+            <SectionOpenToggle open={listOpen} onToggle={toggle} label={t("space.documents.panel.title")} />
             <div className="flex items-baseline gap-2">
               <h3 className="text-xl font-semibold text-foreground">{t("space.documents.panel.title")}</h3>
               <span className="text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
-                ({safeDocuments.length})
+                ({searching ? visibleDocuments.length : safeDocuments.length})
               </span>
             </div>
           </div>
-          {open ? (
+          {listOpen ? (
             <p className="text-sm text-muted-foreground">
               {t("space.documents.panel.description", undefined, { space: spaceName })}
             </p>
           ) : null}
         </div>
         <div className="flex items-center gap-2">
-          {open ? (
+          {listOpen && visibleDocuments.length > 0 ? (
             <ViewModeToggle
               viewMode={viewMode}
               onChange={setViewMode}
@@ -202,19 +222,23 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
         </div>
       </div>
 
-      {open ? (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-4">
+      {listOpen ? (
+      <div className="flex min-h-0 max-h-full flex-col overflow-hidden pt-4">
       {error && <p className="mb-2 shrink-0 rounded-md bg-destructive/10 p-2 text-sm text-destructive">{error}</p>}
 
-      {safeDocuments.length === 0 ? (
+      {visibleDocuments.length === 0 ? (
         <Card className="border-dashed shadow">
           <CardContent className="flex flex-col items-center justify-center gap-3 py-8 text-center">
             <FileText className="h-10 w-10 text-muted-foreground" />
             <div>
-              <h4 className="text-base font-semibold text-foreground">{t("space.documents.panel.emptyTitle")}</h4>
-              <p className="text-sm text-muted-foreground">{t("space.documents.panel.emptyDescription")}</p>
+              <h4 className="text-base font-semibold text-foreground">
+                {searching ? t("space.search.noResults") : t("space.documents.panel.emptyTitle")}
+              </h4>
+              {searching ? null : (
+                <p className="text-sm text-muted-foreground">{t("space.documents.panel.emptyDescription")}</p>
+              )}
             </div>
-            {canUpload && (
+            {!searching && canUpload && (
               <SpaceUploadDocumentDialog
                 spaceId={spaceId}
                 onUploaded={handleUploaded}
@@ -229,7 +253,7 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
         </Card>
       ) : (
         (() => {
-          const docCards = safeDocuments.map((doc) => {
+          const docCards = visibleDocuments.map((doc) => {
             const docTitle = doc.payload?.title || doc.payload?.file_name || t("space.documents.panel.untitled")
             const href = `/spaces/${spaceId}/documents/${doc.id}`
             const fileDocument = {
@@ -291,15 +315,14 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
           })
 
           return viewMode === "grid" ? (
-            <div className="scrollbar-on-hover min-h-0 flex-1 overflow-y-auto">
+            <div className="scrollbar-on-hover min-h-0 max-h-full overflow-y-auto">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{docCards}</div>
             </div>
           ) : (
-            <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0 shadow">
-              <CardContent className="relative min-h-0 flex-1 overflow-hidden p-0">
-                <ScrollArea type="hover" scrollHideDelay={0} className="h-full">
+            <Card className="scrollbar-on-hover min-h-0 max-h-full overflow-y-auto py-0 shadow">
+              <CardContent className="p-0">
                 <div className="divide-y divide-border">
-                  {safeDocuments.map((doc) => {
+                  {visibleDocuments.map((doc) => {
                     const docTitle = doc.payload?.title || doc.payload?.file_name || t("space.documents.panel.untitled")
                     const fileDocument = {
                       mimeType: doc.payload?.mime_type,
@@ -363,7 +386,6 @@ export function SpaceDocumentsPanel({ spaceId, documents, onDocumentsChange, spa
                     )
                   })}
                 </div>
-                </ScrollArea>
               </CardContent>
             </Card>
           )

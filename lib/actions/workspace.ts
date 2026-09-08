@@ -8,12 +8,14 @@ import { withCache, workspaceCacheKey } from "@/lib/cache/api-cache"
 import { requireAuthAndPermission } from "@/lib/middleware/authorization"
 import { getServerTranslator } from "@/lib/i18n/server"
 import { canManageProgrammeAccess } from "@/lib/programme/membership"
+import { emptyProgrammeBindings } from "@/lib/programme/domain"
 
 export async function createWorkspace(
   spaceId: string,
   name: string,
   description?: string,
   kind: "research" | "environmental_programme" = "research",
+  options?: { templateId?: string | null },
 ) {
   const supabase = await createClient()
   const { t } = await getServerTranslator()
@@ -32,6 +34,20 @@ export async function createWorkspace(
     return { error: "Unauthorized" }
   }
 
+  const templateId = options?.templateId?.trim() || null
+  const metadata: Record<string, unknown> = { kind }
+  if (templateId) {
+    const { data: template, error: templateError } = await supabase
+      .from("programme_templates")
+      .select("id, space_id")
+      .eq("id", templateId)
+      .maybeSingle()
+    if (templateError || !template || template.space_id !== spaceId) {
+      return { error: t("space.workspaces.dialog.templateInvalid") }
+    }
+    metadata.programmeBindings = { ...emptyProgrammeBindings(), templateId }
+  }
+
   const { data, error } = await supabase
     .from("workspaces")
     .insert({
@@ -40,7 +56,7 @@ export async function createWorkspace(
       description,
       created_by: user.id,
       kind,
-      metadata: { kind },
+      metadata,
     })
     .select()
     .single()

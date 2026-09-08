@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,8 +17,10 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ProgrammeTemplatePicker } from "@/components/programme-template-picker"
 import { createWorkspace } from "@/lib/actions/workspace"
-import { workspaceHomeHref } from "@/lib/programme/domain"
+import { listSpaceTemplates } from "@/lib/actions/template"
+import { workspaceHomeHref, type ProgrammeTemplateSummary } from "@/lib/programme/domain"
 import { Plus } from "lucide-react"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
@@ -52,11 +54,31 @@ export function CreateWorkspaceDialog({
   const onlySpaceId = !spaceId && spaces.length === 1 ? spaces[0].id : null
   const needsAuthorityPicker = !spaceId && spaces.length > 1
   const [selectedSpaceId, setSelectedSpaceId] = useState(spaceId ?? onlySpaceId ?? "")
+  const [templateId, setTemplateId] = useState<string | null>(null)
+  const [templates, setTemplates] = useState<ProgrammeTemplateSummary[]>([])
+
+  const targetSpaceForTemplates = spaceId ?? (selectedSpaceId || onlySpaceId)
+
+  useEffect(() => {
+    if (!open || !targetSpaceForTemplates) {
+      setTemplates([])
+      return
+    }
+    let cancelled = false
+    void listSpaceTemplates(targetSpaceForTemplates).then((result) => {
+      if (cancelled) return
+      setTemplates(result.data || [])
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [open, targetSpaceForTemplates])
 
   const resetForm = () => {
     setName("")
     setError(null)
     setSelectedSpaceId(spaceId ?? onlySpaceId ?? "")
+    setTemplateId(null)
   }
 
   const handleOpenChange = (next: boolean) => {
@@ -83,7 +105,9 @@ export function CreateWorkspaceDialog({
     setIsLoading(true)
     setError(null)
 
-    const result = await createWorkspace(targetSpaceId, trimmedName, undefined, "environmental_programme")
+    const result = await createWorkspace(targetSpaceId, trimmedName, undefined, "environmental_programme", {
+      templateId,
+    })
 
     if (result.error) {
       setError(result.error)
@@ -150,7 +174,13 @@ export function CreateWorkspaceDialog({
             {needsAuthorityPicker && (
               <div className="space-y-2">
                 <Label htmlFor="programme-authority">{t("space.workspaces.dialog.authorityLabel")}</Label>
-                <Select value={selectedSpaceId} onValueChange={setSelectedSpaceId}>
+                <Select
+                  value={selectedSpaceId}
+                  onValueChange={(next) => {
+                    setSelectedSpaceId(next)
+                    setTemplateId(null)
+                  }}
+                >
                   <SelectTrigger id="programme-authority" className="w-full">
                     <SelectValue placeholder={t("space.workspaces.dialog.authorityPlaceholder")} />
                   </SelectTrigger>
@@ -175,6 +205,15 @@ export function CreateWorkspaceDialog({
               />
               <p className="text-xs text-muted-foreground">{t("space.workspaces.dialog.kindProgrammeHelp")}</p>
             </div>
+            {targetSpaceForTemplates ? (
+              <ProgrammeTemplatePicker
+                templates={templates}
+                value={templateId}
+                onChange={setTemplateId}
+                disabled={isLoading}
+                help={t("space.workspaces.dialog.templateHelp")}
+              />
+            ) : null}
             {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
           </div>
           <DialogFooter>

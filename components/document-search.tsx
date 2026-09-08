@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
+import { SearchField } from "@/components/search-field"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -68,15 +69,12 @@ export function DocumentSearch({ workspaceId }: DocumentSearchProps) {
     <div className="space-y-6">
       <form onSubmit={handleSearch} className="space-y-4">
         <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search documents..."
-              className="pl-10"
-            />
-          </div>
+          <SearchField
+            className="flex-1"
+            value={query}
+            onChange={setQuery}
+            placeholder="Search documents..."
+          />
           <Button type="submit" disabled={isSearching || !query.trim()}>
             {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
           </Button>

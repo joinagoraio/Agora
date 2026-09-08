@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest"
-import { canAccessProgramme, canManageProgrammeAccess, resolveProgrammeInvite } from "@/lib/programme/membership"
+import {
+  canAccessProgramme,
+  canManageProgrammeAccess,
+  isPendingInvitation,
+  resolveProgrammeInvite,
+  resolveSpaceInvite,
+} from "@/lib/programme/membership"
 
 describe("programme membership", () => {
   it("lets programme members in, not every authority member", () => {
@@ -53,5 +59,25 @@ describe("programme membership", () => {
         inviteeIsAuthorityMember: true,
       }),
     ).toEqual({ error: "already_pending" })
+  })
+})
+
+describe("authority invitations", () => {
+  it("treats status and accepted_at as the pending signal", () => {
+    expect(isPendingInvitation({ status: "pending" })).toBe(true)
+    expect(isPendingInvitation({})).toBe(true)
+    expect(isPendingInvitation({ status: "declined" })).toBe(false)
+    expect(isPendingInvitation({ status: "accepted" })).toBe(false)
+    expect(isPendingInvitation({ status: "pending", accepted_at: "2026-01-01" })).toBe(false)
+  })
+
+  it("rejects people who are already on the authority or already invited", () => {
+    expect(resolveSpaceInvite({ alreadyMember: true, alreadyPending: false })).toEqual({
+      error: "already_member",
+    })
+    expect(resolveSpaceInvite({ alreadyMember: false, alreadyPending: true })).toEqual({
+      error: "already_pending",
+    })
+    expect(resolveSpaceInvite({ alreadyMember: false, alreadyPending: false })).toEqual({ ok: true })
   })
 })

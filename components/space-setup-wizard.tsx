@@ -5,7 +5,9 @@ import { useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { updateSpace, updateSpaceScope, enhanceScopeText, updateSpaceSetupState } from "@/lib/actions/space"
 import { createWorkspace } from "@/lib/actions/workspace"
-import { workspaceHomeHref } from "@/lib/programme/domain"
+import { listSpaceTemplates } from "@/lib/actions/template"
+import { ProgrammeTemplatePicker } from "@/components/programme-template-picker"
+import { workspaceHomeHref, type ProgrammeTemplateSummary } from "@/lib/programme/domain"
 import { AddOverheidDocumentsDialog } from "@/components/add-overheid-documents-dialog"
 import { SpaceAgentsPanel } from "@/components/space-agents-panel"
 import { SpaceUploadDocumentDialog } from "@/components/space-upload-document-dialog"
@@ -221,6 +223,8 @@ export function SpaceSetupWizard({
     [spaceName, t],
   )
   const [workspaceName, setWorkspaceName] = useState(defaultWorkspaceName)
+  const [workspaceTemplateId, setWorkspaceTemplateId] = useState<string | null>(null)
+  const [workspaceTemplates, setWorkspaceTemplates] = useState<ProgrammeTemplateSummary[]>([])
   useEffect(() => {
     setWorkspaceName((current) => (current === defaultWorkspaceName ? defaultWorkspaceName : current))
   }, [defaultWorkspaceName])
@@ -243,6 +247,18 @@ export function SpaceSetupWizard({
   useEffect(() => {
     setLocalDocuments(documents)
   }, [documents])
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    void listSpaceTemplates(spaceId).then((result) => {
+      if (cancelled) return
+      setWorkspaceTemplates(result.data || [])
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [open, spaceId])
 
   const currentStepKey = steps[currentStep]?.key
   const trimmedJurisdiction = jurisdictionLabel.trim()
@@ -540,7 +556,9 @@ export function SpaceSetupWizard({
     setWorkspaceError(null)
     setWorkspaceIsCreating(true)
 
-    const result = await createWorkspace(spaceId, workspaceName.trim(), undefined, "environmental_programme")
+    const result = await createWorkspace(spaceId, workspaceName.trim(), undefined, "environmental_programme", {
+      templateId: workspaceTemplateId,
+    })
     setWorkspaceIsCreating(false)
 
     if (result?.error) {
@@ -1043,6 +1061,15 @@ export function SpaceSetupWizard({
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">{t("space.workspaces.dialog.kindProgrammeHelp")}</p>
+                <ProgrammeTemplatePicker
+                  templates={workspaceTemplates}
+                  value={workspaceTemplateId}
+                  onChange={setWorkspaceTemplateId}
+                  disabled={workspaceIsCreating}
+                  id="wizard-workspace-template"
+                  label={t("space.wizard.workspace.templateLabel")}
+                  help={t("space.workspaces.dialog.templateHelp")}
+                />
                 <Button onClick={handleCreateWorkspace} disabled={workspaceIsCreating} className="w-fit">
                   {workspaceIsCreating ? (
                     <>

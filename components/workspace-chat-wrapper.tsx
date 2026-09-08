@@ -5,6 +5,7 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import { ChatSidebar } from "@/components/chat-sidebar"
 import { ChatToggleButton } from "@/components/chat-toggle-button"
 import { patchAskPanelPreference, readAskPanelPreference } from "@/lib/chat/ask-panel-preference"
+import type { ChatGuidanceConfig, ChatPanelTab } from "@/lib/guidance/chat-guidance"
 
 interface WorkspaceChatWrapperProps {
   workspaceId?: string
@@ -12,6 +13,7 @@ interface WorkspaceChatWrapperProps {
   workspaceName: string
   children: React.ReactNode
   defaultOpen?: boolean
+  defaultPanelTab?: ChatPanelTab
   canManage?: boolean
 }
 
@@ -22,6 +24,9 @@ const ChatContext = createContext<{
   setSidebarWidth: (width: number | null) => void
   isSidebarResizing: boolean
   setIsSidebarResizing: (isResizing: boolean) => void
+  setGuidance: (guidance: ChatGuidanceConfig | null) => void
+  panelTab: ChatPanelTab
+  setPanelTab: (tab: ChatPanelTab) => void
 }>({
   isChatOpen: false,
   setIsChatOpen: () => {},
@@ -29,6 +34,9 @@ const ChatContext = createContext<{
   setSidebarWidth: () => {},
   isSidebarResizing: false,
   setIsSidebarResizing: () => {},
+  setGuidance: () => {},
+  panelTab: "ask",
+  setPanelTab: () => {},
 })
 
 export function useChatContext() {
@@ -41,6 +49,7 @@ export function WorkspaceChatWrapper({
   workspaceName,
   children,
   defaultOpen = false,
+  defaultPanelTab = "ask",
   canManage = true,
 }: WorkspaceChatWrapperProps) {
   const router = useRouter()
@@ -49,6 +58,8 @@ export function WorkspaceChatWrapper({
   const [isChatOpen, setIsChatOpen] = useState(defaultOpen)
   const [sidebarWidth, setSidebarWidth] = useState<number | null>(null)
   const [isSidebarResizing, setIsSidebarResizing] = useState(false)
+  const [guidance, setGuidance] = useState<ChatGuidanceConfig | null>(null)
+  const [panelTab, setPanelTab] = useState<ChatPanelTab>(defaultPanelTab)
 
   useEffect(() => {
     const preference = readAskPanelPreference(spaceId, workspaceId)
@@ -85,6 +96,9 @@ export function WorkspaceChatWrapper({
   }
 
   const handleToggle = () => {
+    if (!isChatOpen) {
+      setPanelTab("ask")
+    }
     persistOpen(!isChatOpen)
   }
 
@@ -113,7 +127,17 @@ export function WorkspaceChatWrapper({
 
   return (
     <ChatContext.Provider
-      value={{ isChatOpen, setIsChatOpen: persistOpen, sidebarWidth, setSidebarWidth, isSidebarResizing, setIsSidebarResizing }}
+      value={{
+        isChatOpen,
+        setIsChatOpen: persistOpen,
+        sidebarWidth,
+        setSidebarWidth,
+        isSidebarResizing,
+        setIsSidebarResizing,
+        setGuidance,
+        panelTab,
+        setPanelTab,
+      }}
     >
       <div className="relative flex min-h-screen overflow-x-hidden">
         <div 
@@ -135,6 +159,9 @@ export function WorkspaceChatWrapper({
           isOpen={isChatOpen}
           onClose={handleClose}
           canManage={canManage}
+          guidance={guidance}
+          panelTab={panelTab}
+          onPanelTabChange={setPanelTab}
         />
       </div>
     </ChatContext.Provider>

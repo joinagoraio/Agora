@@ -1,12 +1,11 @@
 "use client"
 
 import { useMemo, useState, type ReactNode } from "react"
-import { Search } from "lucide-react"
 import { toast } from "sonner"
 
 import { DashboardCollection, type DashboardCollectionItem } from "@/components/dashboard-collection"
+import { SearchField } from "@/components/search-field"
 import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import {
   reorderDashboardPins,
@@ -133,16 +132,13 @@ export function DashboardBoard({
       ) : null}
 
       {showSearch ? (
-        <div className="relative mb-8 max-w-md shrink-0">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={t("dashboard.search.placeholder")}
-            aria-label={t("dashboard.search.label")}
-            className="pl-10"
-          />
-        </div>
+        <SearchField
+          className="mb-8 max-w-md shrink-0"
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder={t("dashboard.search.placeholder")}
+          label={t("dashboard.search.label")}
+        />
       ) : null}
 
       <DashboardCollection

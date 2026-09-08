@@ -6,10 +6,14 @@ import { requireAuthAndPermission } from "@/lib/middleware/authorization"
 import {
   mapOutlineRow,
   mapTemplateRow,
+  parseProgrammeBindings,
+  summarizeTemplates,
   type OutlineEditorDraft,
   type ProgrammeOutlineNode,
   type ProgrammeTemplate,
+  type ProgrammeTemplateSummary,
 } from "@/lib/programme/domain"
+import { getServerTranslator } from "@/lib/i18n/server"
 import { HANDBOOK_SEED_NODES, HANDBOOK_TEMPLATE_META, HANDBOOK_TEMPLATE_NAME } from "@/lib/programme/handbook-seed"
 import { programmeTemplateMetaSchema } from "@/lib/programme/structured-artefacts"
 
@@ -17,7 +21,7 @@ const OUTLINE_SELECT =
   "id, template_id, parent_id, title, purpose, instructions, field_specs, quality_rules, output_form, relation_hints, required, sort_order"
 
 export async function listSpaceTemplates(spaceId: string): Promise<{
-  data: ProgrammeTemplate[]
+  data: ProgrammeTemplateSummary[]
   error?: string
 }> {
   const supabase = await createClient()
@@ -27,7 +31,30 @@ export async function listSpaceTemplates(spaceId: string): Promise<{
     .eq("space_id", spaceId)
     .order("created_at", { ascending: true })
   if (error) return { error: error.message, data: [] }
-  return { data: (data || []).map(mapTemplateRow) }
+  const templates = (data || []).map(mapTemplateRow)
+  if (templates.length === 0) return { data: [] }
+
+  const { data: nodes, error: nodesError } = await supabase
+    .from("programme_outline_nodes")
+    .select("template_id, title, required, sort_order")
+    .in(
+      "template_id",
+      templates.map((template) => template.id),
+    )
+    .order("sort_order", { ascending: true })
+  if (nodesError) return { error: nodesError.message, data: [] }
+
+  return {
+    data: summarizeTemplates(
+      templates,
+      (nodes || []).map((node) => ({
+        templateId: node.template_id,
+        title: node.title,
+        required: Boolean(node.required),
+        sortOrder: node.sort_order,
+      })),
+    ),
+  }
 }
 
 export async function getTemplateWithNodes(templateId: string): Promise<{
@@ -324,6 +351,72 @@ export async function cloneProgrammeTemplate(spaceId: string, templateId: string
 
   const cloned = await getTemplateWithNodes(created.data.id)
   if (cloned.error || !cloned.data) return { error: cloned.error || "Clone failed" }
+  revalidatePath(`/spaces/${spaceId}`)
+  return { data: cloned.data }
+}
+
+export async function reorderOutlineNodes(spaceId: string, templateId: string, orderedIds: string[]) {
+  try {
+    await requireAuthAndPermission("space:update", { spaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+
+  const supabase = await createClient()
+  for (let i = 0; i < orderedIds.length; i++) {
+    const { error } = await supabase
+      .from("programme_outline_nodes")
+      .update({ sort_order: i + 1 })
+      .eq("id", orderedIds[i])
+      .eq("template_id", templateId)
+    if (error) return { error: error.message }
+  }
+
+  const nodes = await listOutlineNodesForTemplate(templateId)
+  revalidatePath(`/spaces/${spaceId}`)
+  return { data: nodes.data }
+}
+
+export async function saveProgrammeAsTemplate(input: { workspaceId: string; name: string }) {
+  const { t } = await getServerTranslator()
+  const supabase = await createClient()
+  const { data: workspace, error: workspaceError } = await supabase
+    .from("workspaces")
+    .select("id, space_id, metadata")
+    .eq("id", input.workspaceId)
+    .single()
+  if (workspaceError || !workspace) {
+    return { error: workspaceError?.message || t("workspace.programme.saveAsTemplateNeedOutline") }
+  }
+
+  try {
+    await requireAuthAndPermission("space:update", { spaceId: workspace.space_id })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+
+  const bindings = parseProgrammeBindings(workspace.metadata as Record<string, unknown>)
+  if (!bindings.templateId) {
+    return { error: t("workspace.programme.saveAsTemplateNeedOutline") }
+  }
+
+  const { data: template, error: templateError } = await supabase
+    .from("programme_templates")
+    .select("id, space_id")
+    .eq("id", bindings.templateId)
+    .maybeSingle()
+  if (templateError || !template || template.space_id !== workspace.space_id) {
+    return { error: templateError?.message || t("workspace.programme.saveAsTemplateNeedOutline") }
+  }
+
+  const name = input.name.trim()
+  if (!name) {
+    return { error: t("workspace.programme.saveAsTemplateNameRequired") }
+  }
+
+  const cloned = await cloneProgrammeTemplate(workspace.space_id, template.id, name)
+  if (cloned.error || !cloned.data) return { error: cloned.error || t("space.settings.templates.saveError") }
+  revalidatePath(`/workspaces/${input.workspaceId}/programme`)
   return { data: cloned.data }
 }
 

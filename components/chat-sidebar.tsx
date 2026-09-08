@@ -40,6 +40,9 @@ import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { patchAskPanelPreference, readAskPanelPreference } from "@/lib/chat/ask-panel-preference"
+import { GuidanceCoach } from "@/components/guidance-coach"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import type { ChatGuidanceConfig, ChatPanelTab } from "@/lib/guidance/chat-guidance"
 
 interface ChatSidebarProps {
   workspaceId?: string
@@ -48,11 +51,24 @@ interface ChatSidebarProps {
   isOpen: boolean
   onClose: () => void
   canManage?: boolean
+  guidance?: ChatGuidanceConfig | null
+  panelTab?: ChatPanelTab
+  onPanelTabChange?: (tab: ChatPanelTab) => void
 }
 
 const DEFAULT_CONVERSATION_TITLE_KEY = "new conversation"
 
-export function ChatSidebar({ workspaceId, spaceId, workspaceName, isOpen, onClose, canManage = true }: ChatSidebarProps) {
+export function ChatSidebar({
+  workspaceId,
+  spaceId,
+  workspaceName,
+  isOpen,
+  onClose,
+  canManage = true,
+  guidance = null,
+  panelTab = "ask",
+  onPanelTabChange,
+}: ChatSidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -151,6 +167,12 @@ export function ChatSidebar({ workspaceId, spaceId, workspaceName, isOpen, onClo
 
   // Get conversationId from URL as a stable value for dependency array
   const conversationIdFromUrl = searchParams.get("conversationId")
+
+  useEffect(() => {
+    if (conversationIdFromUrl) {
+      onPanelTabChange?.("ask")
+    }
+  }, [conversationIdFromUrl, onPanelTabChange])
 
   useEffect(() => {
     // If sidebar is closed, clear conversationIdParam to prevent auto-reopening
@@ -257,6 +279,7 @@ export function ChatSidebar({ workspaceId, spaceId, workspaceName, isOpen, onClo
       contextType,
       contextId,
       spaceId,
+      allInScope: Boolean(spaceId && !isDocumentView),
     })
     if (result.data) {
       setConversations(result.data)
@@ -264,7 +287,7 @@ export function ChatSidebar({ workspaceId, spaceId, workspaceName, isOpen, onClo
     }
     setConversations([])
     return []
-  }, [workspaceId, spaceId, contextType, contextId])
+  }, [workspaceId, spaceId, contextType, contextId, isDocumentView])
 
   const lastCreatedConversationRef = useRef<string | null>(null)
 
@@ -862,6 +885,12 @@ export function ChatSidebar({ workspaceId, spaceId, workspaceName, isOpen, onClo
   const listWidth = isMounted ? getListWidth() : 256
   const minChatWidth = isMounted ? getMinChatWidth() : 300
   const shouldShowList = isListExpanded
+  const selectedConversation = conversations.find((conversation) => conversation.id === currentConversationId)
+  const chatDocumentId =
+    activeDocumentId ??
+    (selectedConversation?.context_type === "document_view" || selectedConversation?.context_type === "document_edit"
+      ? selectedConversation.context_id
+      : undefined)
 
   return (
     <>
@@ -891,16 +920,31 @@ export function ChatSidebar({ workspaceId, spaceId, workspaceName, isOpen, onClo
         )}
       {/* Header with close button */}
       <div className="border-b bg-card">
-        <div className="flex h-16 items-center justify-between px-4">
-          <div>
-            <h2 className="text-sm">
-              <span className="font-semibold">{workspaceName}</span> <span className="text-muted-foreground">·</span>{" "}
-              {t("guidance.chat.programmeAssistant")}
-            </h2>
+        <div className="flex h-16 items-center justify-between gap-3 px-4">
+          <div className="flex min-w-0 items-center gap-3">
+            {guidance ? (
+              <Tabs value={panelTab} onValueChange={(value) => onPanelTabChange?.(value as ChatPanelTab)}>
+                <TabsList>
+                  <TabsTrigger value="ask">{t("guidance.chat.programmeAssistant")}</TabsTrigger>
+                  <TabsTrigger value="guidance">{t("guidance.coach.landmark")}</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            ) : (
+              <h2 className="truncate text-sm">
+                <span className="font-semibold">{workspaceName}</span>{" "}
+                <span className="text-muted-foreground">·</span> {t("guidance.chat.programmeAssistant")}
+              </h2>
+            )}
           </div>
+          {panelTab === "ask" ? (
           <div className="flex items-center gap-2">
             <IconTooltip label={t("workspace.chat.actions.newChat")}>
-              <Button variant="ghost" size="icon" onClick={handleNewChat} aria-label={t("workspace.chat.actions.newChat")}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleNewChat}
+                aria-label={t("workspace.chat.actions.newChat")}
+              >
                 <Plus className="h-5 w-5" />
               </Button>
             </IconTooltip>
@@ -945,9 +989,30 @@ export function ChatSidebar({ workspaceId, spaceId, workspaceName, isOpen, onClo
             </Button>
             </IconTooltip>
           </div>
+          ) : null}
         </div>
       </div>
 
+      {guidance && panelTab === "guidance" ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <GuidanceCoach
+            variant="embedded"
+            surface={guidance.surface}
+            placeName={workspaceName}
+            spaceId={guidance.spaceId ?? spaceId}
+            workspaceId={workspaceId}
+            section={guidance.section}
+            job={guidance.job}
+            guidanceMode={guidance.guidanceMode}
+            pipeline={guidance.pipeline}
+            helpAiEnabled={guidance.helpAiEnabled}
+            documentTitles={guidance.documentTitles}
+            onNavigate={guidance.onNavigate}
+            reviewComplete={guidance.reviewComplete}
+            expertPromptDismissed={guidance.expertPromptDismissed}
+          />
+        </div>
+      ) : (
       <div className="flex flex-1 overflow-hidden">
         {/* Main chat area - flexible width with minimum width */}
         <main 
@@ -960,7 +1025,7 @@ export function ChatSidebar({ workspaceId, spaceId, workspaceName, isOpen, onClo
               spaceId={spaceId}
               conversationId={currentConversationId}
               initialMessages={formattedMessages}
-              documentId={activeDocumentId}
+              documentId={chatDocumentId ?? undefined}
               canManage={Boolean(workspaceId) && canManage}
             />
           ) : (
@@ -1066,6 +1131,7 @@ export function ChatSidebar({ workspaceId, spaceId, workspaceName, isOpen, onClo
           </div>
         </aside>
       </div>
+      )}
 
       {deleteDialogOpen && (
         <AlertDialog open={true} onOpenChange={handleDeleteDialogClose}>

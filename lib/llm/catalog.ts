@@ -53,6 +53,67 @@ export function providerAdapterId(providerId: string, adapter?: string | null): 
   return "openai-compatible"
 }
 
+type CatalogModelVisibility = {
+  enabled?: boolean
+  default_for_tenants?: boolean
+  defaultForTenants?: boolean
+}
+
+export type CatalogVisibilityFlags = {
+  enabled: boolean
+  default_for_tenants: boolean
+}
+
+function allowedFlag(model: CatalogModelVisibility): boolean {
+  return Boolean(model.default_for_tenants ?? model.defaultForTenants)
+}
+
+/** Allowed cannot stay on when the model is off. Allowed on also turns Enabled on. */
+export function nextCatalogVisibility(
+  current: CatalogVisibilityFlags,
+  patch: Partial<CatalogVisibilityFlags>,
+): CatalogVisibilityFlags {
+  if (patch.enabled === false) return { enabled: false, default_for_tenants: false }
+  if (patch.default_for_tenants === true) return { enabled: true, default_for_tenants: true }
+  return {
+    enabled: patch.enabled ?? current.enabled,
+    default_for_tenants: patch.default_for_tenants ?? current.default_for_tenants,
+  }
+}
+
+export function writeCatalogEnabled(enabled: boolean): Partial<CatalogVisibilityFlags> {
+  return enabled ? { enabled: true } : { enabled: false, default_for_tenants: false }
+}
+
+export function writeCatalogAllowed(allowed: boolean): Partial<CatalogVisibilityFlags> {
+  return allowed ? { enabled: true, default_for_tenants: true } : { default_for_tenants: false }
+}
+
+export function sanitizeCatalogVisibility(model: CatalogModelVisibility): CatalogVisibilityFlags {
+  const enabled = Boolean(model.enabled)
+  return { enabled, default_for_tenants: enabled && allowedFlag(model) }
+}
+
+/** Organisations that use Agora keys may only select models marked allowed on the platform. */
+export function isAllowedForAgoraKeyOrgs(model: CatalogModelVisibility): boolean {
+  return sanitizeCatalogVisibility(model).default_for_tenants
+}
+
+/** Organisations only see catalog-enabled models. Agora-key orgs only see allowed models. */
+export function withVisibleCatalogModels<T extends { llm_models?: CatalogModelVisibility[] }>(
+  providers: T[] | null | undefined,
+  options?: { allowedForAgoraKeyOrgs?: boolean },
+): T[] {
+  return (providers || [])
+    .map((provider) => ({
+      ...provider,
+      llm_models: (provider.llm_models || []).filter((model) =>
+        options?.allowedForAgoraKeyOrgs ? isAllowedForAgoraKeyOrgs(model) : Boolean(model.enabled),
+      ),
+    }))
+    .filter((provider) => (provider.llm_models || []).length > 0)
+}
+
 export function isPlatformTask(value: string): value is PlatformTask {
   return (PLATFORM_TASKS as readonly string[]).includes(value)
 }

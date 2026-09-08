@@ -19,9 +19,9 @@ export default async function InvitePage({
     .select(`
       id, 
       email, 
-      role, 
+      role,
+      status,
       expires_at, 
-      accepted_at, 
       space_id,
       spaces (
         id,

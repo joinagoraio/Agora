@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Bot, FolderKanban, Layers2, Settings } from "lucide-react"
 
-import { TenantLlmAdmin } from "@/components/tenant-llm-admin"
+import { prefetchTenantLlmAdminState, TenantLlmAdmin } from "@/components/tenant-llm-admin"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -25,6 +25,11 @@ export function DashboardMetrics({
 }) {
   const { t } = useI18n()
   const [modelsOpen, setModelsOpen] = useState(false)
+
+  useEffect(() => {
+    if (!canManageModels || !tenantId) return
+    void prefetchTenantLlmAdminState(tenantId)
+  }, [canManageModels, tenantId])
 
   return (
     <div className="grid shrink-0 gap-6 sm:grid-cols-3">
@@ -59,12 +64,12 @@ export function DashboardMetrics({
             {t("dashboard.metrics.agents.subtitle")}
           </p>
           {canManageModels && tenantId ? (
-            <IconTooltip label={t("dashboard.metrics.agents.settings")}>
+            <IconTooltip label={t("dashboard.metrics.agents.settings")} className="absolute right-3 bottom-3">
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="absolute right-3 bottom-3 h-8 w-8"
+                className="h-8 w-8"
                 onClick={() => setModelsOpen(true)}
                 aria-label={t("dashboard.metrics.agents.settings")}
               >
@@ -77,12 +82,14 @@ export function DashboardMetrics({
 
       {canManageModels && tenantId ? (
         <Dialog open={modelsOpen} onOpenChange={setModelsOpen}>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-            <DialogHeader>
+          <DialogContent className="flex max-h-[90vh] w-full flex-col overflow-hidden sm:max-w-2xl">
+            <DialogHeader className="shrink-0">
               <DialogTitle>{t("admin.agents.modelsDialogTitle")}</DialogTitle>
               <DialogDescription>{t("admin.agents.modelsDialogDescription")}</DialogDescription>
             </DialogHeader>
-            <TenantLlmAdmin tenantId={tenantId} embedded />
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+              <TenantLlmAdmin tenantId={tenantId} embedded />
+            </div>
           </DialogContent>
         </Dialog>
       ) : null}

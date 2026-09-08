@@ -2,6 +2,7 @@ import type { LlmAdapterId } from "@/lib/llm/catalog"
 
 export const DEFAULT_OPENAI_COMPAT_ENDPOINT = "https://api.openai.com/v1"
 export const DEFAULT_ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1"
+export const LOCAL_LLM_PLACEHOLDER_KEY = "local"
 
 export type RemoteProviderModel = {
   id: string
@@ -9,23 +10,64 @@ export type RemoteProviderModel = {
 }
 
 const NON_CHAT_MODEL_RE =
-  /(whisper|tts|dall-e|embedding|moderation|transcribe|realtime|audio-|image|sora|computer-use|babbage|davinci|ada$|omni-moderation)/i
+  /(whisper|tts|dall-e|embed|moderation|transcribe|realtime|audio-|image|sora|computer-use|babbage|davinci|ada$|omni-moderation|cyber|daybreak)/i
+
+const CHAT_PREFIX_RE =
+  /^(gpt-|chatgpt-|o[1-9]|claude|gemini-|llama|qwen|mistral|mixtral|deepseek|gemma|phi|command|grok|kimi|minimax)/
+
+export function isOfficialOpenAiEndpoint(endpoint?: string | null): boolean {
+  if (!endpoint?.trim()) return true
+  try {
+    return new URL(endpoint).hostname.replace(/^www\./, "") === "api.openai.com"
+  } catch {
+    return /api\.openai\.com/i.test(endpoint)
+  }
+}
+
+export function isLocalLlmEndpoint(endpoint?: string | null): boolean {
+  if (!endpoint?.trim()) return false
+  try {
+    const host = new URL(endpoint).hostname
+    return host === "localhost" || host === "127.0.0.1"
+  } catch {
+    return false
+  }
+}
+
+export function apiKeyForProviderRequest(apiKey?: string | null, endpoint?: string | null): string | null {
+  const trimmed = apiKey?.trim() || ""
+  if (trimmed) return trimmed
+  if (isLocalLlmEndpoint(endpoint)) return LOCAL_LLM_PLACEHOLDER_KEY
+  return null
+}
 
 export function humanizeModelId(modelId: string): string {
   const trimmed = modelId.trim()
-  if (/^gpt-/i.test(trimmed)) return `GPT-${trimmed.slice(4).replace(/-/g, " ")}`
-  if (/^claude-/i.test(trimmed)) return `Claude ${trimmed.slice(7).replace(/-/g, " ")}`
-  return trimmed.replace(/-/g, " ")
+  const slash = trimmed.lastIndexOf("/")
+  const leaf = slash >= 0 ? trimmed.slice(slash + 1) : trimmed
+  if (/^gpt-/i.test(leaf)) return `GPT-${leaf.slice(4).replace(/-/g, " ")}`
+  if (/^claude-/i.test(leaf)) return `Claude ${leaf.slice(7).replace(/-/g, " ")}`
+  if (/^gemini-/i.test(leaf)) return `Gemini ${leaf.slice(7).replace(/-/g, " ")}`
+  if (/^grok-/i.test(leaf)) return `Grok ${leaf.slice(5).replace(/-/g, " ")}`
+  return leaf.replace(/-/g, " ")
 }
 
 export function isLikelyChatModel(modelId: string): boolean {
   const id = modelId.toLowerCase()
   if (NON_CHAT_MODEL_RE.test(id)) return false
-  return /^(gpt-|chatgpt-|o[1-9]|claude)/.test(id)
+  const leaf = id.includes("/") ? id.slice(id.lastIndexOf("/") + 1) : id
+  return CHAT_PREFIX_RE.test(leaf) || CHAT_PREFIX_RE.test(id)
 }
 
-export function selectChatModels(models: RemoteProviderModel[], adapter: LlmAdapterId): RemoteProviderModel[] {
+export function selectChatModels(
+  models: RemoteProviderModel[],
+  adapter: LlmAdapterId,
+  endpoint?: string | null,
+): RemoteProviderModel[] {
   if (adapter === "anthropic") return sortRemoteModels(models)
+  if (!isOfficialOpenAiEndpoint(endpoint)) {
+    return sortRemoteModels(models.filter((model) => !NON_CHAT_MODEL_RE.test(model.id)))
+  }
   const chat = models.filter((model) => isLikelyChatModel(model.id))
   const chosen = chat.length > 0 ? chat : models.filter((model) => !NON_CHAT_MODEL_RE.test(model.id))
   return sortRemoteModels(chosen)
@@ -56,6 +98,7 @@ export async function fetchProviderChatModels(input: {
   return selectChatModels(
     await fetchOpenAiCompatibleModels(modelsUrl(input.endpoint, "openai-compatible"), input.apiKey),
     "openai-compatible",
+    input.endpoint,
   )
 }
 

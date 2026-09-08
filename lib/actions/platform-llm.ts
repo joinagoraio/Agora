@@ -6,9 +6,25 @@ import { createClient } from "@/lib/supabase/server"
 import { isSuperAdmin } from "@/lib/llm/resolve"
 import { decryptSecret, encryptSecret } from "@/lib/security/crypto"
 import { mapTenantRow } from "@/lib/tenant/membership"
-import { isLlmAdapterId, isPlatformTask, providerAdapterId, slugifyProviderId } from "@/lib/llm/catalog"
+import {
+  isLlmAdapterId,
+  isPlatformTask,
+  PLATFORM_TASKS,
+  providerAdapterId,
+  sanitizeCatalogVisibility,
+  slugifyProviderId,
+  writeCatalogAllowed,
+  writeCatalogEnabled,
+} from "@/lib/llm/catalog"
 import { ensurePlatformPromptSeeds, listPlatformPrompts } from "@/lib/llm/prompts"
-import { fetchProviderChatModels } from "@/lib/llm/provider-models"
+import {
+  builtinProviderById,
+  canAddBuiltinProvider,
+  ensurePlatformTaskModelRows,
+  selectPlatformToolModels,
+} from "@/lib/llm/builtin-catalog"
+import { ensureBuiltinCatalogModels } from "@/lib/llm/ensure-builtin-catalog"
+import { apiKeyForProviderRequest, fetchProviderChatModels } from "@/lib/llm/provider-models"
 
 async function requireSuperAdmin() {
   const supabase = await createClient()
@@ -26,6 +42,7 @@ export async function listPlatformCatalog() {
   if (gate.error) return { error: gate.error, data: null }
 
   await ensurePlatformPromptSeeds()
+  await ensureBuiltinCatalogModels()
   const admin = createAdminClient()
   const [providers, models, tasks, tenants, credentials, prompts] = await Promise.all([
     admin.from("llm_providers").select("*").order("sort_order"),
@@ -37,19 +54,97 @@ export async function listPlatformCatalog() {
   ])
 
   const keyed = new Set((credentials.data || []).map((row) => row.provider_id as string))
+  const providerRows = providers.data || []
+  const modelRows = (models.data || []).map((model) => ({
+    ...model,
+    ...sanitizeCatalogVisibility(model),
+  }))
+  const syncedTasks = await syncPlatformTaskAssignments(admin, providerRows, modelRows, tasks.data || [])
 
   return {
     data: {
-      providers: (providers.data || []).map((provider) => ({
+      providers: providerRows.map((provider) => ({
         ...provider,
         has_key: keyed.has(provider.id),
       })),
-      models: models.data || [],
-      tasks: tasks.data || [],
+      models: modelRows,
+      tasks: syncedTasks,
       tenants: (tenants.data || []).map(mapTenantRow),
       prompts: prompts.data || [],
     },
   }
+}
+
+async function syncPlatformTaskAssignments(
+  admin: ReturnType<typeof createAdminClient>,
+  providers: Array<{ id: string; enabled?: boolean }>,
+  models: Array<{ id: string; enabled?: boolean; provider_id?: string }>,
+  tasks: Array<{ task: string; model_id: string }>,
+) {
+  const eligible = selectPlatformToolModels(models, providers)
+  const next = ensurePlatformTaskModelRows(
+    tasks,
+    eligible.map((model) => model.id),
+    PLATFORM_TASKS,
+  )
+  if (!eligible[0]) return tasks
+  const current = new Map(tasks.map((row) => [row.task, row.model_id]))
+  const updates = next
+    .filter((row) => current.get(row.task) !== row.model_id)
+    .map((row) => ({ ...row, updated_at: new Date().toISOString() }))
+  if (updates.length) await admin.from("platform_task_models").upsert(updates)
+  return next
+}
+
+async function syncPlatformTasksFromCatalog(admin: ReturnType<typeof createAdminClient>) {
+  const [providers, models, tasks] = await Promise.all([
+    admin.from("llm_providers").select("id, enabled"),
+    admin.from("llm_models").select("id, provider_id, enabled, model_id, label, sort_order"),
+    admin.from("platform_task_models").select("task, model_id"),
+  ])
+  await syncPlatformTaskAssignments(admin, providers.data || [], models.data || [], tasks.data || [])
+}
+
+export async function addBuiltinProvider(providerId: string, enabledModelIds: string[]) {
+  const gate = await requireSuperAdmin()
+  if (gate.error) return { error: gate.error }
+  const builtin = builtinProviderById(providerId)
+  if (!builtin) return { error: "Unknown built-in provider." }
+  if (!canAddBuiltinProvider(builtin)) {
+    return { error: "Ollama needs a local server. It cannot be added on this platform." }
+  }
+
+  const admin = createAdminClient()
+  const { data: provider } = await admin.from("llm_providers").select("id, enabled").eq("id", providerId).maybeSingle()
+  if (!provider) return { error: "Unknown built-in provider." }
+  if (provider.enabled) return { error: "This provider is already on the list." }
+
+  const { data: models } = await admin.from("llm_models").select("id").eq("provider_id", providerId)
+  const selected = new Set(enabledModelIds)
+  const turnOn = (models || []).filter((row) => selected.has(row.id)).map((row) => row.id)
+  const turnOff = (models || []).filter((row) => !selected.has(row.id)).map((row) => row.id)
+
+  const { error: enableError } = await admin.from("llm_providers").update({ enabled: true }).eq("id", providerId)
+  if (enableError) return { error: enableError.message }
+  if (turnOn.length) {
+    const { error } = await admin
+      .from("llm_models")
+      .update({ enabled: true, default_for_tenants: true })
+      .in("id", turnOn)
+    if (error) return { error: error.message }
+  }
+  if (turnOff.length) {
+    const { error } = await admin
+      .from("llm_models")
+      .update({ enabled: false, default_for_tenants: false })
+      .in("id", turnOff)
+    if (error) return { error: error.message }
+  }
+
+  await syncPlatformTasksFromCatalog(admin)
+  revalidatePath("/admin/platform")
+  revalidatePath("/dashboard")
+  return { success: true }
 }
 
 export async function createProvider(input: {
@@ -112,6 +207,7 @@ export async function updateProvider(input: {
     })
     .eq("id", input.id)
   if (error) return { error: error.message }
+  await syncPlatformTasksFromCatalog(admin)
   revalidatePath("/admin/platform")
   return { success: true }
 }
@@ -126,6 +222,7 @@ async function updateProviderSettings(providerId: string, patch: Record<string, 
   const admin = createAdminClient()
   const { error } = await admin.from("llm_providers").update(patch).eq("id", providerId)
   if (error) return { error: error.message }
+  await syncPlatformTasksFromCatalog(admin)
   revalidatePath("/admin/platform")
   return { success: true }
 }
@@ -165,7 +262,7 @@ async function importRemoteModelsForProvider(providerId: string): Promise<{
     admin.from("llm_providers").select("id, adapter, endpoint").eq("id", providerId).maybeSingle(),
     admin.from("platform_llm_credentials").select("encrypted_key").eq("provider_id", providerId).maybeSingle(),
   ])
-  const apiKey = decryptSecret(cred?.encrypted_key)
+  const apiKey = apiKeyForProviderRequest(decryptSecret(cred?.encrypted_key), provider?.endpoint)
   if (!provider || !apiKey) {
     return { imported: 0, listed: 0, error: "Save an API key before loading models." }
   }
@@ -194,7 +291,7 @@ async function importRemoteModelsForProvider(providerId: string): Promise<{
         provider_id: providerId,
         model_id: model.id,
         label: model.label,
-        enabled: false,
+        enabled: true,
         default_for_tenants: false,
         sort_order: lastSort + index + 1,
       })),
@@ -214,70 +311,18 @@ export async function clearPlatformProviderCredential(providerId: string) {
   return { success: true }
 }
 
-export async function addCatalogModel(input: {
-  providerId: string
-  modelId: string
-  label: string
-  costHint?: string
-  defaultForTenants?: boolean
-}) {
-  const gate = await requireSuperAdmin()
-  if (gate.error) return { error: gate.error }
-  if (!input.modelId.trim() || !input.label.trim()) return { error: "Model id and label are required." }
-  const admin = createAdminClient()
-  const { data: last } = await admin
-    .from("llm_models")
-    .select("sort_order")
-    .eq("provider_id", input.providerId)
-    .order("sort_order", { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  const defaultForTenants = input.defaultForTenants ?? true
-  const { data: created, error } = await admin
-    .from("llm_models")
-    .insert({
-      provider_id: input.providerId,
-      model_id: input.modelId.trim(),
-      label: input.label.trim(),
-      cost_hint: input.costHint?.trim() || null,
-      enabled: true,
-      default_for_tenants: defaultForTenants,
-      sort_order: (last?.sort_order ?? 0) + 1,
-    })
-    .select("id")
-    .single()
-  if (error || !created) return { error: error?.message || "Failed to add model." }
-  if (defaultForTenants) {
-    const { data: tenants } = await admin.from("tenants").select("id").eq("llm_key_policy", "platform_only")
-    if (tenants?.length) {
-      await admin.from("tenant_llm_settings").upsert(
-        tenants.map((tenant) => ({ tenant_id: tenant.id, model_id: created.id, enabled: true })),
-        { onConflict: "tenant_id,model_id" },
-      )
-    }
-  }
-  revalidatePath("/admin/platform")
-  return { success: true }
-}
-
 export async function setCatalogModelEnabled(modelId: string, enabled: boolean) {
   const gate = await requireSuperAdmin()
   if (gate.error) return { error: gate.error }
   const admin = createAdminClient()
-  const { error } = await admin.from("llm_models").update({ enabled }).eq("id", modelId)
+  const { error } = await admin
+    .from("llm_models")
+    .update(writeCatalogEnabled(enabled))
+    .eq("id", modelId)
   if (error) return { error: error.message }
+  await syncPlatformTasksFromCatalog(admin)
   revalidatePath("/admin/platform")
-  return { success: true }
-}
-
-export async function updateCatalogModelLabel(modelId: string, label: string) {
-  const gate = await requireSuperAdmin()
-  if (gate.error) return { error: gate.error }
-  if (!label.trim()) return { error: "Label is required." }
-  const admin = createAdminClient()
-  const { error } = await admin.from("llm_models").update({ label: label.trim() }).eq("id", modelId)
-  if (error) return { error: error.message }
-  revalidatePath("/admin/platform")
+  revalidatePath("/dashboard")
   return { success: true }
 }
 
@@ -285,9 +330,13 @@ export async function setModelDefaultForTenants(modelId: string, defaultForTenan
   const gate = await requireSuperAdmin()
   if (gate.error) return { error: gate.error }
   const admin = createAdminClient()
-  const { error } = await admin.from("llm_models").update({ default_for_tenants: defaultForTenants }).eq("id", modelId)
+  const { error } = await admin
+    .from("llm_models")
+    .update(writeCatalogAllowed(defaultForTenants))
+    .eq("id", modelId)
   if (error) return { error: error.message }
   revalidatePath("/admin/platform")
+  revalidatePath("/dashboard")
   return { success: true }
 }
 
@@ -296,6 +345,15 @@ export async function setPlatformTaskModel(task: string, modelId: string) {
   if (gate.error) return { error: gate.error }
   if (!isPlatformTask(task)) return { error: "Unknown built-in tool." }
   const admin = createAdminClient()
+  const { data: model } = await admin
+    .from("llm_models")
+    .select("id, enabled, provider_id, llm_providers(enabled)")
+    .eq("id", modelId)
+    .maybeSingle()
+  const provider = Array.isArray(model?.llm_providers) ? model.llm_providers[0] : model?.llm_providers
+  if (!model?.enabled || !provider?.enabled) {
+    return { error: "Choose a model that is enabled on an enabled provider." }
+  }
   const { error } = await admin
     .from("platform_task_models")
     .upsert({ task, model_id: modelId, updated_at: new Date().toISOString() })

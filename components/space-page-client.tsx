@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react"
 
+import { SearchField } from "@/components/search-field"
 import { SpaceSetupWizard } from "@/components/space-setup-wizard"
 import { SpaceAgentsPanel } from "@/components/space-agents-panel"
 import type { AgentRecord, AgentVersionRecord } from "@/lib/programme/domain"
@@ -31,10 +32,8 @@ import Link from "next/link"
 
 import { updateSpaceScope, updateSpace, enhanceScopeText } from "@/lib/actions/space"
 import { useI18n } from "@/lib/i18n/use-i18n"
-import { GuidanceCoach } from "@/components/guidance-coach"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { UserMenu } from "@/components/user-menu"
-import type { GuidanceMode } from "@/lib/guidance/jobs"
 
 type SpaceScope = {
   summary?: string | null
@@ -64,8 +63,6 @@ interface SpacePageClientProps {
   wizardState?: SetupWizardState | null
   spaceJob?: string | null
   userRole?: string | null
-  guidanceMode?: GuidanceMode
-  helpAiEnabled?: boolean
 }
 
 export function SpacePageClient({
@@ -84,11 +81,8 @@ export function SpacePageClient({
   wizardState,
   spaceJob = "none",
   userRole = null,
-  guidanceMode = "guided",
-  helpAiEnabled = false,
 }: SpacePageClientProps) {
   const { t } = useI18n()
-  const [guidanceOpen, setGuidanceOpen] = useState(guidanceMode === "guided")
   const [spaceTitle, setSpaceTitle] = useState(spaceName)
   const [spaceTitleDraft, setSpaceTitleDraft] = useState(spaceName)
   const [spaceDetails, setSpaceDetails] = useState({
@@ -104,6 +98,7 @@ export function SpacePageClient({
   )
   const [accessPanel, setAccessPanel] = useState<AuthorityAccessPanel>(null)
   const [isEditingScope, setIsEditingScope] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
   const formatJurisdiction = (jurisdiction?: Record<string, any> | null) => {
     if (!jurisdiction) {
       return ""
@@ -252,8 +247,6 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
             {descriptionText ?? t("space.overview.descriptionEmpty")}
           </p>
         </div>
-
-        <Separator className="bg-border mt-4" />
       </section>
     )
   }
@@ -469,10 +462,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
 
   return (
     <>
-    <div
-      className="guidance-content-shift flex h-dvh min-h-0 flex-col overflow-hidden bg-white"
-      data-open={guidanceOpen ? "true" : undefined}
-    >
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-white">
       <header className="shrink-0 bg-card">
         <div className="flex h-16 items-center justify-between px-4">
           <Button variant="ghost" asChild>
@@ -529,6 +519,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
       )}
       <AuthorityAccessDialogs
         space={{ id: spaceId, name: spaceTitle }}
+        workspaces={workspaces}
         panel={accessPanel}
         onClose={() => setAccessPanel(null)}
       />
@@ -762,17 +753,38 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
         renderScopeOverview()
       )}
 
-      <div className="mt-6 flex min-h-0 flex-1 flex-col overflow-hidden">
-        <SpaceWorkspaceList spaceId={spaceId} workspaces={workspaces} canCreate={canManage} spaceName={spaceTitle} />
+      <Separator className="my-8 shrink-0 bg-border" />
+
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <SearchField
+          className="mb-8 max-w-md shrink-0"
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder={t("space.search.placeholder")}
+          label={t("space.search.label")}
+        />
+
+        <SpaceWorkspaceList
+          spaceId={spaceId}
+          workspaces={workspaces}
+          canCreate={canManage}
+          spaceName={spaceTitle}
+          searchQuery={searchQuery}
+        />
 
         {canAccessSettings ? (
           <>
-            <Separator className="my-4 shrink-0 bg-border" />
-            <SpaceAgentsPanel spaceId={spaceId} tenantId={tenantId} initialAgents={initialAgents} />
+            <Separator className="my-8 shrink-0 bg-border" />
+            <SpaceAgentsPanel
+              spaceId={spaceId}
+              tenantId={tenantId}
+              initialAgents={initialAgents}
+              searchQuery={searchQuery}
+            />
           </>
         ) : null}
 
-        <Separator className="my-4 shrink-0 bg-border" />
+        <Separator className="my-8 shrink-0 bg-border" />
 
         <SpaceDocumentsPanel
           spaceId={spaceId}
@@ -781,21 +793,13 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
           spaceName={spaceTitle}
           canUpload={canManage}
           canManage={canManage}
+          searchQuery={searchQuery}
         />
       </div>
       </div>
     </div>
       </main>
     </div>
-      <GuidanceCoach
-        surface="organisation"
-        placeName={spaceTitle}
-        spaceId={spaceId}
-        job={spaceJob === "administrator" ? "administrator" : "author"}
-        guidanceMode={guidanceMode}
-        helpAiEnabled={helpAiEnabled}
-        onOpenChange={setGuidanceOpen}
-      />
     </>
   )
 }

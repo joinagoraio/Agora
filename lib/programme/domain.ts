@@ -167,6 +167,25 @@ export function isEnvironmentalProgrammeWorkspace(workspace: {
   return resolveWorkspaceKind(workspace) === "environmental_programme"
 }
 
+export function splitAuthorityDeleteImpact(
+  rows: Array<{
+    id: string
+    name: string
+    kind?: string | null
+    metadata?: Record<string, unknown> | null
+  }>,
+): {
+  programmes: { id: string; name: string }[]
+  legacyCount: number
+} {
+  const programmes = rows
+    .filter((row) => isEnvironmentalProgrammeWorkspace(row))
+    .map((row) => ({ id: row.id, name: row.name }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+  const legacyCount = rows.filter((row) => !isEnvironmentalProgrammeWorkspace(row)).length
+  return { programmes, legacyCount }
+}
+
 export function workspaceHomeHref(workspace: {
   id: string
   kind?: string | null
@@ -228,6 +247,35 @@ export type ProgrammeTemplate = {
   qualityRules: string | null
   outputForm: string | null
   createdAt: string
+}
+
+export type ProgrammeTemplateSummary = ProgrammeTemplate & {
+  chapterCount: number
+  requiredCount: number
+  chapterTitles: string[]
+}
+
+export function summarizeTemplates(
+  templates: ProgrammeTemplate[],
+  nodes: Array<{ templateId: string; title: string; required: boolean; sortOrder: number }>,
+): ProgrammeTemplateSummary[] {
+  const byTemplate = new Map<string, { titles: string[]; required: number }>()
+  const sorted = [...nodes].sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title))
+  for (const node of sorted) {
+    const current = byTemplate.get(node.templateId) ?? { titles: [], required: 0 }
+    current.titles.push(node.title)
+    if (node.required) current.required += 1
+    byTemplate.set(node.templateId, current)
+  }
+  return templates.map((template) => {
+    const stats = byTemplate.get(template.id)
+    return {
+      ...template,
+      chapterCount: stats?.titles.length ?? 0,
+      requiredCount: stats?.required ?? 0,
+      chapterTitles: stats?.titles ?? [],
+    }
+  })
 }
 
 export type OutlineTreeNode = ProgrammeOutlineNode & { children: OutlineTreeNode[] }

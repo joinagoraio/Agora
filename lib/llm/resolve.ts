@@ -3,6 +3,7 @@ import "server-only"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import {
+  isAllowedForAgoraKeyOrgs,
   isCatalogEntryEnabled,
   mapLegacyKeyPolicy,
   pickVaultApiKey,
@@ -16,6 +17,7 @@ import {
 } from "@/lib/llm/catalog"
 import { decryptSecret } from "@/lib/security/crypto"
 import { completeLlm } from "@/lib/llm/complete"
+import { apiKeyForProviderRequest } from "@/lib/llm/provider-models"
 import type { LlmCompleteInput, LlmCompleteResult } from "@/lib/llm/types"
 
 type CatalogModelRow = {
@@ -23,6 +25,7 @@ type CatalogModelRow = {
   provider_id: string
   model_id: string
   enabled: boolean
+  defaultForTenants: boolean
   adapter?: string | null
   endpoint?: string | null
 }
@@ -116,18 +119,21 @@ async function resolveVaultForProvider(input: {
       : { apiKey: null, endpoint: null }
   const platformKey =
     agoraKeys || input.accessPolicy !== "authority_only" ? await loadPlatformCredential(input.providerId) : null
+  const endpoint = spaceCred.endpoint || tenantCred.endpoint || provider.endpoint
+  const localKey =
+    spaceCred.apiKey || tenantCred.apiKey || platformKey ? null : apiKeyForProviderRequest(null, endpoint)
   const picked = pickVaultApiKey({
     accessPolicy: input.accessPolicy,
     keyPolicy: input.keyPolicy,
-    spaceKey: spaceCred.apiKey,
+    spaceKey: spaceCred.apiKey || localKey,
     tenantKey: tenantCred.apiKey,
-    platformKey,
+    platformKey: platformKey || localKey,
     providerId: input.providerId,
   })
 
   return {
     apiKey: picked.apiKey,
-    endpoint: spaceCred.endpoint || tenantCred.endpoint || provider.endpoint,
+    endpoint,
     adapter: providerAdapterId(provider.id, provider.adapter),
   }
 }
@@ -136,7 +142,7 @@ async function getCatalogModelById(modelId: string): Promise<CatalogModelRow | n
   const admin = createAdminClient()
   const { data } = await admin
     .from("llm_models")
-    .select("id, provider_id, model_id, enabled, llm_providers(adapter, endpoint, enabled)")
+    .select("id, provider_id, model_id, enabled, default_for_tenants, llm_providers(adapter, endpoint, enabled)")
     .eq("id", modelId)
     .maybeSingle()
   if (!data) return null
@@ -146,6 +152,7 @@ async function getCatalogModelById(modelId: string): Promise<CatalogModelRow | n
     provider_id: data.provider_id,
     model_id: data.model_id,
     enabled: Boolean(data.enabled && provider?.enabled),
+    defaultForTenants: Boolean(data.default_for_tenants),
     adapter: provider?.adapter,
     endpoint: provider?.endpoint,
   }
@@ -155,11 +162,15 @@ async function getCatalogModelByProviderModel(providerId: string, modelId: strin
   const admin = createAdminClient()
   const { data } = await admin
     .from("llm_models")
-    .select("id, provider_id, model_id, enabled")
+    .select("id, provider_id, model_id, enabled, default_for_tenants")
     .eq("provider_id", providerId)
     .eq("model_id", modelId)
     .maybeSingle()
-  return data
+  if (!data) return null
+  return {
+    ...data,
+    defaultForTenants: Boolean(data.default_for_tenants),
+  }
 }
 
 async function getFlag(
@@ -277,6 +288,9 @@ export async function resolveTenantAgentLlm(input: {
 
   if (!catalog || !catalog.enabled) {
     throw new Error("Selected model is not available in the platform catalog.")
+  }
+  if (usesAgoraPlatformKeys(keyPolicy) && !isAllowedForAgoraKeyOrgs(catalog)) {
+    throw new Error("Selected model is not allowed for organisations that use Agora keys.")
   }
 
   const allowed = await isCatalogAllowed({

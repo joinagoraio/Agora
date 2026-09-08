@@ -60,15 +60,6 @@ export function ProgrammeDocumentRoles({
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">{t("workspace.programme.corpusHint")}</p>
-      <button
-        type="button"
-        className="text-sm underline"
-        onClick={() => {
-          window.dispatchEvent(new CustomEvent("agora-open-glossary", { detail: { term: "bindings" } }))
-        }}
-      >
-        {t("workspace.programme.boundDocumentsGlossary")}
-      </button>
       <div className="flex flex-wrap gap-2">
         <Button
           disabled={pending || !canBind}

@@ -16,6 +16,7 @@ interface ConversationQueryOptions {
   contextType?: ConversationContextType
   contextId?: string | null
   spaceId?: string
+  allInScope?: boolean
 }
 
 export async function createConversation(
@@ -148,7 +149,7 @@ export async function getUserConversations(
     return { data: [], error: "Unauthorized" }
   }
 
-  const { contextType = "workspace", contextId, spaceId } = options
+  const { contextType = "workspace", contextId, spaceId, allInScope } = options
 
   let query = supabase.from("conversations").select("*").eq("user_id", user.id)
 
@@ -160,14 +161,16 @@ export async function getUserConversations(
     return { data: [], error: "Missing scope" }
   }
 
-  if (contextType === "workspace") {
-    query = query.eq("context_type", "workspace").is("context_id", null)
-  } else {
-    query = query.eq("context_type", contextType)
-    if (contextId) {
-      query = query.eq("context_id", contextId)
+  if (!allInScope) {
+    if (contextType === "workspace") {
+      query = query.eq("context_type", "workspace").is("context_id", null)
     } else {
-      query = query.is("context_id", null)
+      query = query.eq("context_type", contextType)
+      if (contextId) {
+        query = query.eq("context_id", contextId)
+      } else {
+        query = query.is("context_id", null)
+      }
     }
   }
 

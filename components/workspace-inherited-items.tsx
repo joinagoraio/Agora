@@ -7,8 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { FileText, Search } from "lucide-react"
+import { FileText } from "lucide-react"
+import { SearchField } from "@/components/search-field"
 import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
 import { getDocumentFileExtension } from "@/lib/utils/document-files"
 import { useI18n } from "@/lib/i18n/use-i18n"
@@ -118,15 +118,12 @@ export function WorkspaceInheritedItems({ items, showEmptyState = true }: Worksp
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative max-w-md w-full">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={t("workspace.sections.inherited.searchPlaceholder")}
-            className="pl-10 w-full"
-          />
-        </div>
+        <SearchField
+          className="max-w-md w-full"
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder={t("workspace.sections.inherited.searchPlaceholder")}
+        />
       </div>
 
       {itemsToRender.length === 0 ? (

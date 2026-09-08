@@ -1,10 +1,27 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
 import { randomBytes } from "node:crypto"
+
+import { createClient } from "@/lib/supabase/server"
 import { env } from "@/lib/env"
 import { spaceJobFromInvite } from "@/lib/guidance/jobs"
+import { requireAuthAndPermission } from "@/lib/middleware/authorization"
+import { isPendingInvitation, resolveSpaceInvite } from "@/lib/programme/membership"
 import { sendSpaceInvitationEmail } from "@/lib/services/email"
+import { revalidatePath } from "next/cache"
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase()
+}
+
+async function requireSpaceInvitePermission(spaceId: string) {
+  try {
+    await requireAuthAndPermission("space:invite", { spaceId })
+    return null
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+}
 
 export async function inviteUserToSpace(
   spaceId: string,
@@ -21,16 +38,57 @@ export async function inviteUserToSpace(
     return { error: "Unauthorized" }
   }
 
-  // Generate unique token
+  const permissionError = await requireSpaceInvitePermission(spaceId)
+  if (permissionError) return permissionError
+
+  const normalizedEmail = normalizeEmail(email)
+  if (!normalizedEmail) {
+    return { error: "Email is required" }
+  }
+
+  const { data: inviteeProfile } = await supabase
+    .from("profiles")
+    .select("id")
+    .ilike("email", normalizedEmail)
+    .maybeSingle()
+
+  const { data: existingMembership } = inviteeProfile
+    ? await supabase
+        .from("space_members")
+        .select("user_id")
+        .eq("space_id", spaceId)
+        .eq("user_id", inviteeProfile.id)
+        .maybeSingle()
+    : { data: null }
+
+  const { data: existingInvites } = await supabase
+    .from("invitations")
+    .select("id, status")
+    .eq("space_id", spaceId)
+    .ilike("email", normalizedEmail)
+
+  const invite = resolveSpaceInvite({
+    alreadyMember: Boolean(existingMembership),
+    alreadyPending: (existingInvites ?? []).some((row) => isPendingInvitation(row)),
+  })
+  if ("error" in invite) {
+    return {
+      error:
+        invite.error === "already_member"
+          ? "That person is already a member of this authority."
+          : "That person already has a pending invitation.",
+    }
+  }
+
   const token = randomBytes(32).toString("hex")
   const expiresAt = new Date()
-  expiresAt.setDate(expiresAt.getDate() + 7) // 7 days expiry
+  expiresAt.setDate(expiresAt.getDate() + 7)
 
   const { data, error } = await supabase
     .from("invitations")
     .insert({
       space_id: spaceId,
-      email,
+      email: normalizedEmail,
       role,
       job: spaceJobFromInvite(role, job),
       token,
@@ -48,17 +106,16 @@ export async function inviteUserToSpace(
   const inviteLink = `${appUrl}/invite/${token}`
   const spaceName = await getSpaceName(supabase, spaceId)
 
-  // Get inviter's name from profile
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name, email")
     .eq("id", user.id)
     .single()
-  
+
   const inviterName = profile?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || null
 
   const emailResult = await sendSpaceInvitationEmail({
-    to: email,
+    to: normalizedEmail,
     inviteLink,
     spaceName,
     invitedByName: inviterName,
@@ -69,7 +126,8 @@ export async function inviteUserToSpace(
     console.error("Space invitation email failed to send", emailResult.error)
   }
 
-  return { data, inviteLink }
+  revalidatePath(`/spaces/${spaceId}`)
+  return { data, inviteLink, emailSkipped: Boolean(emailResult && "skipped" in emailResult && emailResult.skipped) }
 }
 
 export async function acceptInvitation(token: string) {
@@ -82,63 +140,67 @@ export async function acceptInvitation(token: string) {
     return { error: "You must be logged in to accept invitations" }
   }
 
-  // Get invitation
   const { data: invitation, error: inviteError } = await supabase
     .from("invitations")
     .select("*")
     .eq("token", token)
-    .is("accepted_at", null)
     .single()
 
-  if (inviteError || !invitation) {
+  if (inviteError || !invitation || !isPendingInvitation(invitation)) {
     return { error: "Invalid or expired invitation" }
   }
 
-  // Check if expired
   if (new Date(invitation.expires_at) < new Date()) {
+    if ("status" in invitation) {
+      await supabase.from("invitations").update({ status: "expired" }).eq("id", invitation.id)
+    }
     return { error: "Invitation has expired" }
   }
 
-  // Check if email matches (case-insensitive, trimmed)
   const { data: profile } = await supabase.from("profiles").select("email").eq("id", user.id).single()
 
-  const profileEmail = profile?.email?.toLowerCase().trim()
-  const invitationEmail = invitation.email?.toLowerCase().trim()
-
-  console.log('[acceptInvitation] Checking emails:', { profileEmail, invitationEmail, match: profileEmail === invitationEmail })
-
-  if (profileEmail !== invitationEmail) {
+  if (normalizeEmail(profile?.email || "") !== normalizeEmail(invitation.email || "")) {
     return {
       error: "This invitation was sent to a different email address. Please sign in with the invited email.",
     }
   }
 
-  // Add user to space
-  console.log('[acceptInvitation] Adding user to space_members:', { space_id: invitation.space_id, user_id: user.id, role: invitation.role })
-  
-  const { error: memberError } = await supabase.from("space_members").insert({
-    space_id: invitation.space_id,
-    user_id: user.id,
-    role: invitation.role,
-    job: spaceJobFromInvite(invitation.role, invitation.job),
-  })
+  const { data: existingMembership } = await supabase
+    .from("space_members")
+    .select("user_id")
+    .eq("space_id", invitation.space_id)
+    .eq("user_id", user.id)
+    .maybeSingle()
 
-  if (memberError) {
-    console.error('[acceptInvitation] Error adding member:', memberError)
-    return { error: memberError.message }
+  if (!existingMembership) {
+    const { error: memberError } = await supabase.from("space_members").insert({
+      space_id: invitation.space_id,
+      user_id: user.id,
+      role: invitation.role,
+      job: spaceJobFromInvite(invitation.role, invitation.job),
+    })
+
+    if (memberError) {
+      return { error: memberError.message }
+    }
   }
 
-  console.log('[acceptInvitation] User added successfully, marking invitation as accepted')
-
-  // Mark invitation as accepted
-  const { error: updateError } = await supabase.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", invitation.id)
-
-  if (updateError) {
-    console.error('[acceptInvitation] Error updating invitation:', updateError)
-    // Don't fail here - user is already added to space
+  const updatePayload: Record<string, unknown> = {}
+  if ("status" in invitation) {
+    updatePayload.status = "accepted"
+  }
+  if ("accepted_at" in invitation) {
+    updatePayload.accepted_at = new Date().toISOString()
   }
 
-  console.log('[acceptInvitation] Success!')
+  if (Object.keys(updatePayload).length > 0) {
+    const { error: updateError } = await supabase.from("invitations").update(updatePayload).eq("id", invitation.id)
+    if (updateError) {
+      console.error("[acceptInvitation] Error updating invitation:", updateError)
+    }
+  }
+
+  revalidatePath(`/spaces/${invitation.space_id}`)
   return { success: true, spaceId: invitation.space_id }
 }
 
@@ -152,21 +214,25 @@ export async function revokeInvitation(invitationId: string) {
     return { error: "Unauthorized" }
   }
 
-  const { data: invitation, error: fetchError } = await supabase.from("invitations").select("*").eq("id", invitationId).single()
+  const { data: invitation, error: fetchError } = await supabase
+    .from("invitations")
+    .select("*")
+    .eq("id", invitationId)
+    .single()
 
   if (fetchError || !invitation) {
     return { error: "Invitation not found" }
   }
 
-  const hasStatusColumn = Object.prototype.hasOwnProperty.call(invitation, "status")
+  const permissionError = await requireSpaceInvitePermission(invitation.space_id)
+  if (permissionError) return permissionError
 
-  if (hasStatusColumn) {
-    if (invitation.status !== "pending") {
-      return { error: "Only pending invitations can be revoked" }
-    }
+  if (!isPendingInvitation(invitation)) {
+    return { error: "Only pending invitations can be revoked" }
+  }
 
+  if ("status" in invitation) {
     const { error } = await supabase.from("invitations").update({ status: "declined" }).eq("id", invitationId)
-
     if (error) {
       return { error: error.message }
     }
@@ -177,6 +243,7 @@ export async function revokeInvitation(invitationId: string) {
     }
   }
 
+  revalidatePath(`/spaces/${invitation.space_id}`)
   return { success: true }
 }
 
@@ -200,7 +267,10 @@ export async function resendInvitation(invitationId: string) {
     return { error: "Invitation not found" }
   }
 
-  if ("status" in invitation && invitation.status !== "pending") {
+  const permissionError = await requireSpaceInvitePermission(invitation.space_id)
+  if (permissionError) return permissionError
+
+  if (!isPendingInvitation(invitation)) {
     return { error: "Only pending invitations can be resent" }
   }
 
@@ -208,7 +278,7 @@ export async function resendInvitation(invitationId: string) {
   const expiresAt = new Date()
   expiresAt.setDate(expiresAt.getDate() + 7)
 
-  const updatePayload: Record<string, any> = {
+  const updatePayload: Record<string, unknown> = {
     token,
     expires_at: expiresAt.toISOString(),
   }
@@ -227,13 +297,12 @@ export async function resendInvitation(invitationId: string) {
   const inviteLink = `${appUrl}/invite/${token}`
   const spaceName = await getSpaceName(supabase, invitation.space_id)
 
-  // Get inviter's name from profile
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name, email")
     .eq("id", user.id)
     .single()
-  
+
   const inviterName = profile?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || null
 
   const emailResult = await sendSpaceInvitationEmail({
@@ -248,6 +317,7 @@ export async function resendInvitation(invitationId: string) {
     console.error("Space invitation email failed to resend", emailResult.error)
   }
 
+  revalidatePath(`/spaces/${invitation.space_id}`)
   return { inviteLink }
 }
 

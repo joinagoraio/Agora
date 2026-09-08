@@ -3,6 +3,12 @@
 import type React from "react"
 
 import { useState } from "react"
+import {
+  AuthorityDeleteImpact,
+  splitAuthorityDeleteImpact,
+  type AuthorityDeleteImpactData,
+} from "@/components/authority-delete-impact"
+import { getWorkspacesBySpace } from "@/lib/actions/workspace"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -57,6 +63,9 @@ export function SpaceSettings({
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
   const [invitationAction, setInvitationAction] = useState<{ id: string; type: "resend" | "revoke" } | null>(null)
   const [isDeletingSpace, setIsDeletingSpace] = useState(false)
+  const [deleteImpact, setDeleteImpact] = useState<AuthorityDeleteImpactData | null>(null)
+  const [deleteImpactLoading, setDeleteImpactLoading] = useState(false)
+  const [deleteImpactError, setDeleteImpactError] = useState<string | null>(null)
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null)
   const [memberToRemove, setMemberToRemove] = useState<{ id: string; email: string; name: string } | null>(null)
   const [needsRemoveConfirmation, setNeedsRemoveConfirmation] = useState(false)
@@ -141,6 +150,22 @@ export function SpaceSettings({
 
   const handleDeleteDialogClose = (open: boolean) => {
     setNeedsConfirmation(false)
+    if (!open) {
+      setDeleteImpact(null)
+      setDeleteImpactError(null)
+      setDeleteImpactLoading(false)
+      return
+    }
+    setDeleteImpactLoading(true)
+    setDeleteImpactError(null)
+    void getWorkspacesBySpace(space.id).then((result) => {
+      setDeleteImpactLoading(false)
+      if (result.error) {
+        setDeleteImpactError(t("space.settings.danger.programmesError"))
+        return
+      }
+      setDeleteImpact(splitAuthorityDeleteImpact(result.data ?? []))
+    })
   }
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -164,7 +189,12 @@ export function SpaceSettings({
     }
 
     setInviteEmail("")
-    toast.success(t("space.settings.invitations.toastSent"), { description: email })
+    toast.success(
+      result.emailSkipped
+        ? t("space.settings.invitations.toastSentNoEmail")
+        : t("space.settings.invitations.toastSent"),
+      { description: email },
+    )
     notifyMutated()
   }
 
@@ -433,9 +463,13 @@ export function SpaceSettings({
               </div>
             </form>
 
-            {invitations.length > 0 && (
+            {invitations.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t("space.settings.invitations.empty")}</p>
+            ) : (
               <div>
-                <h3 className="mb-4 font-semibold">{t("space.settings.invitations.title")}</h3>
+                {section === "all" ? (
+                  <h3 className="mb-4 font-semibold">{t("space.settings.invitations.pendingTitle")}</h3>
+                ) : null}
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -545,6 +579,11 @@ export function SpaceSettings({
                         {t("space.settings.danger.dialogDescription")}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
+                    <AuthorityDeleteImpact
+                      loading={deleteImpactLoading}
+                      error={deleteImpactError}
+                      impact={deleteImpact}
+                    />
                     {needsConfirmation && (
                       <p className="text-sm text-destructive font-medium">
                         {t("space.settings.members.remove.cannotUndo")}

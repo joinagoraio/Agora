@@ -1737,7 +1737,7 @@ export function ChatInterface({ workspaceId, spaceId, conversationId, initialMes
                   )}
                   </div>
 
-                  {isAssistant && canManage && (
+                  {isAssistant && canManage && !spaceId && (
                     <div className="flex flex-wrap items-center justify-end gap-2 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button
                           variant="ghost"
@@ -1874,6 +1874,69 @@ export function ChatInterface({ workspaceId, spaceId, conversationId, initialMes
                               ))}
                             </div>
                           </div>
+                        )}
+                      </div>
+                    ) : spaceId ? (
+                      <div className="space-y-3 mt-3">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          {t("workspace.chat.interface.context.sharedLibraryFiles")}{" "}
+                          <span className="font-normal">({availableSourceDocuments.length})</span>
+                        </p>
+                        {availableSourceDocuments.length > 0 && (
+                          <div>
+                            <div className="flex flex-wrap gap-2">
+                              {availableSourceDocuments.map((doc) => (
+                                <Tooltip key={doc.id}>
+                                  <TooltipTrigger asChild>
+                                    <Badge
+                                      variant="secondary"
+                                      className="cursor-pointer hover:bg-secondary/80 pr-1"
+                                      onClick={() => handleRemoveDocument(doc.id)}
+                                    >
+                                      <FileText className="mr-1 h-3 w-3" />
+                                      <span className="max-w-[200px] truncate">{doc.title}</span>
+                                      <X className="ml-1 h-3 w-3" />
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{doc.title}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {excludedSourceDocuments.length > 0 && (
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              {formatExcludedLabel(excludedSourceDocuments.length)}
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {excludedSourceDocuments.map((doc) => (
+                                <Tooltip key={doc.id}>
+                                  <TooltipTrigger asChild>
+                                    <Badge
+                                      variant="outline"
+                                      className="cursor-pointer hover:bg-accent pr-1 opacity-60"
+                                      onClick={() => handleRestoreDocument(doc.id)}
+                                    >
+                                      <FileText className="mr-1 h-3 w-3" />
+                                      <span className="max-w-[200px] truncate line-through">{doc.title}</span>
+                                      <Plus className="ml-1 h-3 w-3" />
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{doc.title}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {availableSourceDocuments.length === 0 && excludedSourceDocuments.length === 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            {t("workspace.chat.interface.context.noSharedLibraryFiles")}
+                          </p>
                         )}
                       </div>
                     ) : (

@@ -35,3 +35,22 @@ export function resolveProgrammeInvite(input: {
   if (input.alreadyPending) return { error: "already_pending" }
   return { channel: input.inviteeIsAuthorityMember ? "in_app" : "email" }
 }
+
+export function isPendingInvitation(invite: {
+  status?: string | null
+  accepted_at?: string | null
+}) {
+  if (invite.accepted_at) return false
+  const status = invite.status?.toLowerCase()
+  if (status && status !== "pending") return false
+  return true
+}
+
+export function resolveSpaceInvite(input: {
+  alreadyMember: boolean
+  alreadyPending: boolean
+}): { error: "already_member" | "already_pending" } | { ok: true } {
+  if (input.alreadyMember) return { error: "already_member" }
+  if (input.alreadyPending) return { error: "already_pending" }
+  return { ok: true }
+}

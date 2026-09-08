@@ -24,7 +24,6 @@ import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { useI18n } from "@/lib/i18n/use-i18n"
-import { GuidanceCoach } from "@/components/guidance-coach"
 import { IconTooltip } from "@/components/icon-tooltip"
 
 type ParentSpace = {
@@ -81,7 +80,6 @@ export function WorkspaceOverview({
   const [draftDescription, setDraftDescription] = useState(initialDescription ?? "")
   const [draftContext, setDraftContext] = useState(initialContext ?? "")
   const [draftLocation, setDraftLocation] = useState(initialLocation ?? "")
-  const [guidanceOpen, setGuidanceOpen] = useState(true)
 
   useEffect(() => {
     if (isEditing) return
@@ -242,19 +240,7 @@ export function WorkspaceOverview({
   }
 
   return (
-    <section
-      className="guidance-content-shift space-y-4"
-      data-open={guidanceOpen ? "true" : undefined}
-    >
-      <GuidanceCoach
-        surface={showProgrammeWorkbench ? "programme" : "research"}
-        placeName={name}
-        workspaceId={workspaceId}
-        spaceId={parentSpaces[0]?.id}
-        job="author"
-        guidanceMode="guided"
-        onOpenChange={setGuidanceOpen}
-      />
+    <section className="space-y-4">
       {isEditing ? (
         <div className="space-y-4 rounded-lg border border-border bg-card/50 p-4 shadow-lg">
           <h2 className="text-lg font-semibold text-foreground">

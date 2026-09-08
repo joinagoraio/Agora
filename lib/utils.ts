@@ -115,3 +115,10 @@ export function formatSourceType(type: string | undefined | null): string {
   
   return typeMap[type] || type
 }
+
+/** Case-insensitive substring match used by dashboard and authority search. */
+export function matchesTextSearch(query: string, ...values: Array<string | null | undefined>) {
+  const normalized = query.trim().toLowerCase()
+  if (!normalized) return true
+  return values.some((value) => Boolean(value) && String(value).toLowerCase().includes(normalized))
+}

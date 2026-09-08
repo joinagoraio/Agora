@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { HelpCircle, Loader2, Send, X } from "lucide-react"
+import ReactMarkdown from "react-markdown"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -36,6 +37,7 @@ type Props = {
   reviewComplete?: boolean
   expertPromptDismissed?: boolean
   compact?: boolean
+  variant?: "overlay" | "embedded"
 }
 
 const NEXT_COPY: Record<Exclude<PipelineStageId, "orient">, string> = {
@@ -73,18 +75,18 @@ export function GuidanceCoach({
   onOpenChange,
   reviewComplete = false,
   expertPromptDismissed = false,
+  variant = "overlay",
 }: Props) {
   const { t, language } = useI18n()
-  const [open, setOpen] = useState(guidanceMode === "guided")
+  const [open, setOpen] = useState(variant === "embedded" || guidanceMode === "guided")
   const [mode, setMode] = useState<GuidanceMode>(guidanceMode)
   const [ask, setAsk] = useState("")
   const [messages, setMessages] = useState<HelpChatMessage[]>([])
   const [askBusy, setAskBusy] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
-  const [glossaryOpen, setGlossaryOpen] = useState(false)
-  const [focusedGlossaryTerm, setFocusedGlossaryTerm] = useState<string | null>(null)
   const [highlight, setHighlight] = useState<string | null>(null)
   const [showExpertPrompt, setShowExpertPrompt] = useState(false)
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false)
   const askRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const focusAskOnOpen = useRef(false)
@@ -147,23 +149,6 @@ export function GuidanceCoach({
   }, [messages, askBusy, open])
 
   useEffect(() => {
-    const onOpenGlossary = (event: Event) => {
-      const term = (event as CustomEvent<{ term?: string }>).detail?.term
-      setOpen(true)
-      setGlossaryOpen(true)
-      setFocusedGlossaryTerm(term || null)
-    }
-    window.addEventListener("agora-open-glossary", onOpenGlossary)
-    return () => window.removeEventListener("agora-open-glossary", onOpenGlossary)
-  }, [])
-
-  useEffect(() => {
-    if (!glossaryOpen || !focusedGlossaryTerm) return
-    const el = document.getElementById(`guidance-glossary-${focusedGlossaryTerm}`)
-    el?.scrollIntoView({ block: "nearest" })
-  }, [glossaryOpen, focusedGlossaryTerm, open])
-
-  useEffect(() => {
     onOpenChange?.(open)
   }, [open, onOpenChange])
 
@@ -176,7 +161,7 @@ export function GuidanceCoach({
 
   const persistMode = async (next: GuidanceMode, extras?: { dismissExpertPrompt?: boolean }) => {
     setMode(next)
-    setOpen(next === "guided")
+    if (variant !== "embedded") setOpen(next === "guided")
     onModeChange?.(next)
     void trackGuidanceEvent({ event: "guidance_mode_toggle", job, mode: next, section })
     try {
@@ -296,6 +281,219 @@ export function GuidanceCoach({
           ? t("guidance.coach.organisationHint")
           : t("guidance.coach.researchHint")
 
+  const switchId = "guidance-mode-switch"
+
+  const clearHelpChat = () => {
+    setMessages([])
+    setConversationId(null)
+    setAsk("")
+    setIsClearConfirmOpen(false)
+  }
+
+  const intro = (
+    <div className={cn("space-y-3 text-sm", variant === "embedded" && "text-center")}>
+      <p className={variant === "embedded" ? "text-lg font-semibold" : undefined}>{where}</p>
+      {section && surface === "programme" && (
+        <p className="text-muted-foreground">
+          {t("guidance.coach.whereTab", undefined, { tab: t(`workspace.programme.nav.${section}`, section) })}
+        </p>
+      )}
+      <p className="text-muted-foreground">{purpose}</p>
+      {surface === "programme" && pipeline?.firstIncomplete && (
+        <p className="font-medium">{t("guidance.coach.next", undefined, { action: nextAction })}</p>
+      )}
+      {surface === "programme" && pipeline?.firstIncomplete && (
+        <Button type="button" size="sm" onClick={goNext}>
+          {t(`workspace.programme.nav.${pipeline.firstIncompleteSection}`, pipeline.firstIncompleteSection)}
+        </Button>
+      )}
+
+      {surface === "programme" && pipeline && (
+        <ol className={cn("space-y-1", variant === "embedded" && "text-left")}>
+          <li className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t("guidance.coach.pipelineTitle")}
+          </li>
+          {PIPELINE_STAGES.map((stage) => {
+            const done = pipeline.stages[stage]
+            const current = pipeline.firstIncomplete === stage
+            return (
+              <li
+                key={stage}
+                className={cn(
+                  "text-xs",
+                  done && "text-muted-foreground line-through",
+                  current && "font-medium text-foreground",
+                  !done && !current && "text-muted-foreground",
+                )}
+              >
+                {t(`guidance.coach.stages.${stage}`)}
+              </li>
+            )
+          })}
+        </ol>
+      )}
+
+      {showExpertPrompt && (
+        <div className="rounded-md border p-3 text-left">
+          <p className="font-medium">{t("guidance.mode.tryExpertTitle")}</p>
+          <p className="mt-1 text-muted-foreground">{t("guidance.mode.tryExpertBody")}</p>
+          <div className="mt-2 flex justify-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setShowExpertPrompt(false)
+                void persistMode("expert", { dismissExpertPrompt: true })
+              }}
+            >
+              {t("guidance.mode.tryExpertConfirm")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setShowExpertPrompt(false)
+                void persistMode("guided", { dismissExpertPrompt: true })
+                void trackGuidanceEvent({ event: "expert_prompt_dismiss", job, mode, section })
+              }}
+            >
+              {t("guidance.mode.tryExpertDismiss")}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  const chatPane = (
+    <div className="flex h-full min-h-0 flex-col">
+      {messages.length > 0 && (
+        <div className="flex min-h-[40px] items-center justify-end gap-2 bg-card px-4 py-2">
+          {!isClearConfirmOpen ? (
+            <button
+              type="button"
+              className="inline-flex h-6 items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={askBusy}
+              onClick={() => setIsClearConfirmOpen(true)}
+            >
+              <X className="h-3.5 w-3.5" />
+              {t("workspace.chat.interface.controls.clear")}
+            </button>
+          ) : (
+            <div className="inline-flex h-6 items-center gap-2 text-xs">
+              <span className="text-muted-foreground">{t("workspace.chat.interface.controls.confirmQuestion")}</span>
+              <button
+                type="button"
+                className="h-6 px-2 text-muted-foreground transition-colors hover:text-foreground"
+                onClick={() => setIsClearConfirmOpen(false)}
+              >
+                {t("common.actions.cancel")}
+              </button>
+              <button
+                type="button"
+                className="h-6 px-2 text-destructive transition-colors hover:text-destructive/80"
+                onClick={clearHelpChat}
+              >
+                {t("workspace.chat.interface.controls.confirm")}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      <div
+        className={cn(
+          "flex-1 space-y-4 p-4",
+          messages.length > 0 ? "overflow-y-auto chat-scrollable" : "overflow-hidden",
+        )}
+      >
+        {messages.length === 0 && !askBusy && (
+          <div className="flex h-full items-center justify-center">
+            <div className="max-w-md">{intro}</div>
+          </div>
+        )}
+        {messages.map((message) => {
+          const isUser = message.role === "user"
+          return (
+            <div key={message.id} className={cn("flex", isUser ? "justify-end" : "justify-start")}>
+              <div
+                className={cn(
+                  "max-w-[80%] sm:max-w-[60ch] rounded-2xl px-3 py-2 text-sm break-words",
+                  isUser && "bg-primary/5 text-foreground",
+                )}
+              >
+                <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-0 prose-pre:whitespace-pre-wrap prose-pre:break-words prose-pre:text-sm">
+                  <ReactMarkdown>{message.content}</ReactMarkdown>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+        {askBusy && (
+          <div className="flex justify-start">
+            <div className="flex items-center px-2 animate-pulse">
+              <span className="text-sm italic text-muted-foreground">{t("workspace.chat.interface.messages.thinking")}…</span>
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+      <div className="space-y-2 border-t bg-card p-4">
+        <form
+          className="relative"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void submitAsk()
+          }}
+        >
+          <Textarea
+            ref={askRef}
+            id={variant === "embedded" ? "guidance-ask-embedded" : "guidance-ask"}
+            value={ask}
+            onChange={(event) => setAsk(event.target.value)}
+            placeholder={t("guidance.coach.askPlaceholder")}
+            className="min-h-[60px] flex-1 resize-none pr-10 shadow"
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault()
+                void submitAsk()
+              }
+            }}
+            disabled={askBusy}
+            aria-label={t("guidance.header.help")}
+          />
+          <IconTooltip label={t("workspace.chat.interface.input.send")} className="absolute bottom-2 right-3">
+            <Button
+              type="submit"
+              variant="ghost"
+              size="icon"
+              disabled={askBusy || !ask.trim()}
+              className="h-6 w-6 p-0"
+              aria-label={t("workspace.chat.interface.input.send")}
+            >
+              {askBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+            </Button>
+          </IconTooltip>
+        </form>
+        <p className="pl-3 text-xs text-muted-foreground">{t("workspace.chat.interface.input.hint")}</p>
+      </div>
+    </div>
+  )
+
+  const body = helpAiEnabled ? (
+    chatPane
+  ) : (
+    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{intro}</div>
+  )
+
+  if (variant === "embedded") {
+    return (
+      <div className="flex h-full min-h-0 flex-col" aria-label={t("guidance.coach.landmark")}>
+        {body}
+      </div>
+    )
+  }
+
   return (
     <>
       {!open && (
@@ -333,12 +531,12 @@ export function GuidanceCoach({
             )}
           </div>
           <div className="flex items-center gap-2">
-            <label htmlFor="guidance-mode-switch" className="text-xs font-medium">
+            <label htmlFor={switchId} className="text-xs font-medium">
               {t("guidance.mode.guided")}
             </label>
             <IconTooltip label={t("guidance.mode.toggleSr")}>
               <Switch
-                id="guidance-mode-switch"
+                id={switchId}
                 checked={mode === "guided"}
                 onCheckedChange={(checked) => void persistMode(checked ? "guided" : "expert")}
                 aria-label={t("guidance.mode.toggleSr")}
@@ -358,183 +556,7 @@ export function GuidanceCoach({
             </IconTooltip>
           </div>
         </header>
-
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 text-sm">
-            <p>{where}</p>
-            {section && surface === "programme" && (
-              <p className="mt-1 text-muted-foreground">
-                {t("guidance.coach.whereTab", undefined, { tab: t(`workspace.programme.nav.${section}`, section) })}
-              </p>
-            )}
-            <p className="mt-2 text-muted-foreground">{purpose}</p>
-            <p className="mt-3 font-medium">{t("guidance.coach.next", undefined, { action: nextAction })}</p>
-            {surface === "programme" && pipeline?.firstIncomplete && (
-              <Button type="button" className="mt-2" size="sm" onClick={goNext}>
-                {t(`workspace.programme.nav.${pipeline.firstIncompleteSection}`, pipeline.firstIncompleteSection)}
-              </Button>
-            )}
-
-            {surface === "programme" && pipeline && (
-              <ol className="mt-4 space-y-1">
-                <li className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {t("guidance.coach.pipelineTitle")}
-                </li>
-                {PIPELINE_STAGES.map((stage) => {
-                  const done = pipeline.stages[stage]
-                  const current = pipeline.firstIncomplete === stage
-                  return (
-                    <li
-                      key={stage}
-                      className={cn(
-                        "text-xs",
-                        done && "text-muted-foreground line-through",
-                        current && "font-medium text-foreground",
-                        !done && !current && "text-muted-foreground",
-                      )}
-                    >
-                      {t(`guidance.coach.stages.${stage}`)}
-                    </li>
-                  )
-                })}
-              </ol>
-            )}
-
-            <div className="mt-4">
-              <button type="button" className="text-xs underline" onClick={() => setGlossaryOpen((value) => !value)}>
-                {t("guidance.coach.glossaryTitle")}
-              </button>
-              {glossaryOpen && (
-                <dl className="mt-2 space-y-2 text-xs text-muted-foreground">
-                  {(["authority", "programme", "documents", "bindings", "specialist", "research"] as const).map(
-                    (term) => (
-                      <div
-                        key={term}
-                        id={`guidance-glossary-${term}`}
-                        className={cn(focusedGlossaryTerm === term && "rounded-md ring-2 ring-ring ring-offset-2")}
-                      >
-                        <dt className="font-medium text-foreground">{t(`guidance.coach.glossaryTerms.${term}`)}</dt>
-                        <dd>{t(`guidance.coach.glossary.${term}`)}</dd>
-                      </div>
-                    ),
-                  )}
-                </dl>
-              )}
-            </div>
-
-            {showExpertPrompt && (
-              <div className="mt-4 rounded-md border p-3">
-                <p className="font-medium">{t("guidance.mode.tryExpertTitle")}</p>
-                <p className="mt-1 text-muted-foreground">{t("guidance.mode.tryExpertBody")}</p>
-                <div className="mt-2 flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => {
-                      setShowExpertPrompt(false)
-                      void persistMode("expert", { dismissExpertPrompt: true })
-                    }}
-                  >
-                    {t("guidance.mode.tryExpertConfirm")}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setShowExpertPrompt(false)
-                      void persistMode("guided", { dismissExpertPrompt: true })
-                      void trackGuidanceEvent({ event: "expert_prompt_dismiss", job, mode, section })
-                    }}
-                  >
-                    {t("guidance.mode.tryExpertDismiss")}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {helpAiEnabled && (
-            <div className="flex min-h-0 flex-1 flex-col border-t bg-muted/20">
-              <div className="flex shrink-0 items-center border-b px-3 py-2">
-                <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  {t("guidance.coach.chatTitle")}
-                </p>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-                {messages.length === 0 && !askBusy && (
-                  <p className="px-2 text-xs text-muted-foreground">{t("guidance.coach.chatEmpty")}</p>
-                )}
-                <div className="space-y-3">
-                  {messages.map((message) => {
-                    const isUser = message.role === "user"
-                    return (
-                      <div key={message.id} className={cn("flex", isUser ? "justify-end" : "justify-start")}>
-                        <div
-                          className={cn(
-                            "max-w-[85%] rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap",
-                            isUser ? "bg-primary/5 text-foreground" : "bg-muted/50 text-foreground",
-                          )}
-                        >
-                          {message.content}
-                        </div>
-                      </div>
-                    )
-                  })}
-                  {askBusy && (
-                    <div className="flex justify-start">
-                      <p className="px-2 text-xs italic text-muted-foreground animate-pulse">
-                        {t("guidance.coach.thinking")}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                <div ref={messagesEndRef} />
-              </div>
-
-              <form
-                className="shrink-0 border-t p-3"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  void submitAsk()
-                }}
-              >
-                <div className="relative">
-                  <Textarea
-                    ref={askRef}
-                    id="guidance-ask"
-                    rows={2}
-                    className="min-h-[2.75rem] resize-none pr-10"
-                    placeholder={t("guidance.coach.askPlaceholder")}
-                    value={ask}
-                    onChange={(event) => setAsk(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault()
-                        void submitAsk()
-                      }
-                    }}
-                    disabled={askBusy}
-                    aria-label={t("guidance.header.help")}
-                  />
-                  <IconTooltip label={t("guidance.coach.send")}>
-                    <Button
-                      type="submit"
-                      variant="ghost"
-                      size="icon"
-                      disabled={askBusy || !ask.trim()}
-                      className="absolute bottom-1.5 right-1.5 h-7 w-7"
-                      aria-label={t("guidance.coach.send")}
-                    >
-                      {askBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                    </Button>
-                  </IconTooltip>
-                </div>
-                <p className="sr-only">{t("guidance.chat.programmeAssistantHint")}</p>
-              </form>
-            </div>
-          )}
-        </div>
+        {body}
       </aside>
     </>
   )

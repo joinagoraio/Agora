@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
+import { SearchField } from "@/components/search-field"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { CreateWorkspaceDocumentDialog } from "@/components/create-workspace-document-dialog"
 import { deleteDocument } from "@/lib/actions/document"
-import { Calendar, Edit3, FileText, MoreVertical, Search, Trash2 } from "lucide-react"
+import { Calendar, Edit3, FileText, MoreVertical, Trash2 } from "lucide-react"
 import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
@@ -160,16 +160,13 @@ export function MyDocumentsList({ workspaceId, initialDocuments, showHeader = tr
   const isSearchDisabled = documents.length === 0
 
   const searchInput = (
-    <div className="relative w-full max-w-md">
-      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-      <Input
-        value={searchQuery}
-        onChange={(event) => setSearchQuery(event.target.value)}
-        placeholder={t("workspace.sections.myDocuments.searchPlaceholder")}
-        className="pl-10"
-        disabled={isSearchDisabled}
-      />
-    </div>
+    <SearchField
+      className="w-full max-w-md"
+      value={searchQuery}
+      onChange={setSearchQuery}
+      placeholder={t("workspace.sections.myDocuments.searchPlaceholder")}
+      disabled={isSearchDisabled}
+    />
   )
 
   return (

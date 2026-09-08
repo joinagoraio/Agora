@@ -7,6 +7,8 @@ import {
   parseProgrammeBindings,
   documentOriginFromMetadata,
   resolveWorkspaceKind,
+  splitAuthorityDeleteImpact,
+  summarizeTemplates,
   buildOutlineTree,
   outlineNodesToTipTapHtml,
   outlinePurposePlainText,
@@ -26,6 +28,45 @@ import {
 } from "@/lib/programme/domain"
 
 describe("programme domain (Phase 0)", () => {
+  it("summarizes template chapter counts in sort order", () => {
+    const summaries = summarizeTemplates(
+      [
+        {
+          id: "t1",
+          spaceId: "s1",
+          name: "Handbook",
+          qualityRules: null,
+          outputForm: null,
+          createdAt: "2026-01-01",
+        },
+        {
+          id: "t2",
+          spaceId: "s1",
+          name: "Empty",
+          qualityRules: null,
+          outputForm: null,
+          createdAt: "2026-01-02",
+        },
+      ],
+      [
+        { templateId: "t1", title: "B", required: false, sortOrder: 2 },
+        { templateId: "t1", title: "A", required: true, sortOrder: 1 },
+      ],
+    )
+    expect(summaries[0]).toMatchObject({
+      id: "t1",
+      chapterCount: 2,
+      requiredCount: 1,
+      chapterTitles: ["A", "B"],
+    })
+    expect(summaries[1]).toMatchObject({
+      id: "t2",
+      chapterCount: 0,
+      requiredCount: 0,
+      chapterTitles: [],
+    })
+  })
+
   it("defaults workspace kind to research", () => {
     expect(getWorkspaceKind(null)).toBe("research")
     expect(getWorkspaceKind({ kind: "environmental_programme" })).toBe("environmental_programme")
@@ -43,6 +84,23 @@ describe("programme domain (Phase 0)", () => {
     expect(isProgrammeWorkbenchSection("outline")).toBe(true)
     expect(isProgrammeWorkbenchSection("agents")).toBe(true)
     expect(isProgrammeWorkbenchSection("nope")).toBe(false)
+  })
+
+  it("lists programmes that cascade when an authority is deleted", () => {
+    expect(
+      splitAuthorityDeleteImpact([
+        { id: "b", name: "Noise and air quality", kind: "environmental_programme" },
+        { id: "a", name: "Bicycle network gaps", kind: "environmental_programme" },
+        { id: "legacy", name: "Old research", kind: "research" },
+      ]),
+    ).toEqual({
+      programmes: [
+        { id: "a", name: "Bicycle network gaps" },
+        { id: "b", name: "Noise and air quality" },
+      ],
+      legacyCount: 1,
+    })
+    expect(splitAuthorityDeleteImpact([])).toEqual({ programmes: [], legacyCount: 0 })
   })
 
   it("maps document metadata origin for the Documents list", () => {

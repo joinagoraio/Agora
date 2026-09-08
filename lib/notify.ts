@@ -16,3 +16,18 @@ export function notifyResult(error: string | null | undefined, success: string) 
   if (error) showToast("error", error)
   else showToast("success", success)
 }
+
+export function persistOrRevert(
+  action: () => Promise<{ error?: string }>,
+  revert: () => void,
+  success: string,
+) {
+  void action().then((result) => {
+    if (result.error) {
+      revert()
+      showToast("error", result.error)
+      return
+    }
+    showToast("success", success)
+  })
+}

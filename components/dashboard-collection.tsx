@@ -218,7 +218,12 @@ function CollectionCard({
       onPointerDown={onReorderPointerDown}
     >
       {onReorderPointerDown ? (
-        <div className={cn("absolute left-2 top-2 z-10", compact ? "left-2 top-1.5" : "left-3 top-2.5")}>
+        <div
+          className={cn(
+            "absolute left-2 top-2 z-10 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100",
+            compact ? "left-2 top-1.5" : "left-3 top-2.5",
+          )}
+        >
           <ReorderHandle label={reorderLabel ?? ""} onPointerDown={onReorderPointerDown} />
         </div>
       ) : null}
@@ -354,7 +359,7 @@ function CollectionListRows({
               onPointerDown={onReorderPointerDown ? (event) => onReorderPointerDown(event, item) : undefined}
             >
               {onReorderPointerDown ? (
-                <div className="flex items-center pl-2">
+                <div className="flex items-center pl-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100">
                   <ReorderHandle
                     label={reorderLabel ?? ""}
                     onPointerDown={(event) => onReorderPointerDown(event, item)}

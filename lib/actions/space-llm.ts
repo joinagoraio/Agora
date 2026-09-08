@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
-import { canOverrideAuthorityCatalog, canStoreSpaceApiKeys } from "@/lib/llm/catalog"
+import {
+  canOverrideAuthorityCatalog,
+  canStoreSpaceApiKeys,
+  isAllowedForAgoraKeyOrgs,
+  usesAgoraPlatformKeys,
+  withVisibleCatalogModels,
+} from "@/lib/llm/catalog"
 import { getTenantAccessPolicy } from "@/lib/llm/resolve"
 import { requireAuthAndPermission } from "@/lib/middleware/authorization"
 import { encryptSecret } from "@/lib/security/crypto"
@@ -42,7 +48,7 @@ export async function getSpaceLlmAdminState(spaceId: string) {
     await Promise.all([
       admin
         .from("llm_providers")
-        .select("id, label, enabled, sort_order, llm_models(id, provider_id, model_id, label, enabled, cost_hint, sort_order)")
+        .select("id, label, enabled, sort_order, llm_models(id, provider_id, model_id, label, enabled, default_for_tenants, cost_hint, sort_order)")
         .eq("enabled", true)
         .order("sort_order"),
       admin.from("tenant_llm_settings").select("model_id, enabled").eq("tenant_id", space.tenant_id),
@@ -60,7 +66,9 @@ export async function getSpaceLlmAdminState(spaceId: string) {
       canOverrideCatalog: canOverrideAuthorityCatalog(policy),
       canStoreKeys: canStoreSpaceApiKeys({ accessPolicy: policy, keyPolicy }),
       usesAgoraKeys: keyPolicy !== "allow_byok",
-      providers: providers.data || [],
+      providers: withVisibleCatalogModels(providers.data, {
+        allowedForAgoraKeyOrgs: usesAgoraPlatformKeys(keyPolicy),
+      }),
       tenantSettings: tenantSettings.data || [],
       tenantProviderSettings: tenantProviders.data || [],
       tenantCredentialProviders: (tenantCredentials.data || []).map((row) => row.provider_id as string),
@@ -105,6 +113,16 @@ export async function setSpaceModelEnabled(spaceId: string, modelId: string, ena
   }
 
   const admin = createAdminClient()
+  if (enabled && usesAgoraPlatformKeys(state.data.tenant?.llmKeyPolicy)) {
+    const { data: model } = await admin
+      .from("llm_models")
+      .select("enabled, default_for_tenants")
+      .eq("id", modelId)
+      .maybeSingle()
+    if (!model || !isAllowedForAgoraKeyOrgs(model)) {
+      return { error: "This model is not allowed for organisations that use Agora keys." }
+    }
+  }
   const { error } = await admin
     .from("space_llm_settings")
     .upsert({ space_id: spaceId, model_id: modelId, enabled }, { onConflict: "space_id,model_id" })

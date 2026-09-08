@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useI18n } from "@/lib/i18n/use-i18n"
-import { GuidanceCoach } from "@/components/guidance-coach"
+import { useChatContext } from "@/components/workspace-chat-wrapper"
 import { ProgrammeAccessDialogs, ProgrammeAccessMenuItems, type ProgrammeAccessPanel } from "@/components/programme-list-menu"
 import { notify, notifyResult } from "@/lib/notify"
 import {
@@ -100,6 +100,8 @@ import {
 } from "@/lib/actions/publish"
 import type { PublicationVisibility } from "@/lib/programme/publish"
 import { listSpaceTemplates } from "@/lib/actions/template"
+import { ProgrammeTemplatePicker } from "@/components/programme-template-picker"
+import { SaveProgrammeAsTemplateDialog } from "@/components/save-programme-as-template-dialog"
 import { listSpaceAgents } from "@/lib/actions/agent"
 import { convertPolicyProseToMeasures, findDuplicateMeasures, generateVisionSkeleton, mergeMeasureFragment } from "@/lib/actions/pipelines"
 import { addProgrammeComment, listProgrammeComments, setProgrammeCommentResolved } from "@/lib/actions/comments"
@@ -111,6 +113,7 @@ import {
   PROGRAMME_WORKBENCH_SECTIONS,
   type DocumentOrigin,
   type ProgrammeBindings,
+  type ProgrammeTemplateSummary,
   type ProgrammeWorkbenchSection,
   type WorkspaceKind,
 } from "@/lib/programme/domain"
@@ -271,6 +274,7 @@ export function ProgrammeWorkbench({
   const workspaceSummary = workspaceSummaryProp ?? ""
   const workspaceDescription = workspaceDescriptionProp ?? ""
   const { t } = useI18n()
+  const { setGuidance } = useChatContext()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -278,6 +282,7 @@ export function ProgrammeWorkbench({
   const [outlineNodeCount, setOutlineNodeCount] = useState(0)
   const [snapshotLoaded, setSnapshotLoaded] = useState(false)
   const [accessPanel, setAccessPanel] = useState<ProgrammeAccessPanel>(null)
+  const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false)
 
   const chromeJob = effectiveJob({ spaceJob, workspaceJob, pathname })
   const [documentOwnerId, setDocumentOwnerId] = useState<string | null>(initialDocumentOwnerId)
@@ -477,8 +482,7 @@ export function ProgrammeWorkbench({
   const [measureInstructions, setMeasureInstructions] = useState("")
   const [measureImportJson, setMeasureImportJson] = useState("")
   const [pending, startTransition] = useTransition()
-  const [guidanceOpen, setGuidanceOpen] = useState(guidanceMode === "guided")
-  const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([])
+  const [templates, setTemplates] = useState<ProgrammeTemplateSummary[]>([])
   const [agents, setAgents] = useState<
     Array<{ id: string; name: string; role: string; stage: string; provider: string }>
   >([])
@@ -768,7 +772,7 @@ export function ProgrammeWorkbench({
       if (section === "setup" || section === "agents") return showConfiguration && navSet.has(section)
       return navSet.has(section)
     }),
-  })).filter((group) => group.sections.length > 0)
+  })).filter((group) => group.sections.length > 0 || (group.id === "output" && canAccessSettings))
   const documentRoleList = (
     <ProgrammeDocumentRoles
       workspaceId={workspaceId}
@@ -787,13 +791,46 @@ export function ProgrammeWorkbench({
   )
   const coachSection = isKnowledgeView ? "knowledge" : activeSection
 
+  useEffect(() => {
+    setGuidance({
+      surface: "programme",
+      job: chromeJob,
+      guidanceMode,
+      helpAiEnabled,
+      spaceId,
+      pipeline,
+      section: coachSection,
+      documentTitles: corpusDocs.map((doc) => ({ title: doc.title, role: doc.document_role })),
+      onNavigate: (section, target) => {
+        setSection(section)
+        if (target) {
+          window.setTimeout(() => {
+            const el = document.querySelector(`[data-guidance-target="${target}"]`)
+            if (el instanceof HTMLElement) el.focus()
+          }, 50)
+        }
+      },
+      reviewComplete: pipeline.stages.review,
+      expertPromptDismissed,
+    })
+    return () => setGuidance(null)
+  }, [
+    chromeJob,
+    coachSection,
+    corpusDocs,
+    expertPromptDismissed,
+    guidanceMode,
+    helpAiEnabled,
+    pipeline,
+    setGuidance,
+    setSection,
+    spaceId,
+  ])
+
   return (
     <ProgrammeTextHistoryProvider>
     <>
-    <div
-      className="guidance-content-shift flex h-dvh flex-col overflow-hidden bg-white"
-      data-open={guidanceOpen ? "true" : undefined}
-    >
+    <div className="flex h-dvh flex-col overflow-hidden bg-white">
       <header className="shrink-0 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75">
         <div className="grid h-16 min-w-0 grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto] items-center gap-3 px-4">
           <Button variant="ghost" asChild className="justify-self-start min-w-0">
@@ -840,6 +877,11 @@ export function ProgrammeWorkbench({
                         {t(`workspace.programme.nav.${section}`)}
                       </DropdownMenuItem>
                     ))}
+                    {group.id === "output" && canAccessSettings ? (
+                      <DropdownMenuItem onSelect={() => setSaveAsTemplateOpen(true)}>
+                        {t("workspace.programme.saveAsTemplate")}
+                      </DropdownMenuItem>
+                    ) : null}
                   </DropdownMenuGroup>
                 ))}
                 {canAccessSettings && (
@@ -859,6 +901,15 @@ export function ProgrammeWorkbench({
         onClose={() => setAccessPanel(null)}
         onDeleted={() => router.push(`/spaces/${spaceId}`)}
       />
+      {canAccessSettings ? (
+        <SaveProgrammeAsTemplateDialog
+          workspaceId={workspaceId}
+          workspaceName={workspaceName}
+          open={saveAsTemplateOpen}
+          onOpenChange={setSaveAsTemplateOpen}
+          onSaved={refresh}
+        />
+      ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {isKnowledgeView ? (
@@ -916,7 +967,7 @@ export function ProgrammeWorkbench({
 
       <Dialog open={sheetOpen} onOpenChange={(open) => { if (!open) closeSheet() }}>
         <DialogContent className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden sm:max-w-4xl">
-          <DialogHeader>
+          <DialogHeader className="sr-only">
             <DialogTitle>{t(`workspace.programme.nav.${activeSection}`, activeSection)}</DialogTitle>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto pr-2">
@@ -1002,30 +1053,35 @@ export function ProgrammeWorkbench({
               {t("workspace.programme.setupGoMeasures")}
             </Button>
           </div>
-          <div className="space-y-2">
-            <p className="text-sm font-medium">{t("workspace.programme.bindTemplate")}</p>
-            <div className="flex flex-wrap gap-2">
-              {templates.map((tpl) => (
-                <Button
-                  key={tpl.id}
-                  size="sm"
-                  variant={bindings.templateId === tpl.id ? "default" : "outline"}
-                  disabled={pending}
-                  onClick={() =>
-                    startTransition(async () => {
-                      const saved = await bindWorkspaceTemplate(workspaceId, tpl.id)
-                      if (saved.data) setBindings(saved.data)
-                      notifyResult(saved.error, t("workspace.programme.templateBound", undefined, { name: tpl.name }))
-                    })
-                  }
-                >
-                  {tpl.name}
-                </Button>
-              ))}
-              {templates.length === 0 && (
-                <p className="text-sm text-muted-foreground">{t("workspace.programme.noTemplates")}</p>
-              )}
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div className="min-w-[16rem] flex-1">
+                {templates.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t("workspace.programme.noTemplates")}</p>
+                ) : (
+                  <ProgrammeTemplatePicker
+                    templates={templates}
+                    value={bindings.templateId ?? null}
+                    allowNone={!bindings.templateId}
+                    disabled={pending}
+                    label={t("workspace.programme.bindTemplate")}
+                    help={t("workspace.programme.bindTemplateHint")}
+                    onChange={(next) => {
+                      if (!next || next === bindings.templateId) return
+                      startTransition(async () => {
+                        const saved = await bindWorkspaceTemplate(workspaceId, next)
+                        if (saved.data) setBindings(saved.data)
+                        const name = templates.find((tpl) => tpl.id === next)?.name || next
+                        notifyResult(saved.error, t("workspace.programme.templateBound", undefined, { name }))
+                      })
+                    }}
+                  />
+                )}
+              </div>
             </div>
+            {bindings.templateId ? (
+              <p className="text-xs text-muted-foreground">{t("workspace.programme.bindTemplateSwitchHint")}</p>
+            ) : null}
           </div>
           <p className="text-sm text-muted-foreground">
             {t("workspace.programme.bindingsSummary", undefined, {
@@ -2649,30 +2705,6 @@ export function ProgrammeWorkbench({
         </DialogContent>
       </Dialog>
     </div>
-      <GuidanceCoach
-        surface="programme"
-        placeName={workspaceName}
-        spaceId={spaceId}
-        workspaceId={workspaceId}
-        section={coachSection}
-        job={chromeJob}
-        guidanceMode={guidanceMode}
-        pipeline={pipeline}
-        helpAiEnabled={helpAiEnabled}
-        documentTitles={corpusDocs.map((doc) => ({ title: doc.title, role: doc.document_role }))}
-        onOpenChange={setGuidanceOpen}
-        onNavigate={(section, target) => {
-          setSection(section)
-          if (target) {
-            window.setTimeout(() => {
-              const el = document.querySelector(`[data-guidance-target="${target}"]`)
-              if (el instanceof HTMLElement) el.focus()
-            }, 50)
-          }
-        }}
-        reviewComplete={pipeline.stages.review}
-        expertPromptDismissed={expertPromptDismissed}
-      />
     </>
     </ProgrammeTextHistoryProvider>
   )

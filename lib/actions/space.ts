@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
 import { env } from "@/lib/env"
 import { requireAuth, requireAuthAndPermission } from "@/lib/middleware/authorization"
+import { isPendingInvitation } from "@/lib/programme/membership"
 import { getServerTranslator } from "@/lib/i18n/server"
 import { defaultSpaceJobForRole, wouldLeaveLastAdministrator } from "@/lib/guidance/jobs"
 import { ensureTenantForUser } from "@/lib/actions/tenant"
@@ -522,14 +523,13 @@ export async function getSpaceAccessSettings(spaceId: string) {
     .from("invitations")
     .select("*")
     .eq("space_id", spaceId)
-    .is("accepted_at", null)
     .order("created_at", { ascending: false })
 
   return {
     data: {
       space,
       members: members || [],
-      invitations: invitations || [],
+      invitations: (invitations || []).filter((invite) => isPendingInvitation(invite)),
       currentUserId: user.id,
       currentRole: membership?.role ?? null,
     },

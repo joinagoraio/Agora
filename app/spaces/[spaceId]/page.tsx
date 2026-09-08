@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { redirect } from "next/navigation"
 
 import { createClient } from "@/lib/supabase/server"
@@ -5,7 +6,7 @@ import { getWorkspacesBySpace } from "@/lib/actions/workspace"
 import { listSpacePublicationIds } from "@/lib/actions/publish"
 import { getSpaceItems } from "@/lib/actions/space-item"
 import { SpacePageClient } from "@/components/space-page-client"
-import { isSpaceHelpAiDisabled, resolveHelpAiEnabled } from "@/lib/guidance/help-flag"
+import { WorkspaceChatWrapper } from "@/components/workspace-chat-wrapper"
 import { canManageProgrammeAccess } from "@/lib/programme/membership"
 import { listSpaceAgents } from "@/lib/actions/agent"
 
@@ -87,11 +88,6 @@ export default async function SpacePage({
   }))
 
   const { data: documents } = await getSpaceItems(spaceId, { item_type: "document" })
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("guidance_mode, expert_prompt_dismissed_at")
-    .eq("id", user.id)
-    .maybeSingle()
 
   const scopeMetadata = (space.metadata as Record<string, any> | null) ?? {}
   const scopeDetails = (scopeMetadata.scope as Record<string, any> | null) ?? {}
@@ -104,30 +100,35 @@ export default async function SpacePage({
     : { data: [] as Awaited<ReturnType<typeof listSpaceAgents>>["data"] }
 
   return (
-    <SpacePageClient
-      spaceId={spaceId}
-      tenantId={space.tenant_id}
-      spaceName={space.name}
-      userRole={membership.role}
-      initialSpaceType={space.space_type}
-      initialVisibility={space.visibility}
-      initialJurisdiction={space.jurisdiction}
-      initialScope={{
-        summary: space.description,
-        description: (scopeDetails.description as string | undefined) ?? "",
-        timeframe: (scopeDetails.timeframe as string | undefined) ?? "",
-      }}
-      initialDocuments={documents ?? []}
-      initialWorkspaces={workspacesWithPublication}
-      initialAgents={spaceAgents ?? []}
-      canManage={canManage}
-      canAccessSettings={canAccessSettings}
-      wizardState={(space.metadata as Record<string, any> | null)?.setupWizard ?? null}
-      spaceJob={membership.job ?? "none"}
-      guidanceMode={profile?.guidance_mode === "expert" ? "expert" : "guided"}
-      helpAiEnabled={resolveHelpAiEnabled({
-        spaceHelpAiDisabled: isSpaceHelpAiDisabled(space.metadata),
-      })}
-    />
+    <Suspense fallback={null}>
+      <WorkspaceChatWrapper
+        spaceId={spaceId}
+        workspaceName={space.name}
+        canManage={canManage}
+        defaultOpen
+      >
+        <SpacePageClient
+          spaceId={spaceId}
+          tenantId={space.tenant_id}
+          spaceName={space.name}
+          userRole={membership.role}
+          initialSpaceType={space.space_type}
+          initialVisibility={space.visibility}
+          initialJurisdiction={space.jurisdiction}
+          initialScope={{
+            summary: space.description,
+            description: (scopeDetails.description as string | undefined) ?? "",
+            timeframe: (scopeDetails.timeframe as string | undefined) ?? "",
+          }}
+          initialDocuments={documents ?? []}
+          initialWorkspaces={workspacesWithPublication}
+          initialAgents={spaceAgents ?? []}
+          canManage={canManage}
+          canAccessSettings={canAccessSettings}
+          wizardState={(space.metadata as Record<string, any> | null)?.setupWizard ?? null}
+          spaceJob={membership.job ?? "none"}
+        />
+      </WorkspaceChatWrapper>
+    </Suspense>
   )
 }

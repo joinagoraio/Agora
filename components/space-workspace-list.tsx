@@ -8,11 +8,10 @@ import { ProgrammeListMenu } from "@/components/programme-list-menu"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { SectionOpenToggle, useSectionOpen } from "@/components/section-open-toggle"
 import { ViewModeToggle, useCollectionViewMode } from "@/components/view-mode-toggle"
-import { cn } from "@/lib/utils"
+import { cn, matchesTextSearch } from "@/lib/utils"
 import {
   isEnvironmentalProgrammeWorkspace,
   workspaceHomeHref,
@@ -35,36 +34,51 @@ interface SpaceWorkspaceListProps {
   workspaces: SpaceWorkspace[]
   canCreate: boolean
   spaceName: string
+  searchQuery?: string
 }
 
-export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }: SpaceWorkspaceListProps) {
+export function SpaceWorkspaceList({
+  spaceId,
+  workspaces,
+  canCreate,
+  spaceName,
+  searchQuery = "",
+}: SpaceWorkspaceListProps) {
   const { t } = useI18n()
   const programmes = workspaces.filter((workspace) => isEnvironmentalProgrammeWorkspace(workspace))
   const legacyResearch = workspaces.filter((workspace) => !isEnvironmentalProgrammeWorkspace(workspace))
-  const { viewMode, setViewMode } = useCollectionViewMode(programmes.length, `space.${spaceId}.programmes`)
+  const searching = searchQuery.trim().length > 0
+  const visibleProgrammes = programmes.filter((workspace) =>
+    matchesTextSearch(searchQuery, workspace.name, workspace.description),
+  )
+  const visibleLegacy = legacyResearch.filter((workspace) =>
+    matchesTextSearch(searchQuery, workspace.name, workspace.description),
+  )
+  const { viewMode, setViewMode } = useCollectionViewMode(visibleProgrammes.length, `space.${spaceId}.programmes`)
   const { open, toggle } = useSectionOpen(`space.${spaceId}.programmes`, true)
+  const listOpen = searching || open
 
   return (
-    <div className={cn("flex min-h-0 flex-col overflow-hidden", open ? "flex-1" : "shrink-0")}>
-      <div className={cn("flex shrink-0 flex-wrap items-center justify-between gap-3", open && "mb-4")}>
+    <div className={cn("flex min-h-0 flex-col overflow-hidden", listOpen ? "flex-1" : "shrink-0")}>
+      <div className={cn("flex shrink-0 flex-wrap items-center justify-between gap-3", listOpen && "mb-4")}>
         <div>
           <div className="flex items-center gap-1">
-            <SectionOpenToggle open={open} onToggle={toggle} label={t("space.workspaces.title")} />
+            <SectionOpenToggle open={listOpen} onToggle={toggle} label={t("space.workspaces.title")} />
             <div className="flex items-baseline gap-2">
               <h3 className="text-xl font-semibold text-foreground">{t("space.workspaces.title")}</h3>
               <span className="text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
-                ({programmes.length})
+                ({searching ? visibleProgrammes.length : programmes.length})
               </span>
             </div>
           </div>
-          {open ? (
+          {listOpen ? (
             <p className="text-sm text-muted-foreground">
               {t("space.workspaces.subtitle", undefined, { space: spaceName })}
             </p>
           ) : null}
         </div>
         <div className="flex items-center gap-2">
-          {open && programmes.length > 0 && (
+          {listOpen && visibleProgrammes.length > 0 && (
             <ViewModeToggle
               viewMode={viewMode}
               onChange={setViewMode}
@@ -86,19 +100,23 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
         </div>
       </div>
 
-      {open ? (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      {programmes.length === 0 ? (
+      {listOpen ? (
+      <div className="flex min-h-0 max-h-full flex-col overflow-hidden">
+      {visibleProgrammes.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center gap-3 py-12 text-center">
             <Layers className="h-10 w-10 text-muted-foreground" />
             <div>
-              <h4 className="text-base font-semibold text-foreground">{t("space.workspaces.emptyTitle")}</h4>
-              <p className="text-sm text-muted-foreground">
-                {t("space.workspaces.emptyDescription")}
-              </p>
+              <h4 className="text-base font-semibold text-foreground">
+                {searching ? t("space.search.noResults") : t("space.workspaces.emptyTitle")}
+              </h4>
+              {searching ? null : (
+                <p className="text-sm text-muted-foreground">
+                  {t("space.workspaces.emptyDescription")}
+                </p>
+              )}
             </div>
-            {canCreate && (
+            {!searching && canCreate && (
               <CreateWorkspaceDialog
                 spaceId={spaceId}
                 trigger={
@@ -112,9 +130,9 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
           </CardContent>
         </Card>
       ) : viewMode === "grid" ? (
-        <div className="scrollbar-on-hover min-h-0 flex-1 overflow-y-auto">
+        <div className="scrollbar-on-hover min-h-0 max-h-full overflow-y-auto">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {programmes.map((workspace) => {
+          {visibleProgrammes.map((workspace) => {
             const href = workspaceHomeHref(workspace)
             return (
             <Card key={workspace.id} className="group relative flex h-full flex-col transition-shadow hover:shadow-md">
@@ -148,11 +166,10 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
         </div>
         </div>
       ) : (
-        <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0 shadow">
-          <CardContent className="relative min-h-0 flex-1 overflow-hidden p-0">
-            <ScrollArea type="hover" scrollHideDelay={0} className="h-full">
+        <Card className="scrollbar-on-hover min-h-0 max-h-full overflow-y-auto py-0 shadow">
+          <CardContent className="p-0">
             <div className="divide-y divide-border">
-              {programmes.map((workspace) => {
+              {visibleProgrammes.map((workspace) => {
                 const href = workspaceHomeHref(workspace)
                 return (
                   <div
@@ -189,14 +206,13 @@ export function SpaceWorkspaceList({ spaceId, workspaces, canCreate, spaceName }
                 )
               })}
             </div>
-            </ScrollArea>
           </CardContent>
         </Card>
       )}
-      {legacyResearch.length > 0 && (
+      {visibleLegacy.length > 0 && (
         <p className="mt-3 shrink-0 text-xs text-muted-foreground">
-          {t("space.workspaces.legacyResearch", undefined, { count: String(legacyResearch.length) })}{" "}
-          {legacyResearch.map((workspace, index) => (
+          {t("space.workspaces.legacyResearch", undefined, { count: String(visibleLegacy.length) })}{" "}
+          {visibleLegacy.map((workspace, index) => (
             <span key={workspace.id}>
               {index > 0 ? ", " : ""}
               <Link href={workspaceHomeHref(workspace)} className="underline">

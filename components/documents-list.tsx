@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useMemo, useCallback, useEffect } from "react"
-import { Input } from "@/components/ui/input"
+import { SearchField } from "@/components/search-field"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -296,16 +296,13 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
       <div className="space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 flex-1">
-          <div className="relative max-w-md flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t("workspace.documents.list.searchPlaceholder")}
-              className="pl-10 w-full"
-              disabled
-            />
-          </div>
+          <SearchField
+            className="max-w-md flex-1"
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder={t("workspace.documents.list.searchPlaceholder")}
+            disabled
+          />
           {archivedCount > 0 && (
             <Button
               variant={showArchived ? "default" : "outline"}
@@ -430,15 +427,12 @@ export function DocumentsList({ workspaceId, initialDocuments, initialArchivedCo
     <div className="space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 flex-1">
-          <div className="relative max-w-md flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t("workspace.documents.list.searchPlaceholder")}
-              className="pl-10 w-full"
-            />
-          </div>
+          <SearchField
+            className="max-w-md flex-1"
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder={t("workspace.documents.list.searchPlaceholder")}
+          />
           {archivedCount > 0 && (
             <Button
               variant={showArchived ? "default" : "outline"}

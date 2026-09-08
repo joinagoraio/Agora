@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { acceptInvitation } from "@/lib/actions/invitation"
+import { isPendingInvitation } from "@/lib/programme/membership"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -59,7 +60,8 @@ export default function InvitePageClient({ token, invitation, user, error: fetch
 
   // Check if expired or already used
   const isExpired = new Date(invitation.expires_at) < new Date()
-  const isAlreadyUsed = invitation.accepted_at !== null
+  const isRevoked = invitation.status === "declined"
+  const isAlreadyUsed = !isPendingInvitation(invitation)
 
   if (isExpired || isAlreadyUsed) {
     return (
@@ -68,12 +70,16 @@ export default function InvitePageClient({ token, invitation, user, error: fetch
           <CardHeader>
             <div className="flex items-center gap-2 text-destructive">
               <AlertCircle className="h-5 w-5" />
-              <CardTitle>{isExpired ? "Invitation Expired" : "Invitation Already Used"}</CardTitle>
+              <CardTitle>
+                {isExpired ? "Invitation Expired" : isRevoked ? "Invitation Revoked" : "Invitation Already Used"}
+              </CardTitle>
             </div>
             <CardDescription>
-              {isExpired 
+              {isExpired
                 ? "This invitation has expired. Please ask the space admin to send a new invitation."
-                : "This invitation has already been accepted."}
+                : isRevoked
+                  ? "This invitation was revoked. Ask an administrator to send a new one if you still need access."
+                  : "This invitation has already been accepted."}
             </CardDescription>
           </CardHeader>
           <CardContent>

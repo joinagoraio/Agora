@@ -5,11 +5,15 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import {
   canStoreTenantApiKeys,
+  isAllowedForAgoraKeyOrgs,
   isCatalogEntryEnabled,
   isLlmAccessPolicy,
+  usesAgoraPlatformKeys,
+  withVisibleCatalogModels,
   type TenantLlmAccessPolicy,
 } from "@/lib/llm/catalog"
-import { getTenantAccessPolicy } from "@/lib/llm/resolve"
+import { ensureBuiltinCatalogModels } from "@/lib/llm/ensure-builtin-catalog"
+import { getTenantAccessPolicy, getTenantLlmPolicies } from "@/lib/llm/resolve"
 import { encryptSecret } from "@/lib/security/crypto"
 import { isTenantAdminRole } from "@/lib/tenant/domain"
 import { mapTenantRow } from "@/lib/tenant/membership"
@@ -46,11 +50,12 @@ export async function getTenantLlmAdminState(tenantId: string) {
   const gate = await requireTenantAdmin(tenantId)
   if (gate.error) return { error: gate.error, data: null }
 
+  await ensureBuiltinCatalogModels()
   const admin = createAdminClient()
   const [providers, settings, providerSettings, credentials] = await Promise.all([
     admin
       .from("llm_providers")
-      .select("id, label, enabled, sort_order, llm_models(id, provider_id, model_id, label, enabled, cost_hint, sort_order)")
+      .select("id, label, enabled, sort_order, llm_models(id, provider_id, model_id, label, enabled, default_for_tenants, cost_hint, sort_order)")
       .eq("enabled", true)
       .order("sort_order"),
     admin.from("tenant_llm_settings").select("model_id, enabled").eq("tenant_id", tenantId),
@@ -61,7 +66,9 @@ export async function getTenantLlmAdminState(tenantId: string) {
   return {
     data: {
       tenant: gate.tenant,
-      providers: providers.data || [],
+      providers: withVisibleCatalogModels(providers.data, {
+        allowedForAgoraKeyOrgs: usesAgoraPlatformKeys(gate.tenant?.llmKeyPolicy),
+      }),
       settings: settings.data || [],
       providerSettings: providerSettings.data || [],
       credentials: credentials.data || [],
@@ -105,6 +112,16 @@ export async function setTenantModelEnabled(tenantId: string, modelId: string, e
   if (gate.error) return { error: gate.error }
 
   const admin = createAdminClient()
+  if (enabled && usesAgoraPlatformKeys(gate.tenant?.llmKeyPolicy)) {
+    const { data: model } = await admin
+      .from("llm_models")
+      .select("enabled, default_for_tenants")
+      .eq("id", modelId)
+      .maybeSingle()
+    if (!model || !isAllowedForAgoraKeyOrgs(model)) {
+      return { error: "This model is not allowed for organisations that use Agora keys." }
+    }
+  }
   const { error } = await admin
     .from("tenant_llm_settings")
     .upsert({ tenant_id: tenantId, model_id: modelId, enabled }, { onConflict: "tenant_id,model_id" })
@@ -171,10 +188,12 @@ export async function clearTenantProviderCredential(tenantId: string, providerId
 export async function listTenantModelsForAuthority(tenantId: string) {
   const supabase = await createClient()
   const policy = await getTenantAccessPolicy(tenantId)
+  const { data: tenant } = await supabase.from("tenants").select("llm_key_policy").eq("id", tenantId).maybeSingle()
+  const agoraKeys = usesAgoraPlatformKeys(tenant?.llm_key_policy)
   const { data, error } = await supabase
     .from("tenant_llm_settings")
     .select(
-      "enabled, llm_models(id, provider_id, model_id, label, enabled, llm_providers(id, label, enabled))",
+      "enabled, llm_models(id, provider_id, model_id, label, enabled, default_for_tenants, llm_providers(id, label, enabled))",
     )
     .eq("tenant_id", tenantId)
     .eq("enabled", true)
@@ -186,6 +205,7 @@ export async function listTenantModelsForAuthority(tenantId: string) {
       const model = Array.isArray(row.llm_models) ? row.llm_models[0] : row.llm_models
       const provider = model?.llm_providers
       const providerRow = Array.isArray(provider) ? provider[0] : provider
+      if (agoraKeys && !isAllowedForAgoraKeyOrgs(model || {})) return false
       return isCatalogEntryEnabled({
         policy,
         tenantProviderEnabled: providerRow?.enabled !== false,
@@ -208,12 +228,13 @@ export async function listAuthorityModels(spaceId: string) {
     return { error: spaceError?.message || "Authority not found", data: [] as Array<Record<string, unknown>> }
   }
 
-  const policy = await getTenantAccessPolicy(space.tenant_id)
+  const { accessPolicy: policy, keyPolicy } = await getTenantLlmPolicies(space.tenant_id)
+  const agoraKeys = usesAgoraPlatformKeys(keyPolicy)
   const admin = createAdminClient()
   const [providers, tenantSettings, tenantProviders, spaceSettings, spaceProviders] = await Promise.all([
     admin
       .from("llm_providers")
-      .select("id, label, enabled, sort_order, llm_models(id, provider_id, model_id, label, enabled, sort_order)")
+      .select("id, label, enabled, sort_order, llm_models(id, provider_id, model_id, label, enabled, default_for_tenants, sort_order)")
       .eq("enabled", true)
       .order("sort_order"),
     admin.from("tenant_llm_settings").select("model_id, enabled").eq("tenant_id", space.tenant_id),
@@ -246,6 +267,7 @@ export async function listAuthorityModels(spaceId: string) {
         : []
     for (const model of providerModels) {
       if (!model?.enabled) continue
+      if (agoraKeys && !isAllowedForAgoraKeyOrgs(model)) continue
       const allowed = isCatalogEntryEnabled({
         policy,
         tenantProviderEnabled: tenantProvider.get(provider.id) ?? true,

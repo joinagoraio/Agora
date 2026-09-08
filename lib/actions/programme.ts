@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { getServerTranslator } from "@/lib/i18n/server"
 import {
   emptyProgrammeBindings,
   parseProgrammeBindings,
@@ -110,9 +111,31 @@ export async function updateProgrammeBindings(workspaceId: string, bindings: Pro
 }
 
 export async function bindWorkspaceTemplate(workspaceId: string, templateId: string) {
-  const current = await getProgrammeBindings(workspaceId)
-  if (current.error) return current
-  return updateProgrammeBindings(workspaceId, { ...current.data, templateId })
+  const supabase = await createClient()
+  const { t } = await getServerTranslator()
+  const { data: workspace, error } = await supabase
+    .from("workspaces")
+    .select("space_id, metadata")
+    .eq("id", workspaceId)
+    .single()
+  if (error || !workspace) {
+    return { error: error?.message || t("space.workspaces.dialog.templateInvalid"), data: emptyProgrammeBindings() }
+  }
+
+  const { data: template, error: templateError } = await supabase
+    .from("programme_templates")
+    .select("id, space_id")
+    .eq("id", templateId)
+    .maybeSingle()
+  if (templateError || !template || template.space_id !== workspace.space_id) {
+    return {
+      error: templateError?.message || t("space.workspaces.dialog.templateInvalid"),
+      data: emptyProgrammeBindings(),
+    }
+  }
+
+  const current = parseProgrammeBindings(workspace.metadata as Record<string, unknown>)
+  return updateProgrammeBindings(workspaceId, { ...current, templateId })
 }
 
 export async function bindWorkspaceChapterAgent(

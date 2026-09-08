@@ -30,8 +30,15 @@ import {
 import { SpaceComplianceSettings } from "@/components/space-compliance-settings"
 import { SpaceSettings } from "@/components/space-settings"
 import { SpaceTemplateLibrary } from "@/components/space-template-library"
+import {
+  AuthorityDeleteImpact,
+  splitAuthorityDeleteImpact,
+  type AuthorityDeleteImpactData,
+  type AuthorityDeleteWorkspace,
+} from "@/components/authority-delete-impact"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { deleteSpace, getSpaceAccessSettings } from "@/lib/actions/space"
+import { getWorkspacesBySpace } from "@/lib/actions/workspace"
 
 export type AuthorityAccessPanel = "templates" | "members" | "invitations" | "compliance" | "delete" | null
 
@@ -57,6 +64,10 @@ export function AuthorityAccessMenuItems({
         <LayoutTemplate className="h-4 w-4" />
         {t("space.overview.menu.templates")}
       </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => onPick("compliance")}>
+        <Shield className="h-4 w-4" />
+        {t("space.overview.menu.compliance")}
+      </DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem onSelect={() => onPick("members")}>
         <Users className="h-4 w-4" />
@@ -65,10 +76,6 @@ export function AuthorityAccessMenuItems({
       <DropdownMenuItem onSelect={() => onPick("invitations")}>
         <Mail className="h-4 w-4" />
         {t("space.overview.menu.invitations")}
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={() => onPick("compliance")}>
-        <Shield className="h-4 w-4" />
-        {t("space.overview.menu.compliance")}
       </DropdownMenuItem>
       {canDelete ? (
         <>
@@ -87,10 +94,12 @@ export function AuthorityAccessDialogs({
   space,
   panel,
   onClose,
+  workspaces = [],
 }: {
   space: { id: string; name: string }
   panel: AuthorityAccessPanel
   onClose: () => void
+  workspaces?: AuthorityDeleteWorkspace[]
 }) {
   const { t } = useI18n()
   const router = useRouter()
@@ -99,10 +108,36 @@ export function AuthorityAccessDialogs({
   const [access, setAccess] = useState<AccessData | null>(null)
   const [accessLoading, setAccessLoading] = useState(false)
   const [accessError, setAccessError] = useState<string | null>(null)
+  const [deleteImpact, setDeleteImpact] = useState<AuthorityDeleteImpactData | null>(() =>
+    workspaces.length > 0 ? splitAuthorityDeleteImpact(workspaces) : null,
+  )
+  const [deleteImpactLoading, setDeleteImpactLoading] = useState(false)
+  const [deleteImpactError, setDeleteImpactError] = useState<string | null>(null)
 
   useEffect(() => {
     if (panel === "delete") setNeedsConfirmation(false)
   }, [panel])
+
+  useEffect(() => {
+    if (panel !== "delete") return
+    const seeded = workspaces.length > 0 ? splitAuthorityDeleteImpact(workspaces) : null
+    setDeleteImpact(seeded)
+    setDeleteImpactError(null)
+    let cancelled = false
+    setDeleteImpactLoading(!seeded)
+    void getWorkspacesBySpace(space.id).then((result) => {
+      if (cancelled) return
+      setDeleteImpactLoading(false)
+      if (result.error) {
+        setDeleteImpactError(t("space.settings.danger.programmesError"))
+        return
+      }
+      setDeleteImpact(splitAuthorityDeleteImpact(result.data ?? []))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [panel, space.id, t, workspaces])
 
   useEffect(() => {
     if (panel !== "members" && panel !== "invitations") return
@@ -154,7 +189,7 @@ export function AuthorityAccessDialogs({
           : t("space.settings.compliance.title")
   const description =
     panel === "templates"
-      ? t("space.settings.templates.hint")
+      ? t("space.settings.templates.dialogHint")
       : panel === "members"
         ? t("space.settings.members.description")
         : panel === "invitations"
@@ -164,12 +199,20 @@ export function AuthorityAccessDialogs({
   return (
     <>
       <Dialog open={contentOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-4xl">
-          <DialogHeader>
+        <DialogContent
+          className={
+            panel === "templates"
+              ? "flex h-[min(48rem,90vh)] flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl"
+              : panel === "compliance"
+                ? "flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl"
+                : "flex max-h-[85vh] flex-col overflow-hidden sm:max-w-5xl"
+          }
+        >
+          <DialogHeader className={panel === "templates" ? "shrink-0 space-y-1 px-6 py-4 pr-12" : undefined}>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className={panel === "templates" ? "min-h-0 flex-1 border-t" : "min-h-0 flex-1 overflow-y-auto"}>
             {panel === "templates" ? <SpaceTemplateLibrary spaceId={space.id} hideIntro /> : null}
             {panel === "compliance" ? <SpaceComplianceSettings spaceId={space.id} hideIntro /> : null}
             {panel === "members" || panel === "invitations" ? (
@@ -203,6 +246,11 @@ export function AuthorityAccessDialogs({
             </AlertDialogTitle>
             <AlertDialogDescription>{t("space.settings.danger.dialogDescription")}</AlertDialogDescription>
           </AlertDialogHeader>
+          <AuthorityDeleteImpact
+            loading={deleteImpactLoading}
+            error={deleteImpactError}
+            impact={deleteImpact}
+          />
           {needsConfirmation ? (
             <p className="text-sm font-medium text-destructive">{t("space.settings.members.remove.cannotUndo")}</p>
           ) : null}

@@ -93,7 +93,13 @@ export default async function ProgrammeWorkbenchPage({
 
   return (
     <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
-      <WorkspaceChatWrapper workspaceId={workspace.id} workspaceName={workspace.name} canManage={canManage}>
+      <WorkspaceChatWrapper
+        workspaceId={workspace.id}
+        workspaceName={workspace.name}
+        canManage={canManage}
+        defaultOpen={guidanceMode === "guided"}
+        defaultPanelTab={guidanceMode === "guided" ? "guidance" : "ask"}
+      >
       <ProgrammeWorkbench
         workspaceId={workspace.id}
         workspaceName={workspace.name}

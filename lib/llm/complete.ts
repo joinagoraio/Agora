@@ -1,5 +1,6 @@
 import { completeAnthropic } from "@/lib/llm/anthropic"
 import { completeOpenAiCompatible } from "@/lib/llm/openai-compatible"
+import { apiKeyForProviderRequest } from "@/lib/llm/provider-models"
 import type { LlmAdapter, LlmCompleteInput, LlmCompleteResult } from "@/lib/llm/types"
 
 const ADAPTERS: Record<string, LlmAdapter> = {
@@ -18,7 +19,7 @@ export function resolveLlmAdapter(provider: string): LlmAdapter {
 
 export async function completeLlm(input: LlmCompleteInput): Promise<LlmCompleteResult> {
   const adapter = resolveLlmAdapter(input.provider)
-  const apiKey = input.apiKey?.trim()
+  const apiKey = apiKeyForProviderRequest(input.apiKey, input.endpoint)
   if (!apiKey) {
     throw new Error(
       `No API key provided for provider "${input.provider}". Store a key in Platform admin (or organisation keys if this org uses its own accounts).`,
