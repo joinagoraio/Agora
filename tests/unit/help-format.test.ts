@@ -125,7 +125,7 @@ describe("glossary help composition", () => {
     const text = composeGlossaryHelp("analysis", glossaryDefinition("analysis") ?? "", { language: "en" })
     expect(text).toMatch(/^## Analysis/)
     expect(text).toContain("Analysis is a complementary tool for your programme.")
-    expect(text).toContain("- It lives under the document menu → Work → Analysis")
+    expect(text).toContain("- It lives on the programme toolbar (Work)")
     expect(text).toContain("- It does not create or edit chapter text")
     expect(text).toMatch(/Open it any time/)
   })

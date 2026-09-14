@@ -3,7 +3,7 @@
 import { FileIcon } from "react-file-icon"
 import { cn } from "@/lib/utils"
 import { getDocumentFileExtension, type DocumentLike } from "@/lib/utils/document-files"
-import { resolveFileIconAppearance } from "@/lib/utils/file-icon-appearance"
+import { resolveFileIconAppearance } from "@/lib/file-icon-appearance"
 
 const SIZE_CLASS = {
   sm: "h-5 w-5",

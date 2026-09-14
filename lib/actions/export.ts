@@ -285,6 +285,8 @@ export async function buildAuditPackageJson(workspaceId: string) {
   const { data: workspaceRow } = await supabase.from("workspaces").select("name").eq("id", workspaceId).maybeSingle()
   const composed = await composeWorkspaceProgramme(workspaceId, workspaceRow?.name || workspaceId)
   const { createHash } = await import("node:crypto")
+  const { listConsultationLedgerForManifest } = await import("@/lib/actions/consultation")
+  const consultationLedger = await listConsultationLedgerForManifest(workspaceId)
   const manifest = {
     workspaceId,
     generatedAt: new Date().toISOString(),
@@ -294,6 +296,7 @@ export async function buildAuditPackageJson(workspaceId: string) {
     recentExportJobs: jobs.data || [],
     composedMarkdown: composed.markdown,
     citationGraph: composed.citationGraph,
+    consultationLedger,
   }
   const contentHash = createHash("sha256").update(JSON.stringify(manifest)).digest("hex")
   const { data: freezeRow, error: freezeError } = await supabase

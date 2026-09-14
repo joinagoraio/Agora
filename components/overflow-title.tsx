@@ -6,9 +6,11 @@ import { cn } from "@/lib/utils"
 export function OverflowTitle({
   title,
   className,
+  fit = false,
 }: {
   title: string
   className?: string
+  fit?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const textRef = useRef<HTMLHeadingElement>(null)
@@ -65,7 +67,9 @@ export function OverflowTitle({
           "whitespace-nowrap transition-transform ease-linear",
           overflowing
             ? "w-max cursor-default text-left group-hover/title:-translate-x-[var(--title-overflow)]"
-            : "w-full text-center",
+            : fit
+              ? "w-max text-left"
+              : "w-full text-center",
           className,
         )}
         style={{ transitionDuration: overflowing ? "var(--title-duration)" : "220ms" }}

@@ -84,13 +84,15 @@ const nextConfig = {
         "http://127.0.0.1:54321",
         "ws://localhost:54321",
         "ws://127.0.0.1:54321",
+        "http:",
+        "ws:",
         "https://vercel.live",
       )
     }
     
     const imageSources = ["'self'", "data:", "blob:", "https:"]
     if (isDev) {
-      imageSources.push("http://localhost:54321", "http://127.0.0.1:54321")
+      imageSources.push("http://localhost:54321", "http://127.0.0.1:54321", "http:")
     }
 
     const csp = [

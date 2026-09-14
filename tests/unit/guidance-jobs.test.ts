@@ -43,6 +43,12 @@ describe("guidance jobs", () => {
     expect(defaultProgrammeSection("author")).toBe("editor")
     expect(defaultProgrammeSection("administrator")).toBe("editor")
     expect(primaryNavSections("author")).toContain("overview")
+    expect(primaryNavSections("author")).toContain("consultation")
+    expect(primaryNavSections("administrator")).toContain("consultation")
+    expect(primaryNavSections("reviewer")).toContain("consultation")
+    expect(primaryNavSections("author")).toContain("publish")
+    expect(primaryNavSections("administrator")).toContain("publish")
+    expect(primaryNavSections("reviewer")).toContain("publish")
   })
 
   it("blocks removing the last administrator job", () => {
@@ -67,8 +73,9 @@ describe("guidance jobs", () => {
     expect(canShowProgrammeConfiguration({ spaceJob: "none", canAccessSettings: true })).toBe(true)
   })
 
-  it("keeps deep links and sends reviewers to review", () => {
+  it("keeps deep links and lands on the document", () => {
     expect(resolveProgrammeLandingSection({ job: "reviewer", sectionParam: "editor" })).toBe("editor")
-    expect(resolveProgrammeLandingSection({ job: "reviewer" })).toBe("review")
+    expect(resolveProgrammeLandingSection({ job: "reviewer" })).toBe("editor")
+    expect(resolveProgrammeLandingSection({ job: "author", sectionParam: "analysis" })).toBe("analysis")
   })
 })

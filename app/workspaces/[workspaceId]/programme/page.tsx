@@ -97,7 +97,6 @@ export default async function ProgrammeWorkbenchPage({
         workspaceId={workspace.id}
         workspaceName={workspace.name}
         canManage={canManage}
-        defaultOpen={guidanceMode === "guided"}
         defaultPanelTab={guidanceMode === "guided" ? "guidance" : "ask"}
       >
       <ProgrammeWorkbench

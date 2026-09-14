@@ -105,7 +105,6 @@ export default async function SpacePage({
         spaceId={spaceId}
         workspaceName={space.name}
         canManage={canManage}
-        defaultOpen
       >
         <SpacePageClient
           spaceId={spaceId}

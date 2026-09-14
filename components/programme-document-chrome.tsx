@@ -29,6 +29,7 @@ import {
   type ProgrammePageNumberPosition,
 } from "@/lib/programme/page-chrome"
 import { toggleFocusChapterId, type ProgrammeDocumentMode } from "@/lib/programme/document-mode"
+import { cn } from "@/lib/utils"
 
 type WritableChapter = { id: string; title: string }
 
@@ -43,6 +44,7 @@ type Props = {
   writableChapters: WritableChapter[]
   focusChapterIds: string[]
   onFocusChapterIdsChange: (ids: string[]) => void
+  compact?: boolean
 }
 
 function Divider() {
@@ -60,19 +62,22 @@ export function ProgrammeDocumentChrome({
   writableChapters,
   focusChapterIds,
   onFocusChapterIdsChange,
+  compact = false,
 }: Props) {
   const { t } = useI18n()
   const textHistory = useOptionalProgrammeTextHistory()
   const minScale = PROGRAMME_ZOOM_PRESETS[0]
   const maxScale = PROGRAMME_ZOOM_PRESETS[PROGRAMME_ZOOM_PRESETS.length - 1]
   const canWriteText = !isKnowledgeView && documentMode !== "read"
+  const buttonSize = compact ? "icon-sm" : "icon"
+  const iconClass = compact ? "h-4 w-4" : "h-5 w-5"
   const checkedFocusIds =
     focusChapterIds.length > 0
       ? focusChapterIds
       : writableChapters.map((chapter) => chapter.id)
 
   return (
-    <div className="flex shrink-0 items-center justify-end">
+    <div className={cn("flex shrink-0 items-center", compact ? "justify-start" : "justify-end")}>
       {!isKnowledgeView ? (
         <>
           {canWriteText ? (
@@ -82,24 +87,24 @@ export function ProgrammeDocumentChrome({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
+                    size={buttonSize}
                     disabled={!textHistory?.canUndo}
                     aria-label={t("workspace.programme.undo")}
                     onClick={() => textHistory?.undo()}
                   >
-                    <Undo className="h-5 w-5" />
+                    <Undo className={iconClass} />
                   </Button>
                 </IconTooltip>
                 <IconTooltip label={t("workspace.programme.redo")}>
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
+                    size={buttonSize}
                     disabled={!textHistory?.canRedo}
                     aria-label={t("workspace.programme.redo")}
                     onClick={() => textHistory?.redo()}
                   >
-                    <Redo className="h-5 w-5" />
+                    <Redo className={iconClass} />
                   </Button>
                 </IconTooltip>
               </div>
@@ -110,11 +115,11 @@ export function ProgrammeDocumentChrome({
             <Button
               type="button"
               variant={layout.showComments ? "secondary" : "ghost"}
-              size="icon"
+              size={buttonSize}
               aria-label={layout.showComments ? t("workspace.programme.hideComments") : t("workspace.programme.showComments")}
               onClick={() => onLayoutChange({ showComments: !layout.showComments })}
             >
-              <MessageSquare className="h-5 w-5" />
+              <MessageSquare className={iconClass} />
             </Button>
           </IconTooltip>
           <Divider />
@@ -123,36 +128,36 @@ export function ProgrammeDocumentChrome({
               <Button
                 type="button"
                 variant={!layout.paged && layout.wide ? "secondary" : "ghost"}
-                size="icon"
+                size={buttonSize}
                 aria-label={t("workspace.programme.layoutWide")}
                 aria-pressed={!layout.paged && layout.wide}
                 onClick={() => onLayoutChange({ paged: false, wide: true })}
               >
-                <ChevronsLeftRight className="h-5 w-5" />
+                <ChevronsLeftRight className={iconClass} />
               </Button>
             </IconTooltip>
             <IconTooltip label={t("workspace.programme.layoutNarrow")}>
               <Button
                 type="button"
                 variant={!layout.paged && !layout.wide ? "secondary" : "ghost"}
-                size="icon"
+                size={buttonSize}
                 aria-label={t("workspace.programme.layoutNarrow")}
                 aria-pressed={!layout.paged && !layout.wide}
                 onClick={() => onLayoutChange({ paged: false, wide: false })}
               >
-                <AlignJustify className="h-5 w-5" />
+                <AlignJustify className={iconClass} />
               </Button>
             </IconTooltip>
             <IconTooltip label={t("workspace.programme.layoutPages")}>
               <Button
                 type="button"
                 variant={layout.paged ? "secondary" : "ghost"}
-                size="icon"
+                size={buttonSize}
                 aria-label={t("workspace.programme.layoutPages")}
                 aria-pressed={layout.paged}
                 onClick={() => onLayoutChange({ paged: true })}
               >
-                <GalleryVertical className="h-5 w-5" />
+                <GalleryVertical className={iconClass} />
               </Button>
             </IconTooltip>
             {layout.paged ? (
@@ -162,10 +167,10 @@ export function ProgrammeDocumentChrome({
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon"
+                      size={buttonSize}
                       aria-label={t("workspace.programme.pageChromeAria")}
                     >
-                      <PanelTop className="h-5 w-5" />
+                      <PanelTop className={iconClass} />
                     </Button>
                   </DropdownMenuTrigger>
                 </IconTooltip>
@@ -252,8 +257,8 @@ export function ProgrammeDocumentChrome({
           <DropdownMenu>
             <IconTooltip label={t("workspace.programme.zoom")}>
               <DropdownMenuTrigger asChild>
-                <Button type="button" variant="ghost" size="icon" aria-label={t("workspace.programme.zoom")}>
-                  <ZoomIn className="h-5 w-5" />
+                <Button type="button" variant="ghost" size={buttonSize} aria-label={t("workspace.programme.zoom")}>
+                  <ZoomIn className={iconClass} />
                 </Button>
               </DropdownMenuTrigger>
             </IconTooltip>
@@ -305,39 +310,39 @@ export function ProgrammeDocumentChrome({
             <IconTooltip label={t("workspace.programme.modes.read")}>
               <Button
                 type="button"
-                size="icon"
+                size={buttonSize}
                 variant={documentMode === "read" ? "secondary" : "ghost"}
                 aria-label={t("workspace.programme.modes.read")}
                 aria-pressed={documentMode === "read"}
                 onClick={() => onDocumentModeChange("read")}
               >
-                <Eye className="h-5 w-5" />
+                <Eye className={iconClass} />
               </Button>
             </IconTooltip>
             <IconTooltip label={t("workspace.programme.modes.edit")}>
               <Button
                 type="button"
-                size="icon"
+                size={buttonSize}
                 variant={documentMode === "edit" ? "secondary" : "ghost"}
                 disabled={!canWrite}
                 aria-label={t("workspace.programme.modes.edit")}
                 aria-pressed={documentMode === "edit"}
                 onClick={() => onDocumentModeChange("edit")}
               >
-                <PencilLine className="h-5 w-5" />
+                <PencilLine className={iconClass} />
               </Button>
             </IconTooltip>
             <IconTooltip label={t("workspace.programme.modes.focus")}>
               <Button
                 type="button"
-                size="icon"
+                size={buttonSize}
                 variant={documentMode === "focus" ? "secondary" : "ghost"}
                 disabled={!canWrite}
                 aria-label={t("workspace.programme.modes.focus")}
                 aria-pressed={documentMode === "focus"}
                 onClick={() => onDocumentModeChange("focus")}
               >
-                <Focus className="h-5 w-5" />
+                <Focus className={iconClass} />
               </Button>
             </IconTooltip>
             {writableChapters.length > 1 ? (
@@ -346,12 +351,12 @@ export function ProgrammeDocumentChrome({
                   <DropdownMenuTrigger asChild>
                     <Button
                       type="button"
-                      size="icon"
+                      size={buttonSize}
                       variant={documentMode === "focus" ? "secondary" : "ghost"}
                       disabled={!canWrite}
                       aria-label={t("workspace.programme.focusChaptersAria")}
                     >
-                      <ChevronDown className="h-5 w-5" />
+                      <ChevronDown className={iconClass} />
                     </Button>
                   </DropdownMenuTrigger>
                 </IconTooltip>
@@ -386,25 +391,25 @@ export function ProgrammeDocumentChrome({
         <IconTooltip label={t("workspace.programme.views.document")}>
           <Button
             type="button"
-            size="icon"
+            size={buttonSize}
             variant={!isKnowledgeView ? "secondary" : "ghost"}
             aria-label={t("workspace.programme.views.document")}
             aria-pressed={!isKnowledgeView}
             onClick={() => onViewChange("document")}
           >
-            <FileText className="h-5 w-5" />
+            <FileText className={iconClass} />
           </Button>
         </IconTooltip>
         <IconTooltip label={t("workspace.programme.views.knowledge")}>
           <Button
             type="button"
-            size="icon"
+            size={buttonSize}
             variant={isKnowledgeView ? "secondary" : "ghost"}
             aria-label={t("workspace.programme.views.knowledge")}
             aria-pressed={isKnowledgeView}
             onClick={() => onViewChange("knowledge")}
           >
-            <BookOpen className="h-5 w-5" />
+            <BookOpen className={iconClass} />
           </Button>
         </IconTooltip>
       </div>

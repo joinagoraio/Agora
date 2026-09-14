@@ -43,8 +43,7 @@ describe("help route isolation", () => {
   })
 
   it("teaches the document layers Help must describe", () => {
-    expect(HELP_SYSTEM_PROMPT).toMatch(/document menu/)
-    expect(HELP_SYSTEM_PROMPT).toMatch(/not as header icons/)
+    expect(HELP_SYSTEM_PROMPT).toMatch(/programme toolbar/)
     expect(HELP_SYSTEM_PROMPT).toMatch(/Read vs Edit vs Focus/)
     expect(HELP_SYSTEM_PROMPT).toMatch(/Focus/)
     expect(HELP_SYSTEM_PROMPT).toMatch(/Document owner/)
@@ -58,15 +57,16 @@ describe("help route isolation", () => {
 })
 
 describe("programme landing from job", () => {
-  it("opens review for reviewers and first incomplete for guided authors", () => {
-    expect(resolveProgrammeLandingSection({ job: "reviewer" })).toBe("review")
+  it("lands on the document unless a section is requested", () => {
+    expect(resolveProgrammeLandingSection({ job: "reviewer" })).toBe("editor")
     expect(
       resolveProgrammeLandingSection({
         job: "author",
         guided: true,
         firstIncompleteSection: "analysis",
       }),
-    ).toBe("analysis")
+    ).toBe("editor")
     expect(resolveProgrammeLandingSection({ job: "author", sectionParam: "editor" })).toBe("editor")
+    expect(resolveProgrammeLandingSection({ job: "author", sectionParam: "analysis" })).toBe("analysis")
   })
 })

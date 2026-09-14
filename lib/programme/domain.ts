@@ -209,7 +209,9 @@ export const PROGRAMME_WORKBENCH_SECTIONS = [
   "effects",
   "provenance",
   "review",
+  "consultation",
   "export",
+  "publish",
 ] as const
 
 export type ProgrammeWorkbenchSection = (typeof PROGRAMME_WORKBENCH_SECTIONS)[number]

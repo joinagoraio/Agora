@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { resolveFileIconAppearance } from "@/lib/utils/file-icon-appearance"
+import { resolveFileIconAppearance } from "@/lib/file-icon-appearance"
 
 describe("resolveFileIconAppearance", () => {
   it("uses Acrobat red for PDF", () => {

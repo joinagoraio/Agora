@@ -1,10 +1,12 @@
 import Link from "next/link"
 import ReactMarkdown from "react-markdown"
 import { getPublishedProgrammeForReading } from "@/lib/actions/publish"
+import { getPublishedConsultation } from "@/lib/actions/consultation"
 import { getServerTranslator } from "@/lib/i18n/server"
 import { Button } from "@/components/ui/button"
 import { PublishedCodeForm } from "@/components/published-code-form"
 import { PublishedPrintButton } from "@/components/published-print-button"
+import { PublishedConsultationPanel } from "@/components/published-consultation-panel"
 
 export default async function PublishedProgrammePage({
   params,
@@ -65,6 +67,7 @@ export default async function PublishedProgrammePage({
   }
 
   const { publication, bodyMarkdown, authorityName } = result
+  const consultation = await getPublishedConsultation(publication.id)
 
   return (
     <div className="min-h-screen bg-white">
@@ -95,6 +98,19 @@ export default async function PublishedProgrammePage({
           <ReactMarkdown>{bodyMarkdown}</ReactMarkdown>
         </article>
         <p className="text-xs text-muted-foreground">{t("workspace.published.gazetteNote")}</p>
+        {consultation.data ? (
+          <PublishedConsultationPanel
+            publicationId={publication.id}
+            consultation={consultation.data.consultation}
+            canComment={consultation.data.canComment}
+            signedIn={consultation.data.signedIn}
+            comments={consultation.data.comments}
+            replies={consultation.data.replies}
+            appeals={consultation.data.appeals}
+            clusters={consultation.data.clusters}
+            topicSummary={consultation.data.topicSummary}
+          />
+        ) : null}
       </main>
     </div>
   )

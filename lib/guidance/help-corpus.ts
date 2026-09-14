@@ -28,31 +28,33 @@ export const HELP_GLOSSARY: Record<string, string> = {
         "Edit shows the whole programme. Use the pencil on a chapter you may write to open its editor; click outside that chapter to leave it. Other chapters stay visible so you can compare. Chapter tools sit behind the three-dot menu.",
   focus:
     "Focus shows only chapters you may write. One writable chapter: that text only. Several: a dropdown picks which stay visible (?view=document&mode=focus).",
-  guided: "Guided help keeps the coach open and may land on the first incomplete production stage.",
+  guided: "Guided help suggests the next production stage in the Guidance side panel. It does not open a sheet over the document. Ask and Guidance stay collapsed until you open them.",
   expert: "Expert hides the coach. Help reopens the scripted panel. Access is unchanged.",
   published:
     "Frozen snapshot others may read and quote. Not gazette enactment. Sister programmes cite only published versions.",
   analysis:
-    "Analysis is a complementary tool for your programme. It lives under the document menu → Work → Analysis. It lets you run and save analytical reports, for example on environmental effects, policy alignment, or spatial data. It does not create or edit chapter text. Open it any time to view existing reports or generate new ones.",
+    "Analysis is a complementary tool for your programme. It lives on the programme toolbar (Work). It lets you run and save analytical reports, for example on environmental effects, policy alignment, or spatial data. It does not create or edit chapter text. Open it any time to view existing reports or generate new ones.",
   knowledge:
     "Files, Inherited, Evidence, and Notes around the programme. Bound sources and file roles live on Files, not in the header.",
   ask: "The programme assistant for sources and drafts. Ask may draft chapter text. Help may not.",
   structure:
     "Chapter titles and descriptions in the document. Open it from the chapters list (Edit structure). Hover a heading to read that chapter’s description.",
-  measures: "The structured measure registry. Open it from the document menu. It does not write chapter text.",
-  effects: "Environmental effects alignment. Open it from the document menu.",
-  provenance: "Citations and unused sources. Open it from the document menu.",
+  measures: "The structured measure registry. Open it from the programme toolbar. It does not write chapter text.",
+  effects: "Environmental effects alignment. Open it from the programme toolbar.",
+  provenance: "Citations and unused sources. Open it from the programme toolbar.",
   review: "Assigned review and approval. Distinct-reviewer uses identity, not job.",
   export:
     "Word, PDF, markdown, or an audit pack. Handoff, not gazette. The document owner freezes after required chapters are approved.",
   publish:
-    "Freeze this version, then publish a reading-room snapshot. Not gazette enactment.",
+    "Publish a reading-room snapshot. Open it from the programme toolbar (Output). A green or orange dot on Publish shows whether a snapshot is live. Freeze first from Export if needed. Not gazette enactment.",
   comments:
-    "Paragraph comments on the right, in Read, Edit, and Focus, only while the comments icon is on.",
+    "Paragraph comments on the right, in Read, Edit, and Focus, only while the comments icon is on. Those are team notes on the live document. Comments on a published snapshot live under Work → Consultation.",
+  consultation:
+    "Comments on the published snapshot. Open it from the programme toolbar (Work). Readers comment in the reading room, not in the editor. Team notes stay on the comments icon.",
   configuration: "Template, review policy, and document owner. Administrators and the document owner.",
   agents:
     "Which authority specialists this programme uses. Administrators and the document owner bind them under Properties.",
-  status: "Next action and team notes. Open it from the menu. Next-step coaching lives in Help, not in the header.",
+  status: "Next action and team notes. Open it from the programme toolbar. Next-step coaching lives in Help, not in the header.",
 }
 
 const GLOSSARY_ALIASES: Record<string, string> = {
@@ -76,6 +78,9 @@ const GLOSSARY_ALIASES: Record<string, string> = {
   files: "knowledge",
   "edit structure": "structure",
   outline: "structure",
+  "consultation comments": "consultation",
+  "comment period": "consultation",
+  consultatie: "consultation",
 }
 
 export const HELP_CORPUS = `
@@ -98,7 +103,7 @@ Programme membership is separate from the authority:
 - Authority owners and admins can still open any programme to administer it (rename, members, invitations, delete).
 - Invite a colleague who is already in the authority in-app. They must accept on the dashboard when they next sign in. No email is sent. Nobody is added silently.
 - People outside the authority get an email invitation. They must accept that email link before they join.
-- Members, Invitations, Rename, and Delete live on the programme menu (tools menu inside the programme, or the three-dot menu on the authority programme list).
+- Edit details, Rename, Members, Invitations, and Delete live on the three-dot menu on the right of the programme header. The same items stay on the three-dot menu on the authority programme list.
 - Authority Templates, Members, Invitations, Compliance, and Delete live on the authority three-dot menu (after Edit). There is no separate authority Settings page.
 
 People on the document (not jobs):
@@ -109,23 +114,24 @@ People on the document (not jobs):
 
 Programme layers:
 - Document: concatenated chapter text. Each chapter title comes from the outline; the body starts below it and should not repeat that title. Default landing is Read (?view=document): view-only, comments on the right; clicking a heading selects it for comments, it does not open an editor. Edit (?view=document&mode=edit): the whole document stays visible; use the pencil on a chapter you may write to edit it and compare with the rest. Clicking a chapter does not open the editor. Click outside the chapter you are editing to leave the editor. Changes save as you type. Tables keep padding between cells. In Edit, click a table and use the format menu to show all borders, body borders without the header row, or no borders. Chapters sit with extra space between them so starts and ends are easy to see. The format menu also sets line spacing (single, 1.15, 1.5, double, 2.5, triple) and space after a paragraph. Focus (?view=document&mode=focus): only chapters you may write. One writable chapter shows that chapter only; more than one opens a dropdown to pick which texts stay visible. Chapter tools (generate, review, history, instructions) sit behind the three-dot menu on the chapter you are editing. Wide and Narrow are continuous reading widths. Pages shows the same text as A4 sheets with a gap between each page. Each sheet has an uppercase header (the chapter of the first line, omitted when the page starts with a chapter title), a footer (the programme name), and page numbers on the outer edge. Open Headers and footers next to Pages to rename, hide, move numbers, or change that type size. Zoom changes body type size inside the current width or sheet; it does not change the column.
-- Complementary work (document menu → Work): Analysis, Measures, Effects, Provenance, Review. Sheets over the document. Analysis writes reports only; it does not write chapters.
-- Properties (menu): Status, Configuration (document owner, template, review policy), Agents (which authority specialists this programme uses).
-- Output (menu): Export and publish.
+- Complementary work (programme toolbar, Work): Analysis, Measures, Effects, Provenance, Review, Consultation. Sheets over the document. Analysis writes reports only; it does not write chapters.
+- Properties (toolbar): Status, Configuration (document owner, template, review policy), Agents (which authority specialists this programme uses).
+- Output (toolbar): Export, Publish. A green or orange dot on Publish shows whether a snapshot is live.
 - Knowledge: Files / Inherited / Evidence / Notes. File roles live on Files. Bound sources are set there, not in the header. ?files=1 opens Knowledge.
-- Status: next action and team notes (sheet from the menu). Next-step coaching lives in Help, not in the header.
+- Status: next action and team notes (sheet from the toolbar). Next-step coaching lives in Help, not in the header.
 - Configuration: template, review policy, document owner. Administrators and the document owner.
 - Agents: bind authority specialists to programme jobs (analysis, draft, quality control, conversation). Chapters may still pick a different draft agent. Administrators and the document owner.
 - Bound sources: bind vision, effects report, handbook, existing policy on Knowledge Files (sheet still opens from ?section=corpus).
-- Analysis: saved reports; does not write the programme or chapters. Opens from the menu.
+- Analysis: saved reports; does not write the programme or chapters. Opens from the toolbar.
 - Structure: chapter titles and descriptions in the document. Open from the chapters list (Edit structure). Auto-saves. Hover a heading in the document to read that chapter’s description. The chapters list shows workflow, not completion: empty, draft, in review, changes requested, or approved (lock). Approved is the chapter freeze; programme freeze is later, after required chapters are approved. ?view=document&structure=1
 - Measures: structured registry.
 - Effects: environmental effects alignment.
 - Provenance: citations and unused sources.
 - Review: assigned review and approval. Distinct-reviewer uses identity, not job.
-- Export: Word, PDF, markdown, audit pack. Handoff, not gazette. Document owner freezes after required chapters are approved.
-- Publish: freeze this version, then publish a reading-room snapshot (permissioned, link+code, or public listing). Not gazette. Sister programmes cite only that published freeze as existing policy.
-- Comments: paragraph comments on the right, in Read, Edit, and Focus, only while the comments icon is on. Anyone with workspace:update can comment. With comments off, clicking text never opens a comment box.
+- Consultation: comments on the published snapshot. Open from Work → Consultation. Readers comment in the reading room after they sign in; they quote a passage and send a comment. The document owner replies, groups topics, and records a decision. An open period or unresolved comments block the next publish. Team notes in the editor are a different rail.
+- Export: Word, PDF, markdown, audit pack. Handoff, not gazette. Document owner freezes after required chapters are approved. Publishing is a separate sheet.
+- Publish: open Publish on the programme toolbar (Output). A green or orange dot shows whether a snapshot is live. Publish a reading-room snapshot (permissioned, link+code, or public listing). Freeze first from Export if needed. Not gazette. Sister programmes cite only that published freeze as existing policy.
+- Comments: paragraph comments on the right, in Read, Edit, and Focus, only while the comments icon is on. Anyone with workspace:update can comment. With comments off, clicking text never opens a comment box. Those are team notes. Published-snapshot comments live under Consultation.
 
 Production pipeline (derived, never checkboxes):
 1 orient — programme exists
@@ -164,7 +170,7 @@ Rules:
 - Never quote or request policy document bodies, chapter text, or measure narratives.
 - You may mention document titles and roles only.
 - If asked to do production work, refuse and point to Ask or the current tab. Ask may draft; Help may not.
-- Complementary tools live in the document menu, not as header icons. Comments sit on the right.
+- Complementary tools live on the programme toolbar under the header. Comments sit on the right.
 - If the user wants to go somewhere, end with a line: NAVIGATE: /workspaces/{id}/programme?section={section} using the workspace id from context when present. Use ?view=document for Read, ?view=document&mode=edit for Edit, ?view=document&mode=focus for Focus, and ?view=document&structure=1 for Structure.
 
 ${HELP_FORMAT_SKILL}

@@ -65,10 +65,12 @@ export const PROGRAMME_PRIMARY_SECTIONS: Record<GuidanceJob, readonly string[]> 
     "effects",
     "provenance",
     "review",
+    "consultation",
     "export",
+    "publish",
   ],
-  author: ["overview", "corpus", "analysis", "outline", "editor", "measures", "effects", "review", "export"],
-  reviewer: ["overview", "review", "provenance", "editor", "measures", "effects", "export"],
+  author: ["overview", "corpus", "analysis", "outline", "editor", "measures", "effects", "review", "consultation", "export", "publish"],
+  reviewer: ["overview", "review", "provenance", "editor", "measures", "effects", "consultation", "export", "publish"],
 }
 
 export function primaryNavSections(job: GuidanceJob): readonly string[] {
@@ -92,11 +94,7 @@ export function resolveProgrammeLandingSection(input: {
   guided?: boolean
 }): string {
   if (input.sectionParam) return input.sectionParam
-  if (input.job === "reviewer") return "review"
-  if (input.guided && input.job !== "administrator" && input.firstIncompleteSection) {
-    return input.firstIncompleteSection
-  }
-  return defaultProgrammeSection(input.job)
+  return "editor"
 }
 
 export function canShowProgrammeConfiguration(input: {

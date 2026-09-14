@@ -80,12 +80,12 @@ test.describe(shouldRunE2E ? "Critical user flows" : "Critical user flows (skipp
     await expect(page.getByRole("button", { name: /retry remaining|resterende hoofdstukken/i })).toBeVisible()
   })
 
-  test("guided programme opens first incomplete stage with coach", async ({ page }) => {
+  test("guided programme shows the document without opening a sheet", async ({ page }) => {
     await login(page, baseUrl, testEmail, testPassword)
     await page.goto(`${baseUrl}${workspacePath}/programme`)
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 30000 })
     await expect(page).toHaveURL(/\/programme/)
-    await expect(page.getByRole("complementary", { name: /guidance|begeleiding/i })).toBeVisible()
-    await expect(page.getByRole("tablist", { name: /programme sections|programmasecties/i })).toBeVisible()
+    await expect(page).not.toHaveURL(/[?&]section=/)
+    await expect(page.getByRole("dialog")).toHaveCount(0)
   })
 })

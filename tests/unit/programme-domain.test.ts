@@ -83,6 +83,8 @@ describe("programme domain (Phase 0)", () => {
     expect(isProgrammeWorkbenchSection("overview")).toBe(true)
     expect(isProgrammeWorkbenchSection("outline")).toBe(true)
     expect(isProgrammeWorkbenchSection("agents")).toBe(true)
+    expect(isProgrammeWorkbenchSection("consultation")).toBe(true)
+    expect(isProgrammeWorkbenchSection("publish")).toBe(true)
     expect(isProgrammeWorkbenchSection("nope")).toBe(false)
   })
 

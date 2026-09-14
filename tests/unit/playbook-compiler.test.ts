@@ -110,7 +110,7 @@ describe("compileSystemPrompt (S1 spike)", () => {
       expect(result.systemPrompt).toContain("Ask may draft")
       expect(result.systemPrompt).toContain("Help may not")
       expect(result.systemPrompt).toContain("write reports only")
-      expect(result.systemPrompt).toContain("document menu")
+      expect(result.systemPrompt).toContain("programme toolbar")
     }
   })
 

@@ -42,7 +42,7 @@ export type CompiledSystemPrompt = {
 }
 
 const PROGRAMME_LAYER_LINE =
-  "Programme layers: the scrolling document is the work (Read to comment; Edit to write while seeing the whole text; Focus to show only chapters you may write). Complementary tools open from the document menu. Ask may draft; Help may not. Analysis agents write reports only, never chapters."
+  "Programme layers: the scrolling document is the work (Read to comment; Edit to write while seeing the whole text; Focus to show only chapters you may write). Complementary tools open from the programme toolbar. Ask may draft; Help may not. Analysis agents write reports only, never chapters."
 
 export const CHAT_IDENTITY = `You are AGORA, an intelligent policy assistant. You help users find and understand information from this programme and its parent authority.
 Never call the programme or authority a workspace.

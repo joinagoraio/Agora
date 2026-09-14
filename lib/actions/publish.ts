@@ -14,7 +14,6 @@ import { getClientIdentifier } from "@/lib/utils/request"
 import {
   buildPublicationCitation,
   canCitePublication,
-  canPublishFromFreeze,
   canRevealPublicationBody,
   isPublicationVisibility,
   publicationCookieName,
@@ -22,6 +21,8 @@ import {
   publicationIsRevoked,
   type PublicationVisibility,
 } from "@/lib/programme/publish"
+import { canPublishProgrammeSnapshot } from "@/lib/programme/consultation"
+import { loadConsultationPublishBlock } from "@/lib/actions/consultation"
 
 const markdownParser = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
@@ -192,7 +193,16 @@ export async function publishProgrammeSnapshot(input: {
     .limit(1)
     .maybeSingle()
 
-  const gate = canPublishFromFreeze(Boolean(freeze))
+  let consultationBlock = { consultationWindowOpen: false, unresolvedCommentCount: 0 }
+  try {
+    consultationBlock = await loadConsultationPublishBlock(input.workspaceId)
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not check consultation" }
+  }
+  const gate = canPublishProgrammeSnapshot({
+    hasFreeze: Boolean(freeze),
+    ...consultationBlock,
+  })
   if (!gate.ok || !freeze) return { error: gate.ok === false ? gate.reason : "Freeze this programme before publishing" }
 
   const { data: space } = await supabase.from("spaces").select("name").eq("id", workspace.space_id).maybeSingle()

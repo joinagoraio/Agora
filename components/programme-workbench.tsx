@@ -3,21 +3,17 @@
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { IconTooltip } from "@/components/icon-tooltip"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   Select,
   SelectContent,
@@ -27,14 +23,17 @@ import {
 } from "@/components/ui/select"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { useChatContext } from "@/components/workspace-chat-wrapper"
-import { ProgrammeAccessDialogs, ProgrammeAccessMenuItems, type ProgrammeAccessPanel } from "@/components/programme-list-menu"
+import {
+  ProgrammeAccessDialogs,
+  ProgrammeAccessMenuItems,
+  type ProgrammeAccessPanel,
+} from "@/components/programme-list-menu"
 import { notify, notifyResult } from "@/lib/notify"
 import {
   canShowProgrammeConfiguration,
   effectiveJob,
   moreNavSections,
   primaryNavSections,
-  resolveProgrammeLandingSection,
   type GuidanceMode,
 } from "@/lib/guidance/jobs"
 import { canAdministerProgramme } from "@/lib/programme/ownership"
@@ -106,6 +105,8 @@ import { SaveProgrammeAsTemplateDialog } from "@/components/save-programme-as-te
 import { listSpaceAgents } from "@/lib/actions/agent"
 import { convertPolicyProseToMeasures, findDuplicateMeasures, generateVisionSkeleton, mergeMeasureFragment } from "@/lib/actions/pipelines"
 import { addProgrammeComment, listProgrammeComments, setProgrammeCommentResolved } from "@/lib/actions/comments"
+import { getProgrammeConsultationQueue, type ConsultationQueue } from "@/lib/actions/consultation"
+import { ConsultationOwnerPanel } from "@/components/consultation-owner-panel"
 import {
   AGENT_STAGES,
   documentOriginFromMetadata,
@@ -127,7 +128,7 @@ import { ProgrammeKnowledgeView } from "@/components/programme-knowledge-view"
 import { ProgrammeDocumentChrome } from "@/components/programme-document-chrome"
 import { OverflowTitle } from "@/components/overflow-title"
 import { ProgrammeTextHistoryProvider } from "@/components/programme-text-history"
-import { IconTooltip } from "@/components/icon-tooltip"
+import { ProgrammeToolsToolbar } from "@/components/programme-tools-toolbar"
 import {
   DEFAULT_PROGRAMME_DOCUMENT_LAYOUT,
   mergeProgrammeDocumentLayout,
@@ -174,13 +175,15 @@ const SHEET_SECTIONS = new Set<ProgrammeWorkbenchSection>([
   "effects",
   "provenance",
   "review",
+  "consultation",
   "export",
+  "publish",
 ])
 
 const MENU_GROUPS: { id: "work" | "properties" | "output"; sections: ProgrammeWorkbenchSection[] }[] = [
-  { id: "work", sections: ["analysis", "measures", "effects", "provenance", "review"] },
+  { id: "work", sections: ["analysis", "measures", "effects", "provenance", "review", "consultation"] },
   { id: "properties", sections: ["overview", "setup", "agents"] },
-  { id: "output", sections: ["export"] },
+  { id: "output", sections: ["export", "publish"] },
 ]
 
 const emptyMeasureDraft = {
@@ -503,6 +506,17 @@ export function ProgrammeWorkbench({
     freezeAt: null as string | null,
   })
   const [publication, setPublication] = useState<ProgrammePublicationSummary | null>(null)
+  const [consultationQueue, setConsultationQueue] = useState<ConsultationQueue>({
+    consultation: null,
+    comments: [],
+    replies: [],
+    clusters: [],
+    appeals: [],
+    topicSummary: null,
+    unresolvedCount: 0,
+    windowOpen: false,
+    clusterJob: null,
+  })
   const [citablePublications, setCitablePublications] = useState<ProgrammePublicationSummary[]>([])
   const [publishVisibility, setPublishVisibility] = useState<PublicationVisibility>("permissioned")
   const [publishPeriod, setPublishPeriod] = useState("")
@@ -589,13 +603,14 @@ export function ProgrammeWorkbench({
       }
       setReviewers(reviewerResult.data || [])
       setCurrentUserId(reviewerResult.currentUserId ?? null)
-      const [tpl, ag, cm, docs, chapterResult, notesResult] = await Promise.all([
+      const [tpl, ag, cm, docs, chapterResult, notesResult, consultationResult] = await Promise.all([
         listSpaceTemplates(spaceId),
         listSpaceAgents(spaceId),
         listProgrammeComments(workspaceId),
         getWorkspaceDocuments(workspaceId),
         listProgrammeChapters(workspaceId),
         getWorkspaceNotes(workspaceId),
+        getProgrammeConsultationQueue(workspaceId),
       ])
       setTemplates(tpl.data || [])
       setAgents(
@@ -610,6 +625,7 @@ export function ProgrammeWorkbench({
           })),
       )
       setComments(cm.data || [])
+      if (consultationResult.data) setConsultationQueue(consultationResult.data)
       setChapters(chapterResult.data || [])
       setCorpusDocs(
         (docs.data || []).map(
@@ -671,47 +687,6 @@ export function ProgrammeWorkbench({
       ),
     [bindings, reports, measures, chapters, outlineNodeCount, observability],
   )
-
-  const [landingApplied, setLandingApplied] = useState(false)
-
-  useEffect(() => {
-    if (landingApplied) return
-    if (sectionParam || viewParam === "knowledge" || chapterParam || searchParams.get("mode") || searchParams.get("structure")) {
-      setLandingApplied(true)
-      return
-    }
-    if (chromeJob === "reviewer") {
-      const next = resolveProgrammeLandingSection({
-        job: chromeJob,
-        firstIncompleteSection: pipeline.firstIncompleteSection,
-        guided: guidanceMode === "guided",
-      })
-      setLandingApplied(true)
-      if (next === "editor" || next === "overview") return
-      if (isProgrammeWorkbenchSection(next)) setSection(next)
-      return
-    }
-    if (!snapshotLoaded) return
-    setLandingApplied(true)
-    const next = resolveProgrammeLandingSection({
-      job: chromeJob,
-      firstIncompleteSection: pipeline.firstIncompleteSection,
-      guided: guidanceMode === "guided",
-    })
-    if (next === "editor" || next === "overview") return
-    if (isProgrammeWorkbenchSection(next)) setSection(next)
-  }, [
-    landingApplied,
-    sectionParam,
-    viewParam,
-    chapterParam,
-    chromeJob,
-    snapshotLoaded,
-    pipeline.firstIncompleteSection,
-    guidanceMode,
-    setSection,
-    searchParams,
-  ])
 
   useEffect(() => {
     if (isKnowledgeView || documentMode !== "focus") return
@@ -832,10 +807,10 @@ export function ProgrammeWorkbench({
   return (
     <ProgrammeTextHistoryProvider>
     <>
-    <div className="flex h-dvh flex-col overflow-hidden bg-white">
+    <div className="relative flex h-dvh flex-col overflow-hidden bg-white">
       <header className="shrink-0 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75">
-        <div className="grid h-16 min-w-0 grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto] items-center gap-3 px-4">
-          <Button variant="ghost" asChild className="justify-self-start min-w-0">
+        <div className="relative flex h-16 min-w-0 items-center px-4">
+          <Button variant="ghost" asChild className="relative z-10 justify-self-start min-w-0">
             <Link href={`/spaces/${spaceId}`}>
               <ArrowLeft className="mr-2 h-3 w-3 shrink-0" />
               <span className="min-w-0 truncate text-xs font-normal">
@@ -843,62 +818,68 @@ export function ProgrammeWorkbench({
               </span>
             </Link>
           </Button>
-          <OverflowTitle title={workspaceName} className="text-2xl font-semibold tracking-tight" />
-          <div className="flex shrink-0 items-center justify-end gap-1">
-            <ProgrammeDocumentChrome
-              isKnowledgeView={isKnowledgeView}
-              layout={documentLayout}
-              onLayoutChange={patchDocumentLayout}
-              documentMode={documentMode}
-              onDocumentModeChange={setDocumentMode}
-              onViewChange={setMode}
-              canWrite={writableChapters.length > 0}
-              writableChapters={writableChapters}
-              focusChapterIds={documentSearch.focusIds}
-              onFocusChapterIdsChange={setFocusVisibleIds}
-            />
-            <DropdownMenu>
-              <IconTooltip label={t("workspace.programme.navAria")}>
-                <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="ghost" size="icon" aria-label={t("workspace.programme.navAria")}>
-                    <MoreVertical className="h-5 w-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-              </IconTooltip>
-              <DropdownMenuContent align="end" className="w-56">
-                {documentMenuGroups.map((group, index) => (
-                  <DropdownMenuGroup key={group.id}>
-                    {index > 0 ? <DropdownMenuSeparator /> : null}
-                    <DropdownMenuLabel>{t(`workspace.programme.menuGroup.${group.id}`)}</DropdownMenuLabel>
-                    {group.sections.map((section) => (
-                      <DropdownMenuItem
-                        key={section}
-                        onClick={() => setSection(section)}
-                        className={sheetOpen && activeSection === section ? "bg-accent" : undefined}
-                      >
-                        {t(`workspace.programme.nav.${section}`)}
-                      </DropdownMenuItem>
-                    ))}
-                    {group.id === "output" && canAccessSettings ? (
-                      <DropdownMenuItem onSelect={() => setSaveAsTemplateOpen(true)}>
-                        {t("workspace.programme.saveAsTemplate")}
-                      </DropdownMenuItem>
-                    ) : null}
-                  </DropdownMenuGroup>
-                ))}
-                {canAccessSettings && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <ProgrammeAccessMenuItems onPick={setAccessPanel} />
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-16 sm:px-24">
+            <div className="pointer-events-auto w-max max-w-[min(100%,36rem)]">
+              <OverflowTitle title={workspaceName} fit className="text-2xl font-semibold tracking-tight" />
+            </div>
           </div>
+          {canAccessSettings ? (
+            <div className="relative z-10 ml-auto">
+              <DropdownMenu>
+                <IconTooltip label={t("space.workspaces.dropdownMenuSr")} side="bottom">
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant={accessPanel ? "secondary" : "ghost"}
+                      size="icon"
+                      className="h-8 w-8"
+                      aria-label={t("space.workspaces.dropdownMenuSr")}
+                      aria-haspopup="menu"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </IconTooltip>
+                <DropdownMenuContent align="end" className="w-44">
+                  <ProgrammeAccessMenuItems onPick={(panel) => setAccessPanel(panel)} />
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ) : null}
         </div>
       </header>
+      <ProgrammeToolsToolbar
+        groups={documentMenuGroups}
+        activeSection={activeSection}
+        sheetOpen={sheetOpen}
+        onSection={setSection}
+        canAccessSettings={canAccessSettings}
+        publicationLoaded={snapshotLoaded}
+        published={Boolean(publication)}
+        onSaveAsTemplate={canAccessSettings ? () => setSaveAsTemplateOpen(true) : undefined}
+        chrome={
+          <ProgrammeDocumentChrome
+            compact
+            isKnowledgeView={isKnowledgeView}
+            layout={documentLayout}
+            onLayoutChange={patchDocumentLayout}
+            documentMode={documentMode}
+            onDocumentModeChange={setDocumentMode}
+            onViewChange={setMode}
+            canWrite={writableChapters.length > 0}
+            writableChapters={writableChapters}
+            focusChapterIds={documentSearch.focusIds}
+            onFocusChapterIdsChange={setFocusVisibleIds}
+          />
+        }
+      />
       <ProgrammeAccessDialogs
-        workspace={{ id: workspaceId, name: workspaceName }}
+        workspace={{
+          id: workspaceId,
+          name: workspaceName,
+          summary: workspaceSummary,
+          description: workspaceDescription,
+        }}
         panel={accessPanel}
         onClose={() => setAccessPanel(null)}
         onDeleted={() => router.push(`/spaces/${spaceId}`)}
@@ -2340,12 +2321,42 @@ export function ProgrammeWorkbench({
           </Button>
         </TabsContent>
 
+        <TabsContent value="consultation" className="space-y-3">
+          <StageHeading
+            title={t("workspace.programme.nav.consultation")}
+            purpose={t("workspace.programme.purpose.consultation")}
+          />
+          <p className="text-sm text-muted-foreground">{t("workspace.programme.consultationHowTo")}</p>
+          {snapshotLoaded && !publication ? (
+            <p className="text-sm text-muted-foreground">{t("workspace.programme.emptyNext.consultation")}</p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {publication ? (
+              <Button variant="outline" asChild>
+                <Link href={`/published/${publication.id}`} target="_blank">
+                  {t("workspace.programme.publishOpenRoom")}
+                </Link>
+              </Button>
+            ) : snapshotLoaded ? (
+              <Button variant="outline" onClick={() => setSection("publish")}>
+                {t("workspace.programme.setupGoPublish")}
+              </Button>
+            ) : null}
+          </div>
+          <ConsultationOwnerPanel
+            workspaceId={workspaceId}
+            publicationId={publication?.id || null}
+            canAdminister={canAdminister}
+            queue={consultationQueue}
+            onChanged={refresh}
+          />
+        </TabsContent>
+
         <TabsContent value="export" className="space-y-3">
           <StageHeading
             title={t("workspace.programme.exportTitle")}
             purpose={t("workspace.programme.purpose.export")}
           />
-          <p className="text-sm text-muted-foreground">{t("workspace.programme.publishHint")}</p>
           {!observability?.hasSuccessfulExport && (
             <p className="text-sm text-muted-foreground">{t("workspace.programme.emptyNext.export")}</p>
           )}
@@ -2392,97 +2403,12 @@ export function ProgrammeWorkbench({
               ? t("workspace.programme.freezePresent", undefined, { at: policies.freezeAt || "—" })
               : t("workspace.programme.freezeMissing")}
           </p>
-          <div className="space-y-3 rounded-md border p-3">
-            <h3 className="text-sm font-medium">{t("workspace.programme.publishTitle")}</h3>
-            <p className="text-sm text-muted-foreground">{t("workspace.programme.publishBody")}</p>
-            <p className="text-xs text-muted-foreground">
-              {publication
-                ? t("workspace.programme.publishCurrent", undefined, { at: publication.publishedAt })
-                : t("workspace.programme.publishNone")}
-            </p>
-            <label className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-muted-foreground">{t("workspace.programme.publishVisibility")}</span>
-              <Select
-                value={publishVisibility}
-                onValueChange={(value) => setPublishVisibility(value as PublicationVisibility)}
-              >
-                <SelectTrigger size="sm" className="min-w-56">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="permissioned">{t("workspace.programme.publishPermissioned")}</SelectItem>
-                  <SelectItem value="link_code">{t("workspace.programme.publishLinkCode")}</SelectItem>
-                  <SelectItem value="public_listing">{t("workspace.programme.publishPublicListing")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </label>
-            <label className="block space-y-1 text-sm">
-              <span className="text-muted-foreground">{t("workspace.programme.publishPeriod")}</span>
-              <Input
-                value={publishPeriod}
-                onChange={(event) => setPublishPeriod(event.target.value)}
-                placeholder={t("workspace.programme.publishPeriodPlaceholder")}
-              />
-            </label>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                disabled={pending || chromeJob === "reviewer" || !policies.hasFreeze || !canAdminister}
-                onClick={() =>
-                  startTransition(async () => {
-                    const result = await publishProgrammeSnapshot({
-                      workspaceId,
-                      visibility: publishVisibility,
-                      periodLabel: publishPeriod,
-                    })
-                    if (result.error || !result.data) {
-                      notify(result.error || t("workspace.programme.publishNeedFreeze"), result.error ? "error" : "warning")
-                      return
-                    }
-                    setPublication(result.data.publication)
-                    setRevealedAccessCode(result.data.accessCode)
-                    notify(
-                      result.data.accessCode
-                        ? t("workspace.programme.publishCodeOnce", undefined, { code: result.data.accessCode })
-                        : t("workspace.programme.publishDone"),
-                    )
-                  })
-                }
-              >
-                {t("workspace.programme.publishAction")}
-              </Button>
-              {publication ? (
-                <>
-                  <Button variant="outline" asChild>
-                    <Link href={`/published/${publication.id}`} target="_blank">
-                      {t("workspace.programme.publishOpenRoom")}
-                    </Link>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    disabled={pending || chromeJob === "reviewer"}
-                    onClick={() =>
-                      startTransition(async () => {
-                        const result = await revokeProgrammePublication(workspaceId)
-                        if (result.error) {
-                          notify(result.error, "error")
-                          return
-                        }
-                        setPublication(null)
-                        setRevealedAccessCode(null)
-                        notify(t("workspace.programme.publishRevoked"))
-                      })
-                    }
-                  >
-                    {t("workspace.programme.publishRevoke")}
-                  </Button>
-                </>
-              ) : null}
-            </div>
-            {revealedAccessCode ? (
-              <p className="text-sm">
-                {t("workspace.programme.publishCodeOnce", undefined, { code: revealedAccessCode })}
-              </p>
-            ) : null}
+          <div className="space-y-2 rounded-md border p-3">
+            <h3 className="text-sm font-medium">{t("workspace.programme.nav.publish")}</h3>
+            <p className="text-sm text-muted-foreground">{t("workspace.programme.exportPublishHint")}</p>
+            <Button variant="outline" onClick={() => setSection("publish")}>
+              {t("workspace.programme.publishOpenSection")}
+            </Button>
           </div>
           <Textarea
             value={exportMd}
@@ -2701,6 +2627,122 @@ export function ProgrammeWorkbench({
               ))}
             </ul>
           )}
+        </TabsContent>
+
+        <TabsContent value="publish" className="space-y-3">
+          <StageHeading
+            title={t("workspace.programme.nav.publish")}
+            purpose={t("workspace.programme.purpose.publish")}
+          />
+          <p className="text-sm text-muted-foreground">{t("workspace.programme.publishBody")}</p>
+          {snapshotLoaded && !publication ? (
+            <p className="text-sm text-muted-foreground">{t("workspace.programme.emptyNext.publish")}</p>
+          ) : null}
+          <p className="text-xs text-muted-foreground">
+            {publication
+              ? t("workspace.programme.publishCurrent", undefined, { at: publication.publishedAt })
+              : t("workspace.programme.publishNone")}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {policies.hasFreeze
+              ? t("workspace.programme.freezePresent", undefined, { at: policies.freezeAt || "—" })
+              : t("workspace.programme.freezeMissing")}
+          </p>
+          {!policies.hasFreeze ? (
+            <Button variant="outline" onClick={() => setSection("export")}>
+              {t("workspace.programme.setupGoExport")}
+            </Button>
+          ) : null}
+          <label className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">{t("workspace.programme.publishVisibility")}</span>
+            <Select
+              value={publishVisibility}
+              onValueChange={(value) => setPublishVisibility(value as PublicationVisibility)}
+            >
+              <SelectTrigger size="sm" className="min-w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="permissioned">{t("workspace.programme.publishPermissioned")}</SelectItem>
+                <SelectItem value="link_code">{t("workspace.programme.publishLinkCode")}</SelectItem>
+                <SelectItem value="public_listing">{t("workspace.programme.publishPublicListing")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="text-muted-foreground">{t("workspace.programme.publishPeriod")}</span>
+            <Input
+              value={publishPeriod}
+              onChange={(event) => setPublishPeriod(event.target.value)}
+              placeholder={t("workspace.programme.publishPeriodPlaceholder")}
+            />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={pending || chromeJob === "reviewer" || !policies.hasFreeze || !canAdminister}
+              onClick={() =>
+                startTransition(async () => {
+                  const result = await publishProgrammeSnapshot({
+                    workspaceId,
+                    visibility: publishVisibility,
+                    periodLabel: publishPeriod,
+                  })
+                  if (result.error || !result.data) {
+                    notify(result.error || t("workspace.programme.publishNeedFreeze"), result.error ? "error" : "warning")
+                    return
+                  }
+                  setPublication(result.data.publication)
+                  setRevealedAccessCode(result.data.accessCode)
+                  notify(
+                    result.data.accessCode
+                      ? t("workspace.programme.publishCodeOnce", undefined, { code: result.data.accessCode })
+                      : t("workspace.programme.publishDone"),
+                  )
+                })
+              }
+            >
+              {t("workspace.programme.publishAction")}
+            </Button>
+            {publication ? (
+              <>
+                <Button variant="outline" asChild>
+                  <Link href={`/published/${publication.id}`} target="_blank">
+                    {t("workspace.programme.publishOpenRoom")}
+                  </Link>
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={pending || chromeJob === "reviewer"}
+                  onClick={() =>
+                    startTransition(async () => {
+                      const result = await revokeProgrammePublication(workspaceId)
+                      if (result.error) {
+                        notify(result.error, "error")
+                        return
+                      }
+                      setPublication(null)
+                      setRevealedAccessCode(null)
+                      notify(t("workspace.programme.publishRevoked"))
+                    })
+                  }
+                >
+                  {t("workspace.programme.publishRevoke")}
+                </Button>
+              </>
+            ) : null}
+          </div>
+          {revealedAccessCode ? (
+            <p className="text-sm">
+              {t("workspace.programme.publishCodeOnce", undefined, { code: revealedAccessCode })}
+            </p>
+          ) : null}
+          <div className="space-y-2 rounded-md border p-3">
+            <h3 className="text-sm font-medium">{t("workspace.programme.nav.consultation")}</h3>
+            <p className="text-sm text-muted-foreground">{t("workspace.programme.consultationExportHint")}</p>
+            <Button variant="outline" onClick={() => setSection("consultation")}>
+              {t("workspace.programme.consultationOpenSection")}
+            </Button>
+          </div>
         </TabsContent>
       </Tabs>
           </div>

@@ -300,14 +300,23 @@ export function GuidanceCoach({
         </p>
       )}
       <p className="text-muted-foreground">{purpose}</p>
-      {surface === "programme" && pipeline?.firstIncomplete && (
-        <p className="font-medium">{t("guidance.coach.next", undefined, { action: nextAction })}</p>
-      )}
-      {surface === "programme" && pipeline?.firstIncomplete && (
-        <Button type="button" size="sm" onClick={goNext}>
-          {t(`workspace.programme.nav.${pipeline.firstIncompleteSection}`, pipeline.firstIncompleteSection)}
-        </Button>
-      )}
+      {surface === "programme" && pipeline?.firstIncomplete && pipeline.firstIncomplete !== "orient" ? (
+        <div
+          role="status"
+          aria-label={t("guidance.coach.nextStepAria")}
+          className={cn("space-y-2 rounded-md border bg-muted/50 p-3", variant === "embedded" && "text-left")}
+        >
+          <p className="font-medium">
+            {t("guidance.coach.next", undefined, { action: t(`guidance.coach.stages.${pipeline.firstIncomplete}`) })}
+          </p>
+          <p className="text-muted-foreground">{nextAction}</p>
+          {pipeline.firstIncomplete !== "draft" ? (
+            <Button type="button" size="sm" onClick={goNext}>
+              {t(`workspace.programme.nav.${pipeline.firstIncompleteSection}`, pipeline.firstIncompleteSection)}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       {surface === "programme" && pipeline && (
         <ol className={cn("space-y-1", variant === "embedded" && "text-left")}>

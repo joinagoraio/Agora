@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, type FormEvent } from "react"
-import { Mail, MoreVertical, PencilLine, Trash2, Users } from "lucide-react"
+import { FilePenLine, Mail, MoreVertical, PencilLine, Trash2, Users } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
@@ -33,11 +33,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { WorkspaceSettings } from "@/components/workspace-settings"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { deleteWorkspace, getWorkspaceAccessSettings, updateWorkspace } from "@/lib/actions/workspace"
 
-export type ProgrammeAccessPanel = "rename" | "members" | "invitations" | "delete" | null
+export type ProgrammeAccessPanel = "rename" | "edit" | "members" | "invitations" | "delete" | null
 
 type AccessData = {
   workspace: { id: string; name: string; space_id: string }
@@ -55,10 +56,15 @@ export function ProgrammeAccessMenuItems({
   const { t } = useI18n()
   return (
     <>
+      <DropdownMenuItem onSelect={() => onPick("edit")}>
+        <FilePenLine className="h-4 w-4" />
+        {t("space.workspaces.menuEdit")}
+      </DropdownMenuItem>
       <DropdownMenuItem onSelect={() => onPick("rename")}>
         <PencilLine className="h-4 w-4" />
         {t("space.workspaces.menuRename")}
       </DropdownMenuItem>
+      <DropdownMenuSeparator />
       <DropdownMenuItem onSelect={() => onPick("members")}>
         <Users className="h-4 w-4" />
         {t("space.workspaces.menuMembers")}
@@ -82,7 +88,7 @@ export function ProgrammeAccessDialogs({
   onClose,
   onDeleted,
 }: {
-  workspace: { id: string; name: string }
+  workspace: { id: string; name: string; summary?: string | null; description?: string | null }
   panel: ProgrammeAccessPanel
   onClose: () => void
   onDeleted?: () => void
@@ -90,8 +96,12 @@ export function ProgrammeAccessDialogs({
   const { t } = useI18n()
   const router = useRouter()
   const [name, setName] = useState(workspace.name)
+  const [summary, setSummary] = useState(workspace.summary ?? "")
+  const [description, setDescription] = useState(workspace.description ?? "")
   const [isRenaming, setIsRenaming] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
   const [renameError, setRenameError] = useState<string | null>(null)
+  const [editError, setEditError] = useState<string | null>(null)
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [access, setAccess] = useState<AccessData | null>(null)
@@ -103,8 +113,13 @@ export function ProgrammeAccessDialogs({
       setName(workspace.name)
       setRenameError(null)
     }
+    if (panel === "edit") {
+      setSummary(workspace.summary ?? "")
+      setDescription(workspace.description ?? "")
+      setEditError(null)
+    }
     if (panel === "delete") setNeedsConfirmation(false)
-  }, [panel, workspace.name])
+  }, [panel, workspace.name, workspace.summary, workspace.description])
 
   useEffect(() => {
     if (panel !== "members" && panel !== "invitations") return
@@ -143,6 +158,29 @@ export function ProgrammeAccessDialogs({
       return
     }
     toast.success(t("space.workspaces.rename.toastSuccess"))
+    onClose()
+    router.refresh()
+  }
+
+  const handleEdit = async (event: FormEvent) => {
+    event.preventDefault()
+    setIsEditing(true)
+    setEditError(null)
+    const result = await updateWorkspace(
+      workspace.id,
+      workspace.name,
+      description.trim() || null,
+      undefined,
+      undefined,
+      summary.trim() || null,
+    )
+    setIsEditing(false)
+    if (result.error) {
+      setEditError(result.error)
+      toast.error(t("space.workspaces.edit.toastError"), { description: result.error })
+      return
+    }
+    toast.success(t("space.workspaces.edit.toastSuccess"))
     onClose()
     router.refresh()
   }
@@ -195,6 +233,52 @@ export function ProgrammeAccessDialogs({
               </Button>
               <Button type="submit" disabled={isRenaming || name.trim().length === 0}>
                 {isRenaming ? t("space.workspaces.rename.saving") : t("space.workspaces.rename.save")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={panel === "edit"} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent>
+          <form onSubmit={handleEdit} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>{t("space.workspaces.edit.title")}</DialogTitle>
+              <DialogDescription>{t("space.workspaces.edit.description")}</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor={`edit-summary-${workspace.id}`}>{t("workspace.overview.edit.summaryLabel")}</Label>
+              <Textarea
+                id={`edit-summary-${workspace.id}`}
+                value={summary}
+                onChange={(event) => {
+                  setSummary(event.target.value)
+                  if (editError) setEditError(null)
+                }}
+                placeholder={t("workspace.overview.edit.summaryPlaceholder")}
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`edit-description-${workspace.id}`}>{t("workspace.overview.edit.descriptionLabel")}</Label>
+              <Textarea
+                id={`edit-description-${workspace.id}`}
+                value={description}
+                onChange={(event) => {
+                  setDescription(event.target.value)
+                  if (editError) setEditError(null)
+                }}
+                placeholder={t("workspace.overview.edit.descriptionPlaceholder")}
+                rows={5}
+              />
+              {editError ? <p className="text-sm text-destructive">{editError}</p> : null}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose} disabled={isEditing}>
+                {t("space.workspaces.dialog.cancel")}
+              </Button>
+              <Button type="submit" disabled={isEditing}>
+                {isEditing ? t("space.workspaces.edit.saving") : t("space.workspaces.edit.save")}
               </Button>
             </DialogFooter>
           </form>

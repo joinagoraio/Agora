@@ -4,7 +4,7 @@ import { useState, useEffect, createContext, useContext } from "react"
 import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import { ChatSidebar } from "@/components/chat-sidebar"
 import { ChatToggleButton } from "@/components/chat-toggle-button"
-import { patchAskPanelPreference, readAskPanelPreference } from "@/lib/chat/ask-panel-preference"
+import { patchAskPanelPreference } from "@/lib/chat/ask-panel-preference"
 import type { ChatGuidanceConfig, ChatPanelTab } from "@/lib/guidance/chat-guidance"
 
 interface WorkspaceChatWrapperProps {
@@ -61,13 +61,6 @@ export function WorkspaceChatWrapper({
   const [guidance, setGuidance] = useState<ChatGuidanceConfig | null>(null)
   const [panelTab, setPanelTab] = useState<ChatPanelTab>(defaultPanelTab)
 
-  useEffect(() => {
-    const preference = readAskPanelPreference(spaceId, workspaceId)
-    if (preference.open) {
-      setIsChatOpen(true)
-    }
-  }, [spaceId, workspaceId])
-
   // Auto-open chat if conversationId is in URL
   // Only open if not already open to avoid closing/reopening loops
   useEffect(() => {
@@ -96,9 +89,6 @@ export function WorkspaceChatWrapper({
   }
 
   const handleToggle = () => {
-    if (!isChatOpen) {
-      setPanelTab("ask")
-    }
     persistOpen(!isChatOpen)
   }
 
