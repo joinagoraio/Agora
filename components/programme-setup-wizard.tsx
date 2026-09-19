@@ -32,7 +32,7 @@ type Props = {
   onBindingsChange: (bindings: ProgrammeBindings) => void
   onMessage: (message: string | null, kind?: NotifyKind) => void
   onRefresh: () => void
-  onStartWriting: (next?: ProgrammeBindings) => void
+  onStartWriting: (next?: ProgrammeBindings) => void | Promise<void>
 }
 
 const NONE = "none"
@@ -103,7 +103,7 @@ export function ProgrammeSetupWizard({
         return
       }
       if (result.data?.bindings) applyBindings(result.data.bindings)
-      onStartWriting(result.data?.bindings)
+      await onStartWriting(result.data?.bindings)
     })
   }
 
@@ -131,7 +131,7 @@ export function ProgrammeSetupWizard({
         onMessage(result.error, "error")
         return
       }
-      onStartWriting()
+      onRefresh()
     })
   }
 
@@ -265,11 +265,18 @@ export function ProgrammeSetupWizard({
               <Button
                 type="button"
                 disabled={pending || !canEdit || !requiredSourcesReady}
-                onClick={() => onStartWriting(bindings)}
+                onClick={() => {
+                  startTransition(async () => {
+                    await onStartWriting(bindings)
+                  })
+                }}
               >
                 {t("workspace.programme.setupWizard.sourcesStart")}
               </Button>
             </div>
+            {pending ? (
+              <p className="text-sm text-muted-foreground">{t("workspace.programme.setupWizard.working")}</p>
+            ) : null}
           </div>
         ) : null}
       </div>

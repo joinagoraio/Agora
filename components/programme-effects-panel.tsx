@@ -224,7 +224,7 @@ export function ProgrammeEffectsPanel({ workspaceId, measures, reports = [], onM
                       }))
                     }
                   >
-                    <SelectTrigger id={`dir-${m.id}`}>
+                    <SelectTrigger id={`dir-${m.id}`} data-guidance-target={measures[0]?.id === m.id ? "record-effects" : undefined}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

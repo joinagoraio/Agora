@@ -3,8 +3,8 @@ export const PIPELINE_STAGES = [
   "bind",
   "analyse",
   "structure",
-  "draft",
   "check",
+  "draft",
   "review",
   "export",
 ] as const
@@ -15,11 +15,18 @@ export const STAGE_TO_SECTION: Record<PipelineStageId, string> = {
   orient: "overview",
   bind: "corpus",
   analyse: "analysis",
-  structure: "outline",
-  draft: "editor",
+  structure: "measures",
   check: "effects",
+  draft: "editor",
   review: "review",
   export: "export",
+}
+
+export const STAGE_TARGET: Partial<Record<PipelineStageId, string>> = {
+  bind: "bind-vision",
+  analyse: "run-analysis",
+  structure: "generate-measures",
+  check: "record-effects",
 }
 
 export type GuidanceMeasureLike = {
@@ -71,14 +78,8 @@ function deviationJustified(measure: GuidanceMeasureLike): boolean {
 }
 
 function checkComplete(input: GuidancePipelineInput): boolean {
-  const inReviewOrBeyond = input.measures.filter((measure) => {
-    const status = measure.workflow_status ?? ""
-    return status === "in_review" || status === "revised" || status === "approved"
-  })
-  const effectsOk =
-    inReviewOrBeyond.length === 0 ||
-    inReviewOrBeyond.every((measure) => effectsFieldsSet(measure) && deviationJustified(measure))
-  return effectsOk && (input.hasQcRun || inReviewOrBeyond.length === 0)
+  if (input.measureCount === 0) return false
+  return input.measures.every((measure) => effectsFieldsSet(measure) && deviationJustified(measure))
 }
 
 function reviewComplete(input: GuidancePipelineInput): boolean {

@@ -43,7 +43,7 @@ import {
   serializeFocusChapterIds,
   type ProgrammeDocumentMode,
 } from "@/lib/programme/document-mode"
-import { deriveGuidancePipeline, pipelineInputFromWorkbench } from "@/lib/guidance/pipeline"
+import { deriveGuidancePipeline, pipelineInputFromWorkbench, STAGE_TARGET } from "@/lib/guidance/pipeline"
 import {
   programmeHasChapterDocuments,
   programmeSetupIncomplete,
@@ -231,6 +231,16 @@ function downloadExportPayload(payload: {
     return
   }
   downloadBlob(payload.filename, new Blob([payload.content], { type: payload.mimeType }))
+}
+
+const NEXT_COPY: Record<string, string> = {
+  bind: "guidance.coach.nextBind",
+  analyse: "guidance.coach.nextAnalyse",
+  structure: "guidance.coach.nextStructure",
+  draft: "guidance.coach.nextDraft",
+  check: "guidance.coach.nextCheck",
+  review: "guidance.coach.nextReview",
+  export: "guidance.coach.nextExport",
 }
 
 function openPrintPreview(html: string) {
@@ -920,6 +930,39 @@ export function ProgrammeWorkbench({
         }
       />
       )}
+      {!showSetupWizard &&
+      guidanceMode === "guided" &&
+      pipeline.firstIncomplete &&
+      pipeline.firstIncomplete !== "orient" ? (
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">
+              {t("guidance.coach.next", undefined, {
+                action: t(`guidance.coach.stages.${pipeline.firstIncomplete}`),
+              })}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {t(NEXT_COPY[pipeline.firstIncomplete] ?? "guidance.coach.nothingRequired")}
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="shrink-0"
+            onClick={() => {
+              setSection(pipeline.firstIncompleteSection)
+              const target = pipeline.firstIncomplete ? STAGE_TARGET[pipeline.firstIncomplete] : undefined
+              if (!target) return
+              window.setTimeout(() => {
+                const el = document.querySelector(`[data-guidance-target="${target}"]`)
+                if (el instanceof HTMLElement) el.focus()
+              }, 50)
+            }}
+          >
+            {t("guidance.coach.goThere")}
+          </Button>
+        </div>
+      ) : null}
       <ProgrammeAccessDialogs
         workspace={{
           id: workspaceId,
@@ -967,12 +1010,16 @@ export function ProgrammeWorkbench({
                 onBindingsChange={setBindings}
                 onMessage={notify}
                 onRefresh={refresh}
-                onStartWriting={(next) => {
+                onStartWriting={async (next) => {
+                  const merged = { ...(next ?? bindings), setupComplete: true }
+                  const result = await updateProgrammeBindings(workspaceId, merged)
+                  if (result.error) {
+                    notify(result.error, "error")
+                    return
+                  }
                   setWizardSession(false)
                   setDocumentMode("edit")
-                  const merged = { ...(next ?? bindings), setupComplete: true }
                   setBindings(merged)
-                  void updateProgrammeBindings(workspaceId, merged)
                 }}
               />
             ) : (
@@ -1589,6 +1636,7 @@ export function ProgrammeWorkbench({
             </Button>
             <Button
               disabled={pending}
+              data-guidance-target="generate-measures"
               onClick={() =>
                 startTransition(async () => {
                   const result = await generateProgrammeMeasuresFromContext(workspaceId, {

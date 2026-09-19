@@ -38,7 +38,7 @@ export function shouldShowProgrammeSetupWizard(input: {
   setupComplete?: boolean
 }): boolean {
   if (!input.canEdit || input.hasChapterBody || input.setupComplete) return false
-  if (!input.setupIncomplete) return false
   if (!input.ready && input.hasChapterDocuments) return false
-  return true
+  if (input.setupIncomplete) return true
+  return Boolean(input.wizardSession) || input.setupComplete === false
 }
