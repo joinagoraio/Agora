@@ -396,7 +396,11 @@ export function ProgrammeToolsToolbar({
 
   if (!floating) {
     return (
-      <div ref={shellRef} className="shrink-0 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75">
+      <div
+        ref={shellRef}
+        data-programme-toolbar=""
+        className="relative z-[60] shrink-0 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75"
+      >
         <nav
           aria-label={t("workspace.programme.navAria")}
           className="flex h-10 items-center justify-center overflow-x-auto px-3"
@@ -412,8 +416,9 @@ export function ProgrammeToolsToolbar({
   return (
     <div
       ref={shellRef}
+      data-programme-toolbar=""
       className={cn(
-        "pointer-events-auto absolute z-30 max-w-[calc(100%-1rem)]",
+        "pointer-events-auto absolute z-[60] max-w-[calc(100%-1rem)]",
         position ? null : "top-20 right-4",
         dragging && "select-none",
       )}
