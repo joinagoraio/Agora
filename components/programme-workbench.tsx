@@ -934,7 +934,10 @@ export function ProgrammeWorkbench({
       guidanceMode === "guided" &&
       pipeline.firstIncomplete &&
       pipeline.firstIncomplete !== "orient" ? (
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2">
+        <div
+          data-guidance-next=""
+          className="flex shrink-0 items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2"
+        >
           <div className="min-w-0">
             <p className="text-sm font-medium">
               {t("guidance.coach.next", undefined, {
@@ -1063,8 +1066,14 @@ export function ProgrammeWorkbench({
         )}
       </div>
 
-      <Dialog open={sheetOpen} onOpenChange={(open) => { if (!open) closeSheet() }}>
-        <DialogContent className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden sm:max-w-4xl">
+      <Dialog open={sheetOpen} modal={false} onOpenChange={(open) => { if (!open) closeSheet() }}>
+        <DialogContent
+          showOverlay={false}
+          className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden sm:max-w-4xl"
+          onPointerDownOutside={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
+          onFocusOutside={(event) => event.preventDefault()}
+        >
           <DialogHeader className="sr-only">
             <DialogTitle>{t(`workspace.programme.nav.${activeSection}`, activeSection)}</DialogTitle>
           </DialogHeader>
