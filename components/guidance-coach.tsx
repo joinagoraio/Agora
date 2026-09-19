@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { trackGuidanceEvent } from "@/lib/guidance/telemetry"
-import { PIPELINE_STAGES, type GuidancePipelineSnapshot, type PipelineStageId } from "@/lib/guidance/pipeline"
+import { PIPELINE_STAGES, STAGE_TO_SECTION, type GuidancePipelineSnapshot, type PipelineStageId } from "@/lib/guidance/pipeline"
 import type { GuidanceJob, GuidanceMode } from "@/lib/guidance/jobs"
 import { IconTooltip } from "@/components/icon-tooltip"
 
@@ -38,6 +38,7 @@ type Props = {
   expertPromptDismissed?: boolean
   compact?: boolean
   variant?: "overlay" | "embedded"
+  setupInProgress?: boolean
 }
 
 const NEXT_COPY: Record<Exclude<PipelineStageId, "orient">, string> = {
@@ -76,6 +77,7 @@ export function GuidanceCoach({
   reviewComplete = false,
   expertPromptDismissed = false,
   variant = "overlay",
+  setupInProgress = false,
 }: Props) {
   const { t, language } = useI18n()
   const [open, setOpen] = useState(variant === "embedded" || guidanceMode === "guided")
@@ -266,22 +268,6 @@ export function GuidanceCoach({
     }
   }
 
-  const where =
-    surface === "organisation"
-      ? t("guidance.coach.whereOrganisation", undefined, { name: placeName })
-      : surface === "research"
-        ? t("guidance.coach.whereResearch")
-        : t("guidance.coach.whereProgramme", undefined, { name: placeName })
-
-  const purpose =
-    surface === "programme" && section
-      ? t(`workspace.programme.purpose.${section}`, t("guidance.coach.organisationHint"))
-      : surface === "programme"
-        ? t("guidance.coach.workspaceHomeHint")
-        : surface === "organisation"
-          ? t("guidance.coach.organisationHint")
-          : t("guidance.coach.researchHint")
-
   const switchId = "guidance-mode-switch"
 
   const clearHelpChat = () => {
@@ -292,55 +278,77 @@ export function GuidanceCoach({
   }
 
   const intro = (
-    <div className={cn("space-y-3 text-sm", variant === "embedded" && "text-center")}>
-      <p className={variant === "embedded" ? "text-lg font-semibold" : undefined}>{where}</p>
-      {section && surface === "programme" && (
-        <p className="text-muted-foreground">
-          {t("guidance.coach.whereTab", undefined, { tab: t(`workspace.programme.nav.${section}`, section) })}
-        </p>
-      )}
-      <p className="text-muted-foreground">{purpose}</p>
-      {surface === "programme" && pipeline?.firstIncomplete && pipeline.firstIncomplete !== "orient" ? (
-        <div
-          role="status"
-          aria-label={t("guidance.coach.nextStepAria")}
-          className={cn("space-y-2 rounded-md border bg-muted/50 p-3", variant === "embedded" && "text-left")}
-        >
-          <p className="font-medium">
-            {t("guidance.coach.next", undefined, { action: t(`guidance.coach.stages.${pipeline.firstIncomplete}`) })}
-          </p>
-          <p className="text-muted-foreground">{nextAction}</p>
-          {pipeline.firstIncomplete !== "draft" ? (
-            <Button type="button" size="sm" onClick={goNext}>
-              {t(`workspace.programme.nav.${pipeline.firstIncompleteSection}`, pipeline.firstIncompleteSection)}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
+    <div className={cn("space-y-4 text-sm", variant === "embedded" && "text-left")}>
+      {setupInProgress ? (
+        <p className="text-muted-foreground">{t("guidance.coach.finishSetup")}</p>
+      ) : (
+        <>
+          {surface === "programme" && pipeline?.firstIncomplete && pipeline.firstIncomplete !== "orient" ? (
+            <div
+              role="status"
+              aria-label={t("guidance.coach.nextStepAria")}
+              className="space-y-2 rounded-md border bg-muted/50 p-3"
+            >
+              <p className="font-medium">
+                {t("guidance.coach.next", undefined, { action: t(`guidance.coach.stages.${pipeline.firstIncomplete}`) })}
+              </p>
+              <p className="text-muted-foreground">{nextAction}</p>
+              <Button type="button" size="sm" onClick={goNext}>
+                {t("guidance.coach.goThere")}
+              </Button>
+            </div>
+          ) : surface === "programme" ? (
+            <p className="text-muted-foreground">{t("guidance.coach.nothingRequired")}</p>
+          ) : surface === "organisation" ? (
+            <p className="text-muted-foreground">{t("guidance.coach.organisationHint")}</p>
+          ) : (
+            <p className="text-muted-foreground">{t("guidance.coach.researchHint")}</p>
+          )}
 
-      {surface === "programme" && pipeline && (
-        <ol className={cn("space-y-1", variant === "embedded" && "text-left")}>
-          <li className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {t("guidance.coach.pipelineTitle")}
-          </li>
-          {PIPELINE_STAGES.map((stage) => {
-            const done = pipeline.stages[stage]
-            const current = pipeline.firstIncomplete === stage
-            return (
-              <li
-                key={stage}
-                className={cn(
-                  "text-xs",
-                  done && "text-muted-foreground line-through",
-                  current && "font-medium text-foreground",
-                  !done && !current && "text-muted-foreground",
-                )}
-              >
-                {t(`guidance.coach.stages.${stage}`)}
-              </li>
-            )
-          })}
-        </ol>
+          {surface === "programme" && pipeline ? (
+            <div className="space-y-1">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("guidance.coach.pipelineTitle")}
+              </p>
+              <ol className="space-y-1">
+              {PIPELINE_STAGES.filter((stage) => stage !== "orient").map((stage) => {
+                const done = pipeline.stages[stage]
+                const current = pipeline.firstIncomplete === stage
+                return (
+                  <li key={stage}>
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-sm px-1 py-1 text-left text-xs transition-colors hover:bg-muted",
+                        done && "text-muted-foreground",
+                        current && "font-medium text-foreground",
+                        !done && !current && "text-muted-foreground",
+                      )}
+                      onClick={() => {
+                        const target = STAGE_TARGET[stage]
+                        setHighlight(target ?? null)
+                        onNavigate?.(STAGE_TO_SECTION[stage], target)
+                      }}
+                    >
+                      <span
+                        className={cn(
+                          "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[10px]",
+                          done && "border-foreground bg-foreground text-background",
+                          current && "border-foreground",
+                        )}
+                        aria-hidden
+                      >
+                        {done ? "✓" : ""}
+                      </span>
+                      {t(`guidance.coach.stages.${stage}`)}
+                    </button>
+                  </li>
+                )
+              })}
+              </ol>
+            </div>
+          ) : null}
+        </>
       )}
 
       {showExpertPrompt && (

@@ -68,7 +68,7 @@ export async function getAnalysisReport(workspaceId: string, reportId: string) {
   if (data.generation_run_id) {
     const listed = await supabase
       .from("generation_runs")
-      .select("id, agent_version_id, source_document_ids, instructions, provider, model")
+      .select("id, agent_version_id, source_document_ids, instructions, provider, model, citations")
       .eq("id", data.generation_run_id)
       .maybeSingle()
     run = listed.data
@@ -280,10 +280,10 @@ async function executeBoundAgentAnalysis(input: {
   const { parseProgrammeBindings, boundAgentId } = await import("@/lib/programme/domain")
   const { getLatestAgentVersion, getAgentVersionById } = await import("@/lib/actions/agent")
   const { resolveAgentSourceDocuments, formatSourcePreview } = await import("@/lib/programme/source-set")
-  const { formatSectionEvidence, preflightAnalysisRun, conflictFindings } = await import(
+  const { formatSectionEvidenceReport, preflightAnalysisRun, conflictFindings } = await import(
     "@/lib/programme/analysis-reports"
   )
-  const { computeUnusedDocumentIds } = await import("@/lib/actions/generation-run")
+  const { computeUnusedSourceReport } = await import("@/lib/actions/generation-run")
   const { listProgrammeOutlineNodes } = await import("@/lib/actions/outline")
   const { listProgrammeMeasures } = await import("@/lib/actions/measures")
 
@@ -340,6 +340,7 @@ async function executeBoundAgentAnalysis(input: {
           ? "effects"
           : "quality"
 
+  const evidence = formatSectionEvidenceReport(documents, sections)
   const layers = await loadPromptLayers(input.kind)
   const { systemPrompt } = compileSystemPrompt({
     kind: input.kind,
@@ -347,7 +348,7 @@ async function executeBoundAgentAnalysis(input: {
     identity: layers.identity,
     playbookBody: agentVersion?.instructions || layers.playbook,
     runInstructions: input.instructions,
-    runtimeSections: `AGENT SOURCE SET:\n${formatSourcePreview(documents)}\n\nOUTLINE:\n${outlineBlock || "(none)"}\n\nMEASURES:\n${measureBlock || "(none)"}\n\nEVIDENCE:\n${formatSectionEvidence(documents, sections)}`,
+    runtimeSections: `AGENT SOURCE SET:\n${formatSourcePreview(documents, evidence)}\n\nOUTLINE:\n${outlineBlock || "(none)"}\n\nMEASURES:\n${measureBlock || "(none)"}\n\nEVIDENCE:\n${evidence.text}`,
   })
 
   let raw = ""
@@ -368,7 +369,7 @@ async function executeBoundAgentAnalysis(input: {
           role: "user",
           content:
             input.kind === "oer"
-              ? `Produce the effects JSON report. Each finding must include measureId from the MEASURES list, effectsDirection, effectsDeviation, and citations. ${input.instructions || ""}`
+              ? `Produce the effects JSON report. Each finding must include measureId from the MEASURES list, oerTheme, effectsDirection, effectsDeviation, effectsJustification when deviation is true, and citations into the effects report. ${input.instructions || ""}`
               : `Produce the ${reportType} JSON report for workspace ${workspace.name}. Use sectionId in citations when evidence has sectionId. ${input.instructions || ""}`,
         },
       ],
@@ -383,7 +384,41 @@ async function executeBoundAgentAnalysis(input: {
   const parsed = parseAnalysisReportJson(raw)
   if (!parsed.report) return { error: parsed.errors.join("; ") || "Invalid analysis JSON" }
 
-  const unused = await computeUnusedDocumentIds(input.workspaceId, sourceIds)
+  const { citedDocumentIdsFromUnknown, inventedCitationIds } = await import("@/lib/programme/citation-labels")
+  const citedIds = citedDocumentIdsFromUnknown(parsed.report.findings)
+  const invented = inventedCitationIds(citedIds, sourceIds)
+  if (invented.length) {
+    return { error: `Invented documentIds are not allowed: ${invented.join(", ")}` }
+  }
+
+  let findings = parsed.report.findings
+  if (input.kind === "qc") {
+    const { overlapFindingsFromMeasures } = await import("@/lib/programme/measure-duplicates")
+    const overlap = overlapFindingsFromMeasures(
+      (measures.data || []).map((measure: { id: string; title: string; specific_action?: string; narrative?: string; outline_node_id?: string | null }) => ({
+        id: measure.id,
+        title: measure.title,
+        specificAction: measure.specific_action,
+        narrative: measure.narrative,
+        outlineNodeId: measure.outline_node_id,
+      })),
+    )
+    findings = [...findings, ...overlap]
+  }
+
+  const { assessGroundedness } = await import("@/lib/programme/reliability")
+  const groundedness = assessGroundedness(
+    findings.map((finding) => `${finding.summary} ${finding.citations.map((citation) => citation.quote || "").join(" ")}`).join(". "),
+    documents.map((document) => ({ documentId: document.id, text: document.content })),
+  )
+
+  const unused = await computeUnusedSourceReport(
+    input.workspaceId,
+    sourceIds,
+    citedIds,
+    agentVersion?.sourceRoles,
+  )
+  const { unusedDocumentIdsFromReport } = await import("@/lib/programme/unused-sources")
   const run = await recordGenerationRun({
     workspaceId: input.workspaceId,
     kind: input.kind,
@@ -392,25 +427,26 @@ async function executeBoundAgentAnalysis(input: {
     model,
     instructions: input.instructions ?? `${input.kind} agent job`,
     sourceDocumentIds: sourceIds,
-    unusedDocumentIds: unused.data || [],
+    unusedDocumentIds: unusedDocumentIdsFromReport(unused.data || []),
+    citations: { unusedSources: unused.data || [], groundedness, evidenceCap: evidence },
     userId: user?.id,
   })
 
   if (input.kind === "analysis" || input.kind === "vision") {
-    await materializeVisionGraph(input.workspaceId, parsed.report.findings, measures.data || [])
+    await materializeVisionGraph(input.workspaceId, findings, measures.data || [])
   }
   if (input.kind === "oer") {
-    await applyOerFindingsToMeasures(input.workspaceId, parsed.report.findings, measures.data || [])
+    await applyOerFindingsToMeasures(input.workspaceId, findings, measures.data || [])
   }
 
   const saved = await saveStructuredReport({
     workspaceId: input.workspaceId,
     reportType,
-    findings: parsed.report.findings,
+    findings,
     generationRunId: run.data?.id ?? null,
     userId: user?.id,
   })
-  const conflicts = conflictFindings(parsed.report.findings)
+  const conflicts = conflictFindings(findings)
   if (conflicts.length && (input.kind === "analysis" || input.kind === "qc")) {
     await saveStructuredReport({
       workspaceId: input.workspaceId,
@@ -631,6 +667,7 @@ async function applyOerFindingsToMeasures(
       .update({
         effects_direction: direction,
         effects_deviation: finding.effectsDeviation ?? (finding.disposition === "drop" || finding.disposition === "adapt"),
+        effects_justification: finding.effectsJustification || undefined,
         updated_at: new Date().toISOString(),
       })
       .eq("id", match.id)

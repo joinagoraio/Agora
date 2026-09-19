@@ -63,9 +63,16 @@ export async function resolveAgentSourceDocuments(input: {
   return { documents, sourceIds: documents.map((d) => d.id) }
 }
 
-export function formatSourcePreview(documents: SourceDocument[]): string {
+export function formatSourcePreview(
+  documents: SourceDocument[],
+  evidenceCap?: { used: number; total: number },
+): string {
   if (documents.length === 0) return "(no sources in agent set)"
-  return documents.map((d) => `- ${d.title} [${d.id}]${d.documentRole ? ` (${d.documentRole})` : ""}`).join("\n")
+  const lines = documents.map((d) => `- ${d.title} [${d.id}]${d.documentRole ? ` (${d.documentRole})` : ""}`)
+  if (evidenceCap && evidenceCap.total > evidenceCap.used) {
+    lines.push(`Using ${evidenceCap.used} of ${evidenceCap.total} sections in this run.`)
+  }
+  return lines.join("\n")
 }
 
 export function formatSourceEvidence(documents: SourceDocument[], maxChars = 4000): string {

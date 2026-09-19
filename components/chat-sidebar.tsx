@@ -1010,6 +1010,7 @@ export function ChatSidebar({
             onNavigate={guidance.onNavigate}
             reviewComplete={guidance.reviewComplete}
             expertPromptDismissed={guidance.expertPromptDismissed}
+            setupInProgress={guidance.setupInProgress}
           />
         </div>
       ) : (

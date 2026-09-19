@@ -12,7 +12,7 @@ import { logger } from "@/lib/utils/logger"
 import { getRelevantContext, getAllWorkspaceKnowledge } from "@/lib/rag/search"
 import { extractPdfPages } from "@/lib/utils/pdf-extraction.server"
 import { compileSystemPrompt } from "@/lib/chat/playbook-compiler"
-import { recordGenerationRun, computeUnusedDocumentIds } from "@/lib/actions/generation-run"
+import { recordGenerationRun } from "@/lib/actions/generation-run"
 import { getLatestPlaybookBody } from "@/lib/actions/playbook"
 import { stripDuplicateChapterHeading } from "@/lib/programme/chapter-heading"
 import { parseProgrammeBindings } from "@/lib/programme/domain"
@@ -1914,7 +1914,13 @@ ${citationInstruction}`
   const { assessGroundedness } = await import("@/lib/programme/reliability")
   const groundedness = assessGroundedness(generatedText, evidenceDocs)
 
-  const unused = await computeUnusedDocumentIds(workspaceId, sourceIds)
+  const { computeUnusedSourceReport } = await import("@/lib/actions/generation-run")
+  const { unusedDocumentIdsFromReport } = await import("@/lib/programme/unused-sources")
+  const { parseStructuredCitations } = await import("@/lib/utils/citation-parser")
+  const citedIds = parseStructuredCitations(generatedText)
+    .map((citation) => citation.structured?.documentId)
+    .filter((id): id is string => Boolean(id))
+  const unused = await computeUnusedSourceReport(workspaceId, sourceIds, citedIds, agentVersion?.sourceRoles)
   await recordGenerationRun({
     workspaceId,
     kind: "draft",
@@ -1925,9 +1931,9 @@ ${citationInstruction}`
     temperature,
     instructions: instructions.trim(),
     sourceDocumentIds: sourceIds,
-    unusedDocumentIds: unused.data || [],
+    unusedDocumentIds: unusedDocumentIdsFromReport(unused.data || []),
     outputRef: documentId,
-    citations: { sources, groundedness },
+    citations: { sources, groundedness, unusedSources: unused.data || [] },
     userId: user.id,
   })
 

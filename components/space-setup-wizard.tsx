@@ -1060,7 +1060,6 @@ export function SpaceSetupWizard({
                     placeholder={t("space.wizard.workspace.namePlaceholder")}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">{t("space.workspaces.dialog.kindProgrammeHelp")}</p>
                 <ProgrammeTemplatePicker
                   templates={workspaceTemplates}
                   value={workspaceTemplateId}

@@ -6,7 +6,7 @@ export const HELP_GLOSSARY: Record<string, string> = {
   authority:
     "Your authority (province, municipality, or department). Shared documents, people, templates, specialists. Storage name: space. Chrome shows the instance name.",
   programme:
-    "One programme. Opening it is the document you write (Knowledge, analysis, review, export sit around that text). Result: one official programme document. Storage: workspace.",
+    "Opening a programme opens the document you write. Knowledge, analysis, review, and export sit around that text.",
   documents:
     "Files this programme may use. Bound documents have a role: vision, effects report, handbook, existing policy, or other.",
   research:

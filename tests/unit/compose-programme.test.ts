@@ -60,6 +60,29 @@ describe("compose programme", () => {
     expect(markdown).toContain("Body after the title.")
   })
 
+  it("adds numbered source footnotes from citations", () => {
+    const markdown = composeProgrammeMarkdown({
+      title: "Flevoland programme",
+      nodes,
+      chapters: [],
+      measures: [
+        {
+          id: "m1",
+          title: "Station housing pilots",
+          measureType: "measure",
+          specificAction: "Fund two station-area pilots",
+          outlineNodeId: nodes[1]!.id,
+          citations: [{ documentId: "vision-1", pageNumber: 4, quote: "housing near nodes" }],
+          workflowStatus: "generated",
+        },
+      ],
+      citationLabels: { "vision-1": "Omgevingsvisie Flevoland 2050, § 4.2, p.4" },
+    })
+    expect(markdown).toContain("[^1]")
+    expect(markdown).toContain("## Bronnen")
+    expect(markdown).toContain("Omgevingsvisie Flevoland 2050")
+  })
+
   it("emits a citation graph matching the registry", () => {
     const graph = composeCitationGraph([
       {

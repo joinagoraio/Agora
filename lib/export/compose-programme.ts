@@ -37,8 +37,20 @@ export function composeProgrammeMarkdown(input: {
   nodes: ProgrammeOutlineNode[]
   chapters: ComposeChapter[]
   measures: ComposeMeasure[]
+  citationLabels?: Record<string, string>
 }): string {
   const chapterByNode = new Map(input.chapters.map((c) => [c.node.id, c]))
+  const footnotes: string[] = []
+  const footnoteFor = (citation: ComposeMeasure["citations"][number]) => {
+    const key = `${citation.documentId}|${citation.sectionId || ""}|${citation.pageNumber || ""}|${citation.quote || ""}`
+    const existing = footnotes.findIndex((line) => line.startsWith(key))
+    if (existing >= 0) return existing + 1
+    const label = input.citationLabels?.[citation.documentId] || citation.documentId
+    const page = citation.pageNumber ? `, p.${citation.pageNumber}` : ""
+    const quote = citation.quote ? ` — “${citation.quote}”` : ""
+    footnotes.push(`${key}::${label}${page}${quote}`)
+    return footnotes.length
+  }
   const parts = [`# ${input.title}`, ""]
 
   for (const node of input.nodes) {
@@ -57,7 +69,8 @@ export function composeProgrammeMarkdown(input: {
     if (nodeMeasures.length > 0) {
       parts.push("#### Measures in this section")
       for (const measure of nodeMeasures) {
-        parts.push(`- **${measure.title}** (${measure.measureType}): ${measure.specificAction}`)
+        const marks = measure.citations.map((citation) => `[^${footnoteFor(citation)}]`).join("")
+        parts.push(`- **${measure.title}** (${measure.measureType}): ${measure.specificAction}${marks}`)
       }
     }
     parts.push("")
@@ -72,14 +85,20 @@ export function composeProgrammeMarkdown(input: {
       parts.push(measure.specificAction)
       if (measure.narrative) parts.push(measure.narrative)
       if (measure.citations.length) {
-        parts.push(
-          measure.citations
-            .map((c, i) => `[${i + 1}] ${c.documentId}${c.pageNumber ? ` p.${c.pageNumber}` : ""}${c.quote ? ` — “${c.quote}”` : ""}`)
-            .join("\n"),
-        )
+        const marks = measure.citations.map((citation) => `[^${footnoteFor(citation)}]`).join(" ")
+        parts.push(marks)
       }
       parts.push("")
     }
+  }
+
+  if (footnotes.length) {
+    parts.push("## Bronnen")
+    footnotes.forEach((line, index) => {
+      const body = line.split("::")[1] || line
+      parts.push(`${index + 1}. ${body}`)
+    })
+    parts.push("")
   }
 
   return parts.join("\n").trim() + "\n"

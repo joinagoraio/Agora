@@ -6,7 +6,8 @@
 import { describe, expect, it } from "vitest"
 import { compileSystemPrompt, DRAFT_STRICT_CITATION_MARKER, MEASURES_SAFETY_MARKER } from "@/lib/chat/playbook-compiler"
 import { assessGroundedness } from "@/lib/programme/reliability"
-import { parseMeasureCandidatesJson, canApproveMeasure } from "@/lib/programme/structured-artefacts"
+import { parseMeasureCandidatesJson, canApproveMeasure, parseAnalysisReportJson } from "@/lib/programme/structured-artefacts"
+import { inventedCitationIds } from "@/lib/programme/citation-labels"
 import { extractSectionsFromPages } from "@/lib/documents/section-extraction"
 import { markdownToExportSections, buildDocxFromSections } from "@/lib/export/markdown-to-docx"
 
@@ -66,6 +67,8 @@ describe("golden programme evals (Phase 9.2)", () => {
           title: "Station densification",
           type: "measure",
           specificAction: "Allow mid-rise housing within 800m of stations",
+          timeline: "2026-2030",
+          successCriterion: "Two station-area pilots contracted",
           effectsDirection: "positive",
           effectsDeviation: true,
           effectsJustification: "Aligned with vision corridor policy",
@@ -89,6 +92,55 @@ describe("golden programme evals (Phase 9.2)", () => {
     )
     expect(cited.score).toBeGreaterThan(uncited.score)
     expect(uncited.issues.some((i) => i.reason === "missing_citation")).toBe(true)
+  })
+
+  it("analysis, OER, and QC JSON contracts parse casus-shaped fixtures", () => {
+    const analysis = parseAnalysisReportJson(
+      JSON.stringify({
+        reportType: "existing_policy",
+        findings: [
+          {
+            id: "f1",
+            disposition: "adapt",
+            summary: "Station pilots can be adopted into Sterke Leefregio's",
+            visionAnchor: "Housing near nodes",
+            provincialInterest: "14",
+            citations: [{ documentId: "vision-doc", sectionId: "s1", pageNumber: 1, quote: "densification near stations" }],
+          },
+        ],
+      }),
+    )
+    expect(analysis.report?.reportType).toBe("existing_policy")
+    expect(analysis.report?.findings[0]?.citations[0]?.documentId).toBe("vision-doc")
+
+    const oer = parseAnalysisReportJson(
+      JSON.stringify({
+        reportType: "effects",
+        findings: [
+          {
+            id: "e1",
+            disposition: "adopt",
+            summary: "Densification reduces car kilometres",
+            measureId: "m1",
+            oerTheme: "liveability near stations",
+            effectsDirection: "positive",
+            effectsDeviation: false,
+            citations: [{ documentId: "oer-doc", quote: "positive effect when it reduces car kilometres" }],
+          },
+        ],
+      }),
+    )
+    expect(oer.report?.findings[0]?.oerTheme).toBe("liveability near stations")
+    expect(oer.report?.findings[0]?.effectsDirection).toBe("positive")
+
+    const qc = parseAnalysisReportJson(
+      JSON.stringify({
+        reportType: "quality",
+        findings: [{ id: "q1", disposition: "missing", summary: "Provincial interest 21 is not covered" }],
+      }),
+    )
+    expect(qc.report?.reportType).toBe("quality")
+    expect(inventedCitationIds(["invented-doc"], ["vision-doc"])).toEqual(["invented-doc"])
   })
 
   it("DOCX export preserves fixture outline headings", async () => {

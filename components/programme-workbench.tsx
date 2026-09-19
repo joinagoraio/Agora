@@ -44,6 +44,12 @@ import {
   type ProgrammeDocumentMode,
 } from "@/lib/programme/document-mode"
 import { deriveGuidancePipeline, pipelineInputFromWorkbench } from "@/lib/guidance/pipeline"
+import {
+  programmeHasChapterDocuments,
+  programmeSetupIncomplete,
+  shouldShowProgrammeSetupWizard,
+} from "@/lib/guidance/setup"
+import { ProgrammeSetupWizard } from "@/components/programme-setup-wizard"
 import { listBoundDocumentsForHelp } from "@/lib/programme/source-set-bindings"
 import { listProgrammeOutlineNodes } from "@/lib/actions/outline"
 import {
@@ -89,7 +95,9 @@ import {
   cancelAnalysisJob,
 } from "@/lib/actions/analysis"
 import { listArtefactVersions, restoreArtefactVersion, compareArtefactVersions } from "@/lib/actions/collaboration"
-import { listGenerationRuns, getProgrammeObservabilityMetrics } from "@/lib/actions/generation-run"
+import { listGenerationRuns, getProgrammeObservabilityMetrics, listWorkspaceCitationCatalog } from "@/lib/actions/generation-run"
+import { formatCitationLabel } from "@/lib/programme/citation-labels"
+import { estimateJobEta, formatEtaMs } from "@/lib/programme/job-eta"
 import { runMarkdownOrDocxExport, buildAuditPackageJson } from "@/lib/actions/export"
 import {
   getActiveProgrammePublication,
@@ -110,7 +118,7 @@ import { ConsultationOwnerPanel } from "@/components/consultation-owner-panel"
 import {
   AGENT_STAGES,
   documentOriginFromMetadata,
-  emptyProgrammeBindings,
+  parseProgrammeBindings,
   isProgrammeWorkbenchSection,
   PROGRAMME_WORKBENCH_SECTIONS,
   type DocumentOrigin,
@@ -274,6 +282,7 @@ export function ProgrammeWorkbench({
   currentUserId: currentUserIdProp = null,
   accessRole: accessRoleProp = null,
   initialDocumentOwnerId = null,
+  metadata,
 }: Props) {
   const workspaceSummary = workspaceSummaryProp ?? ""
   const workspaceDescription = workspaceDescriptionProp ?? ""
@@ -285,6 +294,7 @@ export function ProgrammeWorkbench({
 
   const [outlineNodeCount, setOutlineNodeCount] = useState(0)
   const [snapshotLoaded, setSnapshotLoaded] = useState(false)
+  const [wizardSession, setWizardSession] = useState(false)
   const [accessPanel, setAccessPanel] = useState<ProgrammeAccessPanel>(null)
   const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false)
 
@@ -469,7 +479,7 @@ export function ProgrammeWorkbench({
     [applyDocumentSearch, documentSearch.chapterId, writableChapters],
   )
 
-  const [bindings, setBindings] = useState<ProgrammeBindings>(emptyProgrammeBindings())
+  const [bindings, setBindings] = useState<ProgrammeBindings>(() => parseProgrammeBindings(metadata))
   const [measures, setMeasures] = useState<any[]>([])
   const [reports, setReports] = useState<any[]>([])
   const [runs, setRuns] = useState<any[]>([])
@@ -495,9 +505,14 @@ export function ProgrammeWorkbench({
   >([])
   const [notes, setNotes] = useState<WorkspaceNote[]>([])
   const [graph, setGraph] = useState<{ nodes: any[]; edges: any[] }>({ nodes: [], edges: [] })
-  const [duplicates, setDuplicates] = useState<Array<Array<{ id: string; title: string }>>>([])
+  const [duplicates, setDuplicates] = useState<Array<Array<{ id: string; title: string; score?: number; reason?: string }>>>([])
   const [fillProgress, setFillProgress] = useState<Array<{ title: string; status: string; error?: string }>>([])
+  const [fillStartedAt, setFillStartedAt] = useState<string | null>(null)
   const [filling, setFilling] = useState(false)
+  const [citationCatalog, setCitationCatalog] = useState<{
+    documents: Array<{ id: string; title: string; documentRole?: string | null }>
+    sections: Array<{ id: string; documentId: string; title: string; pageNumber?: number }>
+  }>({ documents: [], sections: [] })
   const [policies, setPolicies] = useState({
     distinctReviewer: false,
     stakeholderExportRequiresFreeze: false,
@@ -561,7 +576,7 @@ export function ProgrammeWorkbench({
 
   const refresh = () => {
     startTransition(async () => {
-      const [b, m, r, g, obs, graphResult, dupes, policyResult, reviewerResult, publicationResult, citableResult] =
+      const [b, m, r, g, obs, graphResult, dupes, policyResult, reviewerResult, publicationResult, citableResult, catalog] =
         await Promise.all([
         getProgrammeBindings(workspaceId),
         listProgrammeMeasures(workspaceId),
@@ -574,6 +589,7 @@ export function ProgrammeWorkbench({
         listProgrammeReviewers(workspaceId),
         getActiveProgrammePublication(workspaceId),
         listCitablePublications(spaceId, workspaceId),
+        listWorkspaceCitationCatalog(workspaceId),
       ])
       if (b.data) setBindings(b.data)
       setMeasures(m.data || [])
@@ -582,6 +598,10 @@ export function ProgrammeWorkbench({
       if (obs.data) setObservability(obs.data)
       if (graphResult.data) setGraph(graphResult.data)
       setDuplicates(dupes.data || [])
+      setCitationCatalog({
+        documents: catalog.documents || [],
+        sections: catalog.sections || [],
+      })
       if (policyResult.data) {
         setPolicies({
           distinctReviewer: policyResult.data.distinctReviewer,
@@ -594,6 +614,7 @@ export function ProgrammeWorkbench({
         if (policyResult.data.accessRole) setAccessRole(policyResult.data.accessRole)
         if (policyResult.data.fillJob?.progress?.length) {
           setFillProgress(policyResult.data.fillJob.progress)
+          setFillStartedAt(policyResult.data.fillJob.startedAt || null)
         }
       }
       setPublication(publicationResult.data || null)
@@ -655,6 +676,10 @@ export function ProgrammeWorkbench({
   }
 
   useEffect(() => {
+    setBindings(parseProgrammeBindings(metadata))
+    setChapters([])
+    setSnapshotLoaded(false)
+    setWizardSession(false)
     refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId])
@@ -664,6 +689,7 @@ export function ProgrammeWorkbench({
     const timer = window.setInterval(() => {
       void getFillProgrammeJob(workspaceId).then((result) => {
         if (result.data?.progress) setFillProgress(result.data.progress)
+        if (result.data?.startedAt) setFillStartedAt(result.data.startedAt)
         if (result.data?.status && result.data.status !== "running") {
           setFilling(false)
         }
@@ -687,6 +713,23 @@ export function ProgrammeWorkbench({
       ),
     [bindings, reports, measures, chapters, outlineNodeCount, observability],
   )
+  const setupIncomplete = programmeSetupIncomplete(bindings)
+  const hasChapterBody = chapters.some((chapter) => chapter.hasBody)
+  const canRunSetup = chromeJob !== "reviewer" && accessRole !== "viewer"
+  const showSetupWizard = shouldShowProgrammeSetupWizard({
+    canEdit: canRunSetup,
+    hasChapterBody,
+    setupIncomplete,
+    wizardSession,
+    ready: snapshotLoaded,
+    hasChapterDocuments: programmeHasChapterDocuments(bindings),
+    setupComplete: bindings.setupComplete,
+  })
+
+  useEffect(() => {
+    if (!snapshotLoaded || !setupIncomplete || bindings.setupComplete) return
+    setWizardSession(true)
+  }, [snapshotLoaded, setupIncomplete, bindings.setupComplete])
 
   useEffect(() => {
     if (isKnowledgeView || documentMode !== "focus") return
@@ -788,6 +831,7 @@ export function ProgrammeWorkbench({
       },
       reviewComplete: pipeline.stages.review,
       expertPromptDismissed,
+      setupInProgress: showSetupWizard,
     })
     return () => setGuidance(null)
   }, [
@@ -801,6 +845,7 @@ export function ProgrammeWorkbench({
     pipeline,
     setGuidance,
     setSection,
+    showSetupWizard,
     spaceId,
   ])
 
@@ -848,6 +893,7 @@ export function ProgrammeWorkbench({
           ) : null}
         </div>
       </header>
+      {showSetupWizard ? null : (
       <ProgrammeToolsToolbar
         groups={documentMenuGroups}
         activeSection={activeSection}
@@ -873,6 +919,7 @@ export function ProgrammeWorkbench({
           />
         }
       />
+      )}
       <ProgrammeAccessDialogs
         workspace={{
           id: workspaceId,
@@ -908,7 +955,27 @@ export function ProgrammeWorkbench({
             </div>
           </div>
         ) : (
-          <div className={`flex min-h-0 flex-1 overflow-hidden ${programmeDocumentCanvasClass({ paged: documentLayout.paged && !structureOpen })}`}>
+          <div className={`flex min-h-0 flex-1 overflow-hidden ${programmeDocumentCanvasClass({ paged: documentLayout.paged && !structureOpen && !showSetupWizard })}`}>
+            {showSetupWizard && !structureOpen ? (
+              <ProgrammeSetupWizard
+                workspaceId={workspaceId}
+                spaceId={spaceId}
+                bindings={bindings}
+                templates={templates}
+                corpusDocs={corpusDocs}
+                canEdit={canRunSetup}
+                onBindingsChange={setBindings}
+                onMessage={notify}
+                onRefresh={refresh}
+                onStartWriting={(next) => {
+                  setWizardSession(false)
+                  setDocumentMode("edit")
+                  const merged = { ...(next ?? bindings), setupComplete: true }
+                  setBindings(merged)
+                  void updateProgrammeBindings(workspaceId, merged)
+                }}
+              />
+            ) : (
             <ProgrammeChapterEditor
               workspaceId={workspaceId}
               spaceId={spaceId}
@@ -944,6 +1011,7 @@ export function ProgrammeWorkbench({
               layout={documentLayout}
               workspaceName={workspaceName}
             />
+            )}
           </div>
         )}
       </div>
@@ -1426,6 +1494,16 @@ export function ProgrammeWorkbench({
                     <button type="button" className="text-left" onClick={() => setSelectedReportId(open ? null : r.id)}>
                       {r.report_type} — {new Date(r.created_at).toLocaleString()} — findings:{" "}
                       {Array.isArray(r.findings) ? r.findings.length : 0}
+                      {(() => {
+                        const run = runs.find((item) => item.id === r.generation_run_id)
+                        const score = run?.citations?.groundedness?.score
+                        return score == null
+                          ? ""
+                          : ` · ${t("workspace.programme.groundednessRun", undefined, {
+                              score: String(score),
+                              issues: String(run?.citations?.groundedness?.issues?.length ?? 0),
+                            })}`
+                      })()}
                     </button>
                     <Button
                       size="sm"
@@ -1457,13 +1535,17 @@ export function ProgrammeWorkbench({
                           <p>{t("workspace.programme.findingConflict", undefined, { value: f.conflictWithDocumentId })}</p>
                         )}
                         {Array.isArray(f.citations) &&
-                          f.citations.map((c: { documentId: string; sectionId?: string; quote?: string }, index: number) => (
+                          f.citations.map((c: { documentId: string; sectionId?: string; quote?: string; pageNumber?: number }, index: number) => (
                             <p key={`${c.documentId}-${index}`}>
-                              {c.documentId}
-                              {c.sectionId ? ` § ${c.sectionId}` : ""}
+                              {formatCitationLabel(c, citationCatalog.documents, citationCatalog.sections)}
                               {c.quote ? ` — ${c.quote}` : ""}
                             </p>
                           ))}
+                        {f.oerTheme && (
+                          <p>
+                            {t("workspace.programme.oerTheme")}: {f.oerTheme}
+                          </p>
+                        )}
                         {r.generation_run_id && <p>run {String(r.generation_run_id).slice(0, 8)}</p>}
                       </div>
                     ))}
@@ -1589,7 +1671,12 @@ export function ProgrammeWorkbench({
               </p>
               {duplicates.map((group) => (
                 <div key={group.map((item) => item.id).join("-")} className="space-y-1 rounded-md border p-2 text-sm">
-                  <p>{group[0]?.title}</p>
+                  <p>
+                    {group[0]?.title}
+                    {group[0]?.reason === "near_duplicate" || group[0]?.reason === "cross_chapter"
+                      ? ` · ${t("workspace.programme.duplicatesNear", undefined, { score: String(group[0]?.score ?? "") })}`
+                      : ""}
+                  </p>
                   <ul className="space-y-1">
                     {group.map((item) => (
                       <li key={item.id} className="flex flex-wrap items-center justify-between gap-2">
@@ -1631,6 +1718,13 @@ export function ProgrammeWorkbench({
                   <span>
                     [{m.workflow_status}] {m.title} ({m.measure_type})
                     {m.outline_node_id ? ` · node ${String(m.outline_node_id).slice(0, 8)}` : ""}
+                    {Array.isArray(m.citations) && m.citations.length
+                      ? ` · ${m.citations
+                          .map((citation: { documentId: string; sectionId?: string; pageNumber?: number }) =>
+                            formatCitationLabel(citation, citationCatalog.documents, citationCatalog.sections),
+                          )
+                          .join("; ")}`
+                      : ""}
                   </span>
                   <div className="flex flex-wrap gap-1">
                     <Button
@@ -2003,11 +2097,39 @@ export function ProgrammeWorkbench({
                 {t("workspace.programme.noRuns")} {t("workspace.programme.emptyNext.provenance")}
               </li>
             )}
-            {runs.map((r) => (
-              <li key={r.id}>
-                {r.kind} — {r.model || "n/a"} — unused sources: {(r.unused_document_ids || []).length}
-              </li>
-            ))}
+            {runs.map((r) => {
+              const unused = Array.isArray(r.citations?.unusedSources) ? r.citations.unusedSources : []
+              const groundedness = r.citations?.groundedness
+              return (
+                <li key={r.id} className="space-y-1 rounded-md border p-2">
+                  <p>
+                    {r.kind} — {r.model || "n/a"}
+                    {groundedness
+                      ? ` · ${t("workspace.programme.groundednessRun", undefined, {
+                          score: String(groundedness.score ?? "—"),
+                          issues: String(groundedness.issues?.length ?? 0),
+                        })}`
+                      : ""}
+                  </p>
+                  {unused.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">{t("workspace.programme.unusedNone")}</p>
+                  ) : (
+                    <ul className="text-xs text-muted-foreground">
+                      {unused.map((item: { id: string; title: string; kind: string }) => (
+                        <li key={`${r.id}-${item.id}`}>
+                          {item.kind === "excluded"
+                            ? t("workspace.programme.unusedExcluded")
+                            : item.kind === "not_cited"
+                              ? t("workspace.programme.unusedNotCited")
+                              : t("workspace.programme.unusedShouldUse")}
+                          {`: ${item.title}`}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </TabsContent>
 
@@ -2484,8 +2606,13 @@ export function ProgrammeWorkbench({
                     notify(result.error || t("workspace.programme.exportFailed"), "error")
                     return
                   }
-                  openPrintPreview(result.data.content)
-                  notify(t("workspace.programme.exportPdfDone", undefined, { jobId: result.data.jobId }))
+                  if (result.data.pdfFallback || result.data.mimeType.includes("html")) {
+                    openPrintPreview(result.data.content)
+                    notify(t("workspace.programme.exportPdfFallback", undefined, { jobId: result.data.jobId }), "warning")
+                    return
+                  }
+                  downloadExportPayload(result.data)
+                  notify(t("workspace.programme.exportPdfFileDone", undefined, { jobId: result.data.jobId }))
                 })
               }
             >
@@ -2521,6 +2648,7 @@ export function ProgrammeWorkbench({
               onClick={() => {
                 setFilling(true)
                 setFillProgress([])
+                setFillStartedAt(new Date().toISOString())
                 startTransition(async () => {
                   const result = await fillProgrammeChapters(workspaceId, spaceId)
                   setFillProgress(result.data?.progress || [])
@@ -2617,6 +2745,18 @@ export function ProgrammeWorkbench({
           </div>
           {fillProgress.length > 0 && (
             <ul className="text-sm">
+              {(() => {
+                const eta = estimateJobEta({ startedAt: fillStartedAt, progress: fillProgress })
+                return (
+                  <li className="text-muted-foreground">
+                    {t("workspace.programme.fillEta", undefined, {
+                      eta: formatEtaMs(eta.remainingMs),
+                      done: String(eta.doneCount),
+                      total: String(fillProgress.length),
+                    })}
+                  </li>
+                )
+              })()}
               {fillProgress.map((item, index) => (
                 <li key={`${item.title}-${index}`}>
                   {t("workspace.programme.fillProgress", undefined, {
