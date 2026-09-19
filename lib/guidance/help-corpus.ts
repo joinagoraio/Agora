@@ -138,8 +138,8 @@ Production pipeline (derived, never checkboxes):
 2 bind — ≥1 vision and ≥1 existing-policy document
 3 analyse — ≥1 analysis report
 4 structure — template + outline nodes + ≥1 measure
-5 draft — ≥1 chapter body
-6 check — effects fields / quality control (hard approval gates stay in review policy)
+5 check — every measure has an effects direction; deviations need a written reason
+6 draft — ≥1 chapter body
 7 review — required items approved
 8 export — ≥1 successful export job
 

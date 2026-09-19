@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { trackGuidanceEvent } from "@/lib/guidance/telemetry"
-import { PIPELINE_STAGES, STAGE_TO_SECTION, type GuidancePipelineSnapshot, type PipelineStageId } from "@/lib/guidance/pipeline"
+import { PIPELINE_STAGES, STAGE_TARGET, STAGE_TO_SECTION, type GuidancePipelineSnapshot, type PipelineStageId } from "@/lib/guidance/pipeline"
 import type { GuidanceJob, GuidanceMode } from "@/lib/guidance/jobs"
 import { IconTooltip } from "@/components/icon-tooltip"
 
@@ -51,10 +51,6 @@ const NEXT_COPY: Record<Exclude<PipelineStageId, "orient">, string> = {
   export: "guidance.coach.nextExport",
 }
 
-const STAGE_TARGET: Partial<Record<PipelineStageId, string>> = {
-  bind: "bind-vision",
-  analyse: "run-analysis",
-}
 
 function displayHelpText(text: string) {
   return text.replace(/\n?NAVIGATE:\s*\S+/gi, "").trim()

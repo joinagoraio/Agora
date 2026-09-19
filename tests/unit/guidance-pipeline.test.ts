@@ -63,6 +63,7 @@ describe("guidance pipeline derivation", () => {
       }),
     )
     expect(snapshot.stages.analyse).toBe(true)
+    expect(snapshot.stages.check).toBe(false)
     expect(snapshot.firstIncomplete).toBe("structure")
   })
 
@@ -81,6 +82,26 @@ describe("guidance pipeline derivation", () => {
       }),
     )
     expect(snapshot.stages.structure).toBe(true)
+    expect(snapshot.firstIncomplete).toBe("check")
+    expect(snapshot.firstIncompleteSection).toBe(STAGE_TO_SECTION.check)
+  })
+
+  it("asks for effects before drafting once measures exist", () => {
+    const snapshot = deriveGuidancePipeline(
+      pipelineInputFromWorkbench({
+        ...empty,
+        bindings: {
+          environmentalVisionDocumentIds: ["v1"],
+          existingPolicyDocumentIds: ["p1"],
+          templateId: "tpl",
+        },
+        reports: [{ id: "r1" }],
+        outlineNodeCount: 3,
+        measures: [{ workflow_status: "generated", effects_direction: "positive", effects_deviation: false }],
+      }),
+    )
+    expect(snapshot.stages.check).toBe(true)
     expect(snapshot.firstIncomplete).toBe("draft")
+    expect(snapshot.firstIncompleteSection).toBe(STAGE_TO_SECTION.draft)
   })
 })

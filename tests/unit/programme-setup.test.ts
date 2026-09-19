@@ -99,6 +99,33 @@ describe("programme first-run setup", () => {
         ready: true,
         hasChapterDocuments: false,
       }),
+    ).toBe(true)
+  })
+
+  it("stays on sources after sample files bind so Start writing is the exit", () => {
+    const afterSeed = {
+      canEdit: true,
+      hasChapterBody: false,
+      setupIncomplete: false,
+      ready: true,
+      hasChapterDocuments: false,
+      setupComplete: false,
+    }
+    expect(shouldShowProgrammeSetupWizard({ ...afterSeed, wizardSession: true })).toBe(true)
+    expect(shouldShowProgrammeSetupWizard({ ...afterSeed, wizardSession: false })).toBe(true)
+  })
+
+  it("leaves the wizard only after Start writing", () => {
+    expect(
+      shouldShowProgrammeSetupWizard({
+        canEdit: true,
+        hasChapterBody: false,
+        setupIncomplete: false,
+        wizardSession: true,
+        ready: true,
+        hasChapterDocuments: false,
+        setupComplete: true,
+      }),
     ).toBe(false)
   })
 
