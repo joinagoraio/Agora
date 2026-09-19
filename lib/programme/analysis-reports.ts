@@ -30,29 +30,49 @@ export function diffAnalysisFindings(a: AnalysisFinding[], b: AnalysisFinding[])
   }
 }
 
+export function formatSectionEvidenceReport(
+  documents: SourceDocumentLike[],
+  sections: SourceSection[],
+  maxCharsPerSection = 1200,
+  maxSections = 40,
+): { text: string; used: number; total: number } {
+  if (sections.length === 0) {
+    const selected = documents.slice(0, maxSections)
+    return {
+      text: selected
+        .map((document) => {
+          const body = (document.content || "").replace(/<[^>]+>/g, " ").slice(0, 4000)
+          return `### ${document.title} (id=${document.id})\n${body}`
+        })
+        .join("\n\n"),
+      used: selected.length,
+      total: documents.length,
+    }
+  }
+  const byDoc = new Map(documents.map((document) => [document.id, document]))
+  const selected = sections.slice(0, maxSections)
+  return {
+    text: selected
+      .map((section) => {
+        const document = byDoc.get(section.documentId)
+        const body = (document?.content || "")
+          .replace(/<[^>]+>/g, " ")
+          .slice(Math.max(0, section.startOffset), Math.max(0, section.startOffset) + maxCharsPerSection)
+        return `### ${document?.title || section.documentId} § ${section.title} (id=${section.documentId} sectionId=${section.id} p.${section.pageNumber})\n${body}`
+      })
+      .join("\n\n"),
+    used: selected.length,
+    total: sections.length,
+  }
+}
+
 export function formatSectionEvidence(
   documents: SourceDocumentLike[],
   sections: SourceSection[],
   maxCharsPerSection = 1200,
+  maxSections = 40,
 ): string {
-  if (sections.length === 0) {
-    return documents
-      .map((document) => {
-        const body = (document.content || "").replace(/<[^>]+>/g, " ").slice(0, 4000)
-        return `### ${document.title} (id=${document.id})\n${body}`
-      })
-      .join("\n\n")
-  }
-  const byDoc = new Map(documents.map((document) => [document.id, document]))
-  return sections
-    .map((section) => {
-      const document = byDoc.get(section.documentId)
-      const body = (document?.content || "")
-        .replace(/<[^>]+>/g, " ")
-        .slice(Math.max(0, section.startOffset), Math.max(0, section.startOffset) + maxCharsPerSection)
-      return `### ${document?.title || section.documentId} § ${section.title} (id=${section.documentId} sectionId=${section.id} p.${section.pageNumber})\n${body}`
-    })
-    .join("\n\n")
+  return formatSectionEvidenceReport(documents, sections, maxCharsPerSection, maxSections).text
 }
 
 export function preflightAnalysisRun(input: {

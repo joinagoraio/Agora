@@ -697,6 +697,12 @@ const CORPUS_FIXTURES: Array<{ title: string; role: DocumentRole; content: strin
     content:
       "<h1>Housing programme 2024</h1><p>Continue two station-area housing pilots with provincial co-funding. Allocate budget 2026–2030. Success: two pilots contracted by 2028. Cite this programme when proposing measures that densify near stations.</p>",
   },
+  {
+    title: "Environmental effects report — station densification (fixture)",
+    role: "environmental_effects_report",
+    content:
+      "<h1>Environmental effects report</h1><p>Theme: liveability near stations. Densification near nodes is assessed as a positive effect when it reduces car kilometres. Theme: landscape quiet. Sprawl outside nodes is a negative deviation from this effects report.</p>",
+  },
 ]
 
 export async function seedProgrammeCorpusFixtures(workspaceId: string) {
@@ -1226,52 +1232,52 @@ export async function fillProgrammeChapters(
     return { data: { progress: job.progress, cancelled: true } }
   }
 
-  for (const node of todo) {
-    const latest = (await loadLatestFillJob(workspaceId)) || job
-    const cancelRequested = await isFillCancelRequested(workspaceId)
-    if (latest.cancelled || latest.id !== job.id || cancelRequested) {
-      job = cancelledFillJob(latest)
-      await persistFillJob(workspaceId, job, user?.id)
-      return { data: { progress: job.progress, cancelled: true } }
-    }
-
-    const chapter = await ensureChapterDocument(workspaceId, node.id, {
-      title: node.title,
-      purposeHtml: node.purpose,
-    })
-    if (chapter.error || !chapter.data) {
+  const FILL_CONCURRENCY = 2
+  let persistChain = Promise.resolve()
+  const persistProgress = (nodeId: string, status: "ok" | "error", error?: string) => {
+    persistChain = persistChain.then(async () => {
       job = {
         ...job,
         updatedAt: new Date().toISOString(),
-        progress: job.progress.map((item) =>
-          item.nodeId === node.id ? { ...item, status: "error", error: chapter.error } : item,
-        ),
+        progress: job.progress.map((item) => (item.nodeId === nodeId ? { ...item, status, error } : item)),
       }
-      await persistFillJob(workspaceId, job, user?.id)
-      continue
-    }
-    const latestBeforeDraft = (await loadLatestFillJob(workspaceId)) || job
-    if (latestBeforeDraft.cancelled || (await isFillCancelRequested(workspaceId))) {
-      job = cancelledFillJob(latestBeforeDraft)
-      await persistFillJob(workspaceId, job, user?.id)
-      return { data: { progress: job.progress, cancelled: true } }
-    }
-    const draft = await regenerateProgrammeChapter(workspaceId, node.id, {
-      documentId: chapter.data.documentId,
-      instructions: node.instructions || `Draft the required chapter “${node.title}”.`,
+      const saved = await persistFillJob(workspaceId, job, user?.id)
+      if (saved.data) job = saved.data
     })
-    job = {
-      ...job,
-      updatedAt: new Date().toISOString(),
-      progress: job.progress.map((item) =>
-        item.nodeId === node.id
-          ? { ...item, status: draft.error ? "error" : "ok", error: draft.error || undefined }
-          : item,
-      ),
-    }
-    const saved = await persistFillJob(workspaceId, job, user?.id)
-    if (saved.data) job = saved.data
+    return persistChain
   }
+
+  const queue = [...todo]
+  const workers = Array.from({ length: Math.min(FILL_CONCURRENCY, queue.length) }, async () => {
+    while (queue.length) {
+      const node = queue.shift()
+      if (!node) return
+      const latest = (await loadLatestFillJob(workspaceId)) || job
+      if (latest.cancelled || latest.id !== job.id || (await isFillCancelRequested(workspaceId))) {
+        queue.length = 0
+        return
+      }
+      const chapter = await ensureChapterDocument(workspaceId, node.id, {
+        title: node.title,
+        purposeHtml: node.purpose,
+      })
+      if (chapter.error || !chapter.data) {
+        await persistProgress(node.id, "error", chapter.error)
+        continue
+      }
+      if ((await loadLatestFillJob(workspaceId))?.cancelled || (await isFillCancelRequested(workspaceId))) {
+        queue.length = 0
+        return
+      }
+      const draft = await regenerateProgrammeChapter(workspaceId, node.id, {
+        documentId: chapter.data.documentId,
+        instructions: node.instructions || `Draft the required chapter “${node.title}”.`,
+      })
+      await persistProgress(node.id, draft.error ? "error" : "ok", draft.error || undefined)
+    }
+  })
+  await Promise.all(workers)
+  await persistChain
 
   const latest = (await loadLatestFillJob(workspaceId)) || job
   if (latest.cancelled || (await isFillCancelRequested(workspaceId))) {

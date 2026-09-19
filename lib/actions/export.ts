@@ -72,7 +72,17 @@ export async function composeWorkspaceProgramme(workspaceId: string, title: stri
     citations: Array.isArray(m.citations) ? m.citations : [],
     workflowStatus: String(m.workflow_status || ""),
   }))
-  const markdown = composeProgrammeMarkdown({ title, nodes, chapters, measures: composedMeasures })
+  const { listWorkspaceCitationCatalog } = await import("@/lib/actions/generation-run")
+  const { formatCitationLabel } = await import("@/lib/programme/citation-labels")
+  const catalog = await listWorkspaceCitationCatalog(workspaceId)
+  const citationLabels: Record<string, string> = {}
+  for (const measure of composedMeasures) {
+    for (const citation of measure.citations) {
+      if (!citation?.documentId || citationLabels[citation.documentId]) continue
+      citationLabels[citation.documentId] = formatCitationLabel(citation, catalog.documents, catalog.sections)
+    }
+  }
+  const markdown = composeProgrammeMarkdown({ title, nodes, chapters, measures: composedMeasures, citationLabels })
   const citationGraph = composeCitationGraph(composedMeasures)
   return { markdown, citationGraph, measures: composedMeasures, nodeCount: nodes.length }
 }
@@ -167,8 +177,17 @@ export async function runMarkdownOrDocxExport(input: {
       resultPayload = markdown
       mimeType = "text/markdown;charset=utf-8"
     } else if (input.format === "pdf") {
-      resultPayload = markdownToPrintHtml(input.title, markdown)
-      mimeType = "text/html;charset=utf-8"
+      const html = markdownToPrintHtml(input.title, markdown)
+      const { renderPrintHtmlToPdf } = await import("@/lib/export/html-to-pdf")
+      const pdf = await renderPrintHtmlToPdf(html)
+      if (pdf.ok) {
+        resultPayload = pdf.pdf.toString("base64")
+        encoding = "base64"
+        mimeType = "application/pdf"
+      } else {
+        resultPayload = html
+        mimeType = "text/html;charset=utf-8"
+      }
     } else {
       const buffer = await buildDocxFromSections(input.title, markdownToExportSections(markdown))
       resultPayload = buffer.toString("base64")
@@ -205,10 +224,13 @@ export async function runMarkdownOrDocxExport(input: {
           input.format === "docx"
             ? `${slugify(input.title)}.docx`
             : input.format === "pdf"
-              ? `${slugify(input.title)}-print.html`
+              ? mimeType.includes("pdf")
+                ? `${slugify(input.title)}.pdf`
+                : `${slugify(input.title)}-print.html`
               : input.format === "json"
                 ? `${slugify(input.title)}.json`
                 : `${slugify(input.title)}.md`,
+        pdfFallback: input.format === "pdf" && mimeType.includes("html"),
       },
     }
   } catch (error) {

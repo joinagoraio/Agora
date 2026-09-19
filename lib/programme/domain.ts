@@ -57,6 +57,8 @@ export type ProgrammeBindings = {
   chapterAgentBindings?: Record<string, string>
   /** outline node id → workspace document id (chapter drafts) */
   chapterDocuments?: Record<string, string>
+  /** First-run setup was finished (including a blank outline that skips sources). */
+  setupComplete?: boolean
 }
 
 export function emptyProgrammeBindings(): ProgrammeBindings {
@@ -72,6 +74,7 @@ export function emptyProgrammeBindings(): ProgrammeBindings {
     agentBindings: {},
     chapterAgentBindings: {},
     chapterDocuments: {},
+    setupComplete: false,
   }
 }
 
@@ -143,6 +146,7 @@ export function parseProgrammeBindings(metadata: Record<string, unknown> | null 
     agentBindings,
     chapterAgentBindings,
     chapterDocuments,
+    setupComplete: raw.setupComplete === true,
   }
 }
 

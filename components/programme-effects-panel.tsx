@@ -99,6 +99,59 @@ export function ProgrammeEffectsPanel({ workspaceId, measures, reports = [], onM
         {t("workspace.programme.runOer")}
       </Button>
 
+      {(() => {
+        const latestEffects = reports.find((report) => report.report_type === "effects")
+        const rows = Array.isArray(latestEffects?.findings) ? latestEffects.findings : []
+        if (rows.length === 0) return null
+        return (
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b text-muted-foreground">
+                  <th className="p-2">{t("workspace.programme.measuresTitle")}</th>
+                  <th className="p-2">{t("workspace.programme.oerTheme")}</th>
+                  <th className="p-2">{t("workspace.programme.effectsDirectionLabel")}</th>
+                  <th className="p-2">{t("workspace.programme.effectsDeviation")}</th>
+                  <th className="p-2">{t("workspace.programme.effectsJustification")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((item: {
+                  id?: string
+                  measureId?: string
+                  summary?: string
+                  oerTheme?: string
+                  effectsDirection?: string
+                  effectsDeviation?: boolean
+                  effectsJustification?: string
+                  citations?: Array<{ quote?: string }>
+                }) => {
+                  const measure = matchFindingToMeasure(
+                    {
+                      id: item.id || item.measureId || "finding",
+                      summary: item.summary || "",
+                      disposition: "adapt",
+                      citations: [],
+                      measureId: item.measureId,
+                    },
+                    measures,
+                  )
+                  return (
+                    <tr key={item.id || `${item.measureId}-${item.oerTheme}`} className="border-b align-top">
+                      <td className="p-2">{measure?.title || item.summary}</td>
+                      <td className="p-2">{item.oerTheme || "—"}</td>
+                      <td className="p-2">{item.effectsDirection || "unknown"}</td>
+                      <td className="p-2">{item.effectsDeviation ? "yes" : "no"}</td>
+                      <td className="p-2">{item.effectsJustification || item.citations?.[0]?.quote || "—"}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      })()}
+
       <ul className="space-y-4">
         {measures.map((m) => {
           const draft = drafts[m.id]

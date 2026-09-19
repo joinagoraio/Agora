@@ -83,11 +83,12 @@ export const DEFAULT_VISION_PLAYBOOK = `VISION GRAPH RULES:
 - Output ONLY valid JSON: { "reportType": "coverage", "findings": [ ${FINDING_JSON_SHAPE} ] }`
 
 export const DEFAULT_OER_PLAYBOOK = `ENVIRONMENTAL EFFECTS RULES:
-- For each measure, state effectsDirection: positive | negative | neutral | unknown
+- Extract OER themes/anchors from the bound effects report, then score each measure against those themes
+- For each measure × relevant OER theme, state effectsDirection: positive | negative | neutral | unknown
 - Set effectsDeviation true when the measure worsens or diverges from the effects report
 - Require effectsJustification when deviation is true
-- Each finding MUST include id, disposition (adopt|adapt|drop|missing), and summary
-- Output ONLY valid JSON: { "reportType": "effects", "findings": [ ${FINDING_JSON_SHAPE} ] }`
+- Each finding MUST include id, measureId from the MEASURES list, oerTheme, effectsDirection, effectsDeviation, summary, and a citation into the effects report
+- Output ONLY valid JSON: { "reportType": "effects", "findings": [ { "id", "disposition", "summary", "measureId", "oerTheme", "effectsDirection", "effectsDeviation", "effectsJustification?", "citations": [] } ] }`
 
 export const DEFAULT_QC_PLAYBOOK = `QUALITY CONTROL RULES:
 - Scan inconsistency (prose vs registry), overlap, missing topics vs template, conflicts, provincial-interest coverage, style vs quality rules

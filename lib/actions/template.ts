@@ -15,6 +15,7 @@ import {
 } from "@/lib/programme/domain"
 import { getServerTranslator } from "@/lib/i18n/server"
 import { HANDBOOK_SEED_NODES, HANDBOOK_TEMPLATE_META, HANDBOOK_TEMPLATE_NAME } from "@/lib/programme/handbook-seed"
+import { LEEFREGIO_SEED_NODES, LEEFREGIO_TEMPLATE_META, LEEFREGIO_TEMPLATE_NAME } from "@/lib/programme/leefregio-seed"
 import { programmeTemplateMetaSchema } from "@/lib/programme/structured-artefacts"
 
 const OUTLINE_SELECT =
@@ -470,9 +471,59 @@ export async function seedHandbookTemplateIfNone(spaceId: string) {
   return { data: { template: created.data, nodes: nodes.data, created: true } }
 }
 
-/** @deprecated Use seedHandbookTemplateIfNone — kept as the public name used by outline ensure. */
+export async function seedLeefregioTemplateIfNone(spaceId: string) {
+  try {
+    await requireAuthAndPermission("space:update", { spaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+
+  const supabase = await createClient()
+  const { data: existing } = await supabase
+    .from("programme_templates")
+    .select("id, space_id, name, quality_rules, output_form, created_at")
+    .eq("space_id", spaceId)
+    .eq("name", LEEFREGIO_TEMPLATE_NAME)
+    .maybeSingle()
+
+  if (existing) {
+    const nodes = await listOutlineNodesForTemplate(existing.id)
+    return { data: { template: mapTemplateRow(existing), nodes: nodes.data, created: false } }
+  }
+
+  const created = await createProgrammeTemplate({
+    spaceId,
+    name: LEEFREGIO_TEMPLATE_NAME,
+    qualityRules: LEEFREGIO_TEMPLATE_META.qualityRules,
+    outputForm: LEEFREGIO_TEMPLATE_META.outputForm,
+  })
+  if (created.error || !created.data) return { error: created.error || "Seed failed" }
+
+  for (const node of LEEFREGIO_SEED_NODES) {
+    const inserted = await upsertOutlineNode({
+      spaceId,
+      templateId: created.data.id,
+      title: node.title,
+      purpose: node.purpose,
+      instructions: node.instructions,
+      fieldSpecs: node.fieldSpecs,
+      qualityRules: node.qualityRules,
+      outputForm: node.outputForm,
+      relationHints: node.relationHints,
+      required: node.required,
+      sortOrder: node.sortOrder,
+    })
+    if (inserted.error) return { error: inserted.error }
+  }
+
+  const nodes = await listOutlineNodesForTemplate(created.data.id)
+  return { data: { template: created.data, nodes: nodes.data, created: true } }
+}
+
+/** Default standard outline is the Sterke Leefregio's casus. Handbook remains an extra template. */
 export async function createDefaultProgrammeTemplate(spaceId: string) {
-  const result = await seedHandbookTemplateIfNone(spaceId)
+  await seedHandbookTemplateIfNone(spaceId)
+  const result = await seedLeefregioTemplateIfNone(spaceId)
   if (result.error || !result.data) return { error: result.error || "Failed" }
   return { data: result.data.template }
 }

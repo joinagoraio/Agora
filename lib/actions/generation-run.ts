@@ -65,23 +65,64 @@ export async function recordGenerationRun(input: GenerationRunInput) {
 }
 
 export async function computeUnusedDocumentIds(workspaceId: string, usedIds: string[]) {
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from("documents")
-    .select("id")
-    .eq("workspace_id", workspaceId)
-    .neq("status", "archived")
+  const report = await computeUnusedSourceReport(workspaceId, usedIds)
+  if (report.error) return { error: report.error, data: [] as string[] }
+  const { unusedDocumentIdsFromReport } = await import("@/lib/programme/unused-sources")
+  return { data: unusedDocumentIdsFromReport(report.data || []) }
+}
 
-  if (error) return { error: error.message, data: [] as string[] }
-  const used = new Set(usedIds)
-  return { data: (data || []).map((d) => d.id).filter((id) => !used.has(id)) }
+export async function listWorkspaceCitationCatalog(workspaceId: string) {
+  const supabase = await createClient()
+  const [documents, sections] = await Promise.all([
+    supabase
+      .from("documents")
+      .select("id, title, document_role")
+      .eq("workspace_id", workspaceId)
+      .neq("status", "archived")
+      .neq("status", "deleted"),
+    supabase
+      .from("document_sections")
+      .select("id, document_id, title, page_number")
+      .eq("workspace_id", workspaceId),
+  ])
+  return {
+    documents: (documents.data || []).map((row) => ({
+      id: row.id,
+      title: row.title || row.id,
+      documentRole: row.document_role ?? null,
+    })),
+    sections: (sections.data || []).map((row) => ({
+      id: row.id,
+      documentId: row.document_id,
+      title: row.title,
+      pageNumber: row.page_number,
+    })),
+  }
+}
+
+export async function computeUnusedSourceReport(
+  workspaceId: string,
+  sourceDocumentIds: string[],
+  citedDocumentIds: string[] = [],
+  requiredRoles?: readonly string[],
+) {
+  const catalog = await listWorkspaceCitationCatalog(workspaceId)
+  const { buildUnusedSourceReport } = await import("@/lib/programme/unused-sources")
+  return {
+    data: buildUnusedSourceReport({
+      documents: catalog.documents,
+      sourceDocumentIds,
+      citedDocumentIds,
+      requiredRoles,
+    }),
+  }
 }
 
 export async function listGenerationRuns(workspaceId: string, limit = 20) {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("generation_runs")
-    .select("id, kind, model, created_at, source_document_ids, unused_document_ids, output_ref")
+    .select("id, kind, model, created_at, source_document_ids, unused_document_ids, output_ref, citations")
     .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false })
     .limit(limit)

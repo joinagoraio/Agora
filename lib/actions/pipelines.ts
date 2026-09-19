@@ -67,15 +67,25 @@ export async function mergeMeasureFragment(workspaceId: string, rawJson: string)
 
 export async function findDuplicateMeasures(workspaceId: string) {
   const existing = await listProgrammeMeasures(workspaceId)
-  const byTitle = new Map<string, Array<{ id: string; title: string; outline_node_id?: string | null }>>()
-  for (const measure of existing.data || []) {
-    const key = String(measure.title || "")
-      .trim()
-      .toLowerCase()
-    const list = byTitle.get(key) || []
-    list.push(measure)
-    byTitle.set(key, list)
+  const { findNearDuplicateMeasureGroups } = await import("@/lib/programme/measure-duplicates")
+  const groups = findNearDuplicateMeasureGroups(
+    (existing.data || []).map((measure: { id: string; title: string; specific_action?: string; narrative?: string; outline_node_id?: string | null }) => ({
+      id: measure.id,
+      title: measure.title,
+      specificAction: measure.specific_action,
+      narrative: measure.narrative,
+      outlineNodeId: measure.outline_node_id,
+    })),
+  )
+  return {
+    data: groups.map((group) =>
+      group.members.map((member) => ({
+        id: member.id,
+        title: member.title,
+        outline_node_id: member.outlineNodeId,
+        score: group.score,
+        reason: group.reason,
+      })),
+    ),
   }
-  const duplicates = [...byTitle.values()].filter((list) => list.length > 1)
-  return { data: duplicates }
 }

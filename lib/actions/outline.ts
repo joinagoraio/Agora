@@ -10,6 +10,7 @@ import {
 } from "@/lib/programme/domain"
 import { createDefaultProgrammeTemplate, listOutlineNodesForTemplate } from "@/lib/actions/template"
 import { updateProgrammeBindings } from "@/lib/actions/programme"
+import { getServerTranslator } from "@/lib/i18n/server"
 
 export async function listProgrammeOutlineNodes(templateId: string): Promise<{
   data: ProgrammeOutlineNode[]
@@ -56,6 +57,52 @@ export async function ensureProgrammeOutline(workspaceId: string, spaceId: strin
 
   const nodes = await listProgrammeOutlineNodes(seeded.data.id)
   return { data: { templateId: seeded.data.id, nodes: nodes.data } }
+}
+
+/** Create a programme-owned empty outline and finish first-run setup. */
+export async function createBlankProgrammeOutline(workspaceId: string, spaceId: string) {
+  try {
+    await requireAuthAndPermission("workspace:update", { workspaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+
+  const supabase = await createClient()
+  const { data: workspace, error: wsError } = await supabase
+    .from("workspaces")
+    .select("name, metadata, space_id")
+    .eq("id", workspaceId)
+    .single()
+  if (wsError || !workspace || workspace.space_id !== spaceId) {
+    return { error: wsError?.message || "Workspace not found" }
+  }
+
+  const bindings = parseProgrammeBindings(workspace.metadata as Record<string, unknown>)
+  const { t } = await getServerTranslator()
+  const { data: template, error: templateError } = await supabase
+    .from("programme_templates")
+    .insert({
+      space_id: spaceId,
+      name: workspace.name?.trim() || t("space.settings.templates.newName"),
+    })
+    .select("id")
+    .single()
+  if (templateError || !template) return { error: templateError?.message || "Failed to create outline" }
+
+  const { error: nodeError } = await supabase.from("programme_outline_nodes").insert({
+    template_id: template.id,
+    title: t("workspace.programme.outlineNewChapter"),
+    purpose: null,
+    required: true,
+    sort_order: 1,
+  })
+  if (nodeError) return { error: nodeError.message }
+
+  const nextBindings = { ...bindings, templateId: template.id, setupComplete: true }
+  const saved = await updateProgrammeBindings(workspaceId, nextBindings)
+  if (saved.error) return { error: saved.error }
+
+  return { data: { templateId: template.id, bindings: nextBindings } }
 }
 
 export async function syncProgrammeOutlineFromEditor(input: {

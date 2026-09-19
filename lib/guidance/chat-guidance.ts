@@ -15,4 +15,5 @@ export type ChatGuidanceConfig = {
   onNavigate?: (section: string, target?: string) => void
   reviewComplete?: boolean
   expertPromptDismissed?: boolean
+  setupInProgress?: boolean
 }

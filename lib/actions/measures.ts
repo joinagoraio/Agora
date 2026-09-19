@@ -8,7 +8,7 @@ import {
   parseMeasureCandidatesJson,
   type MeasureCandidate,
 } from "@/lib/programme/structured-artefacts"
-import { recordGenerationRun, computeUnusedDocumentIds } from "@/lib/actions/generation-run"
+import { recordGenerationRun } from "@/lib/actions/generation-run"
 import { compileSystemPrompt } from "@/lib/chat/playbook-compiler"
 import { boundAgentId, parseProgrammeBindings } from "@/lib/programme/domain"
 import { listProgrammeOutlineNodes } from "@/lib/actions/outline"
@@ -467,7 +467,15 @@ Return ONLY the JSON object with a "measures" array.`
     if (result.data) saved.push(result.data)
   }
 
-  const unused = await computeUnusedDocumentIds(workspaceId, sourceIds)
+  const { computeUnusedSourceReport } = await import("@/lib/actions/generation-run")
+  const { unusedDocumentIdsFromReport } = await import("@/lib/programme/unused-sources")
+  const { citedDocumentIdsFromUnknown } = await import("@/lib/programme/citation-labels")
+  const unused = await computeUnusedSourceReport(
+    workspaceId,
+    sourceIds,
+    citedDocumentIdsFromUnknown(saved),
+    agentVersion?.sourceRoles,
+  )
   await recordGenerationRun({
     workspaceId,
     kind: "measures",
@@ -477,9 +485,15 @@ Return ONLY the JSON object with a "measures" array.`
     temperature,
     instructions,
     sourceDocumentIds: sourceIds,
-    unusedDocumentIds: unused.data || [],
+    unusedDocumentIds: unusedDocumentIdsFromReport(unused.data || []),
     outputRef: `measures:${saved.length}`,
-    citations: { parseErrors: errors, sourceCount: sourceIds.length, accepted: saved.length, sourcePreview },
+    citations: {
+      parseErrors: errors,
+      sourceCount: sourceIds.length,
+      accepted: saved.length,
+      sourcePreview,
+      unusedSources: unused.data || [],
+    },
     userId: user.id,
   })
 

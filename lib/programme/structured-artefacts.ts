@@ -54,6 +54,8 @@ export const analysisFindingSchema = z.object({
   addressed: z.boolean().optional(),
   effectsDirection: effectsDirectionSchema.optional(),
   effectsDeviation: z.boolean().optional(),
+  effectsJustification: z.string().optional(),
+  oerTheme: z.string().optional(),
   citations: z.array(measureCitationSchema).default([]),
 })
 
@@ -243,6 +245,8 @@ function coerceFinding(item: unknown, index: number): unknown {
         ? pickString(record, ["effectsDirection", "effects_direction"])
         : undefined,
     effectsDeviation: record.effectsDeviation === true || record.effects_deviation === true,
+    effectsJustification: pickString(record, ["effectsJustification", "effects_justification"]) || undefined,
+    oerTheme: pickString(record, ["oerTheme", "oer_theme", "theme", "effectsTheme"]) || undefined,
     citations: coerceFindingCitations(record.citations),
   }
 }

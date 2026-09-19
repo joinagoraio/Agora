@@ -153,6 +153,12 @@ describe("programme domain (Phase 0)", () => {
     })
     expect(bindings.chapterDocuments).toEqual({ "node-1": "doc-1" })
     expect(emptyProgrammeBindings().chapterDocuments).toEqual({})
+    expect(emptyProgrammeBindings().setupComplete).toBe(false)
+    expect(
+      parseProgrammeBindings({
+        programmeBindings: { setupComplete: true },
+      }).setupComplete,
+    ).toBe(true)
   })
 
   it("parses chapter agent bindings and resolves draft agent fallback", () => {

@@ -26,7 +26,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { useProgrammeTextHistory } from "@/components/programme-text-history"
 import { useI18n } from "@/lib/i18n/use-i18n"
-import { listProgrammeOutlineNodes, ensureProgrammeOutline } from "@/lib/actions/outline"
+import { listProgrammeOutlineNodes } from "@/lib/actions/outline"
 import {
   ensureChapterDocument,
   getChapterDocument,
@@ -1051,32 +1051,7 @@ export function ProgrammeChapterEditor({
           </div>
         </>
       ) : !bindings.templateId ? (
-        <div className="mx-auto w-full max-w-7xl space-y-2 px-8 py-8 md:px-14">
-          <p className="text-sm">{t("workspace.programme.editorNeedOutline")} {t("workspace.programme.emptyNext.editor")}</p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  const result = await ensureProgrammeOutline(workspaceId, spaceId)
-                  if (result.error) {
-                    onMessage(result.error, "error")
-                    return
-                  }
-                  if (result.data?.templateId) {
-                    onBindingsChange({ ...bindings, templateId: result.data.templateId })
-                    onMessage(t("workspace.programme.outlineReady"))
-                  }
-                })
-              }
-            >
-              {t("workspace.programme.outlineEnsure")}
-            </Button>
-            <Button variant="outline" onClick={onGoOutline}>
-              {t("workspace.programme.setupGoOutline")}
-            </Button>
-          </div>
-        </div>
+        <div className="h-full min-h-0 flex-1" />
       ) : (
         <>
           {nodes.length === 0 && (
