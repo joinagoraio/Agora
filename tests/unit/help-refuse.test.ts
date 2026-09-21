@@ -58,6 +58,16 @@ describe("help route isolation", () => {
   })
 })
 
+describe("document upload insert", () => {
+  it("writes the file location to external_url", () => {
+    const finalize = readFileSync(resolve(process.cwd(), "app/api/documents/upload-finalize/route.ts"), "utf8")
+    const upload = readFileSync(resolve(process.cwd(), "app/api/documents/upload/route.ts"), "utf8")
+    expect(finalize).toMatch(/external_url:\s*publicUrl/)
+    expect(finalize).not.toMatch(/^\s*url:\s*publicUrl/m)
+    expect(upload).toMatch(/external_url:\s*publicUrl/)
+  })
+})
+
 describe("programme landing from job", () => {
   it("lands on the document unless a section is requested", () => {
     expect(resolveProgrammeLandingSection({ job: "reviewer" })).toBe("editor")

@@ -43,3 +43,8 @@ Safe to continue the dry-run. Not Flevoland-tuned. Fix after the session, do not
   - **Fixed in this batch.** QC reports a missing handbook instead of inventing one. Still no official Handleiding in this dry-run.
 - **Output language follows the profile.** English UI → English findings and chapters. Switch the account to Dutch before analysis if the toets should look Dutch.
   - **No code change.** Say this at the restart of the dry-run.
+
+## Found in the local dry-run (21 Sep, after the first batch)
+
+- **Upload casus markdown fails with “Failed to create document record”.** The finalize insert wrote a `url` column that does not exist. The table column is `external_url`. **Fixed in this batch.**
+- **Generate measures replaces the page with “Something went wrong”.** `resolveAgentVersionLlm` throws when the bound specialist’s catalog model is missing or disabled (local default agents point at disabled `gpt-4o-mini`). Analysis already caught this; measures did not. **Fixed in this batch:** measures/draft return `{ error }`; bound-model resolve falls back to the platform draft model so the page stays.

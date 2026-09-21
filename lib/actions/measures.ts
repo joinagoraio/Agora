@@ -367,7 +367,12 @@ export async function generateProgrammeMeasuresFromContext(
   const { assessMeasureCitations } = await import("@/lib/programme/reliability")
   const { getTenantIdForSpace, resolveAgentVersionLlm } = await import("@/lib/llm/resolve")
   const tenantId = workspace.space_id ? await getTenantIdForSpace(workspace.space_id) : null
-  const llm = await resolveAgentVersionLlm({ tenantId, spaceId: workspace.space_id, agentVersion })
+  let llm
+  try {
+    llm = await resolveAgentVersionLlm({ tenantId, spaceId: workspace.space_id, agentVersion })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not resolve the measures model" }
+  }
   const model = llm.model
   const provider = llm.provider
   const { loadPromptLayers } = await import("@/lib/llm/prompts")

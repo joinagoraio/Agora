@@ -335,16 +335,20 @@ export async function resolveAgentVersionLlm(input: {
     return resolvePlatformTaskLlm("draft")
   }
   if (input.tenantId) {
-    const resolved = await resolveTenantAgentLlm({
-      tenantId: input.tenantId,
-      spaceId: input.spaceId,
-      catalogModelId: input.agentVersion.catalogModelId,
-      provider: input.agentVersion.provider,
-      model: input.agentVersion.model,
-    })
-    return {
-      ...resolved,
-      endpoint: input.agentVersion.endpoint || resolved.endpoint,
+    try {
+      const resolved = await resolveTenantAgentLlm({
+        tenantId: input.tenantId,
+        spaceId: input.spaceId,
+        catalogModelId: input.agentVersion.catalogModelId,
+        provider: input.agentVersion.provider,
+        model: input.agentVersion.model,
+      })
+      return {
+        ...resolved,
+        endpoint: input.agentVersion.endpoint || resolved.endpoint,
+      }
+    } catch {
+      return resolvePlatformTaskLlm("draft")
     }
   }
   return resolvePlatformTaskLlm("draft")

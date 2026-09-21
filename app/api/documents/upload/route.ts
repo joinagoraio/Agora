@@ -432,7 +432,7 @@ export async function POST(req: NextRequest) {
         external_id: fileName,
         title: documentTitle,
         content: sanitizeContentForDatabase(documentSummary),
-        url: publicUrl,
+        external_url: publicUrl,
         status: "active",
         classification: validated.classification,
         metadata: {

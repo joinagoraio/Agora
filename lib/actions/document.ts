@@ -732,7 +732,7 @@ export async function uploadDocument(
       external_id: fileName,
       title: documentTitle,
       content: sanitizeContentForDatabase(documentSummary), // Store AI-generated summary for card display
-      url: publicUrl,
+      external_url: publicUrl,
       status: "active", // Set status to active for new uploads
       classification: classification || "internal", // Default to internal
       metadata: {
@@ -1254,7 +1254,7 @@ export async function addDocumentsFromSource(
           external_id: doc.identifier || doc.title,
           title: doc.title,
           content: sanitizeContentForDatabase(documentSummary), // Store AI-generated summary for card display
-          url: publicUrl,
+          external_url: publicUrl,
           classification: classification || "internal", // Default to internal
           metadata: {
             type: doc.type,
@@ -1786,13 +1786,18 @@ export async function generateWorkspaceDocumentDraft(
   const runtimeConfig = parsePlaybookRuntimeConfig(playbookConfig)
   const effectiveCitationMode = citationMode ?? runtimeConfig.citationMode
   const tenantId = workspace.space_id ? await getTenantIdForSpace(workspace.space_id) : null
-  const resolved = tenantId && agentVersion
-    ? await resolveAgentVersionLlm({
-        tenantId,
-        spaceId: workspace.space_id,
-        agentVersion,
-      })
-    : await import("@/lib/llm/resolve").then((m) => m.resolvePlatformTaskLlm("draft"))
+  let resolved
+  try {
+    resolved = tenantId && agentVersion
+      ? await resolveAgentVersionLlm({
+          tenantId,
+          spaceId: workspace.space_id,
+          agentVersion,
+        })
+      : await import("@/lib/llm/resolve").then((m) => m.resolvePlatformTaskLlm("draft"))
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not resolve the draft model" }
+  }
   const model = resolved.model
   const provider = resolved.provider
   const resolvedApiKey = resolved.apiKey
