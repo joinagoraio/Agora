@@ -20,9 +20,10 @@ mkdir -p "$HOME/.ssh"
 chmod 700 "$HOME/.ssh"
 ssh-keyscan -H "$HETZNER_HOST" >> "$HOME/.ssh/known_hosts" 2>/dev/null
 
-SSH=(ssh -i "$KEY_FILE" -o IdentitiesOnly=yes -o BatchMode=yes)
+SSH=(ssh -i "$KEY_FILE" -o IdentitiesOnly=yes -o BatchMode=yes
+  -o ServerAliveInterval=30 -o ServerAliveCountMax=20)
 RSYNC=(rsync -az --delete
-  -e "ssh -i $KEY_FILE -o IdentitiesOnly=yes -o BatchMode=yes"
+  -e "ssh -i $KEY_FILE -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=20"
   --exclude '.git/'
   --exclude 'node_modules/'
   --exclude '.next/'

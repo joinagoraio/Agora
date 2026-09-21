@@ -78,6 +78,10 @@ export async function POST(req: Request) {
     }
 
     const input = parsed.data
+    const documentTitles = input.documentTitles?.map((doc) => ({
+      title: doc.title,
+      role: doc.role ?? null,
+    }))
     if (input.workspaceId) {
       const { data: member } = await supabase
         .from("workspace_members")
@@ -175,7 +179,7 @@ export async function POST(req: Request) {
 
     if (glossary) {
       const glossaryText = composeGlossaryHelp(glossary.key, glossary.definition, {
-        documentTitles: input.documentTitles,
+        documentTitles,
         language: helpLanguage,
         topic: glossary.key,
         question: input.message,
@@ -197,7 +201,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const titles = (input.documentTitles || [])
+    const titles = (documentTitles || [])
       .map((doc) => `${doc.title}${doc.role ? ` (${doc.role})` : ""}`)
       .join("; ")
 
@@ -246,7 +250,7 @@ export async function POST(req: Request) {
     }
 
     const formatted = compileHelpAnswer(result.text, {
-      documentTitles: input.documentTitles,
+      documentTitles,
       language: helpLanguage,
       question: input.message,
     })
