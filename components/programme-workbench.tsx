@@ -1674,6 +1674,7 @@ export function ProgrammeWorkbench({
               data-guidance-target="generate-measures"
               onClick={() =>
                 startTransition(async () => {
+                  try {
                   const result = await generateProgrammeMeasuresFromContext(workspaceId, {
                     instructions: measureInstructions || undefined,
                     count: 5,
@@ -1691,6 +1692,9 @@ export function ProgrammeWorkbench({
                     errCount > 0 ? "warning" : "success",
                   )
                   refresh()
+                  } catch (error) {
+                    notify(error instanceof Error ? error.message : t("workspace.programme.exportFailed"), "error")
+                  }
                 })
               }
             >

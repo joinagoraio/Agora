@@ -209,7 +209,7 @@ export async function POST(req: NextRequest) {
         external_id: fileName,
         title: documentTitle,
         content: sanitizeContentForDatabase(documentSummary),
-        url: publicUrl,
+        external_url: publicUrl,
         status: "active",
         classification,
         metadata: {
@@ -224,7 +224,12 @@ export async function POST(req: NextRequest) {
 
     if (docError) {
       await adminClient.storage.from("documents").remove([path])
-      logger.error("[Upload Finalize] Document insert error:", docError)
+      logger.error("[Upload Finalize] Document insert error:", undefined, {
+        message: docError.message,
+        code: docError.code,
+        details: docError.details,
+        hint: docError.hint,
+      })
       return respondWithRateLimit(
         NextResponse.json({ error: "Failed to create document record" }, { status: 500 }),
       )
