@@ -90,7 +90,7 @@ export async function listProgrammeComments(
     ;({ data, error } = await run(COMMENT_SELECT_BASIC))
   }
   if (error) return { error: error.message, data: [] }
-  const rows = (data || []).map((row) => mapCommentRow(row as Record<string, unknown>))
+  const rows = ((data || []) as unknown as Record<string, unknown>[]).map((row) => mapCommentRow(row))
   return { data: await attachAuthors(supabase, rows) }
 }
 

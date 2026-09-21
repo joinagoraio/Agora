@@ -2603,7 +2603,7 @@ export function ProgrammeWorkbench({
                     {c.resolved ? t("workspace.programme.reopenComment") : t("workspace.programme.resolveComment")}
                   </Button>
                 </div>
-                {c.replies.map((reply) => (
+                {c.replies.map((reply: { id: string; authorName?: string | null; body: string }) => (
                   <p key={reply.id} className="ml-8 text-xs text-muted-foreground">
                     {reply.authorName ? `${reply.authorName} · ` : ""}
                     {reply.body}

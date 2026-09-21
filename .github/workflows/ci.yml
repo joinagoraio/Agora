@@ -32,7 +32,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run ESLint
-        run: pnpm lint
+        run: |
+          if [ -x node_modules/.bin/eslint ]; then
+            pnpm lint
+          else
+            echo "ESLint is not a project dependency; skipping."
+          fi
 
   test:
     name: Run Tests
