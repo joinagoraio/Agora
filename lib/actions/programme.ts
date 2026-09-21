@@ -106,7 +106,12 @@ export async function updateProgrammeBindings(workspaceId: string, bindings: Pro
     .eq("id", workspaceId)
 
   if (error) return { error: error.message }
-  revalidatePath(`/workspaces/${workspaceId}`)
+  try {
+    revalidatePath(`/workspaces/${workspaceId}`)
+    revalidatePath(`/workspaces/${workspaceId}/programme`)
+  } catch {
+    // Bindings are already saved; the workbench refreshes from the client.
+  }
   return { data: bindings }
 }
 
@@ -1132,23 +1137,27 @@ export async function previewBoundAgentSources(workspaceId: string, stage: impor
 }
 
 export async function ensureDefaultAgentsBound(workspaceId: string, spaceId: string) {
-  const { seedDefaultSpaceAgents, listSpaceAgents } = await import("@/lib/actions/agent")
-  const seeded = await seedDefaultSpaceAgents(spaceId)
-  if (seeded.error) return { error: seeded.error }
-  const listed = (await listSpaceAgents(spaceId)).data || seeded.data?.agents || []
-  const current = await getProgrammeBindings(workspaceId)
-  const agentBindings: ProgrammeBindings["agentBindings"] = { ...(current.data.agentBindings || {}) }
-  for (const agent of listed) {
-    if (agentBindings[agent.stage]) continue
-    const sameStage = listed.filter((candidate) => candidate.stage === agent.stage)
-    const preferred =
-      sameStage.find((candidate) => {
-        const provider = candidate.latestVersion?.provider
-        return provider === "openai-compatible" || provider === "openai"
-      }) || agent
-    agentBindings[agent.stage] = preferred.id
+  try {
+    const { seedDefaultSpaceAgents, listSpaceAgents } = await import("@/lib/actions/agent")
+    const seeded = await seedDefaultSpaceAgents(spaceId)
+    if (seeded.error) return { error: seeded.error }
+    const listed = (await listSpaceAgents(spaceId)).data || seeded.data?.agents || []
+    const current = await getProgrammeBindings(workspaceId)
+    const agentBindings: ProgrammeBindings["agentBindings"] = { ...(current.data.agentBindings || {}) }
+    for (const agent of listed) {
+      if (agentBindings[agent.stage]) continue
+      const sameStage = listed.filter((candidate) => candidate.stage === agent.stage)
+      const preferred =
+        sameStage.find((candidate) => {
+          const provider = candidate.latestVersion?.provider
+          return provider === "openai-compatible" || provider === "openai"
+        }) || agent
+      agentBindings[agent.stage] = preferred.id
+    }
+    return bindWorkspaceAgents(workspaceId, agentBindings)
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not bind default agents" }
   }
-  return bindWorkspaceAgents(workspaceId, agentBindings)
 }
 
 export async function fillProgrammeChapters(

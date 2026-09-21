@@ -29,6 +29,7 @@ import {
   type ProgrammeAccessPanel,
 } from "@/components/programme-list-menu"
 import { notify, notifyResult } from "@/lib/notify"
+import { ErrorBoundary } from "@/components/error-boundary"
 import {
   canShowProgrammeConfiguration,
   effectiveJob,
@@ -586,6 +587,7 @@ export function ProgrammeWorkbench({
 
   const refresh = () => {
     startTransition(async () => {
+      try {
       const [b, m, r, g, obs, graphResult, dupes, policyResult, reviewerResult, publicationResult, citableResult, catalog] =
         await Promise.all([
         getProgrammeBindings(workspaceId),
@@ -682,6 +684,9 @@ export function ProgrammeWorkbench({
         setOutlineNodeCount(0)
       }
       setSnapshotLoaded(true)
+      } catch (error) {
+        notify(error instanceof Error ? error.message : t("workspace.programme.exportFailed"), "error")
+      }
     })
   }
 
@@ -769,7 +774,8 @@ export function ProgrammeWorkbench({
     {
       id: "corpus",
       done:
-        bindings.environmentalVisionDocumentIds.length > 0 && bindings.existingPolicyDocumentIds.length > 0,
+        (bindings.environmentalVisionDocumentIds?.length ?? 0) > 0 &&
+        (bindings.existingPolicyDocumentIds?.length ?? 0) > 0,
       label: t("workspace.programme.setupStepCorpus"),
       section: "corpus",
     },
@@ -829,7 +835,7 @@ export function ProgrammeWorkbench({
       spaceId,
       pipeline,
       section: coachSection,
-      documentTitles: listBoundDocumentsForHelp(corpusDocs, bindings),
+      documentTitles: listBoundDocumentsForHelp(corpusDocs || [], bindings),
       onNavigate: (section, target) => {
         setSection(section)
         if (target) {
@@ -1074,6 +1080,7 @@ export function ProgrammeWorkbench({
           onInteractOutside={(event) => event.preventDefault()}
           onFocusOutside={(event) => event.preventDefault()}
         >
+        <ErrorBoundary resetKeys={[activeSection]}>
           <DialogHeader className="sr-only">
             <DialogTitle>{t(`workspace.programme.nav.${activeSection}`, activeSection)}</DialogTitle>
           </DialogHeader>
@@ -1272,10 +1279,14 @@ export function ProgrammeWorkbench({
               disabled={pending}
               onClick={() =>
                 startTransition(async () => {
-                  const result = await ensureDefaultAgentsBound(workspaceId, spaceId)
-                  notifyResult(result.error, t("workspace.programme.agentsBound"))
-                  if ("data" in result && result.data) setBindings(result.data)
-                  refresh()
+                  try {
+                    const result = await ensureDefaultAgentsBound(workspaceId, spaceId)
+                    notifyResult(result.error, t("workspace.programme.agentsBound"))
+                    if ("data" in result && result.data) setBindings(result.data)
+                    refresh()
+                  } catch (error) {
+                    notify(error instanceof Error ? error.message : t("workspace.programme.exportFailed"), "error")
+                  }
                 })
               }
             >
@@ -1288,19 +1299,20 @@ export function ProgrammeWorkbench({
             <div className="grid gap-2 sm:grid-cols-2">
               {AGENT_STAGES.map((stage) => {
                 const options = agents.filter((agent) => agent.stage === stage)
-                const bound = bindings.agentBindings?.[stage] || ""
-                return (
-                  <label key={stage} className="space-y-1 text-xs">
-                    <span className="text-muted-foreground">
-                      {t("workspace.programme.bindAgentStage", undefined, {
-                        stage: t(`space.agents.stages.${stage}`),
-                      })}
-                    </span>
-                    {options.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">{t("workspace.programme.bindAgentEmpty")}</p>
-                    ) : (
-                      <Select
-                        value={bound || undefined}
+                    const bound = bindings.agentBindings?.[stage] || ""
+                    const selected = options.some((agent) => agent.id === bound) ? bound : undefined
+                    return (
+                      <label key={stage} className="space-y-1 text-xs">
+                        <span className="text-muted-foreground">
+                          {t("workspace.programme.bindAgentStage", undefined, {
+                            stage: t(`space.agents.stages.${stage}`),
+                          })}
+                        </span>
+                        {options.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">{t("workspace.programme.bindAgentEmpty")}</p>
+                        ) : (
+                          <Select
+                            value={selected}
                         disabled={pending}
                         onValueChange={(value) =>
                           startTransition(async () => {
@@ -1364,23 +1376,28 @@ export function ProgrammeWorkbench({
                 data-guidance-target={kind === "analysis" ? "run-analysis" : undefined}
                 onClick={() =>
                   startTransition(async () => {
-                    const preview = await previewBoundAgentSources(workspaceId, kind)
-                    setSourcePreview(preview.data?.preview || "")
-                    if (kind === "analysis" || kind === "qc") setAnalysisJobStatus("running")
-                    const result = await runBoundAgentAnalysis({
-                      workspaceId,
-                      kind,
-                      instructions: analysisInstructions.trim() || undefined,
-                    })
-                    setAnalysisJobStatus("")
-                    notifyResult(
-                      "error" in result && result.error ? result.error : null,
-                      t("workspace.programme.analysisSaved", undefined, {
-                        id: "data" in result && result.data ? String(result.data.id) : "",
-                      }),
-                    )
-                    if ("data" in result && result.data?.id) setSelectedReportId(result.data.id)
-                    refresh()
+                    try {
+                      const preview = await previewBoundAgentSources(workspaceId, kind)
+                      setSourcePreview(preview.data?.preview || "")
+                      if (kind === "analysis" || kind === "qc") setAnalysisJobStatus("running")
+                      const result = await runBoundAgentAnalysis({
+                        workspaceId,
+                        kind,
+                        instructions: analysisInstructions.trim() || undefined,
+                      })
+                      setAnalysisJobStatus("")
+                      notifyResult(
+                        "error" in result && result.error ? result.error : null,
+                        t("workspace.programme.analysisSaved", undefined, {
+                          id: "data" in result && result.data ? String(result.data.id) : "",
+                        }),
+                      )
+                      if ("data" in result && result.data?.id) setSelectedReportId(result.data.id)
+                      refresh()
+                    } catch (error) {
+                      setAnalysisJobStatus("")
+                      notify(error instanceof Error ? error.message : t("workspace.programme.exportFailed"), "error")
+                    }
                   })
                 }
               >
@@ -2943,6 +2960,7 @@ export function ProgrammeWorkbench({
         </TabsContent>
       </Tabs>
           </div>
+        </ErrorBoundary>
         </DialogContent>
       </Dialog>
     </div>
