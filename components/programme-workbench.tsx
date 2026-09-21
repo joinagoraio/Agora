@@ -824,7 +824,7 @@ export function ProgrammeWorkbench({
       startTransition={startTransition}
     />
   )
-  const coachSection = isKnowledgeView ? "knowledge" : activeSection
+  const coachSection = isKnowledgeView ? "knowledge" : showSetupWizard ? "setup" : activeSection
 
   useEffect(() => {
     setGuidance({
@@ -942,7 +942,7 @@ export function ProgrammeWorkbench({
       pipeline.firstIncomplete !== "orient" ? (
         <div
           data-guidance-next=""
-          className="flex shrink-0 items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2"
+          className="relative z-[60] flex shrink-0 items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2"
         >
           <div className="min-w-0">
             <p className="text-sm font-medium">
@@ -1026,9 +1026,17 @@ export function ProgrammeWorkbench({
                     notify(result.error, "error")
                     return
                   }
+                  const agents = await ensureDefaultAgentsBound(workspaceId, spaceId)
+                  if (agents.error) {
+                    notify(agents.error, "error")
+                    setBindings(merged)
+                  } else if (agents.data) {
+                    setBindings({ ...agents.data, setupComplete: true })
+                  } else {
+                    setBindings(merged)
+                  }
                   setWizardSession(false)
                   setDocumentMode("edit")
-                  setBindings(merged)
                 }}
               />
             ) : (
@@ -1074,7 +1082,8 @@ export function ProgrammeWorkbench({
 
       <Dialog open={sheetOpen} modal={false} onOpenChange={(open) => { if (!open) closeSheet() }}>
         <DialogContent
-          showOverlay={false}
+          inertOverlay
+          overlayClassName="z-40 pointer-events-none"
           className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden sm:max-w-4xl"
           onPointerDownOutside={(event) => event.preventDefault()}
           onInteractOutside={(event) => event.preventDefault()}

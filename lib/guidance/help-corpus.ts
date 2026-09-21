@@ -8,11 +8,19 @@ export const HELP_GLOSSARY: Record<string, string> = {
   programme:
     "Opening a programme opens the document you write. Knowledge, analysis, review, and export sit around that text.",
   documents:
-    "Files this programme may use. Bound documents have a role: vision, effects report, handbook, existing policy, or other.",
+    "Files this programme may use. On first setup, mark vision and existing policy in the three dropdowns on that page. Later, change roles on Bound sources in the programme toolbar.",
   research:
     "Legacy workspace kind. Not a create-path. Explore with Ask on authority documents, or start a programme.",
   bindings:
-    "Which vision, effects report, handbook, and existing-policy documents constrain this programme. Completing bind requires a vision and an existing-policy document.",
+    "Which vision, effects report, handbook, and existing-policy files constrain this programme. Completing bind requires a vision and an existing-policy file. During setup, pick them in the three dropdowns on this page.",
+  environmental_vision:
+    "The environmental vision is the adopted spatial strategy this programme must follow. On setup, pick it in the Vision dropdown.",
+  existing_policy:
+    "Existing policy is what is already decided. This programme must adopt, adapt, or drop it. On setup, pick it in the Existing policy dropdown.",
+  environmental_effects_report:
+    "The effects report is optional during setup. It unlocks the later effects check. Pick it in the Effects report dropdown if you have one.",
+  setupSources:
+    "The three dropdowns on this setup page are the bind step. Vision and existing policy are required. The effects report is optional.",
   specialist:
     "Versioned instructions for one production stage (analysis, draft, quality). Administrators publish them; authors run them.",
   job: "What you see first (Administrator, Author, Reviewer). Jobs never grant extra permission; access roles still do. Job is not document owner, chapter owner, or assigned reviewer.",
@@ -35,7 +43,7 @@ export const HELP_GLOSSARY: Record<string, string> = {
   analysis:
     "Analysis is a complementary tool for your programme. It lives on the programme toolbar (Work). It lets you run and save analytical reports, for example on environmental effects, policy alignment, or spatial data. It does not create or edit chapter text. Open it any time to view existing reports or generate new ones.",
   knowledge:
-    "Files, Inherited, Evidence, and Notes around the programme. Bound sources and file roles live on Files, not in the header.",
+    "Files, Inherited, Evidence, and Notes around the programme. First-time bind uses the setup dropdowns. After that, file roles live on Bound sources in the toolbar, or Files in Knowledge.",
   ask: "The programme assistant for sources and drafts. Ask may draft chapter text. Help may not.",
   structure:
     "Chapter titles and descriptions in the document. Open it from the chapters list (Edit structure). Hover a heading to read that chapter’s description.",
@@ -65,6 +73,17 @@ const GLOSSARY_ALIASES: Record<string, string> = {
   "bound document": "bindings",
   "bound sources": "bindings",
   "bound source": "bindings",
+  "environmental vision": "environmental_vision",
+  omgevingsvisie: "environmental_vision",
+  vision: "environmental_vision",
+  "existing policy": "existing_policy",
+  "bestaand beleid": "existing_policy",
+  "effects report": "environmental_effects_report",
+  "environmental effects report": "environmental_effects_report",
+  "milieueffectrapport": "environmental_effects_report",
+  oer: "environmental_effects_report",
+  "setup sources": "setupSources",
+  "source roles": "setupSources",
   "document owner": "documentOwner",
   "chapter owner": "chapterOwner",
   "read all": "read",
@@ -117,11 +136,11 @@ Programme layers:
 - Complementary work (programme toolbar, Work): Analysis, Measures, Effects, Provenance, Review, Consultation. Sheets over the document. Analysis writes reports only; it does not write chapters.
 - Properties (toolbar): Status, Configuration (document owner, template, review policy), Agents (which authority specialists this programme uses).
 - Output (toolbar): Export, Publish. A green or orange dot on Publish shows whether a snapshot is live.
-- Knowledge: Files / Inherited / Evidence / Notes. File roles live on Files. Bound sources are set there, not in the header. ?files=1 opens Knowledge.
+- Knowledge: Files / Inherited / Evidence / Notes. After setup, file roles also live on Files. First-time bind uses the three dropdowns on the setup page, not Knowledge → Files. ?files=1 opens Knowledge.
 - Status: next action and team notes (sheet from the toolbar). Next-step coaching lives in Help, not in the header.
 - Configuration: template, review policy, document owner. Administrators and the document owner.
 - Agents: bind authority specialists to programme jobs (analysis, draft, quality control, conversation). Chapters may still pick a different draft agent. Administrators and the document owner.
-- Bound sources: bind vision, effects report, handbook, existing policy on Knowledge Files (sheet still opens from ?section=corpus).
+- Bound sources: during setup, bind vision, existing policy, and optional effects report with the three dropdowns on that page. Later, open Bound sources on the programme toolbar (?section=corpus). Do not send first-time bind to Knowledge → Files.
 - Analysis: saved reports; does not write the programme or chapters. Opens from the toolbar.
 - Structure: chapter titles and descriptions in the document. Open from the chapters list (Edit structure). Auto-saves. Hover a heading in the document to read that chapter’s description. The chapters list shows workflow, not completion: empty, draft, in review, changes requested, or approved (lock). Approved is the chapter freeze; programme freeze is later, after required chapters are approved. ?view=document&structure=1
 - Measures: structured registry.
@@ -150,7 +169,13 @@ Analysis agents write reports only, never chapters.
 If the user asks to open a screen, return a navigate path such as ?section=corpus (bound sources sheet), ?view=knowledge, ?view=document (Read), ?view=document&mode=edit (Edit), ?view=document&mode=focus (Focus), or ?view=document&structure=1 (Structure).
 `.trim()
 
+const SETUP_SOURCES_QUESTION =
+  /(vision|omgevingsvisie).*(policy|beleid|existing).*(effect|oer|milieu)|(what is|wat is|what are|wat zijn).*(vision|omgevingsvisie|policy|beleid|effects report|oer).*(and|en|or|of)/i
+
 export function resolveGlossaryEntry(term: string): { key: string; definition: string } | null {
+  if (SETUP_SOURCES_QUESTION.test(term)) {
+    return { key: "setupSources", definition: HELP_GLOSSARY.setupSources }
+  }
   const key = normalizeHelpQuery(term).toLowerCase()
   const resolved = GLOSSARY_ALIASES[key] ?? key
   const definition = HELP_GLOSSARY[resolved]
@@ -166,6 +191,9 @@ export const HELP_SYSTEM_PROMPT = `You are Agora product Help. Answer only how t
 
 Rules:
 - Use the corpus below. Reply in the user's UI language (English or Dutch).
+- Keep answers under 80 words. Name the control on the current screen. No product tour.
+- If Current section is setup, tell them to use the three dropdowns on this page. Vision and existing policy are required; the effects report is optional. Never say Knowledge → Files for that first bind.
+- After setup, changing roles is Bound sources on the programme toolbar.
 - Never draft policy, write chapters, invent measures, approve, bind documents, or export.
 - Never quote or request policy document bodies, chapter text, or measure narratives.
 - You may mention document titles and roles only.

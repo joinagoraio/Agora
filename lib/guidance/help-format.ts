@@ -10,6 +10,7 @@ export type HelpFormatOptions = {
   language?: HelpFormatLanguage
   topic?: string | null
   question?: string | null
+  section?: string | null
 }
 
 const ROLE_LABELS: Record<HelpFormatLanguage, Record<string, string>> = {
@@ -91,6 +92,17 @@ export function formatBoundDocumentList(
     .join("\n")
 }
 
+export function bindSourcesNextStep(language: HelpFormatLanguage, section?: string | null): string {
+  if (section === "setup" || section === "wizard") {
+    return language === "nl"
+      ? "Kies de bestanden in de drie keuzelijsten op deze pagina. Visie en bestaand beleid zijn verplicht. Het effectenrapport is optioneel."
+      : "Pick the files in the three dropdowns on this page. Vision and existing policy are required. The effects report is optional."
+  }
+  return language === "nl"
+    ? "Om bindingen te wijzigen, open Gebonden bronnen in de programmatoolbar."
+    : "To change these bindings, open Bound sources on the programme toolbar."
+}
+
 export function composeGlossaryHelp(
   topic: string,
   definition: string,
@@ -99,19 +111,20 @@ export function composeGlossaryHelp(
   const language = options.language ?? "en"
   const heading = glossaryHeading(topic, language)
   const titles = options.documentTitles ?? []
-  if ((topic === "bindings" || topic === "documents") && titles.length > 0) {
-    const inThis = language === "nl" ? "In dit programma" : "In this programme"
-    const next =
-      language === "nl"
-        ? "Om bindingen te bekijken of te wijzigen, open Kennis → Bestanden."
-        : "To review or change these bindings, open Knowledge → Files."
-    return joinHelpBlocks([
-      `## ${heading}`,
-      definition,
-      `### ${inThis}`,
-      formatBoundDocumentList(titles, language),
-      next,
-    ])
+  const bindTopic = topic === "bindings" || topic === "documents" || topic === "setupSources"
+  if (bindTopic) {
+    const next = bindSourcesNextStep(language, options.section)
+    if (titles.length > 0) {
+      const inThis = language === "nl" ? "In dit programma" : "In this programme"
+      return joinHelpBlocks([
+        `## ${heading}`,
+        definition,
+        `### ${inThis}`,
+        formatBoundDocumentList(titles, language),
+        next,
+      ])
+    }
+    return joinHelpBlocks([`## ${heading}`, definition, next])
   }
   return compileHelpAnswer(`## ${heading}\n\n${definition}`, {
     language,
@@ -167,6 +180,10 @@ function glossaryHeading(topic: string, language: HelpFormatLanguage): string {
       expert: "Expert",
       published: "Published",
       analysis: "Analysis",
+      environmental_vision: "Environmental vision",
+      existing_policy: "Existing policy",
+      environmental_effects_report: "Effects report",
+      setupSources: "These files",
       knowledge: "Knowledge",
       ask: "Ask",
       structure: "Structure",
@@ -200,6 +217,10 @@ function glossaryHeading(topic: string, language: HelpFormatLanguage): string {
       expert: "Expert",
       published: "Gepubliceerd",
       analysis: "Analyse",
+      environmental_vision: "Omgevingsvisie",
+      existing_policy: "Bestaand beleid",
+      environmental_effects_report: "Effectenrapport",
+      setupSources: "Deze bestanden",
       knowledge: "Kennis",
       ask: "Ask",
       structure: "Structuur",

@@ -937,8 +937,9 @@ export function ChatSidebar({
               </h2>
             )}
           </div>
-          {panelTab === "ask" ? (
           <div className="flex items-center gap-2">
+          {panelTab === "ask" ? (
+          <>
             <IconTooltip label={t("workspace.chat.actions.newChat")}>
               <Button
                 variant="ghost"
@@ -989,14 +990,25 @@ export function ChatSidebar({
               <List className="h-5 w-5" />
             </Button>
             </IconTooltip>
-          </div>
+          </>
           ) : null}
+          <IconTooltip label={t("workspace.chat.toggle.close")}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              aria-label={t("workspace.chat.toggle.close")}
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </IconTooltip>
+          </div>
         </div>
       </div>
 
-      {guidance && panelTab === "guidance" ? (
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <ErrorBoundary resetKeys={[panelTab, workspaceId || ""]}>
+      {guidance ? (
+        <div className={cn("min-h-0 flex-1 overflow-hidden", panelTab !== "guidance" && "hidden")}>
+          <ErrorBoundary resetKeys={[workspaceId || ""]}>
           <GuidanceCoach
             variant="embedded"
             surface={guidance.surface}
@@ -1016,8 +1028,8 @@ export function ChatSidebar({
           />
           </ErrorBoundary>
         </div>
-      ) : (
-      <div className="flex flex-1 overflow-hidden">
+      ) : null}
+      <div className={cn("flex flex-1 overflow-hidden", guidance && panelTab !== "ask" && "hidden")}>
         {/* Main chat area - flexible width with minimum width */}
         <main 
           className="flex flex-col flex-1 min-w-0"
@@ -1135,7 +1147,6 @@ export function ChatSidebar({
           </div>
         </aside>
       </div>
-      )}
 
       {deleteDialogOpen && (
         <AlertDialog open={true} onOpenChange={handleDeleteDialogClose}>

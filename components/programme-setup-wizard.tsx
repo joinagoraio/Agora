@@ -136,12 +136,14 @@ export function ProgrammeSetupWizard({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 items-start justify-center overflow-y-auto px-6 py-16">
+    <div className="flex h-full min-h-0 flex-1 items-start justify-center overflow-y-auto px-6 py-16 [font-variant-ligatures:none]">
       <div className={cn("w-full space-y-8", step === 1 ? "max-w-4xl" : "max-w-lg")}>
         {step === 1 ? (
           <div className="space-y-6">
             <div className="space-y-2">
-              <h1 className="text-2xl font-semibold tracking-tight">{t("workspace.programme.setupWizard.structureTitle")}</h1>
+              <h1 className="text-2xl font-semibold tracking-tight [font-variant-ligatures:none]">
+                {t("workspace.programme.setupWizard.structureTitle")}
+              </h1>
               <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 {t("workspace.programme.setupWizard.structureBody")}
               </p>
@@ -208,8 +210,10 @@ export function ProgrammeSetupWizard({
               {t("workspace.programme.setupWizard.back")}
             </Button>
             <div className="space-y-2">
-              <h1 className="text-2xl font-semibold tracking-tight">{t("workspace.programme.setupWizard.sourcesTitle")}</h1>
-              <p className="text-sm leading-relaxed text-muted-foreground">
+              <h1 className="text-2xl font-semibold tracking-tight [font-variant-ligatures:none]">
+                {t("workspace.programme.setupWizard.sourcesTitle")}
+              </h1>
+              <p className="text-sm leading-relaxed text-muted-foreground [font-variant-ligatures:none]">
                 {t("workspace.programme.setupWizard.sourcesBody")}
               </p>
             </div>

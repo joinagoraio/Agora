@@ -32,6 +32,8 @@ describe("help route isolation", () => {
     expect(source).not.toMatch(/compileSystemPrompt/)
     expect(source).not.toMatch(/generation_runs/)
     expect(source).toMatch(/completeLlm/)
+    expect(source).toMatch(/HELP_SYSTEM_PROMPT/)
+    expect(source).not.toMatch(/getPlatformPrompt/)
   })
 
   it("grounds the help prompt without policy bodies", () => {

@@ -8,8 +8,14 @@ import { I18nClientProvider } from "@/components/providers/i18n-client-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import "./globals.css"
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
+const geistSans = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist-sans",
+})
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
+})
 
 export const metadata: Metadata = {
   title: 'Agora',
@@ -34,8 +40,8 @@ export default async function RootLayout({
   const { language, messages } = await getServerDictionary()
 
   return (
-    <html lang={language}>
-      <body className={`font-sans antialiased bg-white`}>
+    <html lang={language} className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body className={`${geistSans.className} font-sans antialiased bg-white [font-variant-ligatures:none]`}>
         <I18nClientProvider initialLanguage={language} initialMessages={messages}>
           <TooltipProvider delayDuration={400}>
             <JumpPaletteProvider>

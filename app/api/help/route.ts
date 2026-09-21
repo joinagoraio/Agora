@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server"
 import { isHelpAiEnabled } from "@/lib/env"
 import { completeLlm } from "@/lib/llm/complete"
 import { HELP_REFUSAL_COPY_EN, shouldRefuseHelpQuery } from "@/lib/guidance/help-refuse"
-import { resolveGlossaryEntry } from "@/lib/guidance/help-corpus"
+import { HELP_SYSTEM_PROMPT, resolveGlossaryEntry } from "@/lib/guidance/help-corpus"
 import { compileHelpAnswer, composeGlossaryHelp } from "@/lib/guidance/help-format"
 import { isSpaceHelpAiDisabled, resolveHelpAiEnabled } from "@/lib/guidance/help-flag"
 import { applyRateLimitHeaders, checkRateLimit, helpRateLimit, RateLimitStatus } from "@/lib/rate-limit"
@@ -179,6 +179,7 @@ export async function POST(req: Request) {
         language: helpLanguage,
         topic: glossary.key,
         question: input.message,
+        section: input.section,
       })
       await admin.from("help_messages").insert({
         conversation_id: conversationId,
@@ -212,7 +213,6 @@ export async function POST(req: Request) {
       .join("\n")
 
     const { resolvePlatformTaskLlmWithFallback } = await import("@/lib/llm/resolve")
-    const { getPlatformPrompt } = await import("@/lib/llm/prompts")
     let resolved
     try {
       resolved = await resolvePlatformTaskLlmWithFallback("help", "chat")
@@ -222,7 +222,7 @@ export async function POST(req: Request) {
         NextResponse.json({ error: "Help model is not configured" }, { status: 503 }),
       )
     }
-    const helpPrompt = await getPlatformPrompt("help")
+    const helpPrompt = `${HELP_SYSTEM_PROMPT}\n\nCurrent screen: ${input.section || "unknown"}`
 
     const result = await completeLlm({
       provider: resolved.provider,
@@ -234,7 +234,7 @@ export async function POST(req: Request) {
         { role: "user", content: `${contextBlock}\n\nQuestion:\n${input.message}` },
       ],
       temperature: 0.2,
-      maxTokens: 2500,
+      maxTokens: 700,
       reasoningEffort: "low",
     })
 
