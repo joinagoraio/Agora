@@ -52,27 +52,15 @@ function DialogContent({
   showCloseButton = true,
   showOverlay = true,
   overlayClassName,
-  inertOverlay = false,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
   showOverlay?: boolean
   overlayClassName?: string
-  inertOverlay?: boolean
 }) {
   return (
     <DialogPortal data-slot="dialog-portal">
-      {showOverlay ? (
-        inertOverlay ? (
-          <div
-            data-slot="dialog-overlay"
-            aria-hidden
-            className={cn("fixed inset-0 z-50 bg-black/50", overlayClassName)}
-          />
-        ) : (
-          <DialogOverlay className={overlayClassName} />
-        )
-      ) : null}
+      {showOverlay ? <DialogOverlay className={overlayClassName} /> : null}
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(

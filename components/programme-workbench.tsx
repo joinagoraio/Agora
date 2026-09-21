@@ -1086,14 +1086,10 @@ export function ProgrammeWorkbench({
         )}
       </div>
 
-      <Dialog open={sheetOpen} modal={false} onOpenChange={(open) => { if (!open) closeSheet() }}>
+      <Dialog open={sheetOpen} onOpenChange={(open) => { if (!open) closeSheet() }}>
         <DialogContent
-          inertOverlay
-          overlayClassName="z-[70] pointer-events-none"
+          overlayClassName="z-[70]"
           className="z-[80] flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden sm:max-w-4xl"
-          onPointerDownOutside={(event) => event.preventDefault()}
-          onInteractOutside={(event) => event.preventDefault()}
-          onFocusOutside={(event) => event.preventDefault()}
         >
         <ErrorBoundary resetKeys={[activeSection]}>
           <DialogHeader className="sr-only">
