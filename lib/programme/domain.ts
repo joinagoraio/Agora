@@ -568,6 +568,10 @@ export function hasAllDefaultSpaceAgents(agents: Array<{ name: string }>): boole
   return DEFAULT_SPACE_AGENTS.every((spec) => names.has(spec.name))
 }
 
+export function defaultSourceRolesForStage(stage: AgentStage): DocumentRole[] {
+  return [...(DEFAULT_SPACE_AGENTS.find((spec) => spec.stage === stage)?.sourceRoles ?? [])]
+}
+
 export type AgentVersionRecord = {
   id: string
   agentId: string

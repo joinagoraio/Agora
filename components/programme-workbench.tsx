@@ -114,7 +114,15 @@ import { ProgrammeTemplatePicker } from "@/components/programme-template-picker"
 import { SaveProgrammeAsTemplateDialog } from "@/components/save-programme-as-template-dialog"
 import { listSpaceAgents } from "@/lib/actions/agent"
 import { convertPolicyProseToMeasures, findDuplicateMeasures, generateVisionSkeleton, mergeMeasureFragment } from "@/lib/actions/pipelines"
-import { addProgrammeComment, listProgrammeComments, setProgrammeCommentResolved } from "@/lib/actions/comments"
+import {
+  addProgrammeComment,
+  clusterColleagueComments,
+  listProgrammeCommentThemes,
+  listProgrammeComments,
+  setProgrammeCommentResolved,
+  setProgrammeCommentThemeAddressed,
+} from "@/lib/actions/comments"
+import { nestColleagueComments, type ColleagueCommentThemeRecord } from "@/lib/programme/colleague-comments"
 import { getProgrammeConsultationQueue, type ConsultationQueue } from "@/lib/actions/consultation"
 import { ConsultationOwnerPanel } from "@/components/consultation-owner-panel"
 import {
@@ -465,7 +473,6 @@ export function ProgrammeWorkbench({
   const setActiveChapter = useCallback(
     (chapterId: string | null) => {
       replaceParams((params) => {
-        params.delete("section")
         params.delete("structure")
         params.set("view", "document")
         if (chapterId) params.set("chapter", chapterId)
@@ -569,6 +576,7 @@ export function ProgrammeWorkbench({
   const [measureDraft, setMeasureDraft] = useState(emptyMeasureDraft)
   const [commentBody, setCommentBody] = useState("")
   const [comments, setComments] = useState<any[]>([])
+  const [commentThemes, setCommentThemes] = useState<ColleagueCommentThemeRecord[]>([])
   const [chapters, setChapters] = useState<
     Array<{
       documentId: string
@@ -587,7 +595,7 @@ export function ProgrammeWorkbench({
   const [stakeholderExport, setStakeholderExport] = useState(false)
 
   const refresh = () => {
-    startTransition(async () => {
+    void (async () => {
       try {
       const [b, m, r, g, obs, graphResult, dupes, policyResult, reviewerResult, publicationResult, citableResult, catalog] =
         await Promise.all([
@@ -637,10 +645,11 @@ export function ProgrammeWorkbench({
       }
       setReviewers(reviewerResult.data || [])
       setCurrentUserId(reviewerResult.currentUserId ?? null)
-      const [tpl, ag, cm, docs, chapterResult, notesResult, consultationResult] = await Promise.all([
+      const [tpl, ag, cm, themeResult, docs, chapterResult, notesResult, consultationResult] = await Promise.all([
         listSpaceTemplates(spaceId),
         listSpaceAgents(spaceId),
         listProgrammeComments(workspaceId),
+        listProgrammeCommentThemes(workspaceId),
         getWorkspaceDocuments(workspaceId),
         listProgrammeChapters(workspaceId),
         getWorkspaceNotes(workspaceId),
@@ -659,6 +668,7 @@ export function ProgrammeWorkbench({
           })),
       )
       setComments(cm.data || [])
+      setCommentThemes(themeResult.data || [])
       if (consultationResult.data) setConsultationQueue(consultationResult.data)
       setChapters(chapterResult.data || [])
       setCorpusDocs(
@@ -688,7 +698,7 @@ export function ProgrammeWorkbench({
       } catch (error) {
         notify(error instanceof Error ? error.message : t("workspace.programme.exportFailed"), "error")
       }
-    })
+    })()
   }
 
   useEffect(() => {
@@ -2229,6 +2239,70 @@ export function ProgrammeWorkbench({
           />
           <p className="text-sm text-muted-foreground">{t("workspace.programme.reviewHint")}</p>
           <p className="text-xs text-muted-foreground">{t("workspace.programme.reviewLocalHint")}</p>
+          <div className="space-y-2 rounded-md border p-3">
+            <h3 className="text-sm font-medium">{t("workspace.programme.colleagueThemesTitle")}</h3>
+            <p className="text-xs text-muted-foreground">{t("workspace.programme.colleagueThemesHint")}</p>
+            <p className="text-xs text-muted-foreground">{t("workspace.programme.colleagueNotConsultation")}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  const result = await clusterColleagueComments(workspaceId)
+                  notifyResult(result.error, t("workspace.programme.colleagueClustered"))
+                  refresh()
+                })
+              }
+            >
+              {t("workspace.programme.colleagueClusterAction")}
+            </Button>
+            {commentThemes.length === 0 ? (
+              <p className="text-xs text-muted-foreground">{t("workspace.programme.colleagueThemesEmpty")}</p>
+            ) : (
+              <ul className="space-y-2">
+                {commentThemes.map((theme) => (
+                  <li key={theme.id} className="space-y-1 rounded-md border p-2">
+                    <p className="text-sm font-medium">{theme.label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("workspace.programme.colleagueThemeComments", undefined, { count: String(theme.commentCount) })}
+                    </p>
+                    {theme.summary ? <p className="text-xs">{theme.summary}</p> : null}
+                    {theme.suggestedReply ? (
+                      <p className="text-xs text-muted-foreground">
+                        {t("workspace.programme.colleagueThemeSuggestedReply")}: {theme.suggestedReply}
+                      </p>
+                    ) : null}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={pending}
+                      onClick={() =>
+                        startTransition(async () => {
+                          const result = await setProgrammeCommentThemeAddressed(
+                            workspaceId,
+                            theme.id,
+                            !theme.addressed,
+                          )
+                          notifyResult(
+                            result.error,
+                            theme.addressed
+                              ? t("workspace.programme.colleagueThemeReopen")
+                              : t("workspace.programme.colleagueThemeAddressed"),
+                          )
+                          refresh()
+                        })
+                      }
+                    >
+                      {theme.addressed
+                        ? t("workspace.programme.colleagueThemeReopen")
+                        : t("workspace.programme.colleagueThemeAddressed")}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -2503,27 +2577,38 @@ export function ProgrammeWorkbench({
               ))}
           </ul>
           <ul className="text-sm">
-            {comments.map((c) => (
-              <li key={c.id} className="flex items-center justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-2">
-                  <UserAvatar name={c.authorName} url={c.authorAvatarUrl} className="h-6 w-6 shrink-0" />
-                  <span className={c.resolved ? "line-through text-muted-foreground" : ""}>
-                    {c.authorName ? `${c.authorName} · ` : ""}
-                    {c.artefact_type}: {c.body}
+            {nestColleagueComments(
+              comments.map((c) => ({ ...c, parentId: c.parentId ?? null })),
+            ).map((c) => (
+              <li key={c.id} className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <UserAvatar name={c.authorName} url={c.authorAvatarUrl} className="h-6 w-6 shrink-0" />
+                    <span className={c.resolved ? "line-through text-muted-foreground" : ""}>
+                      {c.authorName ? `${c.authorName} · ` : ""}
+                      {c.themeLabel ? `${c.themeLabel} · ` : ""}
+                      {c.artefact_type}: {c.body}
+                    </span>
                   </span>
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    startTransition(async () => {
-                      await setProgrammeCommentResolved(workspaceId, c.id, !c.resolved)
-                      refresh()
-                    })
-                  }
-                >
-                  {c.resolved ? t("workspace.programme.reopenComment") : t("workspace.programme.resolveComment")}
-                </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      startTransition(async () => {
+                        await setProgrammeCommentResolved(workspaceId, c.id, !c.resolved)
+                        refresh()
+                      })
+                    }
+                  >
+                    {c.resolved ? t("workspace.programme.reopenComment") : t("workspace.programme.resolveComment")}
+                  </Button>
+                </div>
+                {c.replies.map((reply) => (
+                  <p key={reply.id} className="ml-8 text-xs text-muted-foreground">
+                    {reply.authorName ? `${reply.authorName} · ` : ""}
+                    {reply.body}
+                  </p>
+                ))}
               </li>
             ))}
           </ul>

@@ -488,7 +488,33 @@ export async function seedLeefregioTemplateIfNone(spaceId: string) {
 
   if (existing) {
     const nodes = await listOutlineNodesForTemplate(existing.id)
-    return { data: { template: mapTemplateRow(existing), nodes: nodes.data, created: false } }
+    for (const spec of LEEFREGIO_SEED_NODES) {
+      const current = nodes.data.find((node) => node.title === spec.title)
+      if (!current) continue
+      const same =
+        current.instructions === spec.instructions &&
+        current.purpose === spec.purpose &&
+        current.qualityRules === spec.qualityRules &&
+        current.relationHints === spec.relationHints
+      if (same) continue
+      const updated = await upsertOutlineNode({
+        spaceId,
+        templateId: existing.id,
+        nodeId: current.id,
+        title: spec.title,
+        purpose: spec.purpose,
+        instructions: spec.instructions,
+        fieldSpecs: spec.fieldSpecs,
+        qualityRules: spec.qualityRules,
+        outputForm: spec.outputForm,
+        relationHints: spec.relationHints,
+        required: spec.required,
+        sortOrder: spec.sortOrder,
+      })
+      if (updated.error) return { error: updated.error }
+    }
+    const refreshed = await listOutlineNodesForTemplate(existing.id)
+    return { data: { template: mapTemplateRow(existing), nodes: refreshed.data, created: false } }
   }
 
   const created = await createProgrammeTemplate({

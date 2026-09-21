@@ -10,7 +10,7 @@ import {
 } from "@/lib/programme/structured-artefacts"
 import { recordGenerationRun } from "@/lib/actions/generation-run"
 import { compileSystemPrompt } from "@/lib/chat/playbook-compiler"
-import { boundAgentId, parseProgrammeBindings } from "@/lib/programme/domain"
+import { boundAgentId, defaultSourceRolesForStage, parseProgrammeBindings } from "@/lib/programme/domain"
 import { listProgrammeOutlineNodes } from "@/lib/actions/outline"
 import { completeLlm } from "@/lib/llm"
 import { getLatestAgentVersion } from "@/lib/actions/agent"
@@ -356,6 +356,7 @@ export async function generateProgrammeMeasuresFromContext(
     workspaceId,
     version: agentVersion,
     bindings,
+    fallbackRoles: defaultSourceRolesForStage("measures"),
   })
   const context = formatSourceEvidence(documents)
   const sourcePreview = formatSourcePreview(documents)

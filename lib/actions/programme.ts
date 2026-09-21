@@ -1115,14 +1115,19 @@ export async function assessDocumentGroundedness(workspaceId: string, documentId
 }
 
 export async function previewBoundAgentSources(workspaceId: string, stage: import("@/lib/programme/domain").AgentStage) {
-  const { boundAgentId } = await import("@/lib/programme/domain")
+  const { boundAgentId, defaultSourceRolesForStage } = await import("@/lib/programme/domain")
   const { getLatestAgentVersion } = await import("@/lib/actions/agent")
   const { resolveAgentSourceDocuments, formatSourcePreview } = await import("@/lib/programme/source-set")
   const bindingsResult = await getProgrammeBindings(workspaceId)
   const bindings = bindingsResult.data
   const agentId = boundAgentId(bindings, stage)
   const version = agentId ? (await getLatestAgentVersion(agentId)).data : null
-  const { documents, sourceIds } = await resolveAgentSourceDocuments({ workspaceId, version, bindings })
+  const { documents, sourceIds } = await resolveAgentSourceDocuments({
+    workspaceId,
+    version,
+    bindings,
+    fallbackRoles: defaultSourceRolesForStage(stage),
+  })
   return {
     data: {
       agentId,

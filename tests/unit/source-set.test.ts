@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { emptyProgrammeBindings } from "@/lib/programme/domain"
+import { defaultSourceRolesForStage, emptyProgrammeBindings } from "@/lib/programme/domain"
 import {
   applyDocumentRoleToBindings,
   bindingIdsForRoles,
+  expandSourceRolesWhenEmpty,
   isChapterDocumentId,
   listBoundDocumentsForHelp,
+  sourceRolesForAgent,
 } from "@/lib/programme/source-set-bindings"
 
 describe("programme source set bindings", () => {
@@ -21,6 +23,24 @@ describe("programme source set bindings", () => {
 
     const cleared = applyDocumentRoleToBindings(moved, "doc-p", null)
     expect(cleared.existingPolicyDocumentIds).toEqual([])
+  })
+
+  it("falls back to default stage roles when the agent version has none", () => {
+    expect(sourceRolesForAgent({ versionRoles: [], fallbackRoles: ["environmental_vision"] })).toEqual([
+      "environmental_vision",
+    ])
+    expect(
+      sourceRolesForAgent({
+        versionRoles: ["quality_style_rules"],
+        fallbackRoles: ["environmental_vision"],
+      }),
+    ).toEqual(["quality_style_rules"])
+    expect(
+      expandSourceRolesWhenEmpty({
+        roles: ["quality_style_rules"],
+        fallbackRoles: defaultSourceRolesForStage("qc"),
+      }),
+    ).toEqual(expect.arrayContaining(["quality_style_rules", "environmental_vision", "programme_handbook"]))
   })
 
   it("collects binding ids only for the agent source roles", () => {

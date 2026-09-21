@@ -50,13 +50,13 @@ export const HELP_GLOSSARY: Record<string, string> = {
   measures: "The structured measure registry. Open it from the programme toolbar. It does not write chapter text.",
   effects: "Environmental effects alignment. Open it from the programme toolbar.",
   provenance: "Citations and unused sources. Open it from the programme toolbar.",
-  review: "Assigned review and approval. Distinct-reviewer uses identity, not job.",
+  review: "Assigned review and approval. Distinct-reviewer uses identity, not job. Colleague notes on the live draft are grouped here so the author can address them before consultation.",
   export:
     "Word, PDF, markdown, or an audit pack. Handoff, not gazette. The document owner freezes after required chapters are approved.",
   publish:
     "Publish a reading-room snapshot. Open it from the programme toolbar (Output). A green or orange dot on Publish shows whether a snapshot is live. Freeze first from Export if needed. Not gazette enactment.",
   comments:
-    "Paragraph comments on the right, in Read, Edit, and Focus, only while the comments icon is on. Those are team notes on the live document. Comments on a published snapshot live under Work → Consultation.",
+    "Paragraph comments on the right, in Read, Edit, and Focus, only while the comments icon is on. Those are colleague notes on the live draft: reply and group common notes to prepare the text for consultation. They are not public consultation comments. Comments on a published snapshot live under Work → Consultation.",
   consultation:
     "Comments on the published snapshot. Open it from the programme toolbar (Work). Readers comment in the reading room, not in the editor. Team notes stay on the comments icon.",
   configuration: "Template, review policy, and document owner. Administrators and the document owner.",
@@ -146,11 +146,11 @@ Programme layers:
 - Measures: structured registry.
 - Effects: environmental effects alignment.
 - Provenance: citations and unused sources.
-- Review: assigned review and approval. Distinct-reviewer uses identity, not job.
+- Review: assigned review and approval. Distinct-reviewer uses identity, not job. Colleague notes on the live draft also live here: reply, group common notes, and mark them addressed before consultation.
 - Consultation: comments on the published snapshot. Open from Work → Consultation. Readers comment in the reading room after they sign in; they quote a passage and send a comment. The document owner replies, groups topics, and records a decision. An open period or unresolved comments block the next publish. Team notes in the editor are a different rail.
 - Export: Word, PDF, markdown, audit pack. Handoff, not gazette. Document owner freezes after required chapters are approved. Publishing is a separate sheet.
 - Publish: open Publish on the programme toolbar (Output). A green or orange dot shows whether a snapshot is live. Publish a reading-room snapshot (permissioned, link+code, or public listing). Freeze first from Export if needed. Not gazette. Sister programmes cite only that published freeze as existing policy.
-- Comments: paragraph comments on the right, in Read, Edit, and Focus, only while the comments icon is on. Anyone with workspace:update can comment. With comments off, clicking text never opens a comment box. Those are team notes. Published-snapshot comments live under Consultation.
+- Comments: paragraph comments on the right, in Read, Edit, and Focus, only while the comments icon is on. Anyone with workspace:update can comment. With comments off, clicking text never opens a comment box. Those are colleague notes on the live draft: reply and find common notes to prepare the text for consultation. They are not the consultation queue. Published-snapshot comments live under Consultation.
 
 Production pipeline (derived, never checkboxes):
 1 orient — programme exists

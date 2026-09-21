@@ -48,3 +48,34 @@ Safe to continue the dry-run. Not Flevoland-tuned. Fix after the session, do not
 
 - **Upload casus markdown fails with “Failed to create document record”.** The finalize insert wrote a `url` column that does not exist. The table column is `external_url`. **Fixed in this batch.**
 - **Generate measures replaces the page with “Something went wrong”.** `resolveAgentVersionLlm` throws when the bound specialist’s catalog model is missing or disabled (local default agents point at disabled `gpt-4o-mini`). Analysis already caught this; measures did not. **Fixed in this batch:** measures/draft return `{ error }`; bound-model resolve falls back to the platform draft model so the page stays.
+
+## Overlay follow-up (shipped)
+
+- **Toolbar stayed clickable through the sheet.** After the first overlay fix, `modal={false}` plus a `pointer-events-none` backdrop still let hover/click reach the toolbar and chapter tooltips. **Shipped as a true modal** (PR #18): overlay dims and captures pointer; only the sheet is interactive; click-outside closes.
+
+## Found in the full local dry-run (21 Sep, second pass)
+
+Blocking bugs, fixed locally (not on live until shipped):
+
+- **Start writing flashes “No chapters yet”.** Outline nodes load asynchronously. Show “Loading chapters…” until the request finishes.
+- **QC: “The bound agent has no source documents”.** Latest QC version on Amsterdam has empty `source_roles`. No handbook is bound (by design). QC may now run with an empty set, and source resolve falls back to default QC roles so a bound vision is used.
+- **Create stub / Chapter tools hidden or stuck disabled.** Tools only appeared after the pencil; clicking another chapter closed the editor; background `useTransition` (locks, comments, outline load, workbench `refresh`) set `pending` and disabled Create stub, Regenerate, and Export DOCX. Edit mode now shows Create stub; chapter click switches the editor; Start writing opens the first writable chapter; background loads no longer use `useTransition`.
+- **Chapter generate refused: “sources not provided”.** `getAllWorkspaceKnowledge` selected `documents.url`, a column that does not exist, so the draft saw no casus files. Select is `external_url` only. After the fix, Wonen drafted from the casus with citations (groundedness 0.33).
+- **Export / Publish sheet vanished immediately.** Auto-activating the first chapter deleted `?section=` from the URL, which closed the tool sheet. Activating a chapter no longer clears the section.
+- **Standard outline still named official Visie 4.2 / 5.2 / 5.4 sources** in relation hints. Seed copy now stays on bound sources. Choosing Standard again syncs those fields on the existing Sterke Leefregio's template (match by title). A brand-new template is not required.
+
+Opinions / non-blocking:
+
+- **Analysis purpose copy starts with “Saved reports…”** Easy to read as a finished run. Empty state should not say “Saved”.
+- **Ask / Guidance stay mounted and hide with CSS.** Hidden Help / Close / tabs remain in the accessibility tree off-screen. Prefer `inert` on the closed rail.
+- **Publish toolbar control** is “Publish status: Not published”, not a button labelled exactly “Publish”. Icon-only toolbar is easy to miss.
+- **Citations render as raw `[citation:{…}]` JSON** in the chapter body. Fine for a toets if we say so; ugly for reading.
+- **Amsterdam is a stand-in space.** Do not treat it as Flevoland authority.
+- **No official Handleiding.** QC and draft stay thin. Do not invent a handbook.
+- **Output language follows the profile.** English UI → English findings. Say this at the joint restart.
+- **Next bar can say Writing** after measures even when analysis never produced a real report.
+
+## Colleague comments vs consultation (21 Sep, local)
+
+- **Colleague notes had no reply and no common-note grouping.** Consultation already had reply + AI topics on the published snapshot. Draft comments are a different job: prepare the live text for consultation. **Fixed in this batch:** replies on `programme_comments`, lexical/AI themes on the live draft, Review + comment rail “Find common notes”, “Addressed in draft”. Consultation ledger unchanged.
+- **Opinion:** the comment rail is tight once a thread + the prep card stack. A later pass could collapse addressed themes and keep only the active paragraph card expanded.

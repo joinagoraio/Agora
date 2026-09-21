@@ -21,6 +21,10 @@ export type ProgrammeCommentRecord = {
   artefact_id: string
   body: string
   resolved: boolean
+  parentId?: string | null
+  themeId?: string | null
+  themeLabel?: string | null
+  themeAddressed?: boolean
   authorName?: string | null
   authorAvatarUrl?: string | null
 }

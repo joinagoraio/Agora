@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server"
-import type { AgentVersionRecord, ProgrammeBindings } from "@/lib/programme/domain"
-import { bindingIdsForRoles } from "@/lib/programme/source-set-bindings"
+import type { AgentVersionRecord, DocumentRole, ProgrammeBindings } from "@/lib/programme/domain"
+import {
+  bindingIdsForRoles,
+  expandSourceRolesWhenEmpty,
+  sourceRolesForAgent,
+} from "@/lib/programme/source-set-bindings"
 
 export type SourceDocument = {
   id: string
@@ -20,47 +24,60 @@ export async function resolveAgentSourceDocuments(input: {
   workspaceId: string
   version: AgentVersionRecord | null
   bindings: ProgrammeBindings
+  fallbackRoles?: DocumentRole[]
 }): Promise<{ documents: SourceDocument[]; sourceIds: string[] }> {
   const supabase = await createClient()
-  const wanted = new Set<string>()
-  const roles = input.version?.sourceRoles || []
-
-  if (input.version) {
-    for (const id of input.version.sourceDocumentIds) wanted.add(id)
+  const fetchForRoles = async (roles: DocumentRole[]) => {
+    const wanted = new Set<string>()
+    for (const id of input.version?.sourceDocumentIds || []) wanted.add(id)
     for (const id of bindingIdsForRoles(input.bindings, roles)) wanted.add(id)
+
+    const base = () =>
+      supabase
+        .from("documents")
+        .select("id, title, content, document_role")
+        .eq("workspace_id", input.workspaceId)
+        .neq("status", "archived")
+        .neq("status", "deleted")
+
+    type DocumentRow = { id: string; title: string | null; content: string | null; document_role: string | null }
+    const empty = Promise.resolve({ data: [] as DocumentRow[] })
+    const byId = wanted.size > 0 ? base().in("id", [...wanted]).limit(40) : empty
+    const byRole = roles.length > 0 ? base().in("document_role", roles).limit(40) : empty
+
+    const [idResult, roleResult] = await Promise.all([byId, byRole])
+    const merged = new Map<string, DocumentRow>()
+    for (const row of [...(idResult.data || []), ...(roleResult.data || [])]) {
+      merged.set(row.id, {
+        id: String(row.id),
+        title: row.title ?? null,
+        content: row.content ?? null,
+        document_role: "document_role" in row ? row.document_role ?? null : null,
+      })
+    }
+    const data = [...merged.values()].slice(0, 40)
+    const documents: SourceDocument[] = (data || []).map((row) => ({
+      id: row.id,
+      title: row.title || row.id,
+      content: typeof row.content === "string" ? row.content : "",
+      documentRole: row.document_role ?? null,
+    }))
+    return { documents, sourceIds: documents.map((d) => d.id) }
   }
 
-  const base = () =>
-    supabase
-      .from("documents")
-      .select("id, title, content, document_role")
-      .eq("workspace_id", input.workspaceId)
-      .neq("status", "archived")
-      .neq("status", "deleted")
+  const primaryRoles = sourceRolesForAgent({
+    versionRoles: input.version?.sourceRoles,
+    fallbackRoles: input.fallbackRoles,
+  })
+  const first = await fetchForRoles(primaryRoles)
+  if (first.documents.length > 0) return first
 
-  type DocumentRow = { id: string; title: string | null; content: string | null; document_role: string | null }
-  const empty = Promise.resolve({ data: [] as DocumentRow[] })
-  const byId = wanted.size > 0 ? base().in("id", [...wanted]).limit(40) : empty
-  const byRole = roles.length > 0 ? base().in("document_role", roles).limit(40) : empty
-
-  const [idResult, roleResult] = await Promise.all([byId, byRole])
-  const merged = new Map<string, DocumentRow>()
-  for (const row of [...(idResult.data || []), ...(roleResult.data || [])]) {
-    merged.set(row.id, {
-      id: String(row.id),
-      title: row.title ?? null,
-      content: row.content ?? null,
-      document_role: "document_role" in row ? row.document_role ?? null : null,
-    })
-  }
-  const data = [...merged.values()].slice(0, 40)
-  const documents: SourceDocument[] = (data || []).map((row) => ({
-    id: row.id,
-    title: row.title || row.id,
-    content: typeof row.content === "string" ? row.content : "",
-    documentRole: row.document_role ?? null,
-  }))
-  return { documents, sourceIds: documents.map((d) => d.id) }
+  const expanded = expandSourceRolesWhenEmpty({
+    roles: primaryRoles,
+    fallbackRoles: input.fallbackRoles,
+  })
+  if (expanded.length > primaryRoles.length) return fetchForRoles(expanded)
+  return first
 }
 
 export function formatSourcePreview(

@@ -82,6 +82,25 @@ describe("analysis report helpers", () => {
     ).toEqual({ ok: true })
   })
 
+  it("lets QC run without handbook or style sources so it can report that gap", () => {
+    expect(
+      preflightAnalysisRun({
+        kind: "qc",
+        agentId: "qc-agent",
+        bindings: emptyProgrammeBindings(),
+        documents: [],
+      }),
+    ).toEqual({ ok: true })
+    expect(
+      preflightAnalysisRun({
+        kind: "oer",
+        agentId: "oer-agent",
+        bindings: emptyProgrammeBindings(),
+        documents: [],
+      }),
+    ).toEqual({ ok: false, reason: "The bound agent has no source documents" })
+  })
+
   it("extracts conflicts, addresses findings, and matches measures", () => {
     const findings = [
       finding({ id: "c1", summary: "Contradiction", conflictWithDocumentId: "doc-b" }),

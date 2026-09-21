@@ -289,7 +289,7 @@ async function executeBoundAgentAnalysis(input: {
   const { completeLlm } = await import("@/lib/llm")
   const { compileSystemPrompt } = await import("@/lib/chat/playbook-compiler")
   const { loadPromptLayers } = await import("@/lib/llm/prompts")
-  const { parseProgrammeBindings, boundAgentId } = await import("@/lib/programme/domain")
+  const { parseProgrammeBindings, boundAgentId, defaultSourceRolesForStage } = await import("@/lib/programme/domain")
   const { getLatestAgentVersion, getAgentVersionById } = await import("@/lib/actions/agent")
   const { resolveAgentSourceDocuments, formatSourcePreview } = await import("@/lib/programme/source-set")
   const { formatSectionEvidenceReport, preflightAnalysisRun, conflictFindings } = await import(
@@ -321,6 +321,7 @@ async function executeBoundAgentAnalysis(input: {
     workspaceId: input.workspaceId,
     version: agentVersion,
     bindings,
+    fallbackRoles: defaultSourceRolesForStage(input.kind),
   })
   if (input.pinSourceDocumentIds?.length) {
     documents = documents.filter((document) => input.pinSourceDocumentIds?.includes(document.id))

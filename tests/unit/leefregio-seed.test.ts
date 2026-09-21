@@ -19,5 +19,7 @@ describe("Sterke Leefregio's template seed", () => {
     expect(visie?.instructions).toMatch(/gebonden/)
     expect(visie?.instructions).toMatch(/Verzin geen/)
     expect(wonen?.instructions).toMatch(/gebonden/)
+    expect(wonen?.relationHints).not.toMatch(/visie 5\.2/i)
+    expect(visie?.relationHints).not.toMatch(/visie 4\.2\./i)
   })
 })

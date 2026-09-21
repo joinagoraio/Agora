@@ -82,7 +82,10 @@ export function preflightAnalysisRun(input: {
   documents: SourceDocumentLike[]
 }): { ok: true } | { ok: false; reason: string } {
   if (!input.agentId) return { ok: false, reason: "Bind an agent for this stage first" }
-  if (input.documents.length === 0) return { ok: false, reason: "The bound agent has no source documents" }
+  if (input.documents.length === 0) {
+    if (input.kind === "qc") return { ok: true }
+    return { ok: false, reason: "The bound agent has no source documents" }
+  }
   if (input.kind === "analysis") {
     const hasVision =
       input.documents.some((document) => document.documentRole === "environmental_vision") ||

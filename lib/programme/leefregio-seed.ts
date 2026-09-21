@@ -27,11 +27,11 @@ export const LEEFREGIO_SEED_NODES: HandbookSeedNode[] = [
     sortOrder: 2,
     fieldSpecs: [
       { key: "ambitions", label: "Visie-ambities", required: true },
-      { key: "interests", label: "Provinciale belangen 1–3", required: true },
+      { key: "interests", label: "Provinciale belangen from the bound vision", required: true },
     ],
-    qualityRules: "Noem belangen zoals in de visie, niet vrij parafraseren.",
+    qualityRules: "Noem belangen zoals in de gebonden visie, niet vrij parafraseren.",
     outputForm: "Kort proza plus een lijst ambitie/belang.",
-    relationHints: "Bronnen: visie 4.2. Vervolg: wonen, mobiliteit, maatregelen.",
+    relationHints: "Bronnen: gebonden omgevingsvisie. Vervolg: wonen, mobiliteit, maatregelen.",
   },
   {
     title: "Wonen en samenleving",
@@ -43,11 +43,11 @@ export const LEEFREGIO_SEED_NODES: HandbookSeedNode[] = [
     fieldSpecs: [{ key: "housing_focus", label: "Woonfocus", required: true }],
     qualityRules: "Verzin geen wooncijfers die niet in gebonden bronnen staan.",
     outputForm: "Narratief plus geplaatste maatregelen.",
-    relationHints: "Bronnen: visie 5.2 + volkshuisvesting. Belangen 14–16.",
+    relationHints: "Bronnen: gebonden visie en gebonden bestaand beleid. Alleen belangen die daar staan.",
   },
   {
     title: "Mobiliteit",
-    purpose: "Hoofdstuk 5.4 en provinciale belangen 20 en 21.",
+    purpose: "Mobiliteit voor zover de gebonden bronnen die dekken.",
     instructions:
       "Werk mobiliteitsmaatregelen alleen uit als de gebonden bronnen die dekken. Koppel aan belangen die daar staan (vaak 20). Verzin belang 21 of modal-split-targets niet.",
     required: true,
@@ -55,19 +55,19 @@ export const LEEFREGIO_SEED_NODES: HandbookSeedNode[] = [
     fieldSpecs: [{ key: "mobility_focus", label: "Mobiliteitsfocus", required: true }],
     qualityRules: "Geen nieuwe modal-split-targets zonder bron.",
     outputForm: "Narratief plus geplaatste maatregelen.",
-    relationHints: "Bronnen: visie 5.4. Vervolg: maatregelen en OER.",
+    relationHints: "Bronnen: gebonden visie en beleid waar die mobiliteit dekken. Vervolg: maatregelen en OER.",
   },
   {
     title: "Energie voor Sterke Leefregio's",
-    purpose: "Hoofdstuk 5.5 voor zover relevant voor leefregio's.",
+    purpose: "Energie voor zover relevant voor leefregio's in de gebonden bronnen.",
     instructions:
       "Alleen energieonderdelen die de leefregio raken: netcongestie bij woningbouw, warmte bij verdichting. Laat provinciebrede energiesystemen elders.",
     required: false,
     sortOrder: 5,
     fieldSpecs: [{ key: "energy_scope", label: "Relevante energieopgaven", required: false }],
-    qualityRules: "Alleen wat de visie 5.5 koppelt aan wonen of mobiliteit.",
+    qualityRules: "Alleen wat de gebonden visie koppelt aan wonen of mobiliteit.",
     outputForm: "Korte constraint-lijst met citaten.",
-    relationHints: "Bronnen: visie 5.5. Optioneel hoofdstuk.",
+    relationHints: "Bronnen: gebonden visie en effectenrapport waar die energie bij knooppunten dekken. Optioneel hoofdstuk.",
   },
   {
     title: "Volkshuisvestingsprogramma",
@@ -79,7 +79,7 @@ export const LEEFREGIO_SEED_NODES: HandbookSeedNode[] = [
     fieldSpecs: [{ key: "housing_programme", label: "Volkshuisvestingskoppeling", required: true }],
     qualityRules: "Geen blinde overname van het bestaande woonprogramma.",
     outputForm: "Narratief plus maatregelen op dit knooppunt.",
-    relationHints: "Bronnen: housing_programme + visie 5.2.",
+    relationHints: "Bronnen: gebonden woonprogramma of bestaand beleid plus gebonden visie.",
   },
   {
     title: "Maatregelenprogramma",

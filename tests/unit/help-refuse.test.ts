@@ -58,6 +58,14 @@ describe("help route isolation", () => {
   })
 })
 
+describe("workspace knowledge document columns", () => {
+  it("does not select a documents.url column that does not exist", () => {
+    const source = readFileSync(resolve(process.cwd(), "lib/rag/search.ts"), "utf8")
+    expect(source).toMatch(/select\("id, title, content, external_url"\)/)
+    expect(source).not.toMatch(/select\("id, title, content, url, external_url"\)/)
+  })
+})
+
 describe("document upload insert", () => {
   it("writes the file location to external_url", () => {
     const finalize = readFileSync(resolve(process.cwd(), "app/api/documents/upload-finalize/route.ts"), "utf8")

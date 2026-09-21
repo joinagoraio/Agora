@@ -725,7 +725,7 @@ export async function getRelevantContext(
       const source: any = {
         id: doc.id,
         title: doc.title,
-        url: doc.url || doc.external_url,
+        url: doc.external_url,
       }
 
       if (match.pageNumber) {
@@ -805,7 +805,7 @@ export async function getAllWorkspaceKnowledge(
   const excludedDocsSet = new Set(excludedDocumentIds)
   const { data: allDocuments, error: docsError } = await supabase
     .from("documents")
-    .select("id, title, content, url, external_url")
+    .select("id, title, content, external_url")
     .eq("workspace_id", workspaceId)
     .neq("status", "deleted")
     .neq("status", "archived")
@@ -872,7 +872,7 @@ export async function getAllWorkspaceKnowledge(
       id: doc.id,
       documentId: doc.id,
       title: doc.title,
-      url: doc.url || doc.external_url,
+      url: doc.external_url,
       content,
     })
 

@@ -11,6 +11,22 @@ export const ROLE_TO_BINDING: Partial<Record<DocumentRole, keyof ProgrammeBindin
 
 const BINDING_ID_KEYS = Object.values(ROLE_TO_BINDING)
 
+export function sourceRolesForAgent(input: {
+  versionRoles?: readonly DocumentRole[] | null
+  fallbackRoles?: readonly DocumentRole[] | null
+}): DocumentRole[] {
+  const version = [...(input.versionRoles || [])]
+  if (version.length > 0) return version
+  return [...(input.fallbackRoles || [])]
+}
+
+export function expandSourceRolesWhenEmpty(input: {
+  roles: readonly DocumentRole[]
+  fallbackRoles?: readonly DocumentRole[] | null
+}): DocumentRole[] {
+  return [...new Set([...input.roles, ...(input.fallbackRoles || [])])]
+}
+
 export function bindingIdsForRoles(bindings: ProgrammeBindings, roles: readonly DocumentRole[]): string[] {
   const ids = new Set<string>()
   for (const role of roles) {
