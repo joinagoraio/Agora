@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { cn } from "@/lib/utils"
 import { useChatContext } from "@/components/workspace-chat-wrapper"
 import {
   ProgrammeAccessDialogs,
@@ -869,7 +870,12 @@ export function ProgrammeWorkbench({
     <ProgrammeTextHistoryProvider>
     <>
     <div className="relative flex h-dvh flex-col overflow-hidden bg-white">
-      <header className="shrink-0 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75">
+      <header
+        className={cn(
+          "shrink-0 border-b bg-card",
+          !sheetOpen && "bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75",
+        )}
+      >
         <div className="relative flex h-16 min-w-0 items-center px-4">
           <Button variant="ghost" asChild className="relative z-10 justify-self-start min-w-0">
             <Link href={`/spaces/${spaceId}`}>
@@ -942,7 +948,7 @@ export function ProgrammeWorkbench({
       pipeline.firstIncomplete !== "orient" ? (
         <div
           data-guidance-next=""
-          className="relative z-[60] flex shrink-0 items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2"
+          className="flex shrink-0 items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2"
         >
           <div className="min-w-0">
             <p className="text-sm font-medium">
@@ -1083,8 +1089,8 @@ export function ProgrammeWorkbench({
       <Dialog open={sheetOpen} modal={false} onOpenChange={(open) => { if (!open) closeSheet() }}>
         <DialogContent
           inertOverlay
-          overlayClassName="z-40 pointer-events-none"
-          className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden sm:max-w-4xl"
+          overlayClassName="z-[70] pointer-events-none"
+          className="z-[80] flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden sm:max-w-4xl"
           onPointerDownOutside={(event) => event.preventDefault()}
           onInteractOutside={(event) => event.preventDefault()}
           onFocusOutside={(event) => event.preventDefault()}

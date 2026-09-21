@@ -399,7 +399,10 @@ export function ProgrammeToolsToolbar({
       <div
         ref={shellRef}
         data-programme-toolbar=""
-        className="relative z-[60] shrink-0 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75"
+        className={cn(
+          "relative shrink-0 border-b bg-card",
+          !sheetOpen && "z-[60] bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75",
+        )}
       >
         <nav
           aria-label={t("workspace.programme.navAria")}
@@ -418,7 +421,8 @@ export function ProgrammeToolsToolbar({
       ref={shellRef}
       data-programme-toolbar=""
       className={cn(
-        "pointer-events-auto absolute z-[60] max-w-[calc(100%-1rem)]",
+        "pointer-events-auto absolute max-w-[calc(100%-1rem)]",
+        sheetOpen ? "z-0" : "z-[60]",
         position ? null : "top-20 right-4",
         dragging && "select-none",
       )}
@@ -427,7 +431,10 @@ export function ProgrammeToolsToolbar({
       <nav
         aria-label={t("workspace.programme.navAria")}
         aria-expanded={!collapsed}
-        className="flex items-center overflow-x-auto rounded-full border bg-background/95 px-1.5 py-1 shadow-lg backdrop-blur-md"
+        className={cn(
+          "flex items-center overflow-x-auto rounded-full border px-1.5 py-1 shadow-lg",
+          sheetOpen ? "bg-background" : "bg-background/95 backdrop-blur-md",
+        )}
       >
         <IconTooltip label={t("workspace.programme.toolbarMove")} side="bottom">
           <Button
