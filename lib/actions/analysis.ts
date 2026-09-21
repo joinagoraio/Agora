@@ -103,7 +103,11 @@ export async function setFindingAddressed(
     .eq("id", reportId)
     .eq("workspace_id", workspaceId)
   if (updateError) return { error: updateError.message }
-  revalidatePath(`/workspaces/${workspaceId}/programme`)
+  try {
+    revalidatePath(`/workspaces/${workspaceId}/programme`)
+  } catch {
+    // Client refresh still loads the finding update.
+  }
   return { data: { reportId, findingId, addressed } }
 }
 
@@ -218,7 +222,11 @@ async function saveStructuredReport(input: {
     .select()
     .single()
   if (error) return { error: error.message }
-  revalidatePath(`/workspaces/${input.workspaceId}/programme`)
+  try {
+    revalidatePath(`/workspaces/${input.workspaceId}/programme`)
+  } catch {
+    // Client refresh still loads the new report.
+  }
   return { data }
 }
 
@@ -236,15 +244,19 @@ export async function runBoundAgentAnalysis(input: {
     return { error: error instanceof Error ? error.message : "Unauthorized" }
   }
 
-  const jobKind = input.kind === "qc" ? "qc" : input.kind === "analysis" ? "analysis" : null
-  const job = !input.skipJob && jobKind ? await startAnalysisJob(input.workspaceId, jobKind, input.kind) : null
-  if (job?.error) return { error: job.error }
+  try {
+    const jobKind = input.kind === "qc" ? "qc" : input.kind === "analysis" ? "analysis" : null
+    const job = !input.skipJob && jobKind ? await startAnalysisJob(input.workspaceId, jobKind, input.kind) : null
+    if (job?.error) return { error: job.error }
 
-  const result = await executeBoundAgentAnalysis(input)
-  if (job?.data) {
-    await finishAnalysisJob(input.workspaceId, job.data.id, result.error ? "failed" : "done", result.error)
+    const result = await executeBoundAgentAnalysis(input)
+    if (job?.data) {
+      await finishAnalysisJob(input.workspaceId, job.data.id, result.error ? "failed" : "done", result.error)
+    }
+    return result
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Analysis failed" }
   }
-  return result
 }
 
 export async function rerunAnalysisFromReport(workspaceId: string, reportId: string, instructions?: string) {
@@ -324,7 +336,7 @@ async function executeBoundAgentAnalysis(input: {
   let outlineBlock = ""
   if (bindings.templateId) {
     const outline = await listProgrammeOutlineNodes(bindings.templateId)
-    outlineBlock = outline.data.map((n) => `- ${n.title}${n.required ? " (required)" : ""}`).join("\n")
+    outlineBlock = (outline.data || []).map((n) => `- ${n.title}${n.required ? " (required)" : ""}`).join("\n")
   }
   const measures = await listProgrammeMeasures(input.workspaceId)
   const measureBlock = (measures.data || [])
@@ -354,7 +366,12 @@ async function executeBoundAgentAnalysis(input: {
   let raw = ""
   const { getTenantIdForSpace, resolveAgentVersionLlm } = await import("@/lib/llm/resolve")
   const tenantId = workspace.space_id ? await getTenantIdForSpace(workspace.space_id) : null
-  const llm = await resolveAgentVersionLlm({ tenantId, spaceId: workspace.space_id, agentVersion })
+  let llm
+  try {
+    llm = await resolveAgentVersionLlm({ tenantId, spaceId: workspace.space_id, agentVersion })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not resolve the analysis model" }
+  }
   const model = llm.model
   const provider = llm.provider
   try {

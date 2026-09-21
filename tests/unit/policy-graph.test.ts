@@ -24,4 +24,8 @@ describe("policy graph matrix", () => {
     expect(rows[0]?.anchors.map((a) => a.label)).toEqual(["Housing near nodes", "14"])
     expect(rows[1]?.hasPath).toBe(false)
   })
+
+  it("treats missing nodes or edges as an empty graph", () => {
+    expect(formatPolicyGraphMatrix({ nodes: undefined as never, edges: undefined as never })).toEqual([])
+  })
 })

@@ -41,6 +41,7 @@ import { useI18n } from "@/lib/i18n/use-i18n"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { patchAskPanelPreference, readAskPanelPreference } from "@/lib/chat/ask-panel-preference"
 import { GuidanceCoach } from "@/components/guidance-coach"
+import { ErrorBoundary } from "@/components/error-boundary"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { ChatGuidanceConfig, ChatPanelTab } from "@/lib/guidance/chat-guidance"
 
@@ -995,6 +996,7 @@ export function ChatSidebar({
 
       {guidance && panelTab === "guidance" ? (
         <div className="min-h-0 flex-1 overflow-hidden">
+          <ErrorBoundary resetKeys={[panelTab, workspaceId || ""]}>
           <GuidanceCoach
             variant="embedded"
             surface={guidance.surface}
@@ -1012,6 +1014,7 @@ export function ChatSidebar({
             expertPromptDismissed={guidance.expertPromptDismissed}
             setupInProgress={guidance.setupInProgress}
           />
+          </ErrorBoundary>
         </div>
       ) : (
       <div className="flex flex-1 overflow-hidden">

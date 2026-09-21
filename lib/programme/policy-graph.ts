@@ -22,10 +22,12 @@ export function formatPolicyGraphMatrix(input: {
   nodes: PolicyGraphNode[]
   edges: PolicyGraphEdge[]
 }): PolicyGraphRow[] {
-  const byId = new Map(input.nodes.map((node) => [node.id, node]))
-  const measures = input.nodes.filter((node) => node.node_type === "measure")
+  const nodes = Array.isArray(input.nodes) ? input.nodes : []
+  const edges = Array.isArray(input.edges) ? input.edges : []
+  const byId = new Map(nodes.map((node) => [node.id, node]))
+  const measures = nodes.filter((node) => node.node_type === "measure")
   return measures.map((measure) => {
-    const anchors = input.edges
+    const anchors = edges
       .filter((edge) => edge.from_node_id === measure.id && edge.relation === "contributes_to")
       .map((edge) => byId.get(edge.to_node_id))
       .filter((node): node is PolicyGraphNode => Boolean(node))

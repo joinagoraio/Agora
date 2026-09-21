@@ -1,6 +1,8 @@
 import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/server"
 import { redirect, notFound } from "next/navigation"
+
+export const dynamic = "force-dynamic"
 import { ProgrammeWorkbench } from "@/components/programme-workbench"
 import { WorkspaceChatWrapper } from "@/components/workspace-chat-wrapper"
 import { parseDocumentOwnerId } from "@/lib/programme/ownership"

@@ -128,12 +128,12 @@ export class ErrorBoundary extends Component<Props, State> {
               </p>
             </div>
 
-            {process.env.NODE_ENV === "development" && this.state.error && (
+            {this.state.error && (
               <div className="mt-4 rounded-md border border-destructive/50 bg-destructive/10 p-4 text-left">
                 <p className="font-mono text-sm text-destructive">
                   {this.state.error.toString()}
                 </p>
-                {this.state.errorInfo && (
+                {process.env.NODE_ENV === "development" && this.state.errorInfo && (
                   <details className="mt-2">
                     <summary className="cursor-pointer text-sm font-medium">Component Stack</summary>
                     <pre className="mt-2 overflow-auto text-xs">

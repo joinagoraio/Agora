@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation"
 import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/server"
+
+export const dynamic = "force-dynamic"
 import { getServerTranslator } from "@/lib/i18n/server"
 import { getSourcesByWorkspace } from "@/lib/actions/source"
 import { getWorkspaceDocuments, getArchivedDocumentCount } from "@/lib/actions/document"
