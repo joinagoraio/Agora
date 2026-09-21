@@ -7,7 +7,7 @@ export const LEEFREGIO_SEED_NODES: HandbookSeedNode[] = [
     title: "Inleiding en wettelijk kader",
     purpose: "Kader het programmadeel, de wettelijke grondslag en de leeswijzer.",
     instructions:
-      "Noem de wettelijke grondslag, de relatie tot de Omgevingsvisie Flevoland 2050, en wat dit programmadeel besluit. Verzin geen juridische citaten.",
+      "Noem de wettelijke grondslag en wat dit programmadeel besluit, alleen vanuit gebonden bronnen. Verzin geen visiehoofdstukken, belangen of juridische citaten die niet in die bronnen staan.",
     required: true,
     sortOrder: 1,
     fieldSpecs: [
@@ -20,9 +20,9 @@ export const LEEFREGIO_SEED_NODES: HandbookSeedNode[] = [
   },
   {
     title: "Visie 4.2 Sterke Leefregio's",
-    purpose: "Veranker hoofdstuk 4.2 van de visie en de provinciale belangen 1, 2 en 3.",
+    purpose: "Veranker de gebonden omgevingsvisie. Noem alleen belangen die in die bron staan.",
     instructions:
-      "Werk uit vanuit Omgevingsvisie 4.2 Sterke Leefregio's, met aandacht voor 2.2 Wonen en Mobiliteit, 3.1 Wensbeeld 2050 en 3.2 rollen van de provincie. Koppel ambities aan provinciale belangen 1–3.",
+      "Werk alleen uit wat de gebonden visie en het gebonden beleid dekken (vaak wonen bij knooppunten en de belangen die daar genoemd worden). Verzin geen visieparagrafen, belangen 1–3 of 4.2-tekst die niet in de gebonden bronnen staan.",
     required: true,
     sortOrder: 2,
     fieldSpecs: [
@@ -35,9 +35,9 @@ export const LEEFREGIO_SEED_NODES: HandbookSeedNode[] = [
   },
   {
     title: "Wonen en samenleving",
-    purpose: "Hoofdstuk 5.2 en provinciale belangen 14, 15 en 16.",
+    purpose: "Wonen bij knooppunten en de belangen die de gebonden bronnen noemen (vaak 14 en 20).",
     instructions:
-      "Plaats woon- en leefbaarheidsmaatregelen hier. Grond claims in visie 5.2 en het volkshuisvestingsprogramma. Eis locatie of typologie.",
+      "Plaats woon- en leefbaarheidsmaatregelen hier. Grond claims alleen in de gebonden visie, bestaand beleid en het woonprogramma. Eis locatie of typologie. Verzin geen visieparagraaf 5.2 of belangen die niet in die bronnen staan.",
     required: true,
     sortOrder: 3,
     fieldSpecs: [{ key: "housing_focus", label: "Woonfocus", required: true }],
@@ -49,7 +49,7 @@ export const LEEFREGIO_SEED_NODES: HandbookSeedNode[] = [
     title: "Mobiliteit",
     purpose: "Hoofdstuk 5.4 en provinciale belangen 20 en 21.",
     instructions:
-      "Werk mobiliteitsmaatregelen uit die bijdragen aan Sterke Leefregio's. Koppel aan belangen 20 en 21. Signaleer spanning met landschap of leefbaarheid.",
+      "Werk mobiliteitsmaatregelen alleen uit als de gebonden bronnen die dekken. Koppel aan belangen die daar staan (vaak 20). Verzin belang 21 of modal-split-targets niet.",
     required: true,
     sortOrder: 4,
     fieldSpecs: [{ key: "mobility_focus", label: "Mobiliteitsfocus", required: true }],

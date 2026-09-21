@@ -104,6 +104,15 @@ describe("compileSystemPrompt (S1 spike)", () => {
     },
   )
 
+  it("writes as the bound bevoegd gezag and does not invent a handbook", () => {
+    const draft = compileSystemPrompt({ kind: "draft", userLanguage: "English" })
+    expect(draft.systemPrompt).toContain("bevoegd gezag")
+    expect(draft.systemPrompt).toContain("never assume it is a municipality")
+
+    const qc = compileSystemPrompt({ kind: "qc", userLanguage: "English" })
+    expect(qc.systemPrompt).toContain("Do not invent a handbook")
+  })
+
   it("puts the shared programme-layer line on Ask, draft, analysis, and measures", () => {
     for (const kind of ["chat", "draft", "analysis", "measures"] as const) {
       const result = compileSystemPrompt({ kind, userLanguage: "English" })

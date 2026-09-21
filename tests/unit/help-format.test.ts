@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  bindSourcesNextStep,
   compileHelpAnswer,
   composeGlossaryHelp,
   formatBoundDocumentList,
@@ -117,7 +118,23 @@ describe("glossary help composition", () => {
     expect(text).toMatch(/^## Bound documents/)
     expect(text).toContain("vision")
     expect(text).toContain(formatBoundDocumentList(BOUND_TITLES, "en"))
-    expect(text).toContain("Knowledge → Files")
+    expect(text).toContain("Bound sources on the programme toolbar")
+    expect(text).not.toContain("Knowledge → Files")
+  })
+
+  it("points setup questions at the three dropdowns on this page", () => {
+    expect(resolveGlossaryEntry("What is an environmental vision, existing policy, and effects report on this page?")?.key).toBe(
+      "setupSources",
+    )
+    expect(bindSourcesNextStep("en", "setup")).toContain("three dropdowns on this page")
+    const text = composeGlossaryHelp("setupSources", glossaryDefinition("setupSources") ?? "", {
+      language: "en",
+      section: "setup",
+    })
+    expect(text).toMatch(/^## These files/)
+    expect(text).toContain("three dropdowns")
+    expect(text).toContain("Vision and existing policy are required")
+    expect(text).not.toContain("Knowledge → Files")
   })
 
   it("resolves what is analysis to a structured glossary answer", () => {
