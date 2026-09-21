@@ -14,7 +14,7 @@ export async function renderPrintHtmlToPdf(html: string): Promise<HtmlToPdfResul
         printBackground: true,
         margin: { top: "18mm", right: "16mm", bottom: "18mm", left: "16mm" },
       })
-      return { ok: true, pdf: Buffer.from(pdf) }
+      return { ok: true, pdf: Buffer.isBuffer(pdf) ? pdf : Buffer.from(pdf) }
     } finally {
       await browser.close()
     }

@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react"
+
 import {
   DEFAULT_PROGRAMME_PAGE_CHROME,
   parseProgrammePageChrome,
@@ -125,8 +127,8 @@ export function programmeChapterScrollTop(
   return Math.max(0, scrollerScrollTop + targetClientTop - scrollerClientTop)
 }
 
-export function programmeDocumentTypeStyle(scale: number): { ["--programme-type-scale"]: string } {
-  return { "--programme-type-scale": String(clampScale(scale)) }
+export function programmeDocumentTypeStyle(scale: number): CSSProperties {
+  return { "--programme-type-scale": String(clampScale(scale)) } as CSSProperties
 }
 
 export function stepProgrammeScale(scale: number, direction: 1 | -1) {

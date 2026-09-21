@@ -153,7 +153,7 @@ export function readProgrammePageExtra(unit: HTMLElement): number {
       if (Number.isFinite(fromTable) && fromTable > 0) return fromTable
     }
     const prev = unit.previousElementSibling
-    if (prev && isProgrammePageBreakRow(prev)) {
+    if (prev instanceof HTMLElement && isProgrammePageBreakRow(prev)) {
       const fromSpacer = Number.parseFloat(prev.dataset.programmePageExtra || "")
       if (Number.isFinite(fromSpacer) && fromSpacer > 0) return fromSpacer
       return prev.getBoundingClientRect().height
@@ -213,7 +213,8 @@ function applyPreviewUnitExtra(unit: HTMLElement, extra: number) {
     return
   }
   if (unit.tagName === "TR" && target === unit) {
-    unit.parentElement?.insertBefore(createProgrammePageBreakRow(extra, unit.cells.length), unit)
+    const columns = unit instanceof HTMLTableRowElement ? unit.cells.length : 1
+    unit.parentElement?.insertBefore(createProgrammePageBreakRow(extra, columns), unit)
     return
   }
   const base = Number.parseFloat(getComputedStyle(target).marginTop) || 0

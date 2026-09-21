@@ -853,7 +853,7 @@ function SRUWebserviceTab({ onDocumentsSelected, showSelection = true }: Overhei
                   <CardHeader className="pb-3">
                     <div className="flex items-start gap-3">
                       <DocumentFileTypeIcon
-                        document={{ mimeType: record.type, fileName: record.url, title: record.title }}
+                        document={{ mimeType: record.type, fileName: record.identifier, title: record.title }}
                         className="mt-0.5"
                       />
                       <div className="flex-1">

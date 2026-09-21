@@ -183,14 +183,14 @@ export function SpaceSettings({
     const result = await inviteUserToSpace(space.id, email, inviteRole)
     setIsInviting(false)
 
-    if (result.error) {
+    if ("error" in result && result.error) {
       toast.error(t("space.settings.invitations.toastError"), { description: result.error })
       return
     }
 
     setInviteEmail("")
     toast.success(
-      result.emailSkipped
+      "emailSkipped" in result && result.emailSkipped
         ? t("space.settings.invitations.toastSentNoEmail")
         : t("space.settings.invitations.toastSent"),
       { description: email },
@@ -205,7 +205,7 @@ export function SpaceSettings({
 
     setInvitationAction(null)
 
-    if (result?.error) {
+    if (result && "error" in result && result.error) {
       toast.error(
         type === "resend"
           ? t("space.settings.invitations.toastResendError")

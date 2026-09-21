@@ -117,7 +117,8 @@ function dispatchBreaks(editor: Editor, extras: ProgrammePageBreakSpec[]) {
   if (editor.isDestroyed) return
   const current = pageBreakKey.getState(editor.state)
   const next = decorationsFor(editor.state.doc, extras)
-  if (current?.eq(next)) return
+  const currentSet = current as (DecorationSet & { eq: (other: DecorationSet) => boolean }) | undefined
+  if (currentSet?.eq(next)) return
   const { tr } = editor.state
   editor.view.dispatch(tr.setMeta(pageBreakKey, extras).setMeta("addToHistory", false))
 }

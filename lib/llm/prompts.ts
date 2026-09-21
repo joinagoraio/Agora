@@ -229,6 +229,14 @@ export async function getPlatformPrompt(id: string): Promise<string> {
   return builtinPlatformPrompt(id)
 }
 
+export type PlatformPromptRow = {
+  id: string
+  group_id: string
+  label: string
+  body: string
+  updated_at: string | null
+}
+
 export async function listPlatformPrompts() {
   await ensurePlatformPromptSeeds()
   const admin = createAdminClient()
@@ -237,8 +245,8 @@ export async function listPlatformPrompts() {
     .select("id, group_id, label, body, updated_at")
     .order("group_id")
     .order("id")
-  if (error) return { error: error.message, data: [] as Array<Record<string, unknown>> }
-  return { data: data || [] }
+  if (error) return { error: error.message, data: [] as PlatformPromptRow[] }
+  return { data: (data || []) as PlatformPromptRow[] }
 }
 
 export async function loadPromptLayers(kind: PromptKind): Promise<{ identity: string; playbook: string }> {

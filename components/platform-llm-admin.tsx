@@ -604,7 +604,7 @@ export function PlatformLlmAdmin() {
                               const previous = prompt.body
                               patchCatalog((current) => ({
                                 ...current,
-                                prompts: (current.prompts || []).map((row: { id: string }) =>
+                                prompts: (current.prompts || []).map((row) =>
                                   row.id === prompt.id ? { ...row, body } : row,
                                 ),
                               }))
@@ -613,7 +613,7 @@ export function PlatformLlmAdmin() {
                                 () => {
                                   patchCatalog((current) => ({
                                     ...current,
-                                    prompts: (current.prompts || []).map((row: { id: string }) =>
+                                    prompts: (current.prompts || []).map((row) =>
                                       row.id === prompt.id ? { ...row, body: previous } : row,
                                     ),
                                   }))

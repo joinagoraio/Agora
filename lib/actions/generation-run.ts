@@ -66,7 +66,6 @@ export async function recordGenerationRun(input: GenerationRunInput) {
 
 export async function computeUnusedDocumentIds(workspaceId: string, usedIds: string[]) {
   const report = await computeUnusedSourceReport(workspaceId, usedIds)
-  if (report.error) return { error: report.error, data: [] as string[] }
   const { unusedDocumentIdsFromReport } = await import("@/lib/programme/unused-sources")
   return { data: unusedDocumentIdsFromReport(report.data || []) }
 }
