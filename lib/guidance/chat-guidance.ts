@@ -13,6 +13,7 @@ export type ChatGuidanceConfig = {
   section?: string
   documentTitles?: Array<{ title: string; role: string | null }>
   onNavigate?: (section: string, target?: string) => void
+  onModeChange?: (mode: GuidanceMode) => void
   reviewComplete?: boolean
   expertPromptDismissed?: boolean
   setupInProgress?: boolean

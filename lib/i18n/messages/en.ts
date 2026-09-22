@@ -2431,6 +2431,8 @@ export const enMessages = {
       expert: "Expert",
       toggleSr: "Toggle guided help",
       expertHint: "Hides this panel so you can work full-width. Help brings it back.",
+      guidedEmbeddedHint: "The next step sits in a bar under the tools.",
+      expertEmbeddedHint: "Expert hides that bar. Turn Guided help on to show it.",
       tryExpertTitle: "Try expert layout?",
       tryExpertBody: "You have completed a review cycle. Expert hides this coach. You can turn guided help back on any time.",
       tryExpertConfirm: "Use expert",

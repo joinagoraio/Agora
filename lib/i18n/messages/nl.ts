@@ -2431,6 +2431,8 @@ export const nlMessages = {
       expert: "Expert",
       toggleSr: "Begeleide hulp in- of uitschakelen",
       expertHint: "Verbergt dit paneel zodat je het werkblad op volle breedte ziet. Hulp haalt het terug.",
+      guidedEmbeddedHint: "De volgende stap staat in een balk onder de werkbalk.",
+      expertEmbeddedHint: "Expert verbergt die balk. Zet begeleide hulp aan om hem te tonen.",
       tryExpertTitle: "Expertweergave proberen?",
       tryExpertBody: "Je hebt een reviewronde afgerond. Expert verbergt deze gids. Je kunt begeleide hulp altijd weer aanzetten.",
       tryExpertConfirm: "Gebruik expert",

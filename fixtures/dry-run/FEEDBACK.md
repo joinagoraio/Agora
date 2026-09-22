@@ -79,3 +79,7 @@ Opinions / non-blocking:
 
 - **Colleague notes had no reply and no common-note grouping.** Consultation already had reply + AI topics on the published snapshot. Draft comments are a different job: prepare the live text for consultation. **Fixed in this batch:** replies on `programme_comments`, lexical/AI themes on the live draft, Review + comment rail “Find common notes”, “Addressed in draft”. Consultation ledger unchanged.
 - **Opinion:** the comment rail is tight once a thread + the prep card stack. A later pass could collapse addressed themes and keep only the active paragraph card expanded.
+
+## Joint dry-run (22 Sep)
+
+- **Next-step bar missing, and no way to turn Guided help on.** The bar only renders in Guided mode. The Guided/Expert switch lived on a floating Help header the programme page never mounts, so Expert hid the bar with no control in the Guidance side panel. **Fixed in this batch:** the switch sits at the top of the Guidance panel, and turning it on shows the bar under the tools.

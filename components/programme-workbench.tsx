@@ -312,6 +312,10 @@ export function ProgrammeWorkbench({
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
+  const [liveGuidanceMode, setLiveGuidanceMode] = useState<GuidanceMode>(guidanceMode)
+  useEffect(() => {
+    setLiveGuidanceMode(guidanceMode)
+  }, [guidanceMode])
   const [outlineNodeCount, setOutlineNodeCount] = useState(0)
   const [snapshotLoaded, setSnapshotLoaded] = useState(false)
   const [wizardSession, setWizardSession] = useState(false)
@@ -841,7 +845,8 @@ export function ProgrammeWorkbench({
     setGuidance({
       surface: "programme",
       job: chromeJob,
-      guidanceMode,
+      guidanceMode: liveGuidanceMode,
+      onModeChange: setLiveGuidanceMode,
       helpAiEnabled,
       spaceId,
       pipeline,
@@ -867,7 +872,7 @@ export function ProgrammeWorkbench({
     coachSection,
     corpusDocs,
     expertPromptDismissed,
-    guidanceMode,
+    liveGuidanceMode,
     helpAiEnabled,
     pipeline,
     setGuidance,
@@ -953,7 +958,7 @@ export function ProgrammeWorkbench({
       />
       )}
       {!showSetupWizard &&
-      guidanceMode === "guided" &&
+      liveGuidanceMode === "guided" &&
       pipeline.firstIncomplete &&
       pipeline.firstIncomplete !== "orient" ? (
         <div

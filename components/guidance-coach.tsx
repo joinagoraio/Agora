@@ -264,7 +264,22 @@ export function GuidanceCoach({
     }
   }
 
-  const switchId = "guidance-mode-switch"
+  const switchId = variant === "embedded" ? "guidance-mode-switch-embedded" : "guidance-mode-switch"
+  const modeSwitch = (
+    <div className="flex shrink-0 items-center gap-2">
+      <label htmlFor={switchId} className="text-xs font-medium">
+        {t("guidance.mode.guided")}
+      </label>
+      <IconTooltip label={t("guidance.mode.toggleSr")}>
+        <Switch
+          id={switchId}
+          checked={mode === "guided"}
+          onCheckedChange={(checked) => void persistMode(checked ? "guided" : "expert")}
+          aria-label={t("guidance.mode.toggleSr")}
+        />
+      </IconTooltip>
+    </div>
+  )
 
   const clearHelpChat = () => {
     setMessages([])
@@ -501,6 +516,12 @@ export function GuidanceCoach({
   if (variant === "embedded") {
     return (
       <div className="flex h-full min-h-0 flex-col" aria-label={t("guidance.coach.landmark")}>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2">
+          <p className="min-w-0 text-[11px] leading-snug text-muted-foreground">
+            {mode === "expert" ? t("guidance.mode.expertEmbeddedHint") : t("guidance.mode.guidedEmbeddedHint")}
+          </p>
+          {modeSwitch}
+        </div>
         {body}
       </div>
     )
@@ -543,17 +564,7 @@ export function GuidanceCoach({
             )}
           </div>
           <div className="flex items-center gap-2">
-            <label htmlFor={switchId} className="text-xs font-medium">
-              {t("guidance.mode.guided")}
-            </label>
-            <IconTooltip label={t("guidance.mode.toggleSr")}>
-              <Switch
-                id={switchId}
-                checked={mode === "guided"}
-                onCheckedChange={(checked) => void persistMode(checked ? "guided" : "expert")}
-                aria-label={t("guidance.mode.toggleSr")}
-              />
-            </IconTooltip>
+            {modeSwitch}
             <IconTooltip label={t("guidance.coach.closePanel")}>
               <Button
                 type="button"

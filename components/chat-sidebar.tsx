@@ -1022,6 +1022,7 @@ export function ChatSidebar({
             helpAiEnabled={guidance.helpAiEnabled}
             documentTitles={guidance.documentTitles}
             onNavigate={guidance.onNavigate}
+            onModeChange={guidance.onModeChange}
             reviewComplete={guidance.reviewComplete}
             expertPromptDismissed={guidance.expertPromptDismissed}
             setupInProgress={guidance.setupInProgress}
