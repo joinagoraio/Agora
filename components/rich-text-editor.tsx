@@ -60,6 +60,8 @@ import { useI18n } from "@/lib/i18n/use-i18n"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { BlockId, BLOCK_ID_ATTR } from "@/lib/programme/block-id"
 import { ProgrammePageBreaks, registerProgrammePaginationEditor } from "@/lib/programme/editor-page-breaks"
+import { programmeCitationExtension, type ProgrammeCitationLookup } from "@/lib/programme/editor-citations"
+import type { ProgrammeCitationSource } from "@/lib/programme/citation-display"
 
 interface RichTextEditorProps {
   content: string
@@ -70,6 +72,8 @@ interface RichTextEditorProps {
   onBlockClick?: (blockId: string) => void
   showHistoryButtons?: boolean
   toolbar?: "fixed" | "selection"
+  workspaceId?: string | null
+  citationSources?: ProgrammeCitationSource[]
 }
 
 type ToolbarLabel = (key: string) => string
@@ -486,6 +490,8 @@ export function RichTextEditor({
   onBlockClick,
   showHistoryButtons = true,
   toolbar = "fixed",
+  workspaceId = null,
+  citationSources = [],
 }: RichTextEditorProps) {
   const { t } = useI18n()
   const tb = (key: string) => t(`workspace.documents.editor.toolbar.${key}`)
@@ -495,6 +501,8 @@ export function RichTextEditor({
   const keepMenuCountRef = useRef(0)
   const lastEmittedRef = useRef(content)
   const selectionToolbar = toolbar === "selection"
+  const citationLookupRef = useRef<ProgrammeCitationLookup["current"]>({ workspaceId, sources: citationSources })
+  citationLookupRef.current = { workspaceId, sources: citationSources }
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -521,6 +529,7 @@ export function RichTextEditor({
       ProgrammeParagraphSpacing,
       BlockId,
       ProgrammePageBreaks,
+      programmeCitationExtension(citationLookupRef),
     ],
     content,
     onUpdate: ({ editor, transaction }) => {
@@ -572,6 +581,12 @@ export function RichTextEditor({
     if (!editor) return
     return registerProgrammePaginationEditor(editor)
   }, [editor])
+
+  const citationKey = `${workspaceId || ""}:${citationSources.map((source) => `${source.id}:${source.title}`).join("|")}`
+  useEffect(() => {
+    if (!editor) return
+    editor.view.dispatch(editor.state.tr.setMeta("addToHistory", false))
+  }, [editor, citationKey])
 
   useEffect(() => {
     if (!editor) return

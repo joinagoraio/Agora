@@ -83,6 +83,8 @@ import {
   shouldAutoActivateWritingChapter,
   visibleProgrammeChapterIds,
 } from "@/lib/programme/document-mode"
+import { renderProgrammeCitationHtml, type ProgrammeCitationSource } from "@/lib/programme/citation-display"
+import { ProgrammeCitationTooltip } from "@/components/programme-citation-tooltip"
 import { BLOCK_ID_ATTR, ensureBlockIdsInHtml, quoteFromBlock } from "@/lib/programme/block-id"
 import { stripDuplicateChapterHeading } from "@/lib/programme/chapter-heading"
 import {
@@ -125,6 +127,7 @@ type Props = {
   onChapterOwnerChange?: () => void
   layout: ProgrammeDocumentLayout
   workspaceName?: string
+  citationSources?: ProgrammeCitationSource[]
 }
 
 export function ProgrammeChapterEditor({
@@ -151,8 +154,18 @@ export function ProgrammeChapterEditor({
   onChapterOwnerChange,
   layout,
   workspaceName = "",
+  citationSources = [],
 }: Props) {
   const { t } = useI18n()
+  const labelledCitationSources = useMemo(
+    () =>
+      citationSources.map((source) => {
+        const role = source.documentRole?.trim()
+        const label = role && role !== "other" ? t(`workspace.programme.documentRoles.${role}`, "") : ""
+        return label ? { ...source, label } : source
+      }),
+    [citationSources, t],
+  )
   const textHistory = useProgrammeTextHistory()
   const applyingHistoryRef = useRef(false)
   const dirtyIdsRef = useRef(new Set<string>())
@@ -1144,6 +1157,7 @@ export function ProgrammeChapterEditor({
 
   return (
     <div className={cn("flex h-full min-h-0 min-w-0 flex-1", programmeDocumentCanvasClass({ paged: layout.paged && !structureOpen }))}>
+      <ProgrammeCitationTooltip />
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto" id="programme-document-scroll" onClick={clearChapterFocus}>
       {structureOpen ? (
         <>
@@ -1307,8 +1321,10 @@ export function ProgrammeChapterEditor({
                   </div>
                   {showEditor ? (
                     hasDoc ? (
-                      <RichTextEditor
+                        <RichTextEditor
                           key={documentId || node.id}
+                          workspaceId={workspaceId}
+                          citationSources={labelledCitationSources}
                           content={stripDuplicateChapterHeading(content, node.title)}
                           showHistoryButtons={false}
                           toolbar="selection"
@@ -1358,13 +1374,16 @@ export function ProgrammeChapterEditor({
                       )}
                       onClick={(event) => onPreviewClick(event, node.id)}
                       dangerouslySetInnerHTML={{
-                        __html: ensureBlockIdsInHtml(
-                          stripDuplicateChapterHeading(
-                            isSelected && !(isWriting && activeChapterId && activeChapterId !== node.id)
-                              ? content || body.content
-                              : body.content,
-                            node.title,
+                        __html: renderProgrammeCitationHtml(
+                          ensureBlockIdsInHtml(
+                            stripDuplicateChapterHeading(
+                              isSelected && !(isWriting && activeChapterId && activeChapterId !== node.id)
+                                ? content || body.content
+                                : body.content,
+                              node.title,
+                            ),
                           ),
+                          { workspaceId, sources: labelledCitationSources },
                         ),
                       }}
                     />

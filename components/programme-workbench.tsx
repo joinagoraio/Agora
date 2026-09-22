@@ -1095,6 +1095,7 @@ export function ProgrammeWorkbench({
               onChapterOwnerChange={refresh}
               layout={documentLayout}
               workspaceName={workspaceName}
+              citationSources={citationCatalog.documents}
             />
             )}
           </div>
