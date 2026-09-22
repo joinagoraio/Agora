@@ -2,12 +2,13 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { NextRequest, NextResponse } from "next/server"
 import { isSupabaseStorageUrl } from "@/lib/utils/storage-url"
+import { plainTextFromStoredContent } from "@/lib/documents/stored-text"
 
 async function fetchDocumentTextFromSource(
-  document: { url: string | null; metadata: Record<string, any> | null; title: string | null },
+  document: { external_url: string | null; metadata: Record<string, any> | null; title: string | null },
   supabase: Awaited<ReturnType<typeof createClient>>
 ) {
-  const url = document.url
+  const url = document.external_url
   if (!url) {
     return null
   }
@@ -86,6 +87,25 @@ type DocumentPage = {
   page_number: number | null
 }
 
+function textResponse(body: string) {
+  return new NextResponse(body, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-cache",
+    },
+  })
+}
+
+async function storedDocumentText(
+  document: { external_url: string | null; metadata: Record<string, any> | null; title: string | null; content?: string | null },
+  supabase: Awaited<ReturnType<typeof createClient>>,
+) {
+  const fromFile = await fetchDocumentTextFromSource(document, supabase)
+  if (fromFile && fromFile.trim().length > 0) return fromFile
+  const fromRow = plainTextFromStoredContent(document.content)
+  return fromRow.length > 0 ? fromRow : null
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ documentId: string }> }
@@ -108,11 +128,12 @@ export async function GET(
     // who have access to the workspace, so if this query succeeds, the user has access
     const { data: document, error: docError } = await supabase
       .from("documents")
-      .select("id, workspace_id, metadata, title, url")
+      .select("id, workspace_id, metadata, title, external_url, content")
       .eq("id", documentId)
       .single()
 
     if (docError || !document) {
+      console.error("[text-content] Document lookup failed:", docError)
       return NextResponse.json({ error: "Document not found" }, { status: 404 })
     }
 
@@ -163,15 +184,8 @@ export async function GET(
     }
 
     if (!pages || pages.length === 0) {
-      const fallbackContent = await fetchDocumentTextFromSource(document, supabase)
-      if (fallbackContent && fallbackContent.trim().length > 0) {
-        return new NextResponse(fallbackContent, {
-          headers: {
-            "Content-Type": "text/plain; charset=utf-8",
-            "Cache-Control": "no-cache",
-          },
-        })
-      }
+      const fallbackContent = await storedDocumentText(document, supabase)
+      if (fallbackContent) return textResponse(fallbackContent)
       return NextResponse.json({ error: "No content found in document pages" }, { status: 404 })
     }
 
@@ -182,25 +196,12 @@ export async function GET(
       .join("\n\n")
 
     if (!textContent || textContent.trim().length === 0) {
-      const fallbackContent = await fetchDocumentTextFromSource(document, supabase)
-      if (fallbackContent && fallbackContent.trim().length > 0) {
-        return new NextResponse(fallbackContent, {
-          headers: {
-            "Content-Type": "text/plain; charset=utf-8",
-            "Cache-Control": "no-cache",
-          },
-        })
-      }
+      const fallbackContent = await storedDocumentText(document, supabase)
+      if (fallbackContent) return textResponse(fallbackContent)
       return NextResponse.json({ error: "Document has no text content" }, { status: 404 })
     }
 
-    // Return as plain text
-    return new NextResponse(textContent, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-cache",
-      },
-    })
+    return textResponse(textContent)
   } catch (error) {
     console.error("[text-content] Error:", error)
     return NextResponse.json(
