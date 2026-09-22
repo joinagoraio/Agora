@@ -187,6 +187,12 @@ export function GuidanceCoach({
   const nextAction = useMemo(() => {
     if (surface !== "programme" || !pipeline?.firstIncomplete) return t("guidance.coach.nothingRequired")
     if (pipeline.firstIncomplete === "orient") return t("guidance.coach.organisationHint")
+    if (pipeline.firstIncomplete === "draft" && pipeline.focusChapterTitle) {
+      return t("guidance.coach.nextDraftNamed", undefined, { title: pipeline.focusChapterTitle })
+    }
+    if (pipeline.firstIncomplete === "review" && pipeline.focusChapterTitle) {
+      return t("guidance.coach.nextReviewNamed", undefined, { title: pipeline.focusChapterTitle })
+    }
     return t(NEXT_COPY[pipeline.firstIncomplete])
   }, [pipeline, surface, t])
 

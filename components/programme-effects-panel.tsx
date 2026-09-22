@@ -35,11 +35,20 @@ type Props = {
   onMessage: (message: string | null, kind?: NotifyKind) => void
   onRefresh: () => void
   onGoMeasures: () => void
+  recordedIds?: string[]
 }
 
 const DIRECTIONS = effectsDirectionSchema.options
 
-export function ProgrammeEffectsPanel({ workspaceId, measures, reports = [], onMessage, onRefresh, onGoMeasures }: Props) {
+export function ProgrammeEffectsPanel({
+  workspaceId,
+  measures,
+  reports = [],
+  onMessage,
+  onRefresh,
+  onGoMeasures,
+  recordedIds = [],
+}: Props) {
   const { t } = useI18n()
   const [pending, startTransition] = useTransition()
   const [drafts, setDrafts] = useState<
@@ -157,6 +166,13 @@ export function ProgrammeEffectsPanel({ workspaceId, measures, reports = [], onM
           const draft = drafts[m.id]
           if (!draft) return null
           const needsJustification = draft.effectsDeviation && !draft.effectsJustification.trim()
+          const matchesRecord =
+            recordedIds.includes(m.id) &&
+            draft.effectsDirection === (DIRECTIONS.includes(m.effects_direction as (typeof DIRECTIONS)[number])
+              ? m.effects_direction
+              : "unknown") &&
+            draft.effectsDeviation === Boolean(m.effects_deviation) &&
+            draft.effectsJustification === (m.effects_justification || "")
           const latestEffects = reports.find((report) => report.report_type === "effects")
           const finding = Array.isArray(latestEffects?.findings)
             ? latestEffects.findings.find((item: { measureId?: string; id?: string; summary?: string }) =>
@@ -188,7 +204,7 @@ export function ProgrammeEffectsPanel({ workspaceId, measures, reports = [], onM
                 </div>
                 <Button
                   size="sm"
-                  disabled={pending || needsJustification}
+                  disabled={pending || needsJustification || matchesRecord}
                   onClick={() =>
                     startTransition(async () => {
                       const result = await updateMeasureEffects(workspaceId, m.id, {
@@ -205,7 +221,7 @@ export function ProgrammeEffectsPanel({ workspaceId, measures, reports = [], onM
                     })
                   }
                 >
-                  {t("workspace.programme.effectsSave")}
+                  {matchesRecord ? t("workspace.programme.effectsSavedState") : t("workspace.programme.effectsSave")}
                 </Button>
               </div>
 

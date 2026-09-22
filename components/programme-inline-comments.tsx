@@ -154,12 +154,18 @@ export function ProgrammeInlineComments({
                     {clusterLabel}
                   </Button>
                 ) : null}
-                {openThemes.map((theme) => (
-                  <div key={theme.id} className="mt-2 border-t border-amber-200 pt-2">
-                    <p className="text-[11px] font-medium">{theme.label}</p>
-                    {theme.summary ? <p className="mt-1 text-[11px] text-muted-foreground">{theme.summary}</p> : null}
-                  </div>
-                ))}
+                {activeBlockId && openThemes.length > 0 ? (
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    {openThemes.map((theme) => theme.label).join(" · ")}
+                  </p>
+                ) : (
+                  openThemes.map((theme) => (
+                    <div key={theme.id} className="mt-2 border-t border-amber-200 pt-2">
+                      <p className="text-[11px] font-medium">{theme.label}</p>
+                      {theme.summary ? <p className="mt-1 text-[11px] text-muted-foreground">{theme.summary}</p> : null}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )
@@ -189,7 +195,7 @@ export function ProgrammeInlineComments({
                         {comment.themeLabel}
                       </p>
                     ) : null}
-                    {comment.quote ? (
+                    {isActive && comment.quote ? (
                       <p className="mb-1 line-clamp-2 border-l-2 border-amber-300 pl-2 text-[11px] text-muted-foreground">
                         {comment.quote}
                       </p>
@@ -204,7 +210,7 @@ export function ProgrammeInlineComments({
                       </p>
                     </div>
                   </button>
-                  {comment.replies?.map((reply) => (
+                  {isActive && comment.replies?.map((reply) => (
                     <div key={reply.id} className="mt-2 ml-7 flex items-start gap-2">
                       <UserAvatar name={reply.authorName} url={reply.authorAvatarUrl} className="mt-0.5 h-4 w-4" />
                       <p className="min-w-0 flex-1 text-[11px]">
@@ -213,48 +219,52 @@ export function ProgrammeInlineComments({
                       </p>
                     </div>
                   ))}
-                  <div className="mt-1 ml-7 flex flex-wrap items-center gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-1 text-[11px]"
-                      onClick={() => onToggleResolved(comment.id, !comment.resolved)}
-                    >
-                      {comment.resolved ? reopenLabel : resolveLabel}
-                    </Button>
-                    {canComment && !comment.resolved ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-1 text-[11px]"
-                        onClick={() => {
-                          setReplyTo(replyTo === comment.id ? null : comment.id)
-                          setReplyDraft("")
-                        }}
-                      >
-                        {replyLabel}
-                      </Button>
-                    ) : null}
-                  </div>
-                  {canComment && replyTo === comment.id ? (
-                    <div className="mt-2 ml-7 flex gap-2">
-                      <Input
-                        value={replyDraft}
-                        onChange={(event) => setReplyDraft(event.target.value)}
-                        placeholder={replyPlaceholder}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" && replyDraft.trim() && !pending) {
-                            event.preventDefault()
-                            submitReply(comment.id)
-                          }
-                        }}
-                      />
-                      <Button type="button" size="sm" disabled={pending || !replyDraft.trim()} onClick={() => submitReply(comment.id)}>
-                        {replyLabel}
-                      </Button>
-                    </div>
+                  {isActive ? (
+                    <>
+                      <div className="mt-1 ml-7 flex flex-wrap items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-1 text-[11px]"
+                          onClick={() => onToggleResolved(comment.id, !comment.resolved)}
+                        >
+                          {comment.resolved ? reopenLabel : resolveLabel}
+                        </Button>
+                        {canComment && !comment.resolved ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-1 text-[11px]"
+                            onClick={() => {
+                              setReplyTo(replyTo === comment.id ? null : comment.id)
+                              setReplyDraft("")
+                            }}
+                          >
+                            {replyLabel}
+                          </Button>
+                        ) : null}
+                      </div>
+                      {canComment && replyTo === comment.id ? (
+                        <div className="mt-2 ml-7 flex gap-2">
+                          <Input
+                            value={replyDraft}
+                            onChange={(event) => setReplyDraft(event.target.value)}
+                            placeholder={replyPlaceholder}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" && replyDraft.trim() && !pending) {
+                                event.preventDefault()
+                                submitReply(comment.id)
+                              }
+                            }}
+                          />
+                          <Button type="button" size="sm" disabled={pending || !replyDraft.trim()} onClick={() => submitReply(comment.id)}>
+                            {replyLabel}
+                          </Button>
+                        </div>
+                      ) : null}
+                    </>
                   ) : null}
                 </div>
               ))}

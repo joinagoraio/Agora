@@ -1,4 +1,5 @@
 import { stripDuplicateChapterHeading } from "@/lib/programme/chapter-heading"
+import { findProgrammeCitationMarkers, programmeCitationLabel } from "@/lib/programme/citation-display"
 import type { ProgrammeOutlineNode } from "@/lib/programme/domain"
 
 export type ComposeChapter = {
@@ -32,6 +33,28 @@ export function htmlToPlain(html: string): string {
     .trim()
 }
 
+function plainWithCitationFootnotes(
+  plain: string,
+  footnoteFor: (citation: ComposeMeasure["citations"][number]) => number,
+): string {
+  const hits = findProgrammeCitationMarkers(plain)
+  if (hits.length === 0) return plain
+  let cursor = 0
+  let next = ""
+  for (const hit of hits) {
+    next += plain.slice(cursor, hit.start)
+    const number = footnoteFor({
+      documentId: hit.citation.documentId || "",
+      quote: hit.citation.quote,
+      pageNumber: hit.citation.pageNumber,
+    })
+    next += `[^${number}]`
+    cursor = hit.end
+  }
+  next += plain.slice(cursor)
+  return next
+}
+
 export function composeProgrammeMarkdown(input: {
   title: string
   nodes: ProgrammeOutlineNode[]
@@ -45,10 +68,14 @@ export function composeProgrammeMarkdown(input: {
     const key = `${citation.documentId}|${citation.sectionId || ""}|${citation.pageNumber || ""}|${citation.quote || ""}`
     const existing = footnotes.findIndex((line) => line.startsWith(key))
     if (existing >= 0) return existing + 1
-    const label = input.citationLabels?.[citation.documentId] || citation.documentId
-    const page = citation.pageNumber ? `, p.${citation.pageNumber}` : ""
+    const stored = input.citationLabels?.[citation.documentId] || citation.documentId
+    const label = programmeCitationLabel({
+      title: stored,
+      pageNumber: /p\.\d+/.test(stored) ? null : citation.pageNumber,
+      index: footnotes.length + 1,
+    })
     const quote = citation.quote ? ` — “${citation.quote}”` : ""
-    footnotes.push(`${key}::${label}${page}${quote}`)
+    footnotes.push(`${key}::${label}${quote}`)
     return footnotes.length
   }
   const parts = [`# ${input.title}`, ""]
@@ -59,7 +86,12 @@ export function composeProgrammeMarkdown(input: {
     if (node.required) parts.push("*Required section*")
     const chapter = chapterByNode.get(node.id)
     if (chapter?.html) {
-      parts.push(htmlToPlain(stripDuplicateChapterHeading(chapter.html, node.title)))
+      parts.push(
+        plainWithCitationFootnotes(
+          htmlToPlain(stripDuplicateChapterHeading(chapter.html, node.title)),
+          footnoteFor,
+        ),
+      )
     } else if (node.purpose) {
       parts.push(htmlToPlain(node.purpose))
     } else {
@@ -93,10 +125,10 @@ export function composeProgrammeMarkdown(input: {
   }
 
   if (footnotes.length) {
-    parts.push("## Bronnen")
+    parts.push("")
     footnotes.forEach((line, index) => {
       const body = line.split("::")[1] || line
-      parts.push(`${index + 1}. ${body}`)
+      parts.push(`[^${index + 1}]: ${body}`)
     })
     parts.push("")
   }

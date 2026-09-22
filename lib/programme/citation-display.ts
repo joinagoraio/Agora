@@ -17,6 +17,16 @@ export type ProgrammeCitationHit = {
   citation: ProgrammeCitationMarker
 }
 
+function decodeCitationJson(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+}
+
 export function findProgrammeCitationMarkers(text: string): ProgrammeCitationHit[] {
   const hits: ProgrammeCitationHit[] = []
   const opener = /\[citation:\s*\{/gi
@@ -39,7 +49,7 @@ export function findProgrammeCitationMarkers(text: string): ProgrammeCitationHit
     if (jsonEnd < 0 || text[jsonEnd + 1] !== "]") continue
     const end = jsonEnd + 2
     try {
-      const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1)) as {
+      const parsed = JSON.parse(decodeCitationJson(text.slice(jsonStart, jsonEnd + 1))) as {
         quote?: unknown
         documentId?: unknown
         pageNumber?: unknown

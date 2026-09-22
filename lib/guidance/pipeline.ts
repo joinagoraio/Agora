@@ -37,11 +37,14 @@ export type GuidanceMeasureLike = {
   effectsDeviation?: boolean | null
   effects_justification?: string | null
   effectsJustification?: string | null
+  effectsChecked?: boolean
 }
 
 export type GuidanceChapterLike = {
   workflowStatus?: string | null
   hasBody?: boolean
+  title?: string | null
+  outlineNodeId?: string | null
 }
 
 export type GuidancePipelineInput = {
@@ -63,6 +66,8 @@ export type GuidancePipelineSnapshot = {
   stages: Record<PipelineStageId, boolean>
   firstIncomplete: PipelineStageId | null
   firstIncompleteSection: string
+  focusChapterId: string | null
+  focusChapterTitle: string | null
 }
 
 function effectsFieldsSet(measure: GuidanceMeasureLike): boolean {
@@ -79,12 +84,23 @@ function deviationJustified(measure: GuidanceMeasureLike): boolean {
 
 function checkComplete(input: GuidancePipelineInput): boolean {
   if (input.measureCount === 0) return false
-  return input.measures.every((measure) => effectsFieldsSet(measure) && deviationJustified(measure))
+  return input.measures.every(
+    (measure) => measure.effectsChecked === true && effectsFieldsSet(measure) && deviationJustified(measure),
+  )
+}
+
+const FRAMING_CHAPTER = /inleiding|wettelijk kader|legal framework|^visie\b/i
+
+export function preferredDraftChapter(chapters: GuidanceChapterLike[]): GuidanceChapterLike | null {
+  const open = chapters.filter((chapter) => !chapter.hasBody && (chapter.outlineNodeId || chapter.title))
+  const substantive = open.filter((chapter) => !FRAMING_CHAPTER.test(chapter.title || ""))
+  return substantive[0] || open[0] || null
 }
 
 function reviewComplete(input: GuidancePipelineInput): boolean {
-  if (input.chapters.length === 0) return false
-  const chaptersApproved = input.chapters.every((chapter) => chapter.workflowStatus === "approved")
+  const drafted = input.chapters.filter((chapter) => chapter.hasBody)
+  if (drafted.length === 0) return false
+  const chaptersApproved = drafted.every((chapter) => chapter.workflowStatus === "approved")
   const reviewMeasures = input.measures.filter((measure) => {
     const status = measure.workflow_status ?? ""
     return status === "in_review" || status === "revised" || status === "approved"
@@ -107,10 +123,15 @@ export function deriveGuidancePipeline(input: GuidancePipelineInput): GuidancePi
   }
 
   const firstIncomplete = PIPELINE_STAGES.find((stage) => !stages[stage]) ?? null
+  const draftTarget = preferredDraftChapter(input.chapters)
+  const reviewTarget = input.chapters.find((chapter) => chapter.hasBody && chapter.workflowStatus !== "approved")
+  const focus = firstIncomplete === "draft" ? draftTarget : firstIncomplete === "review" ? reviewTarget : null
   return {
     stages,
     firstIncomplete,
     firstIncompleteSection: firstIncomplete ? STAGE_TO_SECTION[firstIncomplete] : "export",
+    focusChapterId: focus?.outlineNodeId ?? null,
+    focusChapterTitle: focus?.title ?? null,
   }
 }
 

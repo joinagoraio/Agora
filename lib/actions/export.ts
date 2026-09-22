@@ -2,8 +2,9 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { requireAuthAndPermission } from "@/lib/middleware/authorization"
-import { buildDocxFromSections, markdownToExportSections } from "@/lib/export/markdown-to-docx"
+import { buildDocxFromSections, markdownToExportSections, takeExportFootnotes } from "@/lib/export/markdown-to-docx"
 import { markdownToPrintHtml } from "@/lib/export/markdown-to-print-html"
+import { DEFAULT_PROGRAMME_PAGE_CHROME, parseProgrammePageChrome, type ProgrammePageChromeSettings } from "@/lib/programme/page-chrome"
 import { recordGenerationRun } from "@/lib/actions/generation-run"
 
 const CLASSIFICATION_RANK = { public: 0, internal: 1, confidential: 2 } as const
@@ -74,13 +75,27 @@ export async function composeWorkspaceProgramme(workspaceId: string, title: stri
   }))
   const { listWorkspaceCitationCatalog } = await import("@/lib/actions/generation-run")
   const { formatCitationLabel } = await import("@/lib/programme/citation-labels")
+  const { findProgrammeCitationMarkers } = await import("@/lib/programme/citation-display")
   const catalog = await listWorkspaceCitationCatalog(workspaceId)
   const citationLabels: Record<string, string> = {}
+  const remember = (citation: { documentId?: string; pageNumber?: number; quote?: string; sectionId?: string }) => {
+    if (!citation.documentId || citationLabels[citation.documentId]) return
+    citationLabels[citation.documentId] = formatCitationLabel(
+      {
+        documentId: citation.documentId,
+        pageNumber: citation.pageNumber,
+        quote: citation.quote,
+        sectionId: citation.sectionId,
+      },
+      catalog.documents,
+      catalog.sections,
+    )
+  }
   for (const measure of composedMeasures) {
-    for (const citation of measure.citations) {
-      if (!citation?.documentId || citationLabels[citation.documentId]) continue
-      citationLabels[citation.documentId] = formatCitationLabel(citation, catalog.documents, catalog.sections)
-    }
+    for (const citation of measure.citations) remember(citation)
+  }
+  for (const chapter of chapters) {
+    for (const hit of findProgrammeCitationMarkers(chapter.html)) remember(hit.citation)
   }
   const markdown = composeProgrammeMarkdown({ title, nodes, chapters, measures: composedMeasures, citationLabels })
   const citationGraph = composeCitationGraph(composedMeasures)
@@ -95,7 +110,9 @@ export async function runMarkdownOrDocxExport(input: {
   classificationMax?: "public" | "internal" | "confidential"
   compose?: boolean
   stakeholder?: boolean
+  pageChrome?: ProgrammePageChromeSettings
 }) {
+  const pageChrome = parseProgrammePageChrome(input.pageChrome ?? DEFAULT_PROGRAMME_PAGE_CHROME)
   const job = await createExportJob(input.workspaceId, input.format, input.classificationMax ?? "internal")
   if (job.error || !job.data) return job
 
@@ -177,7 +194,8 @@ export async function runMarkdownOrDocxExport(input: {
       resultPayload = markdown
       mimeType = "text/markdown;charset=utf-8"
     } else if (input.format === "pdf") {
-      const html = markdownToPrintHtml(input.title, markdown)
+      const prepared = takeExportFootnotes(markdown)
+      const html = markdownToPrintHtml(input.title, prepared.markdown, prepared.footnotes, pageChrome)
       const { renderPrintHtmlToPdf } = await import("@/lib/export/html-to-pdf")
       const pdf = await renderPrintHtmlToPdf(html)
       if (pdf.ok) {
@@ -189,7 +207,13 @@ export async function runMarkdownOrDocxExport(input: {
         mimeType = "text/html;charset=utf-8"
       }
     } else {
-      const buffer = await buildDocxFromSections(input.title, markdownToExportSections(markdown))
+      const prepared = takeExportFootnotes(markdown)
+      const buffer = await buildDocxFromSections(
+        input.title,
+        markdownToExportSections(prepared.markdown),
+        prepared.footnotes,
+        pageChrome,
+      )
       resultPayload = buffer.toString("base64")
       encoding = "base64"
       mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"

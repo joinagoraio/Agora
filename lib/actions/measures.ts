@@ -288,6 +288,22 @@ export async function updateMeasureEffects(
     .single()
 
   if (error) return { error: error.message }
+
+  const { data: workspace } = await supabase.from("workspaces").select("metadata").eq("id", workspaceId).single()
+  const metadata = (workspace?.metadata as Record<string, unknown> | null) || {}
+  const current = Array.isArray(metadata.effectsCheckedIds)
+    ? metadata.effectsCheckedIds.filter((id): id is string => typeof id === "string")
+    : []
+  if (!current.includes(measureId)) {
+    await supabase
+      .from("workspaces")
+      .update({
+        metadata: { ...metadata, effectsCheckedIds: [...current, measureId] },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", workspaceId)
+  }
+
   revalidatePath(`/workspaces/${workspaceId}`)
   revalidatePath(`/workspaces/${workspaceId}/programme`)
   return { data }

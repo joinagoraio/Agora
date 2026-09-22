@@ -55,13 +55,14 @@ import {
   type ProgrammeLineHeight,
   type ProgrammeSpaceAfter,
 } from "@/lib/programme/paragraph-style"
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { BlockId, BLOCK_ID_ATTR } from "@/lib/programme/block-id"
 import { ProgrammePageBreaks, registerProgrammePaginationEditor } from "@/lib/programme/editor-page-breaks"
 import { programmeCitationExtension, type ProgrammeCitationLookup } from "@/lib/programme/editor-citations"
 import type { ProgrammeCitationSource } from "@/lib/programme/citation-display"
+import { ProgrammeCiteDialog } from "@/components/programme-cite-dialog"
 
 interface RichTextEditorProps {
   content: string
@@ -501,6 +502,7 @@ export function RichTextEditor({
   const keepMenuCountRef = useRef(0)
   const lastEmittedRef = useRef(content)
   const selectionToolbar = toolbar === "selection"
+  const [citeOpen, setCiteOpen] = useState(false)
   const citationLookupRef = useRef<ProgrammeCitationLookup["current"]>({ workspaceId, sources: citationSources })
   citationLookupRef.current = { workspaceId, sources: citationSources }
 
@@ -687,6 +689,17 @@ export function RichTextEditor({
           onMouseDown={(event) => event.preventDefault()}
         >
           {controls}
+          {citationSources.length > 0 ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setCiteOpen(true)}
+            >
+              {t("workspace.programme.citeAdd")}
+            </Button>
+          ) : null}
         </BubbleMenu>
       ) : (
         <div className="flex flex-wrap items-center gap-1 border-b bg-muted/50 p-2" onMouseDown={(event) => event.preventDefault()}>
@@ -694,6 +707,16 @@ export function RichTextEditor({
         </div>
       )}
       <EditorContent editor={editor} />
+      {citeOpen && citationSources.length > 0 ? (
+        <ProgrammeCiteDialog
+          sources={citationSources}
+          onClose={() => setCiteOpen(false)}
+          onInsert={(marker) => {
+            const to = editor.state.selection.to
+            editor.chain().focus().setTextSelection(to).insertContent(marker).run()
+          }}
+        />
+      ) : null}
     </div>
   )
 }

@@ -319,24 +319,16 @@ export function ProgrammeToolsToolbar({
   }
 
   const publishStatus = publicationLoaded ? (published ? "published" : "unpublished") : undefined
-  const publishStatusLabel = published
-    ? t("workspace.programme.publishBadgeOn")
-    : t("workspace.programme.publishBadgeOff")
 
   const sections: ToolbarItem[][] = []
 
   for (const group of groups) {
     const items: ToolbarItem[] = group.sections.map((section) => {
       const name = t(`workspace.programme.nav.${section}`)
-      const publishLabel =
-        section === "publish" && publicationLoaded ? `${name} — ${publishStatusLabel}` : name
       return {
         id: section,
-        label: publishLabel,
-        ariaLabel:
-          section === "publish"
-            ? t("workspace.programme.publishBadgeAria", undefined, { status: publishStatusLabel })
-            : name,
+        label: name,
+        ariaLabel: name,
         icon: SECTION_ICONS[section],
         active: sheetOpen && activeSection === section,
         onClick: () => onSection(section),

@@ -99,6 +99,16 @@ export function clickClosesProgrammeChapterEditor(input: {
   return input.clickedChapterId !== input.activeChapterId
 }
 
+const FRAMING_CHAPTER = /inleiding|wettelijk kader|legal framework|^visie\b/i
+
+export function preferredWritingChapterId(
+  chapters: Array<{ id: string; title: string; hasBody: boolean }>,
+): string | null {
+  const open = chapters.filter((chapter) => !chapter.hasBody)
+  const substantive = open.filter((chapter) => !FRAMING_CHAPTER.test(chapter.title))
+  return (substantive[0] || open[0])?.id ?? null
+}
+
 export function shouldAutoActivateWritingChapter(input: {
   alreadyActivated: boolean
   isWriting: boolean

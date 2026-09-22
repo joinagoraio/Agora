@@ -80,6 +80,7 @@ import type { ProgrammeDocumentMode } from "@/lib/programme/document-mode"
 import {
   clickClosesProgrammeChapterEditor,
   clickDismissesWritingChapter,
+  preferredWritingChapterId,
   shouldAutoActivateWritingChapter,
   visibleProgrammeChapterIds,
 } from "@/lib/programme/document-mode"
@@ -247,7 +248,13 @@ export function ProgrammeChapterEditor({
   const writableChapterList = nodes
     .filter((node) => canWriteNode(node.id))
     .map((node) => ({ id: node.id, title: node.title }))
-  const firstWritableId = writableChapterList[0]?.id ?? null
+  const draftTargetId = preferredWritingChapterId(
+    writableChapterList.map((chapter) => ({
+      id: chapter.id,
+      title: chapter.title,
+      hasBody: Boolean(bodies[chapter.id]?.content?.replace(/<[^>]+>/g, "").trim()),
+    })),
+  )
   const visibleIds = visibleProgrammeChapterIds({
     mode: documentMode,
     allIds: nodes.map((item) => item.id),
@@ -270,15 +277,15 @@ export function ProgrammeChapterEditor({
         alreadyActivated: didAutoActivateRef.current,
         isWriting,
         activeChapterId,
-        firstWritableId,
+        firstWritableId: draftTargetId,
         sectionOpen,
       })
     ) {
       return
     }
     didAutoActivateRef.current = true
-    onActivateChapter?.(firstWritableId)
-  }, [isWriting, activeChapterId, firstWritableId, onActivateChapter])
+    onActivateChapter?.(draftTargetId)
+  }, [isWriting, activeChapterId, draftTargetId, onActivateChapter])
 
   const loadNodes = (templateId: string) => {
     setOutlineLoading(true)

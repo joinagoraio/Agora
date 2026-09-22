@@ -1,6 +1,7 @@
 import {
   clickClosesProgrammeChapterEditor,
   clickDismissesWritingChapter,
+  preferredWritingChapterId,
   shouldAutoActivateWritingChapter,
   nextProgrammeDocumentSearch,
   parseFocusChapterIds,
@@ -234,6 +235,22 @@ describe("programme document modes", () => {
         sectionOpen: true,
       }),
     ).toBe(false)
+  })
+
+  it("points writing at the first chapter that is not a framing heading", () => {
+    expect(
+      preferredWritingChapterId([
+        { id: "intro", title: "Inleiding en wettelijk kader", hasBody: false },
+        { id: "visie", title: "Visie 4.2", hasBody: false },
+        { id: "wonen", title: "Wonen en samenleving", hasBody: false },
+      ]),
+    ).toBe("wonen")
+    expect(
+      preferredWritingChapterId([
+        { id: "intro", title: "Inleiding", hasBody: false },
+        { id: "wonen", title: "Wonen", hasBody: true },
+      ]),
+    ).toBe("intro")
   })
 
   it("clears the writing chapter on a click that is not another chapter or an edit control", () => {

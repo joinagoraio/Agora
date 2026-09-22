@@ -32,6 +32,13 @@ export type ProgrammePolicies = {
   stakeholderExportRequiresFreeze: boolean
 }
 
+export function parseEffectsCheckedIds(metadata: unknown): string[] {
+  const raw =
+    metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>).effectsCheckedIds : null
+  if (!Array.isArray(raw)) return []
+  return raw.filter((id): id is string => typeof id === "string" && id.length > 0)
+}
+
 export function parseProgrammePolicies(metadata: unknown): ProgrammePolicies {
   const raw = metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>) : {}
   return {

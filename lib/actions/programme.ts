@@ -22,6 +22,7 @@ import {
 import {
   evaluateDistinctReviewerApproval,
   parseChapterWorkflow,
+  parseEffectsCheckedIds,
   parseFillJob,
   parseFillJobRecord,
   parseProgrammePolicies,
@@ -193,6 +194,7 @@ export async function getProgrammePolicies(workspaceId: string) {
         fillJob: null as FillJob | null,
         documentOwnerId: null as string | null,
         accessRole: null as string | null,
+        effectsCheckedIds: [] as string[],
       },
     }
   }
@@ -221,6 +223,7 @@ export async function getProgrammePolicies(workspaceId: string) {
       fillJob: (await loadLatestFillJob(workspaceId)) || parseFillJob(data.metadata),
       documentOwnerId,
       accessRole,
+      effectsCheckedIds: parseEffectsCheckedIds(data.metadata),
     },
   }
 }

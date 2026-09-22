@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import JSZip from "jszip"
-import { buildDocxFromSections, markdownToExportSections } from "@/lib/export/markdown-to-docx"
+import { buildDocxFromSections, markdownToExportSections, takeExportFootnotes } from "@/lib/export/markdown-to-docx"
 import { markdownToPrintHtml } from "@/lib/export/markdown-to-print-html"
 
 describe("markdown-to-docx (confidence spike)", () => {
@@ -69,5 +69,60 @@ describe("markdown-to-print-html", () => {
     expect(html).toContain("<strong>stations</strong>")
     expect(html).toContain("<ul>")
     expect(html).toContain("@media print")
+    expect(html).toContain("@page { size: A4;")
+    expect(html).toContain("counter(page)")
+    expect(html).toContain('content: "HOUSING"')
+    expect(html).toContain('content: "PROGRAMME"')
+  })
+
+  it("prints the document title once", () => {
+    const html = markdownToPrintHtml("Full dry-run", "# Full dry-run\n\n## Wonen\n\nHousing stays near stations. [^1]\n")
+    expect(html.match(/Full dry-run/g)?.length).toBe(2)
+    expect(html).not.toContain("<h1>Full dry-run</h1>")
+  })
+
+  it("turns footnote markers into a Word footnote and a print endnote", async () => {
+    const prepared = takeExportFootnotes("Housing stays near stations. [^1]\n\n[^1]: Environmental vision, p.1 — “near stations”\n")
+    expect(prepared.footnotes).toEqual([{ id: 1, text: "Environmental vision, p.1 — “near stations”" }])
+    expect(prepared.markdown).not.toContain("[^1]:")
+
+    const buffer = await buildDocxFromSections("Programme", markdownToExportSections(prepared.markdown), prepared.footnotes)
+    const zip = await JSZip.loadAsync(buffer)
+    const documentXml = await zip.file("word/document.xml")?.async("string")
+    const footnotesXml = await zip.file("word/footnotes.xml")?.async("string")
+    expect(documentXml).toContain('<w:footnoteReference w:id="1"/>')
+    expect(footnotesXml).toContain("Environmental vision, p.1")
+    expect(footnotesXml).toContain('w:type="separator"')
+
+    const html = markdownToPrintHtml("Programme", prepared.markdown, prepared.footnotes)
+    expect(html).toContain('href="#fn-1"')
+    expect(html).toContain("Environmental vision, p.1")
+    expect(html).not.toContain("[^1]")
+  })
+
+  it("prints the Pages header, footer, and page number in Word and PDF", async () => {
+    const markdown = "# Full dry-run\n\n## Wonen en samenleving\n\nHousing stays near stations.\n\n## Mobiliteit\n\nBuses along the corridor.\n"
+    const buffer = await buildDocxFromSections("Full dry-run", markdownToExportSections(markdown))
+    const zip = await JSZip.loadAsync(buffer)
+    const documentXml = await zip.file("word/document.xml")?.async("string")
+    const header = await zip.file("word/header-0.xml")?.async("string")
+    const oddFooter = await zip.file("word/footer-odd.xml")?.async("string")
+    const evenFooter = await zip.file("word/footer-even.xml")?.async("string")
+    const settings = await zip.file("word/settings.xml")?.async("string")
+    expect(documentXml).toContain("<w:titlePg/>")
+    expect(documentXml).toContain('w:val="nextPage"')
+    expect(header).toContain("WONEN EN SAMENLEVING")
+    expect(oddFooter).toContain("FULL DRY-RUN")
+    expect(oddFooter).toContain(" PAGE ")
+    expect(evenFooter).toContain(" PAGE ")
+    expect(settings).toContain("<w:evenAndOddHeaders/>")
+
+    const html = markdownToPrintHtml("Full dry-run", markdown)
+    expect(html).toContain('content: "WONEN EN SAMENLEVING"')
+    expect(html).toContain('content: "MOBILITEIT"')
+    expect(html).toContain('content: "FULL DRY-RUN"')
+    expect(html).toContain("counter(page)")
+    expect(html).toContain("@page c0:first")
+    expect(html).toContain("break-before: page")
   })
 })

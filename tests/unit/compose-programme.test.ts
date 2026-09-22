@@ -60,6 +60,25 @@ describe("compose programme", () => {
     expect(markdown).toContain("Body after the title.")
   })
 
+  it("turns a chapter citation marker into a footnote and keeps the quote out of the paragraph", () => {
+    const markdown = composeProgrammeMarkdown({
+      title: "Flevoland programme",
+      nodes: [nodes[0]!],
+      chapters: [
+        {
+          node: nodes[0]!,
+          title: nodes[0]!.title,
+          html: `<p>Housing stays near stations. [citation:{"quote":"The province concentrates new housing near stations.","documentId":"vision-1","pageNumber":1}]</p>`,
+        },
+      ],
+      measures: [],
+      citationLabels: { "vision-1": "Environmental vision — housing near nodes" },
+    })
+    expect(markdown).toContain("Housing stays near stations. [^1]")
+    expect(markdown).not.toContain("[citation:")
+    expect(markdown).toContain("[^1]: Environmental vision, p.1 — “The province concentrates new housing near stations.”")
+  })
+
   it("adds numbered source footnotes from citations", () => {
     const markdown = composeProgrammeMarkdown({
       title: "Flevoland programme",
@@ -79,8 +98,11 @@ describe("compose programme", () => {
       citationLabels: { "vision-1": "Omgevingsvisie Flevoland 2050, § 4.2, p.4" },
     })
     expect(markdown).toContain("[^1]")
-    expect(markdown).toContain("## Bronnen")
+    expect(markdown).toContain("[^1]:")
+    expect(markdown).not.toContain("## Bronnen")
+    expect(markdown).not.toContain("[citation:")
     expect(markdown).toContain("Omgevingsvisie Flevoland 2050")
+    expect(markdown).toContain("housing near nodes")
   })
 
   it("emits a citation graph matching the registry", () => {

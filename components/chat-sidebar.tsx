@@ -896,6 +896,8 @@ export function ChatSidebar({
   return (
     <>
       <div
+        aria-hidden={!isOpen}
+        inert={!isOpen || undefined}
         className={`fixed inset-y-0 right-0 z-50 flex h-screen flex-col ${isMobile ? "border-l" : ""} bg-card shadow-lg ${
           isResizing ? "" : "transition-[width,transform] duration-300 ease-out"
         } ${

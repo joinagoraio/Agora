@@ -259,6 +259,11 @@ function openPrintPreview(html: string) {
   w.document.open()
   w.document.write(html)
   w.document.close()
+  try {
+    w.history.replaceState(null, "", window.location.href)
+  } catch {
+    // The print window keeps its own address when the browser refuses the replacement.
+  }
   w.focus()
   setTimeout(() => {
     w.print()
@@ -542,6 +547,7 @@ export function ProgrammeWorkbench({
     hasFreeze: false,
     freezeId: null as string | null,
     freezeAt: null as string | null,
+    effectsCheckedIds: [] as string[],
   })
   const [publication, setPublication] = useState<ProgrammePublicationSummary | null>(null)
   const [consultationQueue, setConsultationQueue] = useState<ConsultationQueue>({
@@ -634,6 +640,7 @@ export function ProgrammeWorkbench({
           hasFreeze: policyResult.data.hasFreeze,
           freezeId: policyResult.data.freezeId,
           freezeAt: policyResult.data.freezeAt,
+          effectsCheckedIds: policyResult.data.effectsCheckedIds || [],
         })
         if (policyResult.data.documentOwnerId) setDocumentOwnerId(policyResult.data.documentOwnerId)
         if (policyResult.data.accessRole) setAccessRole(policyResult.data.accessRole)
@@ -734,15 +741,43 @@ export function ProgrammeWorkbench({
         pipelineInputFromWorkbench({
           bindings,
           reports,
-          measures,
+          measures: measures.map((measure) => ({
+            ...measure,
+            effectsChecked: policies.effectsCheckedIds.includes(measure.id),
+          })),
           chapters,
           outlineNodeCount,
           hasQcRun: Boolean(observability?.byKind?.qc) || reports.some((report) => report.report_type === "quality"),
           hasSuccessfulExport: Boolean(observability?.hasSuccessfulExport),
         }),
       ),
-    [bindings, reports, measures, chapters, outlineNodeCount, observability],
+    [bindings, reports, measures, chapters, outlineNodeCount, observability, policies.effectsCheckedIds],
   )
+  const nextStripDetail =
+    pipeline.firstIncomplete === "draft" && pipeline.focusChapterTitle
+      ? t("guidance.coach.nextDraftNamed", undefined, { title: pipeline.focusChapterTitle })
+      : pipeline.firstIncomplete === "review" && pipeline.focusChapterTitle
+        ? t("guidance.coach.nextReviewNamed", undefined, { title: pipeline.focusChapterTitle })
+        : t(NEXT_COPY[pipeline.firstIncomplete ?? ""] ?? "guidance.coach.nothingRequired")
+  const openPipelineStep = (stage: string | null, section: string, chapterId: string | null) => {
+    if (stage === "draft" && chapterId) {
+      replaceParams((params) => {
+        params.delete("section")
+        params.delete("structure")
+        params.set("view", "document")
+        params.set("mode", "edit")
+        params.set("chapter", chapterId)
+      })
+      return
+    }
+    setSection(section)
+    const target = stage ? STAGE_TARGET[stage as keyof typeof STAGE_TARGET] : undefined
+    if (!target) return
+    window.setTimeout(() => {
+      const el = document.querySelector(`[data-guidance-target="${target}"]`)
+      if (el instanceof HTMLElement) el.focus()
+    }, 50)
+  }
   const setupIncomplete = programmeSetupIncomplete(bindings)
   const hasChapterBody = chapters.some((chapter) => chapter.hasBody)
   const canRunSetup = chromeJob !== "reviewer" && accessRole !== "viewer"
@@ -853,6 +888,10 @@ export function ProgrammeWorkbench({
       section: coachSection,
       documentTitles: listBoundDocumentsForHelp(corpusDocs || [], bindings),
       onNavigate: (section, target) => {
+        if (section === "editor" && pipeline.firstIncomplete === "draft" && pipeline.focusChapterId) {
+          openPipelineStep("draft", section, pipeline.focusChapterId)
+          return
+        }
         setSection(section)
         if (target) {
           window.setTimeout(() => {
@@ -971,23 +1010,13 @@ export function ProgrammeWorkbench({
                 action: t(`guidance.coach.stages.${pipeline.firstIncomplete}`),
               })}
             </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {t(NEXT_COPY[pipeline.firstIncomplete] ?? "guidance.coach.nothingRequired")}
-            </p>
+            <p className="truncate text-xs text-muted-foreground">{nextStripDetail}</p>
           </div>
           <Button
             type="button"
             size="sm"
             className="shrink-0"
-            onClick={() => {
-              setSection(pipeline.firstIncompleteSection)
-              const target = pipeline.firstIncomplete ? STAGE_TARGET[pipeline.firstIncomplete] : undefined
-              if (!target) return
-              window.setTimeout(() => {
-                const el = document.querySelector(`[data-guidance-target="${target}"]`)
-                if (el instanceof HTMLElement) el.focus()
-              }, 50)
-            }}
+            onClick={() => openPipelineStep(pipeline.firstIncomplete, pipeline.firstIncompleteSection, pipeline.focusChapterId)}
           >
             {t("guidance.coach.goThere")}
           </Button>
@@ -1385,7 +1414,11 @@ export function ProgrammeWorkbench({
         <TabsContent value="analysis" className="space-y-3">
           <StageHeading
             title={t("workspace.programme.analysisTitle")}
-            purpose={t("workspace.programme.purpose.analysis")}
+            purpose={
+              reports.length === 0
+                ? t("workspace.programme.purpose.analysisEmpty")
+                : t("workspace.programme.purpose.analysis")
+            }
           />
           <p className="text-sm text-muted-foreground">{t("workspace.programme.analysisHint")}</p>
           <Textarea
@@ -2150,6 +2183,7 @@ export function ProgrammeWorkbench({
             onMessage={notify}
             onRefresh={refresh}
             onGoMeasures={() => setSection("measures")}
+            recordedIds={policies.effectsCheckedIds}
           />
         </TabsContent>
 
@@ -2245,6 +2279,9 @@ export function ProgrammeWorkbench({
           />
           <p className="text-sm text-muted-foreground">{t("workspace.programme.reviewHint")}</p>
           <p className="text-xs text-muted-foreground">{t("workspace.programme.reviewLocalHint")}</p>
+          <details className="rounded-md border p-3">
+            <summary className="cursor-pointer text-sm font-medium">{t("workspace.programme.colleagueThemesTitle")}</summary>
+            <div className="mt-3 space-y-3">
           <div className="space-y-2 rounded-md border p-3">
             <h3 className="text-sm font-medium">{t("workspace.programme.colleagueThemesTitle")}</h3>
             <p className="text-xs text-muted-foreground">{t("workspace.programme.colleagueThemesHint")}</p>
@@ -2375,7 +2412,11 @@ export function ProgrammeWorkbench({
             {t("workspace.programme.approveAllLocally")}
           </Button>
           </div>
-          <ul className="space-y-2 text-sm">
+            </div>
+          </details>
+          <details className="rounded-md border p-3">
+            <summary className="cursor-pointer text-sm font-medium">{t("workspace.programme.measuresTitle")}</summary>
+          <ul className="mt-3 space-y-2 text-sm">
             {!reviewHasPending && (
               <li>
                 {reviewHasArtefacts
@@ -2496,14 +2537,22 @@ export function ProgrammeWorkbench({
                 </li>
               ))}
           </ul>
+          </details>
           <h3 className="text-sm font-medium">{t("workspace.programme.chapterReviewTitle")}</h3>
           <ul className="space-y-2 text-sm">
-            {pendingChapters.map((chapter) => (
+            {chapters.map((chapter) => (
                 <li key={chapter.documentId} className="space-y-2 rounded-md border p-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>
-                      [{chapter.workflowStatus}] {chapter.title}
+                      {chapter.title}
+                      <span className="text-muted-foreground">
+                        {" "}
+                        · {t(`workspace.programme.chapterListStatus.${chapter.workflowStatus}`, chapter.workflowStatus)}
+                      </span>
                     </span>
+                    {chapter.workflowStatus === "approved" ? (
+                      <span className="text-xs text-muted-foreground">{t("workspace.programme.chapterApproved")}</span>
+                    ) : (
                     <div className="flex gap-1">
                       {(chapter.workflowStatus === "generated" || chapter.workflowStatus === "revised") && (
                         <Button
@@ -2547,7 +2596,9 @@ export function ProgrammeWorkbench({
                         {t("workspace.programme.approveChapter")}
                       </Button>
                     </div>
+                    )}
                   </div>
+                  {chapter.workflowStatus === "approved" ? null : (
                   <label className="flex items-center gap-2 text-xs">
                     <span className="text-muted-foreground">{t("workspace.programme.assignReviewer")}</span>
                     <Select
@@ -2579,6 +2630,7 @@ export function ProgrammeWorkbench({
                       </SelectContent>
                     </Select>
                   </label>
+                  )}
                 </li>
               ))}
           </ul>
@@ -2731,6 +2783,7 @@ export function ProgrammeWorkbench({
                     compose: !exportMd.trim(),
                     classificationMax: classification,
                     stakeholder: stakeholderExport,
+                    pageChrome: documentLayout.pageChrome,
                   })
                   if (result.error || !result.data) {
                     notify(result.error || t("workspace.programme.exportFailed"), "error")
@@ -2781,6 +2834,7 @@ export function ProgrammeWorkbench({
                     compose: !exportMd.trim(),
                     classificationMax: classification,
                     stakeholder: stakeholderExport,
+                    pageChrome: documentLayout.pageChrome,
                   })
                   if (result.error || !result.data) {
                     notify(result.error || t("workspace.programme.exportFailed"), "error")

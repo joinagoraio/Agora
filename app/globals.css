@@ -551,11 +551,7 @@
 }
 
 [data-programme-document-type] .programme-citation-marker {
-  font-size: 0;
-  line-height: 0;
-  letter-spacing: 0;
-  color: transparent;
-  user-select: none;
+  display: none;
 }
 
 [data-programme-document-type] article[data-chapter-id] {

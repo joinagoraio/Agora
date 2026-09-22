@@ -87,7 +87,7 @@ describe("guidance pipeline derivation", () => {
   })
 
   it("asks for effects before drafting once measures exist", () => {
-    const snapshot = deriveGuidancePipeline(
+    const generated = deriveGuidancePipeline(
       pipelineInputFromWorkbench({
         ...empty,
         bindings: {
@@ -100,8 +100,77 @@ describe("guidance pipeline derivation", () => {
         measures: [{ workflow_status: "generated", effects_direction: "positive", effects_deviation: false }],
       }),
     )
-    expect(snapshot.stages.check).toBe(true)
+    expect(generated.stages.check).toBe(false)
+    expect(generated.firstIncomplete).toBe("check")
+
+    const saved = deriveGuidancePipeline(
+      pipelineInputFromWorkbench({
+        ...empty,
+        bindings: {
+          environmentalVisionDocumentIds: ["v1"],
+          existingPolicyDocumentIds: ["p1"],
+          templateId: "tpl",
+        },
+        reports: [{ id: "r1" }],
+        outlineNodeCount: 3,
+        measures: [
+          {
+            workflow_status: "generated",
+            effects_direction: "positive",
+            effects_deviation: false,
+            effectsChecked: true,
+          },
+        ],
+      }),
+    )
+    expect(saved.stages.check).toBe(true)
+    expect(saved.firstIncomplete).toBe("draft")
+    expect(saved.firstIncompleteSection).toBe(STAGE_TO_SECTION.draft)
+  })
+
+  it("names the chapter that can be drafted and ignores framing headings", () => {
+    const snapshot = deriveGuidancePipeline(
+      pipelineInputFromWorkbench({
+        ...empty,
+        bindings: {
+          environmentalVisionDocumentIds: ["v1"],
+          existingPolicyDocumentIds: ["p1"],
+          templateId: "tpl",
+        },
+        reports: [{ id: "r1" }],
+        outlineNodeCount: 3,
+        measures: [{ effectsChecked: true, effects_direction: "positive" }],
+        chapters: [
+          { title: "Inleiding en wettelijk kader", outlineNodeId: "intro", hasBody: false },
+          { title: "Visie 4.2 Sterke Leefregio's", outlineNodeId: "visie", hasBody: false },
+          { title: "Wonen en samenleving", outlineNodeId: "wonen", hasBody: false },
+        ],
+      }),
+    )
     expect(snapshot.firstIncomplete).toBe("draft")
-    expect(snapshot.firstIncompleteSection).toBe(STAGE_TO_SECTION.draft)
+    expect(snapshot.focusChapterTitle).toBe("Wonen en samenleving")
+    expect(snapshot.focusChapterId).toBe("wonen")
+  })
+
+  it("treats review as done when every drafted chapter is approved", () => {
+    const snapshot = deriveGuidancePipeline(
+      pipelineInputFromWorkbench({
+        ...empty,
+        bindings: {
+          environmentalVisionDocumentIds: ["v1"],
+          existingPolicyDocumentIds: ["p1"],
+          templateId: "tpl",
+        },
+        reports: [{ id: "r1" }],
+        outlineNodeCount: 3,
+        measures: [{ effectsChecked: true, effects_direction: "positive" }],
+        chapters: [
+          { title: "Inleiding", outlineNodeId: "intro", hasBody: false, workflowStatus: "generated" },
+          { title: "Wonen en samenleving", outlineNodeId: "wonen", hasBody: true, workflowStatus: "approved" },
+        ],
+      }),
+    )
+    expect(snapshot.stages.review).toBe(true)
+    expect(snapshot.firstIncomplete).toBe("export")
   })
 })
