@@ -160,6 +160,7 @@ export function ProgrammeChapterEditor({
   const pendingJumpRef = useRef<string | null>(null)
   const didAutoActivateRef = useRef(false)
   const dismissWritingChapterRef = useRef<() => void>(() => {})
+  const pointerDownInChromeRef = useRef(false)
   if (activeChapterId) didAutoActivateRef.current = true
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const contentRef = useRef("")
@@ -587,6 +588,7 @@ export function ProgrammeChapterEditor({
 
   useEffect(() => {
     if (!selectedId) {
+      if (activeChapterId) return
       setContent("")
       setShowHistory(false)
       setChapterVersions([])
@@ -605,7 +607,7 @@ export function ProgrammeChapterEditor({
     setShowHistory(false)
     if (docId && !cached) loadExisting(selectedId, docId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId])
+  }, [selectedId, activeChapterId])
 
   useEffect(() => {
     if (nodes.length === 0) return
@@ -835,7 +837,7 @@ export function ProgrammeChapterEditor({
             </Button>
           </DropdownMenuTrigger>
         </IconTooltip>
-        <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuContent align="end" className="w-64" data-programme-chapter-tools="">
           <DropdownMenuLabel>
             {t("workspace.programme.chapterStatus", undefined, {
               status: t(`workspace.programme.chapterListStatus.${workflowStatus}`),
@@ -1001,7 +1003,6 @@ export function ProgrammeChapterEditor({
         },
       }))
     }
-    setSelectedId(null)
     onActivateChapter?.(null)
   }
   dismissWritingChapterRef.current = closeChapterEditor
@@ -1011,12 +1012,14 @@ export function ProgrammeChapterEditor({
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target instanceof Element ? event.target : event.target instanceof Node ? event.target.parentElement : null
       if (!target) return
-      const clickedChapterId = target.closest("[data-chapter-id]")?.getAttribute("data-chapter-id") ?? null
       const isEditorChrome = Boolean(
         target.closest(
-          "[data-programme-comments], [data-programme-outline-jump], [data-programme-format-menu], [role='menu'], [role='dialog'], [data-radix-popper-content-wrapper]",
+          "[data-programme-comments], [data-programme-outline-jump], [data-programme-format-menu], [data-programme-chapter-tools], [role='menu'], [role='dialog'], [data-radix-popper-content-wrapper]",
         ),
       )
+      pointerDownInChromeRef.current = isEditorChrome
+      if (isEditorChrome) return
+      const clickedChapterId = target.closest("[data-chapter-id]")?.getAttribute("data-chapter-id") ?? null
       const isWritingControl = Boolean(
         target.closest("button, a, input, textarea, select, [contenteditable='true'], .ProseMirror"),
       )
@@ -1032,8 +1035,8 @@ export function ProgrammeChapterEditor({
       }
       dismissWritingChapterRef.current()
     }
-    document.addEventListener("pointerdown", onPointerDown)
-    return () => document.removeEventListener("pointerdown", onPointerDown)
+    document.addEventListener("pointerdown", onPointerDown, true)
+    return () => document.removeEventListener("pointerdown", onPointerDown, true)
   }, [isWriting, activeChapterId])
 
   const onPreviewClick = (event: MouseEvent, nodeId: string) => {
@@ -1047,6 +1050,10 @@ export function ProgrammeChapterEditor({
   }
 
   const clearChapterFocus = (event: MouseEvent<HTMLElement>) => {
+    if (pointerDownInChromeRef.current) {
+      pointerDownInChromeRef.current = false
+      return
+    }
     const target = event.target instanceof Element ? event.target : event.target instanceof Node ? event.target.parentElement : null
     if (!target) return
     const clickedChapterId = target.closest("[data-chapter-id]")?.getAttribute("data-chapter-id") ?? null
@@ -1225,6 +1232,10 @@ export function ProgrammeChapterEditor({
                   )}
                   onClick={(event) => {
                     event.stopPropagation()
+                    if (pointerDownInChromeRef.current) {
+                      pointerDownInChromeRef.current = false
+                      return
+                    }
                     const target = event.target instanceof Element ? event.target : event.target instanceof Node ? event.target.parentElement : null
                     const isWritingControl = Boolean(
                       target?.closest("button, a, input, textarea, select, [contenteditable='true'], .ProseMirror"),
