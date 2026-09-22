@@ -1,5 +1,7 @@
 import {
   clickClosesProgrammeChapterEditor,
+  clickDismissesWritingChapter,
+  shouldAutoActivateWritingChapter,
   nextProgrammeDocumentSearch,
   parseFocusChapterIds,
   parseProgrammeDocumentMode,
@@ -191,6 +193,88 @@ describe("programme document modes", () => {
         activeChapterId: null,
         clickedChapterId: "b",
         isEditorChrome: false,
+      }),
+    ).toBe(false)
+  })
+
+  it("opens the first writable chapter once, and a later clear stays clear", () => {
+    expect(
+      shouldAutoActivateWritingChapter({
+        alreadyActivated: false,
+        isWriting: true,
+        activeChapterId: null,
+        firstWritableId: "intro",
+        sectionOpen: false,
+      }),
+    ).toBe(true)
+    expect(
+      shouldAutoActivateWritingChapter({
+        alreadyActivated: false,
+        isWriting: true,
+        activeChapterId: "intro",
+        firstWritableId: "intro",
+        sectionOpen: false,
+      }),
+    ).toBe(false)
+    expect(
+      shouldAutoActivateWritingChapter({
+        alreadyActivated: true,
+        isWriting: true,
+        activeChapterId: null,
+        firstWritableId: "intro",
+        sectionOpen: false,
+      }),
+    ).toBe(false)
+    expect(
+      shouldAutoActivateWritingChapter({
+        alreadyActivated: false,
+        isWriting: true,
+        activeChapterId: null,
+        firstWritableId: "intro",
+        sectionOpen: true,
+      }),
+    ).toBe(false)
+  })
+
+  it("clears the writing chapter on a click that is not another chapter or an edit control", () => {
+    expect(
+      clickDismissesWritingChapter({
+        activeChapterId: "intro",
+        clickedChapterId: null,
+        isEditorChrome: false,
+        isWritingControl: false,
+      }),
+    ).toBe(true)
+    expect(
+      clickDismissesWritingChapter({
+        activeChapterId: "intro",
+        clickedChapterId: "intro",
+        isEditorChrome: false,
+        isWritingControl: false,
+      }),
+    ).toBe(true)
+    expect(
+      clickDismissesWritingChapter({
+        activeChapterId: "intro",
+        clickedChapterId: "intro",
+        isEditorChrome: false,
+        isWritingControl: true,
+      }),
+    ).toBe(false)
+    expect(
+      clickDismissesWritingChapter({
+        activeChapterId: "intro",
+        clickedChapterId: "wonen",
+        isEditorChrome: false,
+        isWritingControl: false,
+      }),
+    ).toBe(false)
+    expect(
+      clickDismissesWritingChapter({
+        activeChapterId: "intro",
+        clickedChapterId: null,
+        isEditorChrome: true,
+        isWritingControl: false,
       }),
     ).toBe(false)
   })

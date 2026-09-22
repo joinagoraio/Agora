@@ -77,7 +77,12 @@ import {
   type ProgrammeDocumentLayout,
 } from "@/lib/programme/document-layout"
 import type { ProgrammeDocumentMode } from "@/lib/programme/document-mode"
-import { clickClosesProgrammeChapterEditor, visibleProgrammeChapterIds } from "@/lib/programme/document-mode"
+import {
+  clickClosesProgrammeChapterEditor,
+  clickDismissesWritingChapter,
+  shouldAutoActivateWritingChapter,
+  visibleProgrammeChapterIds,
+} from "@/lib/programme/document-mode"
 import { BLOCK_ID_ATTR, ensureBlockIdsInHtml, quoteFromBlock } from "@/lib/programme/block-id"
 import { stripDuplicateChapterHeading } from "@/lib/programme/chapter-heading"
 import {
@@ -154,6 +159,8 @@ export function ProgrammeChapterEditor({
   const selectedIdRef = useRef<string | null>(null)
   const pendingJumpRef = useRef<string | null>(null)
   const didAutoActivateRef = useRef(false)
+  const dismissWritingChapterRef = useRef<() => void>(() => {})
+  if (activeChapterId) didAutoActivateRef.current = true
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const contentRef = useRef("")
   const documentIdRef = useRef<string | null>(null)
@@ -242,8 +249,19 @@ export function ProgrammeChapterEditor({
   }, [nodes, bodies, currentUserId, accessRole, documentOwnerId, documentMode])
 
   useEffect(() => {
-    if (didAutoActivateRef.current || !isWriting || activeChapterId || !firstWritableId) return
-    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("section")) return
+    const sectionOpen =
+      typeof window !== "undefined" && Boolean(new URLSearchParams(window.location.search).get("section"))
+    if (
+      !shouldAutoActivateWritingChapter({
+        alreadyActivated: didAutoActivateRef.current,
+        isWriting,
+        activeChapterId,
+        firstWritableId,
+        sectionOpen,
+      })
+    ) {
+      return
+    }
     didAutoActivateRef.current = true
     onActivateChapter?.(firstWritableId)
   }, [isWriting, activeChapterId, firstWritableId, onActivateChapter])
@@ -967,6 +985,7 @@ export function ProgrammeChapterEditor({
   )
 
   const closeChapterEditor = () => {
+    didAutoActivateRef.current = true
     if (!activeChapterId) return
     const editingId = activeChapterId
     flushChapterSave(editingId)
@@ -982,8 +1001,40 @@ export function ProgrammeChapterEditor({
         },
       }))
     }
+    setSelectedId(null)
     onActivateChapter?.(null)
   }
+  dismissWritingChapterRef.current = closeChapterEditor
+
+  useEffect(() => {
+    if (!isWriting || !activeChapterId) return
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : event.target instanceof Node ? event.target.parentElement : null
+      if (!target) return
+      const clickedChapterId = target.closest("[data-chapter-id]")?.getAttribute("data-chapter-id") ?? null
+      const isEditorChrome = Boolean(
+        target.closest(
+          "[data-programme-comments], [data-programme-outline-jump], [data-programme-format-menu], [role='menu'], [role='dialog'], [data-radix-popper-content-wrapper]",
+        ),
+      )
+      const isWritingControl = Boolean(
+        target.closest("button, a, input, textarea, select, [contenteditable='true'], .ProseMirror"),
+      )
+      if (
+        !clickDismissesWritingChapter({
+          activeChapterId,
+          clickedChapterId,
+          isEditorChrome,
+          isWritingControl,
+        })
+      ) {
+        return
+      }
+      dismissWritingChapterRef.current()
+    }
+    document.addEventListener("pointerdown", onPointerDown)
+    return () => document.removeEventListener("pointerdown", onPointerDown)
+  }, [isWriting, activeChapterId])
 
   const onPreviewClick = (event: MouseEvent, nodeId: string) => {
     if (!layout.showComments) return
@@ -996,15 +1047,28 @@ export function ProgrammeChapterEditor({
   }
 
   const clearChapterFocus = (event: MouseEvent<HTMLElement>) => {
-    const target = event.target as HTMLElement
-    const shouldClose = clickClosesProgrammeChapterEditor({
-      activeChapterId,
-      clickedChapterId: target.closest("[data-chapter-id]")?.getAttribute("data-chapter-id") ?? null,
-      isEditorChrome: Boolean(
-        target.closest("[data-programme-comments], [data-programme-outline-jump], [data-programme-format-menu]"),
-      ),
-    })
-    if (shouldClose) closeChapterEditor()
+    const target = event.target instanceof Element ? event.target : event.target instanceof Node ? event.target.parentElement : null
+    if (!target) return
+    const clickedChapterId = target.closest("[data-chapter-id]")?.getAttribute("data-chapter-id") ?? null
+    const isEditorChrome = Boolean(
+      target.closest("[data-programme-comments], [data-programme-outline-jump], [data-programme-format-menu]"),
+    )
+    const isWritingControl = Boolean(
+      target.closest("button, a, input, textarea, select, [contenteditable='true'], .ProseMirror"),
+    )
+    if (
+      isWriting &&
+      clickDismissesWritingChapter({
+        activeChapterId,
+        clickedChapterId,
+        isEditorChrome,
+        isWritingControl,
+      })
+    ) {
+      closeChapterEditor()
+    } else if (clickClosesProgrammeChapterEditor({ activeChapterId, clickedChapterId, isEditorChrome })) {
+      closeChapterEditor()
+    }
     if (target.closest("[data-chapter-id], [data-programme-comments], [data-programme-outline-jump], [data-programme-format-menu]")) {
       return
     }
@@ -1161,7 +1225,24 @@ export function ProgrammeChapterEditor({
                   )}
                   onClick={(event) => {
                     event.stopPropagation()
+                    const target = event.target instanceof Element ? event.target : event.target instanceof Node ? event.target.parentElement : null
+                    const isWritingControl = Boolean(
+                      target?.closest("button, a, input, textarea, select, [contenteditable='true'], .ProseMirror"),
+                    )
+                    if (
+                      isWriting &&
+                      clickDismissesWritingChapter({
+                        activeChapterId,
+                        clickedChapterId: node.id,
+                        isEditorChrome: false,
+                        isWritingControl,
+                      })
+                    ) {
+                      closeChapterEditor()
+                      return
+                    }
                     if (isWriting && canWriteThis) {
+                      if (isWritingControl) return
                       if (selectedId !== node.id) selectChapter(node.id)
                       if (activeChapterId !== node.id) onActivateChapter?.(node.id)
                       return

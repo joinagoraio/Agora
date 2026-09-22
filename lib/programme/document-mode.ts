@@ -98,3 +98,26 @@ export function clickClosesProgrammeChapterEditor(input: {
   if (input.isEditorChrome) return false
   return input.clickedChapterId !== input.activeChapterId
 }
+
+export function shouldAutoActivateWritingChapter(input: {
+  alreadyActivated: boolean
+  isWriting: boolean
+  activeChapterId: string | null
+  firstWritableId: string | null
+  sectionOpen: boolean
+}): boolean {
+  if (input.alreadyActivated || !input.isWriting || input.activeChapterId || !input.firstWritableId) return false
+  return !input.sectionOpen
+}
+
+export function clickDismissesWritingChapter(input: {
+  activeChapterId: string | null
+  clickedChapterId: string | null
+  isEditorChrome: boolean
+  isWritingControl: boolean
+}): boolean {
+  if (!input.activeChapterId || input.isEditorChrome) return false
+  if (input.clickedChapterId && input.clickedChapterId !== input.activeChapterId) return false
+  if (input.clickedChapterId === input.activeChapterId && input.isWritingControl) return false
+  return true
+}
