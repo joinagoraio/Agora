@@ -362,8 +362,8 @@ export async function generateProgrammeMeasuresFromContext(
     .single()
   if (workspaceError || !workspace) return { error: "Workspace not found" }
 
-  const { data: profile } = await supabase.from("profiles").select("language").eq("id", user.id).single()
-  const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
+  const { writingLanguageForSpace } = await import("@/lib/programme/load-writing-language")
+  const userLanguage = await writingLanguageForSpace(workspace.space_id)
 
   const bindings = parseProgrammeBindings((workspace.metadata as Record<string, unknown>) || {})
   const agentId = boundAgentId(bindings, "measures")

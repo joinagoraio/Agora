@@ -159,29 +159,14 @@ import {
 import { UserAvatar } from "@/components/user-avatar"
 import { WorkspaceNotesPanel, type WorkspaceNote } from "@/components/workspace-notes-panel"
 import { getDocumentFileExtension } from "@/lib/utils/document-files"
-import { ArrowLeft, CircleHelp, MoreVertical } from "lucide-react"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-
-function StageHeading({ title, purpose }: { title: string; purpose: string }) {
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-2">
-        <h2 className="text-lg font-medium">{title}</h2>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button type="button" className="text-muted-foreground" aria-label={purpose}>
-                <CircleHelp className="h-4 w-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-sm">{purpose}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-      <p className="text-sm text-muted-foreground">{purpose}</p>
-    </div>
-  )
-}
+import { ArrowLeft, MoreVertical } from "lucide-react"
+import {
+  ProgrammeToolExtra,
+  ProgrammeToolPage,
+  ProgrammeToolSheet,
+  ProgrammeToolSplit,
+  ProgrammeToolSwitch,
+} from "@/components/programme-tool-sheet"
 
 const SHEET_SECTIONS = new Set<ProgrammeWorkbenchSection>([
   "overview",
@@ -199,9 +184,9 @@ const SHEET_SECTIONS = new Set<ProgrammeWorkbenchSection>([
 ])
 
 const MENU_GROUPS: { id: "work" | "properties" | "output"; sections: ProgrammeWorkbenchSection[] }[] = [
-  { id: "work", sections: ["analysis", "measures", "effects", "provenance", "review", "consultation"] },
+  { id: "work", sections: ["analysis", "measures", "effects", "provenance", "review"] },
   { id: "properties", sections: ["overview", "setup", "agents"] },
-  { id: "output", sections: ["export", "publish"] },
+  { id: "output", sections: ["export", "publish", "consultation"] },
 ]
 
 const emptyMeasureDraft = {
@@ -580,6 +565,10 @@ export function ProgrammeWorkbench({
     shared: Array<{ id: string; disposition?: string; summary?: string }>
   } | null>(null)
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
+  const [selectedMeasureId, setSelectedMeasureId] = useState<string | null>(null)
+  const [reviewPane, setReviewPane] = useState<"chapters" | "measures" | "notes">("chapters")
+  const [analysisView, setAnalysisView] = useState<"findings" | "vision">("findings")
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [analysisInstructions, setAnalysisInstructions] = useState("")
   const [analysisJobStatus, setAnalysisJobStatus] = useState<string>("")
   const [editingMeasureId, setEditingMeasureId] = useState<string | null>(null)
@@ -802,7 +791,7 @@ export function ProgrammeWorkbench({
     setFocusVisibleIds(writableChapters.map((chapter) => chapter.id))
   }, [isKnowledgeView, documentMode, documentSearch.focusIds.length, writableChapters, setFocusVisibleIds])
 
-  const boundTemplateName = templates.find((tpl) => tpl.id === bindings.templateId)?.name
+  const boundTemplate = templates.find((tpl) => tpl.id === bindings.templateId)
   const setupSteps: Array<{
     id: string
     done: boolean
@@ -842,8 +831,9 @@ export function ProgrammeWorkbench({
       section: "measures",
     },
   ]
-  const nextSetupStep = setupSteps.find((step) => !step.done)
   const pendingMeasures = measures.filter((m) => m.workflow_status !== "approved")
+  const activeReport = reports.find((report) => report.id === selectedReportId) ?? reports[0] ?? null
+  const activeMeasure = measures.find((measure) => measure.id === selectedMeasureId) ?? measures[0] ?? null
   const pendingChapters = chapters.filter((chapter) => chapter.workflowStatus !== "approved")
   const reviewHasPending = pendingMeasures.length + pendingChapters.length > 0
   const reviewHasArtefacts = measures.length + chapters.length > 0
@@ -900,7 +890,7 @@ export function ProgrammeWorkbench({
           }, 50)
         }
       },
-      reviewComplete: pipeline.stages.review,
+      reviewComplete: pipeline.stages.review === "ready",
       expertPromptDismissed,
       setupInProgress: showSetupWizard,
     })
@@ -1134,37 +1124,53 @@ export function ProgrammeWorkbench({
       <Dialog open={sheetOpen} onOpenChange={(open) => { if (!open) closeSheet() }}>
         <DialogContent
           overlayClassName="z-[70]"
-          className="z-[80] flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden sm:max-w-4xl"
+          className="top-6 right-6 bottom-6 left-6 z-[80] flex h-auto w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
         >
         <ErrorBoundary resetKeys={[activeSection]}>
           <DialogHeader className="sr-only">
             <DialogTitle>{t(`workspace.programme.nav.${activeSection}`, activeSection)}</DialogTitle>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto pr-2">
-          <Tabs value={activeSection} onValueChange={setSection} className="space-y-6">
-        <TabsContent value="overview" className="space-y-4">
-          <StageHeading
+          <ProgrammeToolSheet
+            groups={documentMenuGroups.filter((group) => group.sections.length > 0)}
+            activeSection={activeSection}
+            onSection={setSection}
+          >
+          <Tabs value={activeSection} onValueChange={setSection} className="min-h-0 flex-1 gap-0">
+        <TabsContent value="overview" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ProgrammeToolPage
             title={t("workspace.programme.nav.overview")}
             purpose={t("workspace.programme.purpose.overview")}
-          />
-          {workspaceSummary.trim() ? (
-            <p className="whitespace-pre-line text-sm font-semibold text-foreground">{workspaceSummary}</p>
+            actions={
+              pipeline.firstIncomplete ? (
+                <Button type="button" onClick={() => setSection(pipeline.firstIncompleteSection)}>
+                  {t("guidance.coach.next", undefined, {
+                    action: t(`guidance.coach.stages.${pipeline.firstIncomplete}`),
+                  })}
+                </Button>
+              ) : null
+            }
+          >
+          {workspaceSummary.trim() || workspaceDescription.trim() ? (
+            <section className="overflow-hidden rounded-lg border">
+              <div className="space-y-2 px-4 py-3">
+                {workspaceSummary.trim() ? (
+                  <p className="whitespace-pre-line text-sm font-semibold text-foreground">{workspaceSummary}</p>
+                ) : null}
+                {workspaceDescription.trim() ? (
+                  <p className="whitespace-pre-line text-sm text-muted-foreground">{workspaceDescription}</p>
+                ) : null}
+              </div>
+            </section>
           ) : null}
-          {workspaceDescription.trim() ? (
-            <p className="whitespace-pre-line text-sm text-muted-foreground">{workspaceDescription}</p>
-          ) : null}
-          {pipeline.firstIncomplete ? (
-            <Button type="button" onClick={() => setSection(pipeline.firstIncompleteSection)}>
-              {t("guidance.coach.next", undefined, {
-                action: t(`guidance.coach.stages.${pipeline.firstIncomplete}`),
-              })}
-            </Button>
-          ) : (
+          {pipeline.firstIncomplete ? null : (
             <p className="text-sm text-muted-foreground">{t("guidance.coach.nothingRequired")}</p>
           )}
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium">{t("workspace.programme.overviewNotesTitle")}</h3>
-            <p className="text-sm text-muted-foreground">{t("workspace.programme.overviewNotesHint")}</p>
+          <section className="overflow-hidden rounded-lg border">
+            <div className="border-b bg-muted px-4 py-3">
+              <h3 className="text-sm font-semibold">{t("workspace.programme.overviewNotesTitle")}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">{t("workspace.programme.overviewNotesHint")}</p>
+            </div>
+            <div className="px-4 py-3">
             {currentUserId ? (
               <WorkspaceNotesPanel
                 key={notes.map((note) => note.id).join("-") || "empty"}
@@ -1175,57 +1181,43 @@ export function ProgrammeWorkbench({
                 hideHeading
               />
             ) : null}
-          </div>
+            </div>
+          </section>
+          </ProgrammeToolPage>
         </TabsContent>
 
-        <TabsContent value="setup" className="space-y-4">
-          <StageHeading
+        <TabsContent value="setup" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ProgrammeToolPage
             title={t("workspace.programme.setupTitle")}
             purpose={t("workspace.programme.purpose.setup")}
-          />
-          <p className="text-sm text-muted-foreground">{t("workspace.programme.setupHint")}</p>
-          <ol className="space-y-2 text-sm">
-            {setupSteps.map((step, index) => (
-              <li key={step.id}>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left"
-                  onClick={() => setSection(step.section)}
-                >
-                  <span className="font-medium">{index + 1}.</span>
-                  <span className={step.done ? "text-muted-foreground line-through" : ""}>{step.label}</span>
-                  {step.done && (
-                    <span className="ml-auto text-xs text-muted-foreground">{t("workspace.programme.setupDone")}</span>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ol>
-          <div className="flex flex-wrap gap-2">
-            {nextSetupStep && nextSetupStep.section !== "setup" && (
-              <Button variant="outline" onClick={() => setSection(nextSetupStep.section)}>
-                {t("workspace.programme.setupNext", undefined, { step: nextSetupStep.label })}
-              </Button>
-            )}
-            <Button variant="outline" onClick={() => setSection("agents")}>
-              {t("workspace.programme.setupGoAgents")}
-            </Button>
-            <Button variant="outline" onClick={() => setSection("outline")}>
-              {t("workspace.programme.setupGoOutline")}
-            </Button>
-            <Button variant="outline" onClick={() => setSection("analysis")}>
-              {t("workspace.programme.setupGoAnalysis")}
-            </Button>
-            <Button variant="outline" onClick={() => setSection("corpus")}>
-              {t("workspace.programme.setupGoCorpus")}
-            </Button>
-            <Button variant="outline" onClick={() => setSection("measures")}>
-              {t("workspace.programme.setupGoMeasures")}
-            </Button>
-          </div>
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <div className="min-w-[16rem] flex-1">
+          >
+          <section className="overflow-hidden rounded-lg border">
+            <div className="divide-y">
+              <div className="space-y-2 px-4 py-4">
+                <h3 className="text-sm font-semibold">{t("workspace.programme.setupChecklistTitle")}</h3>
+                <ol className="text-sm">
+                  {setupSteps.map((step, index) => (
+                    <li key={step.id}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left hover:bg-muted/60"
+                        onClick={() => setSection(step.section)}
+                      >
+                        <span className="w-4 text-muted-foreground">{index + 1}</span>
+                        <span className={step.done ? "text-muted-foreground" : ""}>{step.label}</span>
+                        {step.done ? (
+                          <span className="ml-auto text-xs text-muted-foreground">{t("workspace.programme.setupDone")}</span>
+                        ) : null}
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+              <div className="space-y-3 px-4 py-4">
+                <div>
+                  <h3 className="text-sm font-semibold">{t("workspace.programme.bindTemplate")}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">{t("workspace.programme.bindTemplateHint")}</p>
+                </div>
                 {templates.length === 0 ? (
                   <p className="text-sm text-muted-foreground">{t("workspace.programme.noTemplates")}</p>
                 ) : (
@@ -1234,8 +1226,9 @@ export function ProgrammeWorkbench({
                     value={bindings.templateId ?? null}
                     allowNone={!bindings.templateId}
                     disabled={pending}
+                    hideLabel
+                    hideChapters
                     label={t("workspace.programme.bindTemplate")}
-                    help={t("workspace.programme.bindTemplateHint")}
                     onChange={(next) => {
                       if (!next || next === bindings.templateId) return
                       startTransition(async () => {
@@ -1247,186 +1240,202 @@ export function ProgrammeWorkbench({
                     }}
                   />
                 )}
+                {boundTemplate && boundTemplate.chapterTitles.length > 0 ? (
+                  <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+                    {boundTemplate.chapterTitles.map((title, index) => (
+                      <li key={`${index}-${title}`}>{title}</li>
+                    ))}
+                  </ol>
+                ) : null}
+                {bindings.templateId ? (
+                  <p className="text-sm text-muted-foreground">{t("workspace.programme.bindTemplateSwitchHint")}</p>
+                ) : null}
+                <p className="text-sm text-muted-foreground">
+                  {t("workspace.programme.documentRoles.environmental_vision")}:{" "}
+                  {bindings.environmentalVisionDocumentIds
+                    .map((id) => {
+                      const title = citationCatalog.documents.find((document) => document.id === id)?.title || id
+                      const file = title.match(/^(.*)\.(md|markdown|pdf|docx?|txt)$/i)
+                      return file ? file[1].replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim() : title
+                    })
+                    .join(", ") || t("workspace.programme.none")}
+                </p>
+              </div>
+              <div className="space-y-2 px-4 py-4">
+                <h3 className="text-sm font-semibold">{t("workspace.programme.documentOwner")}</h3>
+                <Select
+                  value={documentOwnerId || "none"}
+                  disabled={pending || !canAdminister}
+                  onValueChange={(value) =>
+                    startTransition(async () => {
+                      if (value === "none") return
+                      const result = await assignDocumentOwner(workspaceId, value)
+                      if (result.data?.documentOwnerId) setDocumentOwnerId(result.data.documentOwnerId)
+                      notifyResult(result.error, t("workspace.programme.ownerSaved"))
+                    })
+                  }
+                >
+                  <SelectTrigger size="sm" className="min-w-56">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t("workspace.programme.ownerUnassigned")}</SelectItem>
+                    {reviewers.map((reviewer) => (
+                      <SelectItem key={reviewer.id} value={reviewer.id}>
+                        {reviewer.name}
+                        {reviewer.id === currentUserId ? ` (${t("workspace.programme.reviewerYou")})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2 px-4 py-4">
+                <h3 className="text-sm font-semibold">{t("workspace.programme.policyTitle")}</h3>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={policies.distinctReviewer}
+                    disabled={pending}
+                    onChange={(e) =>
+                      startTransition(async () => {
+                        const result = await updateProgrammePolicies(workspaceId, { distinctReviewer: e.target.checked })
+                        if (result.data) setPolicies((prev) => ({ ...prev, ...result.data }))
+                        notifyResult(result.error, t("workspace.programme.policySaved"))
+                      })
+                    }
+                  />
+                  {t("workspace.programme.distinctReviewer")}
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={policies.stakeholderExportRequiresFreeze}
+                    disabled={pending}
+                    onChange={(e) =>
+                      startTransition(async () => {
+                        const result = await updateProgrammePolicies(workspaceId, {
+                          stakeholderExportRequiresFreeze: e.target.checked,
+                        })
+                        if (result.data) setPolicies((prev) => ({ ...prev, ...result.data }))
+                        notifyResult(result.error, t("workspace.programme.policySaved"))
+                      })
+                    }
+                  />
+                  {t("workspace.programme.requireFreeze")}
+                </label>
               </div>
             </div>
-            {bindings.templateId ? (
-              <p className="text-xs text-muted-foreground">{t("workspace.programme.bindTemplateSwitchHint")}</p>
-            ) : null}
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {t("workspace.programme.bindingsSummary", undefined, {
-              playbook: boundTemplateName || bindings.templateId || t("workspace.programme.none"),
-              vision: bindings.environmentalVisionDocumentIds.join(", ") || t("workspace.programme.none"),
-            })}
-          </p>
-          <div className="space-y-2 rounded-md border p-3">
-            <p className="text-sm font-medium">{t("workspace.programme.documentOwner")}</p>
-            <Select
-              value={documentOwnerId || "none"}
-              disabled={pending || !canAdminister}
-              onValueChange={(value) =>
-                startTransition(async () => {
-                  if (value === "none") return
-                  const result = await assignDocumentOwner(workspaceId, value)
-                  if (result.data?.documentOwnerId) setDocumentOwnerId(result.data.documentOwnerId)
-                  notifyResult(result.error, t("workspace.programme.ownerSaved"))
-                })
-              }
-            >
-              <SelectTrigger size="sm" className="min-w-56">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">{t("workspace.programme.ownerUnassigned")}</SelectItem>
-                {reviewers.map((reviewer) => (
-                  <SelectItem key={reviewer.id} value={reviewer.id}>
-                    {reviewer.name}
-                    {reviewer.id === currentUserId ? ` (${t("workspace.programme.reviewerYou")})` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2 rounded-md border p-3">
-            <p className="text-sm font-medium">{t("workspace.programme.policyTitle")}</p>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={policies.distinctReviewer}
-                disabled={pending}
-                onChange={(e) =>
-                  startTransition(async () => {
-                    const result = await updateProgrammePolicies(workspaceId, { distinctReviewer: e.target.checked })
-                    if (result.data) setPolicies((prev) => ({ ...prev, ...result.data }))
-                    notifyResult(result.error, t("workspace.programme.policySaved"))
-                  })
-                }
-              />
-              {t("workspace.programme.distinctReviewer")}
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={policies.stakeholderExportRequiresFreeze}
-                disabled={pending}
-                onChange={(e) =>
-                  startTransition(async () => {
-                    const result = await updateProgrammePolicies(workspaceId, {
-                      stakeholderExportRequiresFreeze: e.target.checked,
-                    })
-                    if (result.data) setPolicies((prev) => ({ ...prev, ...result.data }))
-                    notifyResult(result.error, t("workspace.programme.policySaved"))
-                  })
-                }
-              />
-              {t("workspace.programme.requireFreeze")}
-            </label>
-          </div>
+          </section>
+          </ProgrammeToolPage>
         </TabsContent>
 
-        <TabsContent value="agents" className="space-y-4">
-          <StageHeading
+        <TabsContent value="agents" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ProgrammeToolPage
             title={t("workspace.programme.nav.agents")}
             purpose={t("workspace.programme.purpose.agents")}
-          />
-          <p className="text-sm text-muted-foreground">{t("workspace.programme.agentsHint")}</p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  try {
-                    const result = await ensureDefaultAgentsBound(workspaceId, spaceId)
-                    notifyResult(result.error, t("workspace.programme.agentsBound"))
-                    if ("data" in result && result.data) setBindings(result.data)
-                    refresh()
-                  } catch (error) {
-                    notify(error instanceof Error ? error.message : t("workspace.programme.exportFailed"), "error")
-                  }
-                })
-              }
-            >
-              {t("workspace.programme.bindDefaultAgents")}
-            </Button>
-          </div>
-          {agents.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("workspace.programme.agentsEmpty")}</p>
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {AGENT_STAGES.map((stage) => {
-                const options = agents.filter((agent) => agent.stage === stage)
-                    const bound = bindings.agentBindings?.[stage] || ""
-                    const selected = options.some((agent) => agent.id === bound) ? bound : undefined
-                    return (
-                      <label key={stage} className="space-y-1 text-xs">
-                        <span className="text-muted-foreground">
-                          {t("workspace.programme.bindAgentStage", undefined, {
-                            stage: t(`space.agents.stages.${stage}`),
-                          })}
-                        </span>
-                        {options.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">{t("workspace.programme.bindAgentEmpty")}</p>
-                        ) : (
+            actions={
+              <Button
+                disabled={pending}
+                onClick={() =>
+                  startTransition(async () => {
+                    try {
+                      const result = await ensureDefaultAgentsBound(workspaceId, spaceId)
+                      notifyResult(result.error, t("workspace.programme.agentsBound"))
+                      if ("data" in result && result.data) setBindings(result.data)
+                      refresh()
+                    } catch (error) {
+                      notify(error instanceof Error ? error.message : t("workspace.programme.exportFailed"), "error")
+                    }
+                  })
+                }
+              >
+                {t("workspace.programme.bindDefaultAgents")}
+              </Button>
+            }
+          >
+          <section className="overflow-hidden rounded-lg border">
+            {agents.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-muted-foreground">{t("workspace.programme.agentsEmpty")}</p>
+            ) : (
+              <div className="divide-y">
+                {AGENT_STAGES.map((stage) => {
+                  const options = agents.filter((agent) => agent.stage === stage)
+                  const bound = bindings.agentBindings?.[stage] || ""
+                  const selected = options.find((agent) => agent.id === bound)
+                  const provider = selected?.provider && selected.provider !== "n/a"
+                    ? t(`workspace.programme.agentProviderName.${selected.provider}`, selected.provider)
+                    : ""
+                  return (
+                    <div key={stage} className="space-y-3 px-4 py-4">
+                      <div>
+                        <h3 className="text-sm font-semibold">{t(`space.agents.stages.${stage}`)}</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">{t(`workspace.programme.agentJob.${stage}`)}</p>
+                      </div>
+                      {options.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">{t("workspace.programme.bindAgentEmpty")}</p>
+                      ) : (
+                        <div className="max-w-xl space-y-1">
                           <Select
-                            value={selected}
-                        disabled={pending}
-                        onValueChange={(value) =>
-                          startTransition(async () => {
-                            const saved = await bindWorkspaceAgents(workspaceId, { [stage]: value })
-                            if (saved.data) setBindings(saved.data)
-                            notifyResult(saved.error, t("workspace.programme.agentsBound"))
-                          })
-                        }
-                      >
-                        <SelectTrigger className="w-full" size="sm">
-                          <SelectValue placeholder={t("workspace.programme.bindAgentUnset")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {options.map((agent) => (
-                            <SelectItem key={agent.id} value={agent.id}>
-                              {t("workspace.programme.agentProvider", undefined, {
-                                name: agent.name,
-                                provider: agent.provider,
-                              })}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </label>
-                )
-              })}
-            </div>
-          )}
+                            value={selected?.id}
+                            disabled={pending}
+                            onValueChange={(value) =>
+                              startTransition(async () => {
+                                const saved = await bindWorkspaceAgents(workspaceId, { [stage]: value })
+                                if (saved.data) setBindings(saved.data)
+                                notifyResult(saved.error, t("workspace.programme.agentsBound"))
+                              })
+                            }
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder={t("workspace.programme.bindAgentUnset")} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {options.map((agent) => (
+                                <SelectItem key={agent.id} value={agent.id}>
+                                  {agent.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {provider && selected && !selected.name.toLowerCase().includes(provider.toLowerCase()) ? (
+                            <p className="text-xs text-muted-foreground">{provider}</p>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+          </ProgrammeToolPage>
         </TabsContent>
 
-        <TabsContent value="corpus" className="space-y-3">
-          <StageHeading
+        <TabsContent value="corpus" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ProgrammeToolPage
             title={t("workspace.programme.nav.corpus")}
             purpose={t("workspace.programme.purpose.corpus")}
-          />
+            actions={
+              <Button variant="outline" type="button" onClick={() => setMode("knowledge")}>
+                {t("workspace.programme.openKnowledge")}
+              </Button>
+            }
+          >
           {documentRoleList}
-          <Button variant="outline" type="button" onClick={() => setMode("knowledge")}>
-            {t("workspace.programme.openKnowledge")}
-          </Button>
+          </ProgrammeToolPage>
         </TabsContent>
 
-        <TabsContent value="analysis" className="space-y-3">
-          <StageHeading
+        <TabsContent value="analysis" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ProgrammeToolPage
+            fill
             title={t("workspace.programme.analysisTitle")}
             purpose={
               reports.length === 0
                 ? t("workspace.programme.purpose.analysisEmpty")
                 : t("workspace.programme.purpose.analysis")
             }
-          />
-          <p className="text-sm text-muted-foreground">{t("workspace.programme.analysisHint")}</p>
-          <Textarea
-            value={analysisInstructions}
-            onChange={(e) => setAnalysisInstructions(e.target.value)}
-            placeholder={t("workspace.programme.analysisInstructions")}
-            rows={2}
-          />
+            actions={
+              <>
           <div className="flex flex-wrap gap-2">
             {(["analysis", "vision", "oer", "qc"] as const).map((kind) => (
               <Button
@@ -1490,236 +1499,292 @@ export function ProgrammeWorkbench({
               {t("workspace.programme.analysisCancel")}
             </Button>
           </div>
-          {analysisJobStatus && <p className="text-sm">{t("workspace.programme.analysisJob", undefined, { status: analysisJobStatus })}</p>}
-          {sourcePreview && (
-            <pre className="whitespace-pre-wrap rounded-md border p-2 text-xs">{sourcePreview}</pre>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Select value={compareA || "none"} onValueChange={(value) => setCompareA(value === "none" ? "" : value)}>
-              <SelectTrigger size="sm" className="min-w-40">
-                <SelectValue placeholder={t("workspace.programme.compareA")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">{t("workspace.programme.compareA")}</SelectItem>
-                {reports.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    {r.report_type} {r.id.slice(0, 8)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={compareB || "none"} onValueChange={(value) => setCompareB(value === "none" ? "" : value)}>
-              <SelectTrigger size="sm" className="min-w-40">
-                <SelectValue placeholder={t("workspace.programme.compareB")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">{t("workspace.programme.compareB")}</SelectItem>
-                {reports.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    {r.report_type} {r.id.slice(0, 8)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              size="sm"
-              disabled={pending || !compareA || !compareB}
-              onClick={() =>
-                startTransition(async () => {
-                  const result = await compareAnalysisReports(workspaceId, compareA, compareB)
-                  if (result.error || !result.data) {
-                    notify(result.error || t("workspace.programme.exportFailed"), "error")
-                    return
-                  }
-                  setCompareFindings(result.data)
-                  setCompareResult(
-                    t("workspace.programme.compareResult", undefined, {
-                      onlyA: String(result.data.onlyA.length),
-                      onlyB: String(result.data.onlyB.length),
-                      shared: String(result.data.shared.length),
-                    }),
-                  )
-                })
-              }
-            >
-              {t("workspace.programme.compare")}
-            </Button>
-          </div>
-          {compareResult && <p className="text-sm">{compareResult}</p>}
-          {compareFindings && (
-            <div className="grid gap-2 text-xs md:grid-cols-3">
-              <div>
-                <p className="font-medium">{t("workspace.programme.compareOnlyA")}</p>
-                {compareFindings.onlyA.map((f) => (
-                  <p key={f.id}>[{f.disposition}] {f.summary}</p>
-                ))}
-              </div>
-              <div>
-                <p className="font-medium">{t("workspace.programme.compareOnlyB")}</p>
-                {compareFindings.onlyB.map((f) => (
-                  <p key={f.id}>[{f.disposition}] {f.summary}</p>
-                ))}
-              </div>
-              <div>
-                <p className="font-medium">{t("workspace.programme.compareShared")}</p>
-                {compareFindings.shared.map((f) => (
-                  <p key={f.id}>[{f.disposition}] {f.summary}</p>
-                ))}
-              </div>
-            </div>
-          )}
-          <ProgrammePolicyGraph nodes={graph.nodes} edges={graph.edges} />
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium">{t("workspace.programme.qcTitle")}</h3>
-            {reports.filter((r) => r.report_type === "quality").length === 0 && (
-              <p className="text-sm text-muted-foreground">{t("workspace.programme.qcEmpty")}</p>
-            )}
-            <ul className="space-y-1 text-sm">
-              {reports
-                .filter((r) => r.report_type === "quality")
-                .slice(0, 1)
-                .flatMap((r) =>
-                  (Array.isArray(r.findings) ? r.findings : []).map((f: any) => ({ ...f, reportId: r.id })),
-                )
-                .map((f: { id: string; reportId: string; disposition?: string; summary?: string; addressed?: boolean; measureId?: string; citations?: Array<{ documentId: string }> }) => (
-                  <li key={f.id} className="space-y-1 rounded-md border p-2">
-                    <p>
-                      [{f.disposition || "missing"}] {f.summary}
-                      {f.addressed ? ` · ${t("workspace.programme.qcAddressed")}` : ""}
-                    </p>
-                    {f.measureId && (
-                      <p className="text-xs text-muted-foreground">
-                        {t("workspace.programme.qcMeasure", undefined, { id: f.measureId })}
-                      </p>
-                    )}
-                    {Array.isArray(f.citations) && f.citations[0] && (
-                      <p className="text-xs text-muted-foreground">{f.citations[0].documentId}</p>
-                    )}
+          <ProgrammeToolExtra label={t("workspace.programme.analysisInstructionsLabel")}>
+            <p className="text-xs text-muted-foreground">{t("workspace.programme.analysisInstructionsHint")}</p>
+            <Textarea
+              id="analysis-instructions"
+              value={analysisInstructions}
+              onChange={(e) => setAnalysisInstructions(e.target.value)}
+              placeholder={t("workspace.programme.analysisInstructionsPlaceholder")}
+              rows={2}
+            />
+          </ProgrammeToolExtra>
+          {analysisJobStatus ? (
+            <p className="basis-full text-sm">{t("workspace.programme.analysisJob", undefined, { status: analysisJobStatus })}</p>
+          ) : null}
+              </>
+            }
+          >
+          <ProgrammeToolSplit
+            list={
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="shrink-0 border-b bg-muted px-4 py-3">
+                  <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    {t("workspace.programme.reportListTitle")}
+                  </h3>
+                  <p className="mt-1 text-xs text-foreground">{t("workspace.programme.reportListHint")}</p>
+                </div>
+                <ul className="min-h-0 flex-1 overflow-y-auto bg-background text-sm">
+                  {reports.length === 0 ? (
+                    <li className="px-4 py-6 text-muted-foreground">
+                      {t("workspace.programme.noReports")} {t("workspace.programme.emptyNext.analysis")}
+                    </li>
+                  ) : null}
+                  {reports.map((r) => {
+                    const selected = activeReport?.id === r.id
+                    const run = runs.find((item) => item.id === r.generation_run_id)
+                    const score = run?.citations?.groundedness?.score
+                    const findingCount = Array.isArray(r.findings) ? r.findings.length : 0
+                    return (
+                      <li key={r.id} className="border-b">
+                        <button
+                          type="button"
+                          aria-current={selected ? "true" : undefined}
+                          className={`w-full border-l-2 px-4 py-3 text-left ${selected ? "border-l-foreground bg-background" : "border-l-transparent hover:bg-muted/30"}`}
+                          onClick={() => setSelectedReportId(r.id)}
+                        >
+                          <span className="block font-medium">
+                            {t(`workspace.programme.reportType.${r.report_type}`, r.report_type)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(r.created_at).toLocaleString()}
+                            {" · "}
+                            {t("workspace.programme.findingCount", undefined, { count: findingCount })}
+                            {score == null
+                              ? ""
+                              : ` · ${t("workspace.programme.groundednessRun", undefined, {
+                                  score: String(score),
+                                  issues: String(run?.citations?.groundedness?.issues?.length ?? 0),
+                                })}`}
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+                {reports.length >= 2 ? (
+                  <div className="shrink-0 space-y-3 border-t bg-muted/40 px-4 py-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">{t("workspace.programme.compareTitle")}</h3>
+                      <p className="mt-1 text-xs text-muted-foreground">{t("workspace.programme.compareHint")}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium">{t("workspace.programme.compareA")}</p>
+                      <Select value={compareA || "none"} onValueChange={(value) => setCompareA(value === "none" ? "" : value)}>
+                        <SelectTrigger size="sm" className="w-full bg-background">
+                          <SelectValue placeholder={t("workspace.programme.comparePick")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">{t("workspace.programme.comparePick")}</SelectItem>
+                          {reports.map((r) => (
+                            <SelectItem key={r.id} value={r.id}>
+                              {t(`workspace.programme.reportType.${r.report_type}`, r.report_type)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium">{t("workspace.programme.compareB")}</p>
+                      <Select value={compareB || "none"} onValueChange={(value) => setCompareB(value === "none" ? "" : value)}>
+                        <SelectTrigger size="sm" className="w-full bg-background">
+                          <SelectValue placeholder={t("workspace.programme.comparePick")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">{t("workspace.programme.comparePick")}</SelectItem>
+                          {reports.map((r) => (
+                            <SelectItem key={`b-${r.id}`} value={r.id}>
+                              {t(`workspace.programme.reportType.${r.report_type}`, r.report_type)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <Button
                       size="sm"
-                      variant="outline"
-                      disabled={pending}
+                      className="w-full"
+                      disabled={pending || !compareA || !compareB}
                       onClick={() =>
                         startTransition(async () => {
-                          const result = await setFindingAddressed(workspaceId, f.reportId, f.id, !f.addressed)
-                          notifyResult(result.error, t("workspace.programme.qcToggled"))
-                          refresh()
+                          const result = await compareAnalysisReports(workspaceId, compareA, compareB)
+                          if (result.error || !result.data) {
+                            notify(result.error || t("workspace.programme.exportFailed"), "error")
+                            return
+                          }
+                          setCompareFindings(result.data)
+                          setCompareResult(
+                            t("workspace.programme.compareResult", undefined, {
+                              onlyA: String(result.data.onlyA.length),
+                              onlyB: String(result.data.onlyB.length),
+                              shared: String(result.data.shared.length),
+                            }),
+                          )
                         })
                       }
                     >
-                      {f.addressed ? t("workspace.programme.qcReopen") : t("workspace.programme.qcAddress")}
-                    </Button>
-                  </li>
-                ))}
-            </ul>
-          </div>
-          <ul className="space-y-2 text-sm">
-            {reports.length === 0 && (
-              <li>
-                {t("workspace.programme.noReports")} {t("workspace.programme.emptyNext.analysis")}
-              </li>
-            )}
-            {reports.map((r) => {
-              const open = selectedReportId === r.id
-              return (
-                <li key={r.id} className="space-y-2 rounded-md border p-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <button type="button" className="text-left" onClick={() => setSelectedReportId(open ? null : r.id)}>
-                      {r.report_type} — {new Date(r.created_at).toLocaleString()} — findings:{" "}
-                      {Array.isArray(r.findings) ? r.findings.length : 0}
-                      {(() => {
-                        const run = runs.find((item) => item.id === r.generation_run_id)
-                        const score = run?.citations?.groundedness?.score
-                        return score == null
-                          ? ""
-                          : ` · ${t("workspace.programme.groundednessRun", undefined, {
-                              score: String(score),
-                              issues: String(run?.citations?.groundedness?.issues?.length ?? 0),
-                            })}`
-                      })()}
-                    </button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={pending || !r.generation_run_id}
-                      onClick={() =>
-                        startTransition(async () => {
-                          const result = await rerunAnalysisFromReport(workspaceId, r.id, analysisInstructions.trim() || undefined)
-                          notifyResult(result.error, t("workspace.programme.analysisRerun"))
-                          refresh()
-                        })
-                      }
-                    >
-                      {t("workspace.programme.analysisRerun")}
+                      {t("workspace.programme.compare")}
                     </Button>
                   </div>
-                  {open &&
-                    Array.isArray(r.findings) &&
-                    r.findings.map((f: any) => (
-                      <div key={f.id} className="rounded-md bg-muted/40 p-2 text-xs">
-                        <p>
-                          [{f.disposition}] {f.summary}
-                        </p>
-                        {f.visionAnchor && <p>{t("workspace.programme.findingAnchor", undefined, { value: f.visionAnchor })}</p>}
-                        {f.provincialInterest && (
-                          <p>{t("workspace.programme.findingInterest", undefined, { value: f.provincialInterest })}</p>
-                        )}
-                        {f.conflictWithDocumentId && (
-                          <p>{t("workspace.programme.findingConflict", undefined, { value: f.conflictWithDocumentId })}</p>
-                        )}
-                        {Array.isArray(f.citations) &&
-                          f.citations.map((c: { documentId: string; sectionId?: string; quote?: string; pageNumber?: number }, index: number) => (
-                            <p key={`${c.documentId}-${index}`}>
-                              {formatCitationLabel(c, citationCatalog.documents, citationCatalog.sections)}
-                              {c.quote ? ` — ${c.quote}` : ""}
-                            </p>
-                          ))}
-                        {f.oerTheme && (
-                          <p>
-                            {t("workspace.programme.oerTheme")}: {f.oerTheme}
-                          </p>
-                        )}
-                        {r.generation_run_id && <p>run {String(r.generation_run_id).slice(0, 8)}</p>}
+                ) : null}
+              </div>
+            }
+            detail={
+              <div className="space-y-4 p-6">
+                <ProgrammeToolSwitch
+                  label={t("workspace.programme.analysisViewLabel")}
+                  value={analysisView}
+                  options={[
+                    { id: "findings", label: t("workspace.programme.analysisView.findings") },
+                    { id: "vision", label: t("workspace.programme.analysisView.vision") },
+                  ]}
+                  onChange={setAnalysisView}
+                />
+                {analysisView === "vision" ? (
+                  <ProgrammePolicyGraph nodes={graph.nodes} edges={graph.edges} />
+                ) : (
+                  <>
+                {sourcePreview ? (
+                  <section className="overflow-hidden rounded-lg border bg-background">
+                    <div className="border-b bg-muted px-4 py-3">
+                      <h3 className="text-sm font-semibold">{t("workspace.programme.sourcePreviewTitle")}</h3>
+                    </div>
+                    <pre className="whitespace-pre-wrap px-4 py-3 text-xs">{sourcePreview}</pre>
+                  </section>
+                ) : null}
+                {compareFindings ? (
+                  <section className="overflow-hidden rounded-lg border bg-background">
+                    <div className="border-b bg-muted px-4 py-3">
+                      <h3 className="text-sm font-semibold">{t("workspace.programme.compareResultTitle")}</h3>
+                      {compareResult ? <p className="mt-1 text-sm text-muted-foreground">{compareResult}</p> : null}
+                    </div>
+                    <div className="grid gap-4 px-4 py-3 text-sm md:grid-cols-3">
+                      <div className="space-y-1">
+                        <p className="font-medium">{t("workspace.programme.compareOnlyA")}</p>
+                        {compareFindings.onlyA.map((f) => (
+                          <p key={f.id}>[{f.disposition}] {f.summary}</p>
+                        ))}
                       </div>
-                    ))}
-                </li>
-              )
-            })}
-          </ul>
+                      <div className="space-y-1">
+                        <p className="font-medium">{t("workspace.programme.compareOnlyB")}</p>
+                        {compareFindings.onlyB.map((f) => (
+                          <p key={f.id}>[{f.disposition}] {f.summary}</p>
+                        ))}
+                      </div>
+                      <div className="space-y-1">
+                        <p className="font-medium">{t("workspace.programme.compareShared")}</p>
+                        {compareFindings.shared.map((f) => (
+                          <p key={f.id}>[{f.disposition}] {f.summary}</p>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+                ) : null}
+                {activeReport ? (
+                  <section className="overflow-hidden rounded-lg border bg-background">
+                    <div className="flex flex-wrap items-start justify-between gap-2 border-b bg-muted px-4 py-3">
+                      <div className="space-y-1">
+                        <h3 className="text-sm font-semibold">{t("workspace.programme.findingsTitle")}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {t(`workspace.programme.reportType.${activeReport.report_type}`, activeReport.report_type)}
+                          {" · "}
+                          {t("workspace.programme.findingsHint")}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={pending || !activeReport.generation_run_id}
+                        onClick={() =>
+                          startTransition(async () => {
+                            const result = await rerunAnalysisFromReport(
+                              workspaceId,
+                              activeReport.id,
+                              analysisInstructions.trim() || undefined,
+                            )
+                            notifyResult(result.error, t("workspace.programme.analysisRerun"))
+                            refresh()
+                          })
+                        }
+                      >
+                        {t("workspace.programme.analysisRerun")}
+                      </Button>
+                    </div>
+                    <div className="space-y-3 px-4 py-3">
+                    {activeReport.report_type === "quality" && (!Array.isArray(activeReport.findings) || activeReport.findings.length === 0) ? (
+                      <p className="text-sm text-muted-foreground">{t("workspace.programme.qcEmpty")}</p>
+                    ) : null}
+                    {Array.isArray(activeReport.findings) &&
+                      activeReport.findings.map((f: any) => (
+                        <div key={f.id} className="space-y-1 rounded-md border p-3 text-sm">
+                          <p>
+                            [{f.disposition}] {f.summary}
+                            {f.addressed ? ` · ${t("workspace.programme.qcAddressed")}` : ""}
+                          </p>
+                          {f.measureId ? (
+                            <p className="text-xs text-muted-foreground">
+                              {t("workspace.programme.qcMeasure", undefined, { id: f.measureId })}
+                            </p>
+                          ) : null}
+                          {f.visionAnchor ? <p className="text-xs">{t("workspace.programme.findingAnchor", undefined, { value: f.visionAnchor })}</p> : null}
+                          {f.provincialInterest ? (
+                            <p className="text-xs">{t("workspace.programme.findingInterest", undefined, { value: f.provincialInterest })}</p>
+                          ) : null}
+                          {f.conflictWithDocumentId ? (
+                            <p className="text-xs">{t("workspace.programme.findingConflict", undefined, { value: f.conflictWithDocumentId })}</p>
+                          ) : null}
+                          {Array.isArray(f.citations) &&
+                            f.citations.map((c: { documentId: string; sectionId?: string; quote?: string; pageNumber?: number }, index: number) => (
+                              <p key={`${c.documentId}-${index}`} className="text-xs text-muted-foreground">
+                                {formatCitationLabel(c, citationCatalog.documents, citationCatalog.sections)}
+                                {c.quote ? ` — ${c.quote}` : ""}
+                              </p>
+                            ))}
+                          {f.oerTheme ? (
+                            <p className="text-xs">
+                              {t("workspace.programme.oerTheme")}: {f.oerTheme}
+                            </p>
+                          ) : null}
+                          {activeReport.report_type === "quality" ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={pending}
+                              onClick={() =>
+                                startTransition(async () => {
+                                  const result = await setFindingAddressed(workspaceId, activeReport.id, f.id, !f.addressed)
+                                  notifyResult(result.error, t("workspace.programme.qcToggled"))
+                                  refresh()
+                                })
+                              }
+                            >
+                              {f.addressed ? t("workspace.programme.qcReopen") : t("workspace.programme.qcAddress")}
+                            </Button>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {t("workspace.programme.noReports")} {t("workspace.programme.emptyNext.analysis")}
+                  </p>
+                )}
+                  </>
+                )}
+              </div>
+            }
+          />
+          </ProgrammeToolPage>
         </TabsContent>
 
-        <TabsContent value="measures" className="space-y-3">
-          <StageHeading
+        <TabsContent value="measures" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ProgrammeToolPage
+            fill
             title={t("workspace.programme.measuresTitle")}
             purpose={t("workspace.programme.purpose.measures")}
-          />
-          <Textarea
-            value={measureInstructions}
-            onChange={(e) => setMeasureInstructions(e.target.value)}
-            rows={3}
-            placeholder={t("workspace.programme.measuresInstructionsPlaceholder")}
-          />
+            actions={
+              <>
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  const preview = await previewBoundAgentSources(workspaceId, "measures")
-                  setSourcePreview(
-                    [
-                      preview.data?.provider && `Provider: ${preview.data.provider}`,
-                      preview.data?.model && `Model: ${preview.data.model}`,
-                      preview.data?.preview,
-                    ]
-                      .filter(Boolean)
-                      .join("\n"),
-                  )
-                })
-              }
-            >
-              {t("workspace.programme.previewSources")}
-            </Button>
             <Button
               disabled={pending}
               data-guidance-target="generate-measures"
@@ -1756,6 +1821,26 @@ export function ProgrammeWorkbench({
               disabled={pending}
               onClick={() =>
                 startTransition(async () => {
+                  const preview = await previewBoundAgentSources(workspaceId, "measures")
+                  setSourcePreview(
+                    [
+                      preview.data?.provider && `Provider: ${preview.data.provider}`,
+                      preview.data?.model && `Model: ${preview.data.model}`,
+                      preview.data?.preview,
+                    ]
+                      .filter(Boolean)
+                      .join("\n"),
+                  )
+                })
+              }
+            >
+              {t("workspace.programme.previewSources")}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
                   const result = await convertPolicyProseToMeasures(workspaceId, measureInstructions)
                   notifyResult(result.error, t("workspace.programme.pipelineConverted", undefined, { count: String(result.data?.saved ?? 0) }))
                   refresh()
@@ -1765,44 +1850,59 @@ export function ProgrammeWorkbench({
               {t("workspace.programme.convertPolicy")}
             </Button>
           </div>
-          {sourcePreview && <pre className="whitespace-pre-wrap rounded-md border p-2 text-xs">{sourcePreview}</pre>}
-          <details className="rounded-md border p-2 text-sm">
-            <summary className="cursor-pointer text-muted-foreground">
-              {t("workspace.programme.importMeasuresEscape")}
-            </summary>
-            <div className="mt-2 space-y-2">
-              <Textarea
-                value={measureImportJson}
-                onChange={(e) => setMeasureImportJson(e.target.value)}
-                rows={4}
-                placeholder={t("workspace.programme.importMeasuresPlaceholder")}
-              />
-              <Button
-                variant="outline"
-                disabled={pending || !measureImportJson.trim()}
-                onClick={() =>
-                  startTransition(async () => {
-                    const result = await mergeMeasureFragment(workspaceId, measureImportJson)
-                    if (result.error) {
-                      notify(result.error, "error")
-                      return
-                    }
-                    notify(
-                      t("workspace.programme.measuresImported", undefined, {
-                        count: String(result.data?.merged ?? 0),
-                      }),
-                    )
-                    setMeasureImportJson("")
-                    refresh()
-                  })
-                }
-              >
-                {t("workspace.programme.importMeasures")}
-              </Button>
-            </div>
-          </details>
+          <ProgrammeToolExtra label={t("workspace.programme.measuresInstructionsLabel")}>
+            <Textarea
+              value={measureInstructions}
+              onChange={(e) => setMeasureInstructions(e.target.value)}
+              rows={3}
+              placeholder={t("workspace.programme.measuresInstructionsPlaceholder")}
+            />
+          </ProgrammeToolExtra>
+          <ProgrammeToolExtra
+            label={t("workspace.programme.importMeasuresEscape")}
+          >
+            <Textarea
+              value={measureImportJson}
+              onChange={(e) => setMeasureImportJson(e.target.value)}
+              rows={4}
+              placeholder={t("workspace.programme.importMeasuresPlaceholder")}
+            />
+            <Button
+              variant="outline"
+              disabled={pending || !measureImportJson.trim()}
+              onClick={() =>
+                startTransition(async () => {
+                  const result = await mergeMeasureFragment(workspaceId, measureImportJson)
+                  if (result.error) {
+                    notify(result.error, "error")
+                    return
+                  }
+                  notify(
+                    t("workspace.programme.measuresImported", undefined, {
+                      count: String(result.data?.merged ?? 0),
+                    }),
+                  )
+                  setMeasureImportJson("")
+                  refresh()
+                })
+              }
+            >
+              {t("workspace.programme.importMeasures")}
+            </Button>
+          </ProgrammeToolExtra>
+              </>
+            }
+          >
+          {sourcePreview ? (
+            <section className="shrink-0 border-b">
+              <div className="border-b bg-muted px-6 py-3">
+                <h3 className="text-sm font-semibold">{t("workspace.programme.sourcePreviewTitle")}</h3>
+              </div>
+              <pre className="whitespace-pre-wrap px-6 py-3 text-xs">{sourcePreview}</pre>
+            </section>
+          ) : null}
           {duplicates.length > 0 && (
-            <div className="space-y-2 rounded-md border p-3">
+            <div className="shrink-0 space-y-2 border-b px-6 py-3">
               <p className="text-sm font-medium">{t("workspace.programme.duplicatesTitle")}</p>
               <p className="text-sm text-muted-foreground">
                 {t("workspace.programme.duplicatesHint", undefined, { count: String(duplicates.length) })}
@@ -1818,7 +1918,7 @@ export function ProgrammeWorkbench({
                   <ul className="space-y-1">
                     {group.map((item) => (
                       <li key={item.id} className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-mono text-xs">{item.id.slice(0, 8)}</span>
+                        <span className="font-medium">{item.title}</span>
                         <Button
                           size="sm"
                           variant="outline"
@@ -1844,25 +1944,66 @@ export function ProgrammeWorkbench({
               ))}
             </div>
           )}
-          <ul className="space-y-2 text-sm">
-            {measures.length === 0 && (
-              <li>
-                {t("workspace.programme.noMeasures")} {t("workspace.programme.emptyNext.measures")}
-              </li>
-            )}
-            {measures.map((m) => (
-              <li key={m.id} className="space-y-2 rounded-md border p-2">
+          <ProgrammeToolSplit
+            list={
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="shrink-0 border-b bg-muted px-4 py-3">
+                  <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    {t("workspace.programme.measuresListTitle")}
+                  </h3>
+                  <p className="mt-1 text-xs text-foreground">{t("workspace.programme.measuresListHint")}</p>
+                </div>
+              <ul className="min-h-0 flex-1 overflow-y-auto bg-background text-sm">
+                {measures.length === 0 ? (
+                  <li className="px-4 py-6 text-muted-foreground">
+                    {t("workspace.programme.noMeasures")} {t("workspace.programme.emptyNext.measures")}
+                  </li>
+                ) : null}
+                {measures.map((item) => {
+                  const selected = activeMeasure?.id === item.id
+                  return (
+                    <li key={item.id} className="border-b">
+                      <button
+                        type="button"
+                        aria-current={selected ? "true" : undefined}
+                        className={`w-full border-l-2 px-4 py-3 text-left ${selected ? "border-l-foreground bg-background" : "border-l-transparent hover:bg-muted/30"}`}
+                        onClick={() => {
+                          setSelectedMeasureId(item.id)
+                          if (editingMeasureId && editingMeasureId !== item.id) setEditingMeasureId(null)
+                        }}
+                      >
+                        <span className="block font-medium">{item.title}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {t(`workspace.programme.chapterListStatus.${item.workflow_status}`, item.workflow_status)}
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+              </div>
+            }
+            detail={
+              <div className="space-y-3 p-6 text-sm">
+            {(activeMeasure ? [activeMeasure] : []).map((m) => (
+              <div key={m.id} className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span>
-                    [{m.workflow_status}] {m.title} ({m.measure_type})
-                    {m.outline_node_id ? ` · node ${String(m.outline_node_id).slice(0, 8)}` : ""}
-                    {Array.isArray(m.citations) && m.citations.length
-                      ? ` · ${m.citations
+                    <span className="block font-medium">{m.title}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {t(`workspace.programme.measureType.${m.measure_type}`, m.measure_type)}
+                      {" · "}
+                      {t(`workspace.programme.chapterListStatus.${m.workflow_status}`, m.workflow_status)}
+                    </span>
+                    {Array.isArray(m.citations) && m.citations.length ? (
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        {m.citations
                           .map((citation: { documentId: string; sectionId?: string; pageNumber?: number }) =>
                             formatCitationLabel(citation, citationCatalog.documents, citationCatalog.sections),
                           )
-                          .join("; ")}`
-                      : ""}
+                          .join("; ")}
+                      </span>
+                    ) : null}
                   </span>
                   <div className="flex flex-wrap gap-1">
                     <Button
@@ -1964,10 +2105,10 @@ export function ProgrammeWorkbench({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="ambition">ambition</SelectItem>
-                          <SelectItem value="goal">goal</SelectItem>
-                          <SelectItem value="measure">measure</SelectItem>
-                          <SelectItem value="implementation">implementation</SelectItem>
+                          <SelectItem value="ambition">{t("workspace.programme.measureType.ambition")}</SelectItem>
+                          <SelectItem value="goal">{t("workspace.programme.measureType.goal")}</SelectItem>
+                          <SelectItem value="measure">{t("workspace.programme.measureType.measure")}</SelectItem>
+                          <SelectItem value="implementation">{t("workspace.programme.measureType.implementation")}</SelectItem>
                         </SelectContent>
                       </Select>
                     </label>
@@ -2166,16 +2307,39 @@ export function ProgrammeWorkbench({
                     </ul>
                   </div>
                 )}
-              </li>
+              </div>
             ))}
-          </ul>
+            {activeMeasure ? null : (
+              <p className="text-sm text-muted-foreground">
+                {t("workspace.programme.noMeasures")} {t("workspace.programme.emptyNext.measures")}
+              </p>
+            )}
+              </div>
+            }
+          />
+          </ProgrammeToolPage>
         </TabsContent>
 
-        <TabsContent value="effects" className="space-y-3">
-          <StageHeading
+        <TabsContent value="effects" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ProgrammeToolPage
+            fill
             title={t("workspace.programme.nav.effects")}
             purpose={t("workspace.programme.purpose.effects")}
-          />
+            actions={
+              <Button
+                disabled={pending}
+                onClick={() =>
+                  startTransition(async () => {
+                    const result = await runBoundAgentAnalysis({ workspaceId, kind: "oer" })
+                    notifyResult(result.error, t("workspace.programme.oerDone"))
+                    if (!result.error) refresh()
+                  })
+                }
+              >
+                {t("workspace.programme.runOer")}
+              </Button>
+            }
+          >
           <ProgrammeEffectsPanel
             workspaceId={workspaceId}
             measures={measures}
@@ -2185,107 +2349,236 @@ export function ProgrammeWorkbench({
             onGoMeasures={() => setSection("measures")}
             recordedIds={policies.effectsCheckedIds}
           />
+          </ProgrammeToolPage>
         </TabsContent>
 
-        <TabsContent value="provenance" className="space-y-3">
-          <StageHeading
+        <TabsContent value="provenance" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ProgrammeToolPage
+            fill
             title={t("workspace.programme.provenanceTitle")}
             purpose={t("workspace.programme.purpose.provenance")}
+          >
+          <div className="flex min-h-0 flex-1 flex-col">
+          {observability ? (
+            <section className="shrink-0 border-b px-6 py-4">
+              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                {t("workspace.programme.provenanceOverview")}
+              </h3>
+              <dl className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {[
+                  [t("workspace.programme.provenanceRunsLabel"), String(observability.generationRunCount)],
+                  [
+                    t("workspace.programme.provenanceCoverageLabel"),
+                    observability.citationCoverageRate == null ? "—" : `${Math.round(observability.citationCoverageRate * 100)}%`,
+                  ],
+                  [
+                    t("workspace.programme.provenanceUnusedLabel"),
+                    observability.unusedSourceRate == null ? "—" : `${Math.round(observability.unusedSourceRate * 100)}%`,
+                  ],
+                  [
+                    t("workspace.programme.provenanceExportLabel"),
+                    observability.exportFailureRate == null ? "—" : `${Math.round(observability.exportFailureRate * 100)}%`,
+                  ],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-lg border bg-muted/40 px-3 py-2">
+                    <dt className="text-xs text-muted-foreground">{label}</dt>
+                    <dd className="mt-1 text-lg font-semibold">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-3 text-sm text-muted-foreground">
+                {t("workspace.programme.provenanceModelsLabel")}
+                {": "}
+                {observability.modelsUsed.join(", ") || t("workspace.programme.none")}
+              </p>
+            </section>
+          ) : null}
+          <ProgrammeToolSplit
+            list={
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="shrink-0 border-b bg-muted px-4 py-3">
+                  <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    {t("workspace.programme.provenanceRunListTitle")}
+                  </h3>
+                  <p className="mt-1 text-xs text-foreground">{t("workspace.programme.provenanceRunListHint")}</p>
+                </div>
+                <ul className="min-h-0 flex-1 overflow-y-auto bg-background text-sm">
+                  {runs.length === 0 ? (
+                    <li className="px-4 py-6 text-muted-foreground">
+                      {t("workspace.programme.noRuns")} {t("workspace.programme.emptyNext.provenance")}
+                    </li>
+                  ) : null}
+                  {runs.map((run) => {
+                    const selected = (selectedRunId ? run.id === selectedRunId : run.id === runs[0]?.id)
+                    return (
+                      <li key={run.id} className="border-b">
+                        <button
+                          type="button"
+                          aria-current={selected ? "true" : undefined}
+                          className={`w-full border-l-2 px-4 py-3 text-left ${selected ? "border-l-foreground bg-background" : "border-l-transparent hover:bg-muted/30"}`}
+                          onClick={() => setSelectedRunId(run.id)}
+                        >
+                          <span className="block font-medium">
+                            {t(`workspace.programme.provenanceKind.${run.kind}`, run.kind)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {run.created_at ? new Date(run.created_at).toLocaleString() : ""}
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            }
+            detail={
+              <div className="space-y-4 p-6">
+                {(() => {
+                  const run = runs.find((item) => item.id === selectedRunId) ?? runs[0]
+                  if (!run) {
+                    return (
+                      <p className="text-sm text-muted-foreground">
+                        {t("workspace.programme.noRuns")} {t("workspace.programme.emptyNext.provenance")}
+                      </p>
+                    )
+                  }
+                  const groundedness = run.citations?.groundedness
+                  const issues = Array.isArray(groundedness?.issues) ? groundedness.issues : []
+                  const score = typeof groundedness?.score === "number" ? `${Math.round(groundedness.score * 100)}%` : null
+                  const unused = Array.isArray(run.citations?.unusedSources) ? run.citations.unusedSources : []
+                  const unusedGroups = [
+                    ["excluded", "workspace.programme.unusedExcluded"],
+                    ["not_cited", "workspace.programme.unusedNotCited"],
+                    ["should_have_used", "workspace.programme.unusedShouldUse"],
+                  ] as const
+                  return (
+                    <>
+                      <section className="overflow-hidden rounded-lg border bg-background">
+                        <div className="border-b bg-muted px-4 py-3">
+                          <h3 className="text-sm font-semibold">
+                            {t(`workspace.programme.provenanceKind.${run.kind}`, run.kind)}
+                          </h3>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {run.created_at ? new Date(run.created_at).toLocaleString() : ""}
+                            {" · "}
+                            {run.model || t("workspace.programme.provenanceNoModel")}
+                          </p>
+                        </div>
+                        <div className="space-y-4 px-4 py-4">
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-semibold">{t("workspace.programme.provenanceGroundednessTitle")}</h4>
+                            <p className="text-sm text-muted-foreground">{t("workspace.programme.provenanceGroundednessHint")}</p>
+                            {score == null ? (
+                              <p className="text-sm text-muted-foreground">{t("workspace.programme.provenanceNoGroundedness")}</p>
+                            ) : (
+                              <dl className="grid grid-cols-2 gap-3">
+                                <div className="rounded-md border px-3 py-2">
+                                  <dt className="text-xs text-muted-foreground">{t("workspace.programme.provenanceScoreLabel")}</dt>
+                                  <dd className="mt-1 text-lg font-semibold">{score}</dd>
+                                </div>
+                                <div className="rounded-md border px-3 py-2">
+                                  <dt className="text-xs text-muted-foreground">{t("workspace.programme.provenanceIssuesLabel")}</dt>
+                                  <dd className="mt-1 text-lg font-semibold">{issues.length}</dd>
+                                </div>
+                              </dl>
+                            )}
+                            {issues.length === 0 && score != null ? (
+                              <p className="text-sm text-muted-foreground">{t("workspace.programme.provenanceNoIssues")}</p>
+                            ) : null}
+                            {issues.length > 0 ? (
+                              <ul className="space-y-2">
+                                {issues.map((issue: { claim?: string; reason?: string }, index: number) => (
+                                  <li key={`${run.id}-issue-${index}`} className="rounded-md border px-3 py-2 text-sm">
+                                    <p>{issue.claim}</p>
+                                    {issue.reason ? (
+                                      <p className="mt-1 text-xs text-muted-foreground">
+                                        {t(`workspace.programme.provenanceIssue.${issue.reason}`, issue.reason)}
+                                      </p>
+                                    ) : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                          </div>
+                          <div className="space-y-2 border-t pt-4">
+                            <h4 className="text-sm font-semibold">{t("workspace.programme.provenanceUnusedTitle")}</h4>
+                            {unused.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">{t("workspace.programme.unusedNone")}</p>
+                            ) : (
+                              unusedGroups.map(([kind, labelKey]) => {
+                                const items = unused.filter((item: { kind: string }) =>
+                                  kind === "should_have_used"
+                                    ? item.kind !== "excluded" && item.kind !== "not_cited"
+                                    : item.kind === kind,
+                                )
+                                if (items.length === 0) return null
+                                return (
+                                  <div key={kind} className="space-y-2">
+                                    <div>
+                                      <p className="text-sm font-medium">{t(labelKey)}</p>
+                                      <p className="text-xs text-muted-foreground">{t(`${labelKey}Hint`)}</p>
+                                    </div>
+                                    <ul className="divide-y rounded-md border">
+                                      {items.map((item: { id: string; title: string; role?: string | null }) => {
+                                        const file = item.title.match(/^(.*)\.(md|markdown|pdf|docx?|txt)$/i)
+                                        const name = file
+                                          ? file[1].replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim()
+                                          : item.title
+                                        const roleValue =
+                                          item.role ||
+                                          citationCatalog.documents.find((document) => document.id === item.id)?.documentRole
+                                        const role = roleValue
+                                          ? t(`workspace.programme.documentRoles.${roleValue}`, roleValue)
+                                          : ""
+                                        const meta = [role, file ? file[2].toLowerCase() : ""].filter(Boolean).join(" · ")
+                                        return (
+                                          <li key={`${run.id}-${item.id}`} className="px-3 py-2">
+                                            <p className="text-sm">{name}</p>
+                                            {meta ? <p className="text-xs text-muted-foreground">{meta}</p> : null}
+                                          </li>
+                                        )
+                                      })}
+                                    </ul>
+                                  </div>
+                                )
+                              })
+                            )}
+                          </div>
+                        </div>
+                      </section>
+                    </>
+                  )
+                })()}
+              </div>
+            }
           />
-          {observability && (
-            <div className="grid gap-2 text-sm sm:grid-cols-2">
-              <p>
-                {t("workspace.programme.metricsRuns", undefined, {
-                  count: String(observability.generationRunCount),
-                })}
-              </p>
-              <p>
-                {t("workspace.programme.metricsCoverage", undefined, {
-                  rate:
-                    observability.citationCoverageRate == null
-                      ? "—"
-                      : `${Math.round(observability.citationCoverageRate * 100)}%`,
-                })}
-              </p>
-              <p>
-                {t("workspace.programme.metricsUnused", undefined, {
-                  rate:
-                    observability.unusedSourceRate == null
-                      ? "—"
-                      : `${Math.round(observability.unusedSourceRate * 100)}%`,
-                })}
-              </p>
-              <p>
-                {t("workspace.programme.metricsExportFail", undefined, {
-                  rate:
-                    observability.exportFailureRate == null
-                      ? "—"
-                      : `${Math.round(observability.exportFailureRate * 100)}%`,
-                })}
-              </p>
-              <p className="sm:col-span-2">
-                {t("workspace.programme.metricsModels", undefined, {
-                  models: observability.modelsUsed.join(", ") || t("workspace.programme.none"),
-                })}
-              </p>
-            </div>
-          )}
-          <ul className="text-sm">
-            {runs.length === 0 && (
-              <li>
-                {t("workspace.programme.noRuns")} {t("workspace.programme.emptyNext.provenance")}
-              </li>
-            )}
-            {runs.map((r) => {
-              const unused = Array.isArray(r.citations?.unusedSources) ? r.citations.unusedSources : []
-              const groundedness = r.citations?.groundedness
-              return (
-                <li key={r.id} className="space-y-1 rounded-md border p-2">
-                  <p>
-                    {r.kind} — {r.model || "n/a"}
-                    {groundedness
-                      ? ` · ${t("workspace.programme.groundednessRun", undefined, {
-                          score: String(groundedness.score ?? "—"),
-                          issues: String(groundedness.issues?.length ?? 0),
-                        })}`
-                      : ""}
-                  </p>
-                  {unused.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">{t("workspace.programme.unusedNone")}</p>
-                  ) : (
-                    <ul className="text-xs text-muted-foreground">
-                      {unused.map((item: { id: string; title: string; kind: string }) => (
-                        <li key={`${r.id}-${item.id}`}>
-                          {item.kind === "excluded"
-                            ? t("workspace.programme.unusedExcluded")
-                            : item.kind === "not_cited"
-                              ? t("workspace.programme.unusedNotCited")
-                              : t("workspace.programme.unusedShouldUse")}
-                          {`: ${item.title}`}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
+          </div>
+          </ProgrammeToolPage>
         </TabsContent>
 
-        <TabsContent value="review" className="space-y-3">
-          <StageHeading
+        <TabsContent value="review" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ProgrammeToolPage
             title={t("workspace.programme.nav.review")}
             purpose={t("workspace.programme.purpose.review")}
+          >
+          <ProgrammeToolSwitch
+            label={t("workspace.programme.reviewPaneLabel")}
+            value={reviewPane}
+            onChange={setReviewPane}
+            options={[
+              { id: "chapters", label: t("workspace.programme.reviewPane.chapters") },
+              { id: "measures", label: t("workspace.programme.reviewPane.measures") },
+              { id: "notes", label: t("workspace.programme.reviewPane.notes") },
+            ]}
           />
-          <p className="text-sm text-muted-foreground">{t("workspace.programme.reviewHint")}</p>
-          <p className="text-xs text-muted-foreground">{t("workspace.programme.reviewLocalHint")}</p>
-          <details className="rounded-md border p-3">
-            <summary className="cursor-pointer text-sm font-medium">{t("workspace.programme.colleagueThemesTitle")}</summary>
-            <div className="mt-3 space-y-3">
-          <div className="space-y-2 rounded-md border p-3">
-            <h3 className="text-sm font-medium">{t("workspace.programme.colleagueThemesTitle")}</h3>
-            <p className="text-xs text-muted-foreground">{t("workspace.programme.colleagueThemesHint")}</p>
-            <p className="text-xs text-muted-foreground">{t("workspace.programme.colleagueNotConsultation")}</p>
+          {reviewPane === "notes" ? (
+            <section className="overflow-hidden rounded-lg border">
+              <div className="border-b bg-muted px-4 py-3">
+                <h3 className="text-sm font-semibold">{t("workspace.programme.colleagueThemesTitle")}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{t("workspace.programme.colleagueThemesHint")}</p>
+              </div>
+              <div className="space-y-3 p-4">
+            <p className="text-sm text-muted-foreground">{t("workspace.programme.colleagueNotConsultation")}</p>
             <Button
               size="sm"
               variant="outline"
@@ -2345,7 +2638,15 @@ export function ProgrammeWorkbench({
                 ))}
               </ul>
             )}
-          </div>
+              </div>
+            </section>
+          ) : null}
+          {reviewPane === "chapters" ? (
+            <section className="overflow-hidden rounded-lg border">
+              <div className="border-b bg-muted px-4 py-3">
+                <p className="text-sm text-muted-foreground">{t("workspace.programme.reviewLocalHint")}</p>
+              </div>
+              <div className="space-y-3 p-4">
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -2412,26 +2713,34 @@ export function ProgrammeWorkbench({
             {t("workspace.programme.approveAllLocally")}
           </Button>
           </div>
+              </div>
+            </section>
+          ) : null}
+          {reviewPane === "measures" ? (
+          <section className="overflow-hidden rounded-lg border">
+            <div className="border-b bg-muted px-4 py-3">
+              <p className="text-xs font-semibold tracking-wide uppercase">{t("workspace.programme.measuresListTitle")}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{t("workspace.programme.reviewMeasuresHint")}</p>
             </div>
-          </details>
-          <details className="rounded-md border p-3">
-            <summary className="cursor-pointer text-sm font-medium">{t("workspace.programme.measuresTitle")}</summary>
-          <ul className="mt-3 space-y-2 text-sm">
-            {!reviewHasPending && (
-              <li>
+          <ul className="divide-y text-sm">
+            {pendingMeasures.length === 0 && (
+              <li className="px-4 py-6 text-muted-foreground">
                 {reviewHasArtefacts
                   ? t("workspace.programme.reviewEmpty")
                   : `${t("workspace.programme.reviewEmptyNone")} ${t("workspace.programme.emptyNext.review")}`}
               </li>
             )}
             {pendingMeasures.map((m) => (
-                <li key={m.id} className="space-y-2 rounded-md border p-2">
+                <li key={m.id} className="space-y-2 px-4 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>
-                      [{m.workflow_status}] {m.title}
-                      {m.assigned_reviewer_id
-                        ? ` · ${reviewers.find((reviewer) => reviewer.id === m.assigned_reviewer_id)?.name || m.assigned_reviewer_id.slice(0, 8)}`
-                        : ""}
+                      <span className="block font-medium">{m.title}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {t(`workspace.programme.chapterListStatus.${m.workflow_status}`, m.workflow_status)}
+                        {m.assigned_reviewer_id
+                          ? ` · ${reviewers.find((reviewer) => reviewer.id === m.assigned_reviewer_id)?.name || t("workspace.programme.reviewerUnassigned")}`
+                          : ""}
+                      </span>
                     </span>
                     <div className="flex gap-1">
                       {(m.workflow_status === "generated" || m.workflow_status === "revised") && (
@@ -2537,11 +2846,17 @@ export function ProgrammeWorkbench({
                 </li>
               ))}
           </ul>
-          </details>
-          <h3 className="text-sm font-medium">{t("workspace.programme.chapterReviewTitle")}</h3>
-          <ul className="space-y-2 text-sm">
+          </section>
+          ) : null}
+          {reviewPane === "chapters" ? (
+          <section className="overflow-hidden rounded-lg border">
+            <div className="border-b bg-muted px-4 py-3">
+              <p className="text-xs font-semibold tracking-wide uppercase">{t("workspace.programme.chapterReviewTitle")}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{t("workspace.programme.reviewChaptersHint")}</p>
+            </div>
+          <ul className="divide-y text-sm">
             {chapters.map((chapter) => (
-                <li key={chapter.documentId} className="space-y-2 rounded-md border p-2">
+                <li key={chapter.documentId} className="space-y-2 px-4 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>
                       {chapter.title}
@@ -2634,18 +2949,34 @@ export function ProgrammeWorkbench({
                 </li>
               ))}
           </ul>
-          <ul className="text-sm">
+          </section>
+          ) : null}
+          {reviewPane === "notes" ? (
+          <section className="overflow-hidden rounded-lg border">
+            <div className="border-b bg-muted px-4 py-3">
+              <p className="text-xs font-semibold tracking-wide uppercase">{t("workspace.programme.chapterComments")}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{t("workspace.programme.chapterCommentHint")}</p>
+            </div>
+          <ul className="divide-y text-sm">
             {nestColleagueComments(
               comments.map((c) => ({ ...c, parentId: c.parentId ?? null })),
             ).map((c) => (
-              <li key={c.id} className="space-y-1">
+              <li key={c.id} className="space-y-1 px-4 py-3">
                 <div className="flex items-center justify-between gap-2">
                   <span className="flex min-w-0 items-center gap-2">
                     <UserAvatar name={c.authorName} url={c.authorAvatarUrl} className="h-6 w-6 shrink-0" />
                     <span className={c.resolved ? "line-through text-muted-foreground" : ""}>
                       {c.authorName ? `${c.authorName} · ` : ""}
                       {c.themeLabel ? `${c.themeLabel} · ` : ""}
-                      {c.artefact_type}: {c.body}
+                      {c.artefact_type === "section"
+                        ? t("workspace.programme.reviewPane.chapters")
+                        : c.artefact_type === "document"
+                          ? t("workspace.programme.nav.editor")
+                          : c.artefact_type === "measure"
+                            ? t("workspace.programme.nav.measures")
+                            : c.artefact_type}
+                      {": "}
+                      {c.body}
                     </span>
                   </span>
                   <Button
@@ -2670,33 +3001,32 @@ export function ProgrammeWorkbench({
               </li>
             ))}
           </ul>
-          <Button variant="outline" onClick={() => setSection("export")}>
-            {t("workspace.programme.setupGoExport")}
-          </Button>
+          </section>
+          ) : null}
+          </ProgrammeToolPage>
         </TabsContent>
 
-        <TabsContent value="consultation" className="space-y-3">
-          <StageHeading
+        <TabsContent value="consultation" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ProgrammeToolPage
             title={t("workspace.programme.nav.consultation")}
             purpose={t("workspace.programme.purpose.consultation")}
-          />
-          <p className="text-sm text-muted-foreground">{t("workspace.programme.consultationHowTo")}</p>
+            actions={
+              publication ? (
+                <Button variant="outline" asChild>
+                  <Link href={`/published/${publication.id}`} target="_blank">
+                    {t("workspace.programme.publishOpenRoom")}
+                  </Link>
+                </Button>
+              ) : snapshotLoaded ? (
+                <Button variant="outline" onClick={() => setSection("publish")}>
+                  {t("workspace.programme.setupGoPublish")}
+                </Button>
+              ) : null
+            }
+          >
           {snapshotLoaded && !publication ? (
             <p className="text-sm text-muted-foreground">{t("workspace.programme.emptyNext.consultation")}</p>
           ) : null}
-          <div className="flex flex-wrap gap-2">
-            {publication ? (
-              <Button variant="outline" asChild>
-                <Link href={`/published/${publication.id}`} target="_blank">
-                  {t("workspace.programme.publishOpenRoom")}
-                </Link>
-              </Button>
-            ) : snapshotLoaded ? (
-              <Button variant="outline" onClick={() => setSection("publish")}>
-                {t("workspace.programme.setupGoPublish")}
-              </Button>
-            ) : null}
-          </div>
           <ConsultationOwnerPanel
             workspaceId={workspaceId}
             publicationId={publication?.id || null}
@@ -2704,17 +3034,233 @@ export function ProgrammeWorkbench({
             queue={consultationQueue}
             onChanged={refresh}
           />
+          </ProgrammeToolPage>
         </TabsContent>
 
-        <TabsContent value="export" className="space-y-3">
-          <StageHeading
+        <TabsContent value="export" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ProgrammeToolPage
             title={t("workspace.programme.exportTitle")}
             purpose={t("workspace.programme.purpose.export")}
-          />
+            actions={
+              <>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={pending}
+                onClick={() =>
+                  startTransition(async () => {
+                    const result = await runMarkdownOrDocxExport({
+                      workspaceId,
+                      title: workspaceName,
+                      markdown: exportMd,
+                      format: "docx",
+                      compose: !exportMd.trim(),
+                      classificationMax: classification,
+                      stakeholder: stakeholderExport,
+                      pageChrome: documentLayout.pageChrome,
+                    })
+                    if (result.error || !result.data) {
+                      notify(result.error || t("workspace.programme.exportFailed"), "error")
+                      return
+                    }
+                    downloadExportPayload(result.data)
+                    notify(t("workspace.programme.exportDocxDone", undefined, { jobId: result.data.jobId }))
+                  })
+                }
+              >
+                {t("workspace.programme.exportDocx")}
+              </Button>
+              <Button
+                disabled={pending}
+                variant="outline"
+                onClick={() =>
+                  startTransition(async () => {
+                    const result = await runMarkdownOrDocxExport({
+                      workspaceId,
+                      title: workspaceName,
+                      markdown: exportMd,
+                      format: "markdown",
+                      compose: !exportMd.trim(),
+                      classificationMax: classification,
+                      stakeholder: stakeholderExport,
+                    })
+                    if (result.error || !result.data) {
+                      notify(result.error || t("workspace.programme.exportFailed"), "error")
+                      return
+                    }
+                    downloadExportPayload(result.data)
+                    notify(t("workspace.programme.exportMdDone", undefined, { jobId: result.data.jobId }))
+                  })
+                }
+              >
+                {t("workspace.programme.exportMarkdown")}
+              </Button>
+              <Button
+                disabled={pending}
+                variant="outline"
+                onClick={() =>
+                  startTransition(async () => {
+                    const result = await runMarkdownOrDocxExport({
+                      workspaceId,
+                      title: workspaceName,
+                      markdown: exportMd,
+                      format: "pdf",
+                      compose: !exportMd.trim(),
+                      classificationMax: classification,
+                      stakeholder: stakeholderExport,
+                      pageChrome: documentLayout.pageChrome,
+                    })
+                    if (result.error || !result.data) {
+                      notify(result.error || t("workspace.programme.exportFailed"), "error")
+                      return
+                    }
+                    if (result.data.pdfFallback || result.data.mimeType.includes("html")) {
+                      openPrintPreview(result.data.content)
+                      notify(t("workspace.programme.exportPdfFallback", undefined, { jobId: result.data.jobId }), "warning")
+                      return
+                    }
+                    downloadExportPayload(result.data)
+                    notify(t("workspace.programme.exportPdfFileDone", undefined, { jobId: result.data.jobId }))
+                  })
+                }
+              >
+                {t("workspace.programme.exportPdf")}
+              </Button>
+              <Button
+                disabled={pending}
+                variant="outline"
+                onClick={() =>
+                  startTransition(async () => {
+                    const result = await runMarkdownOrDocxExport({
+                      workspaceId,
+                      title: workspaceName,
+                      format: "json",
+                      compose: true,
+                      classificationMax: classification,
+                      stakeholder: stakeholderExport,
+                    })
+                    if (result.error || !result.data) {
+                      notify(result.error || t("workspace.programme.exportFailed"), "error")
+                      return
+                    }
+                    downloadExportPayload(result.data)
+                    notify(t("workspace.programme.exportJsonDone", undefined, { jobId: result.data.jobId }))
+                  })
+                }
+              >
+                {t("workspace.programme.exportJson")}
+              </Button>
+              <Button
+                disabled={pending || filling || !canAdminister}
+                variant="outline"
+                onClick={() => {
+                  setFilling(true)
+                  setFillProgress([])
+                  setFillStartedAt(new Date().toISOString())
+                  startTransition(async () => {
+                    const result = await fillProgrammeChapters(workspaceId, spaceId)
+                    setFillProgress(result.data?.progress || [])
+                    setFilling(false)
+                    if (result.error) {
+                      notify(result.error, "error")
+                    } else if (result.data?.cancelled) {
+                      notify(t("workspace.programme.fillCancelled"), "warning")
+                    } else {
+                      notify(
+                        t("workspace.programme.fillDone", undefined, {
+                          count: String(result.data?.progress.filter((p) => p.status === "ok").length ?? 0),
+                        }),
+                      )
+                    }
+                    refresh()
+                  })
+                }}
+              >
+                {t("workspace.programme.fillProgramme")}
+              </Button>
+              <Button
+                disabled={!filling}
+                variant="outline"
+                onClick={() => {
+                  notify(t("workspace.programme.fillCancelRequested"), "info")
+                  void cancelFillProgramme(workspaceId).then((result) => {
+                    if (result.error) notify(result.error, "error")
+                  })
+                }}
+              >
+                {t("workspace.programme.fillCancel")}
+              </Button>
+              <Button
+                disabled={pending || filling || !canAdminister}
+                variant="outline"
+                onClick={() => {
+                  setFilling(true)
+                  startTransition(async () => {
+                    const result = await retryFillProgramme(workspaceId, spaceId)
+                    setFillProgress(result.data?.progress || [])
+                    setFilling(false)
+                    if (result.error) {
+                      notify(result.error, "error")
+                    } else if (result.data?.cancelled) {
+                      notify(t("workspace.programme.fillCancelled"), "warning")
+                    } else if (result.data?.skipped) {
+                      notify(t("workspace.programme.fillNothingToRetry"), "info")
+                    } else {
+                      notify(
+                        t("workspace.programme.fillDone", undefined, {
+                          count: String(result.data?.progress.filter((p) => p.status === "ok").length ?? 0),
+                        }),
+                      )
+                    }
+                    refresh()
+                  })
+                }}
+              >
+                {t("workspace.programme.fillRetry")}
+              </Button>
+              <Button
+                disabled={pending || !canAdminister}
+                variant="outline"
+                onClick={() =>
+                  startTransition(async () => {
+                    const pack = await buildAuditPackageJson(workspaceId)
+                    if (pack.error || !pack.data) {
+                      notify(pack.error || t("workspace.programme.exportFailed"), "error")
+                      return
+                    }
+                    const json = JSON.stringify(pack.data, null, 2)
+                    downloadBlob(
+                      `audit-package-${workspaceId.slice(0, 8)}.json`,
+                      new Blob([json], { type: "application/json" }),
+                    )
+                    setPolicies((prev) => ({
+                      ...prev,
+                      hasFreeze: true,
+                      freezeId: pack.data.freezeId,
+                      freezeAt: pack.data.generatedAt,
+                    }))
+                    notify(
+                      t("workspace.programme.auditPackageDone", undefined, {
+                        runs: pack.data.generationRuns.length,
+                        measures: pack.data.measures.length,
+                      }),
+                    )
+                  })
+                }
+              >
+                {t("workspace.programme.auditPackage")}
+              </Button>
+            </div>
+              </>
+            }
+          >
           {!observability?.hasSuccessfulExport && (
             <p className="text-sm text-muted-foreground">{t("workspace.programme.emptyNext.export")}</p>
           )}
-          <p className="text-sm text-muted-foreground">{t("workspace.programme.exportComposeHint")}</p>
+          <section className="overflow-hidden rounded-lg border">
+            <div className="border-b bg-muted px-4 py-3">
+              <p className="text-sm text-muted-foreground">{t("workspace.programme.exportComposeHint")}</p>
+            </div>
+            <div className="space-y-3 p-4">
           <label className="flex items-center gap-2 text-sm">
             <Select
               value={classification}
@@ -2724,9 +3270,9 @@ export function ProgrammeWorkbench({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="public">public</SelectItem>
-                <SelectItem value="internal">internal</SelectItem>
-                <SelectItem value="confidential">confidential</SelectItem>
+                <SelectItem value="public">{t("workspace.programme.classificationOption.public")}</SelectItem>
+                <SelectItem value="internal">{t("workspace.programme.classificationOption.internal")}</SelectItem>
+                <SelectItem value="confidential">{t("workspace.programme.classificationOption.confidential")}</SelectItem>
               </SelectContent>
             </Select>
             {t("workspace.programme.classification")}
@@ -2757,226 +3303,16 @@ export function ProgrammeWorkbench({
               ? t("workspace.programme.freezePresent", undefined, { at: policies.freezeAt || "—" })
               : t("workspace.programme.freezeMissing")}
           </p>
-          <div className="space-y-2 rounded-md border p-3">
-            <h3 className="text-sm font-medium">{t("workspace.programme.nav.publish")}</h3>
-            <p className="text-sm text-muted-foreground">{t("workspace.programme.exportPublishHint")}</p>
-            <Button variant="outline" onClick={() => setSection("publish")}>
-              {t("workspace.programme.publishOpenSection")}
-            </Button>
-          </div>
-          <Textarea
-            value={exportMd}
-            onChange={(e) => setExportMd(e.target.value)}
-            rows={6}
-            placeholder={t("workspace.programme.exportOverridePlaceholder")}
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  const result = await runMarkdownOrDocxExport({
-                    workspaceId,
-                    title: workspaceName,
-                    markdown: exportMd,
-                    format: "docx",
-                    compose: !exportMd.trim(),
-                    classificationMax: classification,
-                    stakeholder: stakeholderExport,
-                    pageChrome: documentLayout.pageChrome,
-                  })
-                  if (result.error || !result.data) {
-                    notify(result.error || t("workspace.programme.exportFailed"), "error")
-                    return
-                  }
-                  downloadExportPayload(result.data)
-                  notify(t("workspace.programme.exportDocxDone", undefined, { jobId: result.data.jobId }))
-                })
-              }
-            >
-              {t("workspace.programme.exportDocx")}
-            </Button>
-            <Button
-              disabled={pending}
-              variant="outline"
-              onClick={() =>
-                startTransition(async () => {
-                  const result = await runMarkdownOrDocxExport({
-                    workspaceId,
-                    title: workspaceName,
-                    markdown: exportMd,
-                    format: "markdown",
-                    compose: !exportMd.trim(),
-                    classificationMax: classification,
-                    stakeholder: stakeholderExport,
-                  })
-                  if (result.error || !result.data) {
-                    notify(result.error || t("workspace.programme.exportFailed"), "error")
-                    return
-                  }
-                  downloadExportPayload(result.data)
-                  notify(t("workspace.programme.exportMdDone", undefined, { jobId: result.data.jobId }))
-                })
-              }
-            >
-              {t("workspace.programme.exportMarkdown")}
-            </Button>
-            <Button
-              disabled={pending}
-              variant="outline"
-              onClick={() =>
-                startTransition(async () => {
-                  const result = await runMarkdownOrDocxExport({
-                    workspaceId,
-                    title: workspaceName,
-                    markdown: exportMd,
-                    format: "pdf",
-                    compose: !exportMd.trim(),
-                    classificationMax: classification,
-                    stakeholder: stakeholderExport,
-                    pageChrome: documentLayout.pageChrome,
-                  })
-                  if (result.error || !result.data) {
-                    notify(result.error || t("workspace.programme.exportFailed"), "error")
-                    return
-                  }
-                  if (result.data.pdfFallback || result.data.mimeType.includes("html")) {
-                    openPrintPreview(result.data.content)
-                    notify(t("workspace.programme.exportPdfFallback", undefined, { jobId: result.data.jobId }), "warning")
-                    return
-                  }
-                  downloadExportPayload(result.data)
-                  notify(t("workspace.programme.exportPdfFileDone", undefined, { jobId: result.data.jobId }))
-                })
-              }
-            >
-              {t("workspace.programme.exportPdf")}
-            </Button>
-            <Button
-              disabled={pending}
-              variant="outline"
-              onClick={() =>
-                startTransition(async () => {
-                  const result = await runMarkdownOrDocxExport({
-                    workspaceId,
-                    title: workspaceName,
-                    format: "json",
-                    compose: true,
-                    classificationMax: classification,
-                    stakeholder: stakeholderExport,
-                  })
-                  if (result.error || !result.data) {
-                    notify(result.error || t("workspace.programme.exportFailed"), "error")
-                    return
-                  }
-                  downloadExportPayload(result.data)
-                  notify(t("workspace.programme.exportJsonDone", undefined, { jobId: result.data.jobId }))
-                })
-              }
-            >
-              {t("workspace.programme.exportJson")}
-            </Button>
-            <Button
-              disabled={pending || filling || !canAdminister}
-              variant="outline"
-              onClick={() => {
-                setFilling(true)
-                setFillProgress([])
-                setFillStartedAt(new Date().toISOString())
-                startTransition(async () => {
-                  const result = await fillProgrammeChapters(workspaceId, spaceId)
-                  setFillProgress(result.data?.progress || [])
-                  setFilling(false)
-                  if (result.error) {
-                    notify(result.error, "error")
-                  } else if (result.data?.cancelled) {
-                    notify(t("workspace.programme.fillCancelled"), "warning")
-                  } else {
-                    notify(
-                      t("workspace.programme.fillDone", undefined, {
-                        count: String(result.data?.progress.filter((p) => p.status === "ok").length ?? 0),
-                      }),
-                    )
-                  }
-                  refresh()
-                })
-              }}
-            >
-              {t("workspace.programme.fillProgramme")}
-            </Button>
-            <Button
-              disabled={!filling}
-              variant="outline"
-              onClick={() => {
-                notify(t("workspace.programme.fillCancelRequested"), "info")
-                void cancelFillProgramme(workspaceId).then((result) => {
-                  if (result.error) notify(result.error, "error")
-                })
-              }}
-            >
-              {t("workspace.programme.fillCancel")}
-            </Button>
-            <Button
-              disabled={pending || filling || !canAdminister}
-              variant="outline"
-              onClick={() => {
-                setFilling(true)
-                startTransition(async () => {
-                  const result = await retryFillProgramme(workspaceId, spaceId)
-                  setFillProgress(result.data?.progress || [])
-                  setFilling(false)
-                  if (result.error) {
-                    notify(result.error, "error")
-                  } else if (result.data?.cancelled) {
-                    notify(t("workspace.programme.fillCancelled"), "warning")
-                  } else if (result.data?.skipped) {
-                    notify(t("workspace.programme.fillNothingToRetry"), "info")
-                  } else {
-                    notify(
-                      t("workspace.programme.fillDone", undefined, {
-                        count: String(result.data?.progress.filter((p) => p.status === "ok").length ?? 0),
-                      }),
-                    )
-                  }
-                  refresh()
-                })
-              }}
-            >
-              {t("workspace.programme.fillRetry")}
-            </Button>
-            <Button
-              disabled={pending || !canAdminister}
-              variant="outline"
-              onClick={() =>
-                startTransition(async () => {
-                  const pack = await buildAuditPackageJson(workspaceId)
-                  if (pack.error || !pack.data) {
-                    notify(pack.error || t("workspace.programme.exportFailed"), "error")
-                    return
-                  }
-                  const json = JSON.stringify(pack.data, null, 2)
-                  downloadBlob(
-                    `audit-package-${workspaceId.slice(0, 8)}.json`,
-                    new Blob([json], { type: "application/json" }),
-                  )
-                  setPolicies((prev) => ({
-                    ...prev,
-                    hasFreeze: true,
-                    freezeId: pack.data.freezeId,
-                    freezeAt: pack.data.generatedAt,
-                  }))
-                  notify(
-                    t("workspace.programme.auditPackageDone", undefined, {
-                      runs: pack.data.generationRuns.length,
-                      measures: pack.data.measures.length,
-                    }),
-                  )
-                })
-              }
-            >
-              {t("workspace.programme.auditPackage")}
-            </Button>
-          </div>
+            </div>
+          </section>
+          <ProgrammeToolExtra label={t("workspace.programme.exportOverrideLabel")}>
+            <Textarea
+              value={exportMd}
+              onChange={(e) => setExportMd(e.target.value)}
+              rows={6}
+              placeholder={t("workspace.programme.exportOverridePlaceholder")}
+            />
+          </ProgrammeToolExtra>
           {fillProgress.length > 0 && (
             <ul className="text-sm">
               {(() => {
@@ -3001,57 +3337,15 @@ export function ProgrammeWorkbench({
               ))}
             </ul>
           )}
+          </ProgrammeToolPage>
         </TabsContent>
 
-        <TabsContent value="publish" className="space-y-3">
-          <StageHeading
+        <TabsContent value="publish" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ProgrammeToolPage
             title={t("workspace.programme.nav.publish")}
             purpose={t("workspace.programme.purpose.publish")}
-          />
-          <p className="text-sm text-muted-foreground">{t("workspace.programme.publishBody")}</p>
-          {snapshotLoaded && !publication ? (
-            <p className="text-sm text-muted-foreground">{t("workspace.programme.emptyNext.publish")}</p>
-          ) : null}
-          <p className="text-xs text-muted-foreground">
-            {publication
-              ? t("workspace.programme.publishCurrent", undefined, { at: publication.publishedAt })
-              : t("workspace.programme.publishNone")}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {policies.hasFreeze
-              ? t("workspace.programme.freezePresent", undefined, { at: policies.freezeAt || "—" })
-              : t("workspace.programme.freezeMissing")}
-          </p>
-          {!policies.hasFreeze ? (
-            <Button variant="outline" onClick={() => setSection("export")}>
-              {t("workspace.programme.setupGoExport")}
-            </Button>
-          ) : null}
-          <label className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">{t("workspace.programme.publishVisibility")}</span>
-            <Select
-              value={publishVisibility}
-              onValueChange={(value) => setPublishVisibility(value as PublicationVisibility)}
-            >
-              <SelectTrigger size="sm" className="min-w-56">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="permissioned">{t("workspace.programme.publishPermissioned")}</SelectItem>
-                <SelectItem value="link_code">{t("workspace.programme.publishLinkCode")}</SelectItem>
-                <SelectItem value="public_listing">{t("workspace.programme.publishPublicListing")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </label>
-          <label className="block space-y-1 text-sm">
-            <span className="text-muted-foreground">{t("workspace.programme.publishPeriod")}</span>
-            <Input
-              value={publishPeriod}
-              onChange={(event) => setPublishPeriod(event.target.value)}
-              placeholder={t("workspace.programme.publishPeriodPlaceholder")}
-            />
-          </label>
-          <div className="flex flex-wrap gap-2">
+            actions={
+              <>
             <Button
               disabled={pending || chromeJob === "reviewer" || !policies.hasFreeze || !canAdminister}
               onClick={() =>
@@ -3103,23 +3397,64 @@ export function ProgrammeWorkbench({
                   {t("workspace.programme.publishRevoke")}
                 </Button>
               </>
+            ) : !policies.hasFreeze ? (
+              <Button variant="outline" onClick={() => setSection("export")}>
+                {t("workspace.programme.setupGoExport")}
+              </Button>
             ) : null}
-          </div>
+              </>
+            }
+          >
+          <section className="overflow-hidden rounded-lg border">
+            <div className="space-y-3 p-4">
+          {snapshotLoaded && !publication ? (
+            <p className="text-sm text-muted-foreground">{t("workspace.programme.emptyNext.publish")}</p>
+          ) : null}
+          <p className="text-sm">
+            {publication
+              ? t("workspace.programme.publishCurrent", undefined, { at: publication.publishedAt })
+              : t("workspace.programme.publishNone")}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {policies.hasFreeze
+              ? t("workspace.programme.freezePresent", undefined, { at: policies.freezeAt || "—" })
+              : t("workspace.programme.freezeMissing")}
+          </p>
+          <label className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">{t("workspace.programme.publishVisibility")}</span>
+            <Select
+              value={publishVisibility}
+              onValueChange={(value) => setPublishVisibility(value as PublicationVisibility)}
+            >
+              <SelectTrigger size="sm" className="min-w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="permissioned">{t("workspace.programme.publishPermissioned")}</SelectItem>
+                <SelectItem value="link_code">{t("workspace.programme.publishLinkCode")}</SelectItem>
+                <SelectItem value="public_listing">{t("workspace.programme.publishPublicListing")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="text-muted-foreground">{t("workspace.programme.publishPeriod")}</span>
+            <Input
+              value={publishPeriod}
+              onChange={(event) => setPublishPeriod(event.target.value)}
+              placeholder={t("workspace.programme.publishPeriodPlaceholder")}
+            />
+          </label>
           {revealedAccessCode ? (
             <p className="text-sm">
               {t("workspace.programme.publishCodeOnce", undefined, { code: revealedAccessCode })}
             </p>
           ) : null}
-          <div className="space-y-2 rounded-md border p-3">
-            <h3 className="text-sm font-medium">{t("workspace.programme.nav.consultation")}</h3>
-            <p className="text-sm text-muted-foreground">{t("workspace.programme.consultationExportHint")}</p>
-            <Button variant="outline" onClick={() => setSection("consultation")}>
-              {t("workspace.programme.consultationOpenSection")}
-            </Button>
-          </div>
+            </div>
+          </section>
+          </ProgrammeToolPage>
         </TabsContent>
       </Tabs>
-          </div>
+          </ProgrammeToolSheet>
         </ErrorBoundary>
         </DialogContent>
       </Dialog>

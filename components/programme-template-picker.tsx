@@ -16,6 +16,8 @@ export function ProgrammeTemplatePicker({
   id = "programme-template",
   label,
   help,
+  hideLabel = false,
+  hideChapters = false,
 }: {
   templates: ProgrammeTemplateSummary[]
   value: string | null
@@ -25,6 +27,8 @@ export function ProgrammeTemplatePicker({
   id?: string
   label?: string
   help?: string
+  hideLabel?: boolean
+  hideChapters?: boolean
 }) {
   const { t } = useI18n()
   const selected = templates.find((template) => template.id === value) ?? null
@@ -32,7 +36,13 @@ export function ProgrammeTemplatePicker({
 
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>{label ?? t("space.workspaces.dialog.templateLabel")}</Label>
+      {hideLabel ? (
+        <Label htmlFor={id} className="sr-only">
+          {label ?? t("space.workspaces.dialog.templateLabel")}
+        </Label>
+      ) : (
+        <Label htmlFor={id}>{label ?? t("space.workspaces.dialog.templateLabel")}</Label>
+      )}
       <Select
         value={resolved}
         onValueChange={(next) => onChange(next === NONE ? null : next)}
@@ -54,7 +64,7 @@ export function ProgrammeTemplatePicker({
         </SelectContent>
       </Select>
       {help ? <p className="text-xs text-muted-foreground">{help}</p> : null}
-      {selected && selected.chapterTitles.length > 0 ? (
+      {!hideChapters && selected && selected.chapterTitles.length > 0 ? (
         <p className="text-xs text-muted-foreground">{selected.chapterTitles.join(" · ")}</p>
       ) : null}
     </div>

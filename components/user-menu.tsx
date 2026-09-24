@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { LogOut, User, UserCircle, Languages, Loader2, Shield } from "lucide-react"
+import { LogOut, User, UserCircle, Languages, Loader2, Package, Shield } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -191,12 +191,20 @@ export function UserMenu() {
               {t("admin.menu.label")}
             </DropdownMenuLabel>
             {adminMenu.isSuperAdmin ? (
-              <DropdownMenuItem asChild>
-                <Link href="/admin/platform">
-                  <Shield className="mr-2 h-3.5 w-3.5" />
-                  <span>{t("admin.menu.platform")}</span>
-                </Link>
-              </DropdownMenuItem>
+              <>
+                <DropdownMenuItem asChild>
+                  <Link href="/admin/platform">
+                    <Shield className="mr-2 h-3.5 w-3.5" />
+                    <span>{t("admin.menu.platform")}</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/admin/demo-packs">
+                    <Package className="mr-2 h-3.5 w-3.5" />
+                    <span>{t("admin.menu.demoPacks")}</span>
+                  </Link>
+                </DropdownMenuItem>
+              </>
             ) : null}
           </>
         )}

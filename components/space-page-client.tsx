@@ -54,6 +54,8 @@ interface SpacePageClientProps {
   initialSpaceType?: string | null
   initialVisibility?: string | null
   initialJurisdiction?: Record<string, any> | null
+  initialWritingLanguage?: "en" | "nl" | null
+  demoPack?: boolean
   initialScope: SpaceScope
   initialDocuments: SpaceDocumentItem[]
   initialWorkspaces: SpaceWorkspace[]
@@ -72,6 +74,8 @@ export function SpacePageClient({
   initialSpaceType,
   initialVisibility,
   initialJurisdiction,
+  initialWritingLanguage,
+  demoPack = false,
   initialScope,
   initialDocuments,
   initialWorkspaces,
@@ -89,6 +93,7 @@ export function SpacePageClient({
     spaceType: initialSpaceType ?? "municipal",
     visibility: initialVisibility ?? "internal",
     jurisdiction: initialJurisdiction ?? null,
+    writingLanguage: initialWritingLanguage === "nl" ? "nl" : "en",
   })
   const [scopeState, setScopeState] = useState<SpaceScope>(initialScope)
   const [documents, setDocuments] = useState<SpaceDocumentItem[]>(initialDocuments)
@@ -127,6 +132,9 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
   const [descriptionDraft, setDescriptionDraft] = useState(initialScope.description ?? "")
   const [spaceTypeDraft, setSpaceTypeDraft] = useState(initialSpaceType ?? "municipal")
   const [visibilityDraft, setVisibilityDraft] = useState(initialVisibility ?? "internal")
+  const [writingLanguageDraft, setWritingLanguageDraft] = useState<"en" | "nl">(
+    initialWritingLanguage === "nl" ? "nl" : "en",
+  )
   const [timeframeDraft, setTimeframeDraft] = useState(initialScope.timeframe ?? "")
   const [jurisdictionDraft, setJurisdictionDraft] = useState(formatJurisdiction(initialJurisdiction))
   const [timeframeError, setTimeframeError] = useState<string | null>(null)
@@ -159,6 +167,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
       setDescriptionDraft(scopeState.description ?? "")
       setSpaceTypeDraft(spaceDetails.spaceType)
       setVisibilityDraft(spaceDetails.visibility)
+      setWritingLanguageDraft(spaceDetails.writingLanguage === "nl" ? "nl" : "en")
       setTimeframeDraft(scopeState.timeframe ?? "")
       setJurisdictionDraft(jurisdictionText)
       setTimeframeError(null)
@@ -193,6 +202,9 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
       <section className="shrink-0 space-y-6">
         <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
+            {demoPack ? (
+              <p className="mb-2 text-sm text-muted-foreground">{t("admin.platform.demoBanner")}</p>
+            ) : null}
             <h2 className="text-2xl font-semibold text-foreground">{spaceTitle}</h2>
             <div className="flex flex-wrap items-center gap-2 pt-2 text-xs text-muted-foreground">
               {spaceDetails.spaceType && (
@@ -201,6 +213,9 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
               {spaceDetails.visibility && (
                 <Badge variant="outline">{translateVisibilityBadge(spaceDetails.visibility, t)}</Badge>
               )}
+              <Badge variant="outline">
+                {t(`space.wizard.basics.writingLanguageOptions.${spaceDetails.writingLanguage}`)}
+              </Badge>
               {timeframeText && <Badge variant="secondary">{timeframeText}</Badge>}
               {jurisdictionText && jurisdictionText.length > 0 && (
                 <span className="text-muted-foreground">{jurisdictionText}</span>
@@ -329,6 +344,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
     setDescriptionDraft(scopeState.description ?? "")
     setSpaceTypeDraft(spaceDetails.spaceType)
     setVisibilityDraft(spaceDetails.visibility)
+    setWritingLanguageDraft(spaceDetails.writingLanguage === "nl" ? "nl" : "en")
     setTimeframeDraft(scopeState.timeframe ?? "")
     setJurisdictionDraft(jurisdictionText)
     setTimeframeError(null)
@@ -345,6 +361,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
     setDescriptionDraft(scopeState.description ?? "")
     setSpaceTypeDraft(spaceDetails.spaceType)
     setVisibilityDraft(spaceDetails.visibility)
+    setWritingLanguageDraft(spaceDetails.writingLanguage === "nl" ? "nl" : "en")
     setTimeframeDraft(scopeState.timeframe ?? "")
     setJurisdictionDraft(jurisdictionText)
     setTimeframeError(null)
@@ -380,6 +397,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
         space_type: spaceTypeDraft,
         visibility: visibilityDraft as any,
         jurisdiction: jurisdictionPayload ?? {},
+        writing_language: writingLanguageDraft,
       }
 
       if (nameValue.length > 0) {
@@ -402,6 +420,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
         spaceType: spaceTypeDraft,
         visibility: visibilityDraft,
         jurisdiction: jurisdictionPayload,
+        writingLanguage: writingLanguageDraft,
       })
       if (nameValue.length > 0) {
         setSpaceTitle(nameValue)
@@ -427,6 +446,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
       try {
         const result = await enhanceScopeText(targetText, {
           field,
+          spaceId,
           spaceName: field === "summary" ? spaceTitle : undefined,
           missionStatement: field === "description" ? summaryDraft : undefined,
         })
@@ -507,10 +527,15 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
           onDocumentUploaded={handleDocumentUploaded}
           onWorkspaceCreated={handleWorkspaceCreated}
           onScopeUpdated={(nextScope) => setScopeState(nextScope)}
+          writingLanguage={spaceDetails.writingLanguage === "nl" ? "nl" : "en"}
           onSpaceDetailsChange={(details) =>
             setSpaceDetails((prev) => ({
               spaceType: details.spaceType ?? prev.spaceType,
               visibility: details.visibility ?? prev.visibility,
+              writingLanguage:
+                details.writingLanguage === "nl" || details.writingLanguage === "en"
+                  ? details.writingLanguage
+                  : prev.writingLanguage,
               jurisdiction:
                 details.jurisdiction !== undefined ? details.jurisdiction : prev.jurisdiction,
             }))
@@ -585,6 +610,22 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
                   <SelectItem value="confidential">{t("space.wizard.basics.visibilityOptions.confidential")}</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="space-writing-language">{t("space.wizard.basics.writingLanguageLabel")}</Label>
+              <Select
+                value={writingLanguageDraft}
+                onValueChange={(value) => setWritingLanguageDraft(value === "nl" ? "nl" : "en")}
+              >
+                <SelectTrigger id="space-writing-language">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="en">{t("space.wizard.basics.writingLanguageOptions.en")}</SelectItem>
+                  <SelectItem value="nl">{t("space.wizard.basics.writingLanguageOptions.nl")}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">{t("space.wizard.basics.writingLanguageHelp")}</p>
             </div>
           </div>
 
@@ -793,6 +834,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
           spaceName={spaceTitle}
           canUpload={canManage}
           canManage={canManage}
+          canChangeClassification={canAccessSettings}
           searchQuery={searchQuery}
         />
       </div>

@@ -52,6 +52,98 @@ const NEXT_COPY: Record<Exclude<PipelineStageId, "orient">, string> = {
 }
 
 
+function ProgrammePath({
+  pipeline,
+  nextAction,
+  onOpen,
+}: {
+  pipeline: GuidancePipelineSnapshot
+  nextAction: string
+  onOpen: (stage: PipelineStageId, target?: string) => void
+}) {
+  const { t } = useI18n()
+  const stages = PIPELINE_STAGES.filter((stage) => stage !== "orient")
+  const current = pipeline.firstIncomplete && pipeline.firstIncomplete !== "orient" ? pipeline.firstIncomplete : null
+  const returning = stages.filter(
+    (stage) => stage !== current && (pipeline.stages[stage] === "in_progress" || pipeline.stages[stage] === "ready"),
+  )
+  const ahead = stages.filter((stage) => pipeline.stages[stage] === "not_started" && stage !== current)
+
+  return (
+    <div className="space-y-6">
+      {current ? (
+        <section aria-label={t("guidance.coach.nextStepAria")} className="space-y-3">
+          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{t("guidance.coach.now")}</p>
+          <h3 className="text-base font-medium">{t(`guidance.coach.stages.${current}`)}</h3>
+          <p className="text-sm leading-relaxed text-muted-foreground">{t(`guidance.coach.stageWhy.${current}`)}</p>
+          <p className="text-sm leading-relaxed">{nextAction}</p>
+          <Button type="button" size="sm" onClick={() => onOpen(current, STAGE_TARGET[current])}>
+            {t("guidance.coach.goThere")}
+          </Button>
+        </section>
+      ) : (
+        <p className="text-sm leading-relaxed">{t("guidance.coach.pathComplete")}</p>
+      )}
+      {returning.length > 0 ? (
+        <section className="overflow-hidden rounded-lg border bg-muted/50">
+          <h3 className="border-b px-3 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            {t("guidance.coach.returnTo")}
+            <span className="ml-2 tabular-nums">{returning.length}</span>
+          </h3>
+          <ul className="divide-y divide-border/70">
+            {returning.map((stage) => (
+              <li key={stage}>
+                <button
+                  type="button"
+                  className="flex w-full gap-3 px-3 py-2.5 text-left hover:bg-background"
+                  onClick={() => onOpen(stage, STAGE_TARGET[stage])}
+                >
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/70" aria-hidden />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-foreground">{t(`guidance.coach.stages.${stage}`)}</span>
+                    <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+                      {t(
+                        pipeline.stages[stage] === "ready"
+                          ? "guidance.coach.stageReady"
+                          : "guidance.coach.stageInProgress",
+                      )}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {ahead.length > 0 ? (
+        <section className="overflow-hidden rounded-lg border border-foreground/30">
+          <h3 className="border-b border-foreground/15 bg-foreground px-3 py-2 text-xs font-semibold tracking-wide text-background uppercase">
+            {t("guidance.coach.ahead")}
+            <span className="ml-2 tabular-nums">{ahead.length}</span>
+          </h3>
+          <ul className="divide-y">
+            {ahead.map((stage, index) => (
+              <li key={stage}>
+                <button
+                  type="button"
+                  className="flex w-full gap-3 px-3 py-3 text-left hover:bg-muted/40"
+                  onClick={() => onOpen(stage, STAGE_TARGET[stage])}
+                >
+                  <span className="mt-0.5 w-4 shrink-0 text-xs font-medium text-foreground">{index + 1}</span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-foreground">{t(`guidance.coach.stages.${stage}`)}</span>
+                    <span className="mt-0.5 block text-sm leading-relaxed text-muted-foreground">{t(`guidance.coach.stageAhead.${stage}`)}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </div>
+  )
+}
+
 function displayHelpText(text: string) {
   return text.replace(/\n?NAVIGATE:\s*\S+/gi, "").trim()
 }
@@ -196,13 +288,6 @@ export function GuidanceCoach({
     return t(NEXT_COPY[pipeline.firstIncomplete])
   }, [pipeline, surface, t])
 
-  const goNext = () => {
-    if (surface !== "programme" || !pipeline) return
-    const target = pipeline.firstIncomplete ? STAGE_TARGET[pipeline.firstIncomplete] : undefined
-    setHighlight(target ?? null)
-    onNavigate?.(pipeline.firstIncompleteSection, target)
-  }
-
   const submitAsk = async () => {
     const message = ask.trim()
     if (!message || askBusy) return
@@ -238,7 +323,7 @@ export function GuidanceCoach({
           section: section || undefined,
           job,
           pipeline: pipeline
-            ? PIPELINE_STAGES.map((stage) => `${stage}:${pipeline.stages[stage] ? "done" : "open"}`).join(",")
+            ? PIPELINE_STAGES.map((stage) => `${stage}:${pipeline.stages[stage]}`).join(",")
             : undefined,
           documentTitles,
           language: language === "nl" ? "nl" : "en",
@@ -296,76 +381,23 @@ export function GuidanceCoach({
 
   const intro = (
     <div className={cn("space-y-4 text-sm", variant === "embedded" && "text-left")}>
-      {setupInProgress ? (
+          {surface === "programme" && pipeline && !setupInProgress ? (
+            <ProgrammePath
+              pipeline={pipeline}
+              nextAction={nextAction}
+              onOpen={(stage, target) => {
+                setHighlight(target ?? null)
+                onNavigate?.(STAGE_TO_SECTION[stage], target)
+              }}
+            />
+          ) : setupInProgress ? (
         <p className="text-muted-foreground">{t("guidance.coach.finishSetup")}</p>
+      ) : surface === "programme" ? (
+        <p className="text-muted-foreground">{t("guidance.coach.nothingRequired")}</p>
+      ) : surface === "organisation" ? (
+        <p className="text-muted-foreground">{t("guidance.coach.organisationHint")}</p>
       ) : (
-        <>
-          {surface === "programme" && pipeline?.firstIncomplete && pipeline.firstIncomplete !== "orient" ? (
-            <div
-              role="status"
-              aria-label={t("guidance.coach.nextStepAria")}
-              className="space-y-2 rounded-md border bg-muted/50 p-3"
-            >
-              <p className="font-medium">
-                {t("guidance.coach.next", undefined, { action: t(`guidance.coach.stages.${pipeline.firstIncomplete}`) })}
-              </p>
-              <p className="text-muted-foreground">{nextAction}</p>
-              <Button type="button" size="sm" onClick={goNext}>
-                {t("guidance.coach.goThere")}
-              </Button>
-            </div>
-          ) : surface === "programme" ? (
-            <p className="text-muted-foreground">{t("guidance.coach.nothingRequired")}</p>
-          ) : surface === "organisation" ? (
-            <p className="text-muted-foreground">{t("guidance.coach.organisationHint")}</p>
-          ) : (
-            <p className="text-muted-foreground">{t("guidance.coach.researchHint")}</p>
-          )}
-
-          {surface === "programme" && pipeline ? (
-            <div className="space-y-1">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                {t("guidance.coach.pipelineTitle")}
-              </p>
-              <ol className="space-y-1">
-              {PIPELINE_STAGES.filter((stage) => stage !== "orient").map((stage) => {
-                const done = pipeline.stages[stage]
-                const current = pipeline.firstIncomplete === stage
-                return (
-                  <li key={stage}>
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-sm px-1 py-1 text-left text-xs transition-colors hover:bg-muted",
-                        done && "text-muted-foreground",
-                        current && "font-medium text-foreground",
-                        !done && !current && "text-muted-foreground",
-                      )}
-                      onClick={() => {
-                        const target = STAGE_TARGET[stage]
-                        setHighlight(target ?? null)
-                        onNavigate?.(STAGE_TO_SECTION[stage], target)
-                      }}
-                    >
-                      <span
-                        className={cn(
-                          "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[10px]",
-                          done && "border-foreground bg-foreground text-background",
-                          current && "border-foreground",
-                        )}
-                        aria-hidden
-                      >
-                        {done ? "✓" : ""}
-                      </span>
-                      {t(`guidance.coach.stages.${stage}`)}
-                    </button>
-                  </li>
-                )
-              })}
-              </ol>
-            </div>
-          ) : null}
-        </>
+        <p className="text-muted-foreground">{t("guidance.coach.researchHint")}</p>
       )}
 
       {showExpertPrompt && (
@@ -439,13 +471,17 @@ export function GuidanceCoach({
       <div
         className={cn(
           "flex-1 space-y-4 p-4",
-          messages.length > 0 ? "overflow-y-auto chat-scrollable" : "overflow-hidden",
+          messages.length > 0 || surface === "programme" ? "overflow-y-auto chat-scrollable" : "overflow-hidden",
         )}
       >
         {messages.length === 0 && !askBusy && (
-          <div className="flex h-full items-center justify-center">
+          surface === "programme" ? (
             <div className="max-w-md">{intro}</div>
-          </div>
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <div className="max-w-md">{intro}</div>
+            </div>
+          )
         )}
         {messages.map((message) => {
           const isUser = message.role === "user"

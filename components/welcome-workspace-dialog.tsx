@@ -24,7 +24,6 @@ import {
 } from "@/components/ui/tooltip"
 import { updateWorkspace, enhanceWorkspaceText } from "@/lib/actions/workspace"
 import { MapPin, FileText, Wand2, RotateCcw, Loader2, BookOpen } from "lucide-react"
-import { AddOverheidDocumentsDialog } from "@/components/add-overheid-documents-dialog"
 import { useI18n } from "@/lib/i18n/use-i18n"
 
 interface WelcomeWorkspaceDialogProps {
@@ -53,17 +52,11 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
   const [enhancingField, setEnhancingField] = useState<"summary" | "description" | null>(null)
   const [originalSummary, setOriginalSummary] = useState<string | null>(null)
   const [originalDescription, setOriginalDescription] = useState<string | null>(null)
-  const [overheidDialogOpen, setOverheidDialogOpen] = useState(false)
 
   const trimmedSummary = summary.trim()
   const trimmedDescription = description.trim()
   const trimmedContext = context.trim()
-  const scopeSegments = [trimmedSummary, trimmedDescription].filter((value) => value.length > 0)
-  const scopeIsComplete = trimmedSummary.length > 0 && trimmedDescription.length > 0
-  const hasLocation = location.trim().length > 0
   const isEnhancing = enhancingField !== null
-  const overheidScopeSegments = [...scopeSegments, trimmedContext].filter((value) => value.length > 0)
-  const overheidContext = overheidScopeSegments.length > 0 ? overheidScopeSegments.join("\n\n") : ""
 
   const handleClose = (open: boolean) => {
     if (!open) {
@@ -139,6 +132,7 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
     const cleanTarget = targetText.trim()
     const result = await enhanceWorkspaceText(cleanTarget, {
       field,
+      workspaceId: workspace.id,
       workspaceName: workspace.name,
       summary: field === "description" && trimmedSummary.length > 0 ? trimmedSummary : undefined,
     })
@@ -358,39 +352,6 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
               <p className="text-xs text-muted-foreground">{t("workspace.welcomeDialog.context.helper")}</p>
             </div>
 
-            <div className="space-y-2 mt-6">
-              <Label className="flex items-center gap-2">
-                <BookOpen className="h-4 w-4" />
-                {t("workspace.welcomeDialog.knowledge.label")}
-              </Label>
-              <div className="w-fit">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setOverheidDialogOpen(true)}
-                          disabled={!hasLocation || !scopeIsComplete}
-                          className="w-fit justify-start text-xs"
-                        >
-                          <FileText className="mr-2 h-3 w-3" />
-                          {t("workspace.sources.overheidDialog.title")}
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                      {(!hasLocation || !scopeIsComplete) && (
-                        <TooltipContent>
-                          <p>{t("workspace.welcomeDialog.knowledge.requirements")}</p>
-                        </TooltipContent>
-                      )}
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              <p className="text-xs text-muted-foreground">{t("workspace.welcomeDialog.knowledge.helper")}</p>
-            </div>
-
             {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
           </div>
 
@@ -403,17 +364,6 @@ export function WelcomeWorkspaceDialog({ workspace, open, onOpenChange }: Welcom
             </Button>
           </DialogFooter>
         </form>
-
-        <AddOverheidDocumentsDialog
-          workspaceId={workspace.id}
-          workspaceLocation={hasLocation ? location.trim() : workspace.location}
-          workspaceContext={overheidContext || undefined}
-          open={overheidDialogOpen}
-          onOpenChange={setOverheidDialogOpen}
-          onSuccess={() => {
-            // Optionally refresh or show success message
-          }}
-        />
       </DialogContent>
     </Dialog>
   )

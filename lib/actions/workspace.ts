@@ -467,7 +467,10 @@ export async function getWorkspaceContextDetails(workspaceId: string) {
   }
 }
 
-export async function enhanceContextText(text: string): Promise<{ enhanced?: string; error?: string }> {
+export async function enhanceContextText(
+  text: string,
+  workspaceId?: string,
+): Promise<{ enhanced?: string; error?: string }> {
   const supabase = await createClient()
 
   const {
@@ -477,14 +480,8 @@ export async function enhanceContextText(text: string): Promise<{ enhanced?: str
     return { error: "Unauthorized" }
   }
 
-  // Get user's language preference
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("language")
-    .eq("id", user.id)
-    .single()
-  
-  const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
+  const { writingLanguageForWorkspace } = await import("@/lib/programme/load-writing-language")
+  const userLanguage = await writingLanguageForWorkspace(workspaceId)
 
   if (!text || text.trim().length === 0) {
     return { error: "Text is empty" }
@@ -521,6 +518,7 @@ export async function enhanceWorkspaceText(
     field?: "summary" | "description"
     workspaceName?: string
     summary?: string
+    workspaceId?: string
   },
 ): Promise<{ enhanced?: string; error?: string }> {
   const supabase = await createClient()
@@ -532,14 +530,8 @@ export async function enhanceWorkspaceText(
     return { error: "Unauthorized" }
   }
 
-  // Get user's language preference
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("language")
-    .eq("id", user.id)
-    .single()
-  
-  const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
+  const { writingLanguageForWorkspace } = await import("@/lib/programme/load-writing-language")
+  const userLanguage = await writingLanguageForWorkspace(options?.workspaceId)
 
   if (!text || text.trim().length === 0) {
     return { error: "Text is empty" }

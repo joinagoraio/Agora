@@ -114,6 +114,8 @@ export default async function SpacePage({
           initialSpaceType={space.space_type}
           initialVisibility={space.visibility}
           initialJurisdiction={space.jurisdiction}
+          initialWritingLanguage={space.writing_language === "nl" ? "nl" : "en"}
+          demoPack={Boolean((space.metadata as { demo?: boolean } | null)?.demo)}
           initialScope={{
             summary: space.description,
             description: (scopeDetails.description as string | undefined) ?? "",

@@ -364,16 +364,116 @@ export async function setPlatformTaskModel(task: string, modelId: string) {
 
 export async function savePlatformPrompt(id: string, body: string) {
   const gate = await requireSuperAdmin()
-  if (gate.error) return { error: gate.error }
-  if (!body.trim()) return { error: "Prompt cannot be empty." }
+  if (gate.error || !gate.user) return { error: gate.error || "Unauthorized" }
+  const nextBody = body.trim()
+  if (!nextBody) return { error: "Prompt cannot be empty." }
   const admin = createAdminClient()
+  const { data: current, error: readError } = await admin
+    .from("platform_prompts")
+    .select("body")
+    .eq("id", id)
+    .maybeSingle()
+  if (readError) return { error: readError.message }
+  if (!current) return { error: "Prompt not found." }
+  if ((current.body || "").trim() === nextBody) return { success: true }
+
+  const { data: latest, error: latestError } = await admin
+    .from("platform_prompt_versions")
+    .select("version")
+    .eq("prompt_id", id)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (latestError) return { error: latestError.message }
+
+  let nextVersion = (latest?.version ?? 0) + 1
+  if (!latest) {
+    const { error: snapshotError } = await admin.from("platform_prompt_versions").insert({
+      prompt_id: id,
+      version: 1,
+      body: current.body,
+      created_by: gate.user.id,
+    })
+    if (snapshotError) return { error: snapshotError.message }
+    nextVersion = 2
+  }
+
+  const { error: versionError } = await admin.from("platform_prompt_versions").insert({
+    prompt_id: id,
+    version: nextVersion,
+    body: nextBody,
+    created_by: gate.user.id,
+  })
+  if (versionError) return { error: versionError.message }
+
   const { error } = await admin
     .from("platform_prompts")
-    .update({ body: body.trim(), updated_at: new Date().toISOString() })
+    .update({ body: nextBody, updated_at: new Date().toISOString() })
     .eq("id", id)
   if (error) return { error: error.message }
   revalidatePath("/admin/platform")
+  return { success: true, version: nextVersion }
+}
+
+export async function listPlatformPromptVersions(id: string) {
+  const gate = await requireSuperAdmin()
+  if (gate.error) return { error: gate.error, data: [] as PlatformPromptVersion[] }
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("platform_prompt_versions")
+    .select("id, version, name, body, created_at")
+    .eq("prompt_id", id)
+    .order("version", { ascending: false })
+  if (error) return { error: error.message, data: [] as PlatformPromptVersion[] }
+  return { data: (data || []) as PlatformPromptVersion[] }
+}
+
+export type PlatformPromptVersion = {
+  id: string
+  version: number
+  name: string | null
+  body: string
+  created_at: string
+}
+
+export async function renamePlatformPromptVersion(promptId: string, versionId: string, name: string) {
+  const gate = await requireSuperAdmin()
+  if (gate.error) return { error: gate.error }
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from("platform_prompt_versions")
+    .update({ name: name.trim() || null })
+    .eq("id", versionId)
+    .eq("prompt_id", promptId)
+  if (error) return { error: error.message }
   return { success: true }
+}
+
+export async function deletePlatformPromptVersion(promptId: string, versionId: string) {
+  const gate = await requireSuperAdmin()
+  if (gate.error) return { error: gate.error, body: undefined as string | undefined }
+  const admin = createAdminClient()
+  const { data: row, error: readError } = await admin
+    .from("platform_prompt_versions")
+    .select("id, version")
+    .eq("id", versionId)
+    .eq("prompt_id", promptId)
+    .maybeSingle()
+  if (readError) return { error: readError.message, body: undefined as string | undefined }
+  if (!row) return { error: "Version not found.", body: undefined as string | undefined }
+
+  const { data: latest } = await admin
+    .from("platform_prompt_versions")
+    .select("id")
+    .eq("prompt_id", promptId)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (latest?.id === row.id) return { error: "The current version cannot be deleted.", body: undefined as string | undefined }
+
+  const { error } = await admin.from("platform_prompt_versions").delete().eq("id", versionId)
+  if (error) return { error: error.message, body: undefined as string | undefined }
+  return { success: true, body: undefined as string | undefined }
 }
 
 export async function setTenantKeyPolicyAsSuperAdmin(tenantId: string, policy: "platform_only" | "allow_byok") {

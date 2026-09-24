@@ -252,6 +252,7 @@ export type ProgrammeTemplate = {
   name: string
   qualityRules: string | null
   outputForm: string | null
+  shared: boolean
   createdAt: string
 }
 
@@ -351,6 +352,7 @@ export function mapTemplateRow(row: {
   name: string
   quality_rules?: string | null
   output_form?: string | null
+  shared?: boolean | null
   created_at: string
 }): ProgrammeTemplate {
   return {
@@ -359,8 +361,19 @@ export function mapTemplateRow(row: {
     name: row.name,
     qualityRules: row.quality_rules ?? null,
     outputForm: row.output_form ?? null,
+    shared: row.shared !== false,
     createdAt: row.created_at,
   }
+}
+
+export function chapterTitlesFromHtml(html: string): string[] {
+  const titles: string[] = []
+  const pattern = /<h([12])\b[^>]*>([\s\S]*?)<\/h\1>/gi
+  for (const match of html.matchAll(pattern)) {
+    const title = match[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+    if (title) titles.push(title)
+  }
+  return titles
 }
 
 /** Build a forest sorted by sortOrder; orphans (missing parent) become roots. */

@@ -9,7 +9,7 @@ import { z } from "zod"
 // Ensure route can complete before platform timeout (e.g. Vercel)
 export const maxDuration = 30
 
-const MAX_FILE_SIZE_BYTES = 9 * 1024 * 1024 // 9 MB for direct upload path
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt", ".md", ".markdown"]
 
 const uploadUrlSchema = z.object({

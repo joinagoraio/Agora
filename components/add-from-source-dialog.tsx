@@ -74,7 +74,10 @@ export function AddFromSourceDialog({
   // Filter out workspace_generated sources since they're for internal workspace documents, not external sources
   // Sort sources alphabetically by name
   const availableSources = sources
-    .filter((source) => source.type !== "direct_upload" && source.type !== "workspace_generated")
+    .filter(
+      (source) =>
+        source.type !== "direct_upload" && source.type !== "workspace_generated" && source.type !== "overheid_nl",
+    )
     .sort((a, b) => a.name.localeCompare(b.name))
 
   const selectedSource = availableSources.find((c) => c.id === selectedSourceId)

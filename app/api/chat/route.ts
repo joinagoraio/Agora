@@ -11,6 +11,7 @@ import OpenAI from "openai"
 import { applyRateLimitHeaders, chatRateLimit, checkRateLimit, RateLimitStatus } from "@/lib/rate-limit"
 import { chatMessageSchema } from "@/lib/validations/document"
 import { compileAskAnswer } from "@/lib/chat/ask-format"
+import { writingLanguageName } from "@/lib/programme/writing-language"
 import { resolveCitations } from "@/lib/chat/resolve-citations"
 import { getClientIdentifier } from "@/lib/utils/request"
 
@@ -145,15 +146,6 @@ export async function POST(req: Request) {
       return withRateLimit(new Response("Unauthorized", { status: 401 }))
     }
 
-    // Get user's language preference
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("language")
-      .eq("id", user.id)
-      .single()
-    
-    const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
-
     const { data: conversation, error: conversationError } = await adminSupabase
       .from("conversations")
       .select("id, workspace_id, space_id, user_id, context_type, context_id, title")
@@ -256,7 +248,7 @@ export async function POST(req: Request) {
     if (spaceId) {
       const { data: spaceData } = await supabase
         .from("spaces")
-        .select("name, description, metadata, jurisdiction")
+        .select("name, description, metadata, jurisdiction, writing_language")
         .eq("id", spaceId)
         .single()
       space = spaceData
@@ -302,7 +294,7 @@ export async function POST(req: Request) {
       if (workspace?.space_id) {
         const { data: spaceData } = await supabase
           .from("spaces")
-          .select("name, description, metadata, jurisdiction")
+          .select("name, description, metadata, jurisdiction, writing_language")
           .eq("id", workspace.space_id)
           .single()
         space = spaceData
@@ -502,9 +494,13 @@ ${context}`
     const runtimeConfig = parsePlaybookRuntimeConfig(playbookConfig)
     const layers = await loadPromptLayers("chat")
 
+    const writingLanguage = writingLanguageName(
+      (space as { writing_language?: string | null } | null)?.writing_language,
+    )
+
     const { systemPrompt } = compileSystemPrompt({
       kind: "chat",
-      userLanguage,
+      userLanguage: writingLanguage,
       chatScope,
       identity: chatScope === "authority" ? CHAT_IDENTITY_AUTHORITY : layers.identity,
       playbookBody: playbookBody ?? layers.playbook,

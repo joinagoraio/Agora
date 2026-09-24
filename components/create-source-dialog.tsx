@@ -40,11 +40,6 @@ const SOURCE_TYPE_DEFINITIONS = [
     labelKey: "workspace.sources.manage.typeOptions.googleDrive.label",
     descriptionKey: "workspace.sources.manage.typeOptions.googleDrive.description",
   },
-  {
-    value: "overheid_nl",
-    labelKey: "workspace.sources.manage.typeOptions.overheid.label",
-    descriptionKey: "workspace.sources.manage.typeOptions.overheid.description",
-  },
 ] as const
 
 export function CreateSourceDialog({ workspaceId, onSuccess, existingSources = [], trigger }: CreateSourceDialogProps) {

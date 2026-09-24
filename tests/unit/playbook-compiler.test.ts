@@ -104,6 +104,17 @@ describe("compileSystemPrompt (S1 spike)", () => {
     },
   )
 
+  it("writes prose in the authority language and keeps quotations verbatim", () => {
+    const dutch = compileSystemPrompt({ kind: "draft", userLanguage: "Dutch" })
+    expect(dutch.systemPrompt).toContain("Write all prose in Dutch")
+    expect(dutch.systemPrompt).toContain("authority's writing language")
+    expect(dutch.systemPrompt).toContain("Copy quotations exactly")
+
+    const english = compileSystemPrompt({ kind: "chat", userLanguage: "English" })
+    expect(english.systemPrompt).toContain("Write all prose in English")
+    expect(english.systemPrompt).toContain("Reply in English even when the question is in another language")
+  })
+
   it("writes as the bound bevoegd gezag and does not invent a handbook", () => {
     const draft = compileSystemPrompt({ kind: "draft", userLanguage: "English" })
     expect(draft.systemPrompt).toContain("bevoegd gezag")

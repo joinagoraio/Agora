@@ -21,6 +21,8 @@ import {
 import { fetchCsrfToken } from "@/lib/utils/csrf"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { updateSpaceItem } from "@/lib/actions/space-item"
+import type { FileClassification } from "@/components/classification-picker"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { SectionOpenToggle, useSectionOpen } from "@/components/section-open-toggle"
 import { ViewModeToggle, useCollectionViewMode } from "@/components/view-mode-toggle"
@@ -47,6 +49,7 @@ interface SpaceDocumentsPanelProps {
   spaceName: string
   canUpload?: boolean
   canManage?: boolean
+  canChangeClassification?: boolean
   searchQuery?: string
 }
 
@@ -57,6 +60,7 @@ export function SpaceDocumentsPanel({
   spaceName,
   canUpload = true,
   canManage = true,
+  canChangeClassification = false,
   searchQuery = "",
 }: SpaceDocumentsPanelProps) {
   const router = useRouter()
@@ -89,6 +93,22 @@ export function SpaceDocumentsPanel({
       setInternalDocuments(documents)
     }
   }, [documents, onDocumentsChange])
+
+  const replaceDocument = (item: SpaceDocumentItem) => {
+    const updatedDocuments = safeDocuments.map((doc) => (doc.id === item.id ? item : doc))
+    if (onDocumentsChange) onDocumentsChange(updatedDocuments)
+    else setInternalDocuments(updatedDocuments)
+  }
+
+  const handleClassification = async (doc: SpaceDocumentItem, classification: FileClassification) => {
+    if (doc.classification === classification) return
+    const result = await updateSpaceItem(doc.id, { classification })
+    if (result.error || !result.data) {
+      toast.error(result.error || t("workspace.common.classification.change"))
+      return
+    }
+    replaceDocument({ ...doc, classification: result.data.classification })
+  }
 
   const handleUploaded = (item: SpaceDocumentItem) => {
     const updatedDocuments = [item, ...safeDocuments.filter((doc) => doc.id !== item.id)]
@@ -270,8 +290,10 @@ export function SpaceDocumentsPanel({
                     doc={doc}
                     spaceId={spaceId}
                     canManage={canManage}
+                    canChangeClassification={canChangeClassification}
                     isDeleting={isDeleting === doc.id}
                     onDelete={handleDelete}
+                    onClassification={handleClassification}
                   />
                 </div>
                 <Link href={href} className="flex min-h-0 flex-1 flex-col pr-10">
@@ -378,8 +400,10 @@ export function SpaceDocumentsPanel({
                             doc={doc}
                             spaceId={spaceId}
                             canManage={canManage}
+                            canChangeClassification={canChangeClassification}
                             isDeleting={isDeleting === doc.id}
                             onDelete={handleDelete}
+                            onClassification={handleClassification}
                           />
                         </div>
                       </div>
@@ -401,14 +425,18 @@ function DocumentMenu({
   doc,
   spaceId,
   canManage,
+  canChangeClassification,
   isDeleting,
   onDelete,
+  onClassification,
 }: {
   doc: SpaceDocumentItem
   spaceId: string
   canManage: boolean
+  canChangeClassification: boolean
   isDeleting: boolean
   onDelete: (doc: SpaceDocumentItem) => void
+  onClassification: (doc: SpaceDocumentItem, classification: FileClassification) => void
 }) {
   const { t } = useI18n()
   const fileHref = doc.payload?.file_url ? `/api/spaces/${spaceId}/items/${doc.id}/file` : doc.source_url
@@ -425,7 +453,7 @@ function DocumentMenu({
           </IconTooltip>
         </span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-40">
+      <DropdownMenuContent align="end" className="w-72">
         {fileHref ? (
           <DropdownMenuItem asChild className="cursor-pointer">
             <a
@@ -444,6 +472,22 @@ function DocumentMenu({
         ) : (
           <DropdownMenuItem disabled>{t("space.documents.panel.dropdownNoUrl")}</DropdownMenuItem>
         )}
+        {canChangeClassification
+          ? (["public", "internal", "confidential"] as const).map((option) => (
+              <DropdownMenuItem
+                key={option}
+                disabled={doc.classification === option}
+                onSelect={() => onClassification(doc, option)}
+              >
+                <span className="flex flex-col">
+                  <span>{t(`workspace.common.classification.${option}`)}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {t(`workspace.common.classification.sharedHelp.${option}`)}
+                  </span>
+                </span>
+              </DropdownMenuItem>
+            ))
+          : null}
         {canManage ? (
           <DropdownMenuItem
             className="group cursor-pointer focus:bg-destructive/10 focus:text-destructive"

@@ -62,7 +62,7 @@ export async function createSpace(
   // Ensure profile exists before creating space (owner_id references profiles.id)
   const { data: profile } = await adminClient
     .from("profiles")
-    .select("id")
+    .select("id, language")
     .eq("id", user.id)
     .maybeSingle()
 
@@ -110,6 +110,7 @@ export async function createSpace(
     space_type: options?.spaceType || "municipal",
     visibility: options?.visibility || "internal",
     jurisdiction: options?.jurisdiction || {},
+    writing_language: profile?.language === "nl" ? "nl" : "en",
   }
 
   const { data: newSpace, error: spaceError } = await adminClient
@@ -161,6 +162,7 @@ export async function updateSpace(
     visibility?: "public" | "internal" | "confidential"
     logo_url?: string
     metadata?: Record<string, any>
+    writing_language?: "en" | "nl"
   },
 ) {
   const supabase = await createClient()
@@ -171,6 +173,14 @@ export async function updateSpace(
   } = await supabase.auth.getUser()
   if (!user) {
     return { error: "Unauthorized" }
+  }
+
+  if (
+    updates.writing_language !== undefined &&
+    updates.writing_language !== "en" &&
+    updates.writing_language !== "nl"
+  ) {
+    return { error: "Writing language must be English or Dutch." }
   }
 
   const { data, error } = await supabase.from("spaces").update(updates).eq("id", spaceId).select().single()
@@ -258,6 +268,7 @@ export async function enhanceScopeText(
     field?: "summary" | "description"
     spaceName?: string
     missionStatement?: string
+    spaceId?: string
   },
 ): Promise<{ enhanced?: string; error?: string }> {
   const supabase = await createClient()
@@ -269,14 +280,8 @@ export async function enhanceScopeText(
     return { error: "Unauthorized" }
   }
 
-  // Get user's language preference
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("language")
-    .eq("id", user.id)
-    .single()
-  
-  const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
+  const { writingLanguageForSpace } = await import("@/lib/programme/load-writing-language")
+  const userLanguage = await writingLanguageForSpace(options?.spaceId)
 
   if (!text || text.trim().length === 0) {
     return { error: "Text is empty" }

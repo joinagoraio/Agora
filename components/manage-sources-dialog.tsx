@@ -64,17 +64,12 @@ export function ManageSourcesDialog({
           label: t("workspace.sources.manage.typeOptions.googleDrive.label"),
           description: t("workspace.sources.manage.typeOptions.googleDrive.description"),
         },
-        {
-          value: "overheid_nl",
-          label: t("workspace.sources.manage.typeOptions.overheid.label"),
-          description: t("workspace.sources.manage.typeOptions.overheid.description"),
-        },
       ].sort((a, b) => a.label.localeCompare(b.label)),
     [t],
   )
 
   // Filter out direct_upload sources - they shouldn't be displayed
-  const displaySources = sources.filter((source) => source.type !== "direct_upload")
+  const displaySources = sources.filter((source) => source.type !== "direct_upload" && source.type !== "overheid_nl")
 
   const refreshSources = async () => {
     setIsLoading(true)

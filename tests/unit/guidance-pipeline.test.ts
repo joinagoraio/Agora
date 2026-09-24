@@ -17,8 +17,8 @@ const empty = {
 describe("guidance pipeline derivation", () => {
   it("treats a new programme as incomplete at bind", () => {
     const snapshot = deriveGuidancePipeline(pipelineInputFromWorkbench({ ...empty }))
-    expect(snapshot.stages.orient).toBe(true)
-    expect(snapshot.stages.bind).toBe(false)
+    expect(snapshot.stages.orient).toBe("ready")
+    expect(snapshot.stages.bind).toBe("not_started")
     expect(snapshot.firstIncomplete).toBe("bind")
     expect(snapshot.firstIncompleteSection).toBe(STAGE_TO_SECTION.bind)
   })
@@ -34,7 +34,7 @@ describe("guidance pipeline derivation", () => {
         },
       }),
     )
-    expect(visionOnly.stages.bind).toBe(false)
+    expect(visionOnly.stages.bind).toBe("in_progress")
 
     const both = deriveGuidancePipeline(
       pipelineInputFromWorkbench({
@@ -46,7 +46,7 @@ describe("guidance pipeline derivation", () => {
         },
       }),
     )
-    expect(both.stages.bind).toBe(true)
+    expect(both.stages.bind).toBe("ready")
     expect(both.firstIncomplete).toBe("analyse")
   })
 
@@ -62,8 +62,8 @@ describe("guidance pipeline derivation", () => {
         reports: [{ id: "r1", report_type: "existing_policy" }],
       }),
     )
-    expect(snapshot.stages.analyse).toBe(true)
-    expect(snapshot.stages.check).toBe(false)
+    expect(snapshot.stages.analyse).toBe("ready")
+    expect(snapshot.stages.check).toBe("not_started")
     expect(snapshot.firstIncomplete).toBe("structure")
   })
 
@@ -81,7 +81,7 @@ describe("guidance pipeline derivation", () => {
         measures: [{ workflow_status: "generated" }],
       }),
     )
-    expect(snapshot.stages.structure).toBe(true)
+    expect(snapshot.stages.structure).toBe("ready")
     expect(snapshot.firstIncomplete).toBe("check")
     expect(snapshot.firstIncompleteSection).toBe(STAGE_TO_SECTION.check)
   })
@@ -100,7 +100,7 @@ describe("guidance pipeline derivation", () => {
         measures: [{ workflow_status: "generated", effects_direction: "positive", effects_deviation: false }],
       }),
     )
-    expect(generated.stages.check).toBe(false)
+    expect(generated.stages.check).toBe("in_progress")
     expect(generated.firstIncomplete).toBe("check")
 
     const saved = deriveGuidancePipeline(
@@ -123,7 +123,7 @@ describe("guidance pipeline derivation", () => {
         ],
       }),
     )
-    expect(saved.stages.check).toBe(true)
+    expect(saved.stages.check).toBe("ready")
     expect(saved.firstIncomplete).toBe("draft")
     expect(saved.firstIncompleteSection).toBe(STAGE_TO_SECTION.draft)
   })
@@ -170,7 +170,7 @@ describe("guidance pipeline derivation", () => {
         ],
       }),
     )
-    expect(snapshot.stages.review).toBe(true)
+    expect(snapshot.stages.review).toBe("ready")
     expect(snapshot.firstIncomplete).toBe("export")
   })
 })

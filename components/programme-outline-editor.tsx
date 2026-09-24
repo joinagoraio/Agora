@@ -11,7 +11,7 @@ import {
 } from "@/lib/programme/domain"
 import { outlineDragInsertIndex } from "@/lib/programme/outline-drag"
 import {
-  ensureProgrammeOutline,
+  createBlankProgrammeOutline,
   insertProgrammeOutlineNode,
   listProgrammeOutlineNodes,
   reorderProgrammeOutlineNodes,
@@ -130,15 +130,16 @@ export function ProgrammeOutlineEditor({
     el.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`
   })
 
-  const ensure = () => {
+  const buildChapters = () => {
     startTransition(async () => {
-      const ensured = await ensureProgrammeOutline(workspaceId, spaceId)
-      if (ensured.error || !ensured.data) {
-        onMessage(ensured.error || t("workspace.programme.outlineLoadError"), "error")
+      const created = await createBlankProgrammeOutline(workspaceId, spaceId)
+      if (created.error || !created.data) {
+        onMessage(created.error || t("workspace.programme.outlineLoadError"), "error")
         return
       }
-      onTemplateBound(ensured.data.templateId)
-      applyNodes(ensured.data.nodes)
+      onTemplateBound(created.data.templateId)
+      const nodes = await listProgrammeOutlineNodes(created.data.templateId)
+      applyNodes(nodes.data)
     })
   }
 
@@ -457,8 +458,8 @@ export function ProgrammeOutlineEditor({
         {!templateId ? (
           <div className="space-y-3">
             <p className="text-sm">{t("workspace.programme.editorNeedOutline")}</p>
-            <Button disabled={pending} onClick={ensure}>
-              {t("workspace.programme.outlineEnsure")}
+            <Button disabled={pending} onClick={buildChapters}>
+              {t("workspace.programme.setupWizard.structureBlankTitle")}
             </Button>
           </div>
         ) : ordered.length === 0 ? (

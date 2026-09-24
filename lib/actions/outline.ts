@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { requireAuthAndPermission } from "@/lib/middleware/authorization"
 import {
+  chapterTitlesFromHtml,
   parseProgrammeBindings,
   type OutlineEditorDraft,
   type ProgrammeOutlineNode,
@@ -60,7 +61,11 @@ export async function ensureProgrammeOutline(workspaceId: string, spaceId: strin
 }
 
 /** Create a programme-owned empty outline and finish first-run setup. */
-export async function createBlankProgrammeOutline(workspaceId: string, spaceId: string) {
+export async function createBlankProgrammeOutline(
+  workspaceId: string,
+  spaceId: string,
+  options?: { titles?: string[]; finishSetup?: boolean },
+) {
   try {
     await requireAuthAndPermission("workspace:update", { workspaceId })
   } catch (error) {
@@ -84,25 +89,55 @@ export async function createBlankProgrammeOutline(workspaceId: string, spaceId: 
     .insert({
       space_id: spaceId,
       name: workspace.name?.trim() || t("space.settings.templates.newName"),
+      shared: false,
     })
     .select("id")
     .single()
   if (templateError || !template) return { error: templateError?.message || "Failed to create outline" }
 
-  const { error: nodeError } = await supabase.from("programme_outline_nodes").insert({
-    template_id: template.id,
-    title: t("workspace.programme.outlineNewChapter"),
-    purpose: null,
-    required: true,
-    sort_order: 1,
-  })
+  const titles = (options?.titles || []).map((title) => title.trim()).filter(Boolean)
+  const rows =
+    titles.length > 0
+      ? titles.map((title, index) => ({
+          template_id: template.id,
+          title,
+          purpose: null,
+          required: true,
+          sort_order: index + 1,
+        }))
+      : [
+          {
+            template_id: template.id,
+            title: t("workspace.programme.outlineNewChapter"),
+            purpose: null,
+            required: true,
+            sort_order: 1,
+          },
+        ]
+  const { error: nodeError } = await supabase.from("programme_outline_nodes").insert(rows)
   if (nodeError) return { error: nodeError.message }
 
-  const nextBindings = { ...bindings, templateId: template.id, setupComplete: true }
+  const nextBindings = {
+    ...bindings,
+    templateId: template.id,
+    setupComplete: options?.finishSetup !== false,
+  }
   const saved = await updateProgrammeBindings(workspaceId, nextBindings)
   if (saved.error) return { error: saved.error }
 
   return { data: { templateId: template.id, bindings: nextBindings } }
+}
+
+export async function previewDocxChapterHeadings(formData: FormData) {
+  const file = formData.get("file")
+  if (!(file instanceof File)) return { error: "Choose a Word document (.docx)." }
+  if (!file.name.toLowerCase().endsWith(".docx")) return { error: "Use a Word document (.docx). PDF is not read for chapters." }
+  const mammoth = await import("mammoth")
+  const buffer = Buffer.from(await file.arrayBuffer())
+  const converted = await mammoth.convertToHtml({ buffer })
+  const titles = chapterTitlesFromHtml(converted.value)
+  if (titles.length === 0) return { error: "No Heading 1 or Heading 2 styles were found in that document." }
+  return { data: { titles, html: converted.value, fileName: file.name } }
 }
 
 export async function syncProgrammeOutlineFromEditor(input: {

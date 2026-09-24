@@ -62,8 +62,10 @@ export type GuidancePipelineInput = {
   hasSuccessfulExport: boolean
 }
 
+export type PipelineStageStatus = "not_started" | "in_progress" | "ready"
+
 export type GuidancePipelineSnapshot = {
-  stages: Record<PipelineStageId, boolean>
+  stages: Record<PipelineStageId, PipelineStageStatus>
   firstIncomplete: PipelineStageId | null
   firstIncompleteSection: string
   focusChapterId: string | null
@@ -80,6 +82,11 @@ function deviationJustified(measure: GuidanceMeasureLike): boolean {
   if (!deviation) return true
   const justification = (measure.effectsJustification ?? measure.effects_justification ?? "").trim()
   return justification.length > 0
+}
+
+function checkStatus(input: GuidancePipelineInput): PipelineStageStatus {
+  if (input.measureCount === 0) return "not_started"
+  return checkComplete(input) ? "ready" : "in_progress"
 }
 
 function checkComplete(input: GuidancePipelineInput): boolean {
@@ -110,19 +117,30 @@ function reviewComplete(input: GuidancePipelineInput): boolean {
   return chaptersApproved && measuresApproved
 }
 
+function bindStatus(input: GuidancePipelineInput): PipelineStageStatus {
+  if (input.visionBound && input.existingPolicyBound) return "ready"
+  if (input.visionBound || input.existingPolicyBound) return "in_progress"
+  return "not_started"
+}
+
 export function deriveGuidancePipeline(input: GuidancePipelineInput): GuidancePipelineSnapshot {
-  const stages: Record<PipelineStageId, boolean> = {
-    orient: input.programmeExists,
-    bind: input.visionBound && input.existingPolicyBound,
-    analyse: input.hasSucceededAnalysis,
-    structure: input.hasTemplate && input.outlineNodeCount >= 1 && input.measureCount >= 1,
-    draft: input.hasChapterBody,
-    check: checkComplete(input),
-    review: reviewComplete(input),
-    export: input.hasSuccessfulExport,
+  const stages: Record<PipelineStageId, PipelineStageStatus> = {
+    orient: input.programmeExists ? "ready" : "not_started",
+    bind: bindStatus(input),
+    analyse: input.hasSucceededAnalysis ? "ready" : "not_started",
+    structure:
+      input.hasTemplate && input.outlineNodeCount >= 1 && input.measureCount >= 1
+        ? "ready"
+        : input.measureCount > 0
+          ? "in_progress"
+          : "not_started",
+    draft: input.hasChapterBody ? "ready" : "not_started",
+    check: checkStatus(input),
+    review: reviewComplete(input) ? "ready" : input.hasChapterBody ? "in_progress" : "not_started",
+    export: input.hasSuccessfulExport ? "ready" : "not_started",
   }
 
-  const firstIncomplete = PIPELINE_STAGES.find((stage) => !stages[stage]) ?? null
+  const firstIncomplete = PIPELINE_STAGES.find((stage) => stages[stage] !== "ready") ?? null
   const draftTarget = preferredDraftChapter(input.chapters)
   const reviewTarget = input.chapters.find((chapter) => chapter.hasBody && chapter.workflowStatus !== "approved")
   const focus = firstIncomplete === "draft" ? draftTarget : firstIncomplete === "review" ? reviewTarget : null

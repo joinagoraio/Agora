@@ -1,13 +1,24 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
+import { ChevronRight, Trash2 } from "lucide-react"
 import { LlmAddProviderDialog } from "@/components/llm-add-provider-dialog"
 import { LlmCollapsibleList } from "@/components/llm-collapsible-list"
 import { LlmProviderCard } from "@/components/llm-provider-card"
 import { LlmProviderKeyDialog } from "@/components/llm-provider-key-dialog"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -19,6 +30,9 @@ import {
   clearPlatformProviderCredential,
   listPlatformCatalog,
   refreshProviderModels,
+  deletePlatformPromptVersion,
+  listPlatformPromptVersions,
+  renamePlatformPromptVersion,
   savePlatformPrompt,
   savePlatformProviderCredential,
   setCatalogModelEnabled,
@@ -38,6 +52,11 @@ import {
 import { nextCatalogVisibility, PLATFORM_TASKS } from "@/lib/llm/catalog"
 import { isLocalLlmEndpoint } from "@/lib/llm/provider-models"
 import { notify, notifyResult, persistOrRevert } from "@/lib/notify"
+import { cn } from "@/lib/utils"
+
+const PROMPT_GROUPS = ["tools", "playbooks", "identity", "agents"] as const
+const HIDDEN_PLATFORM_TASKS = new Set<string>(["overheid_search"])
+const HIDDEN_PLATFORM_PROMPTS = new Set(["overheid_search", "overheid_rank"])
 
 function rematchPlatformCatalogTasks<
   T extends {
@@ -77,6 +96,197 @@ function reportModelSync(
   )
 }
 
+type PromptVersion = { id: string; version: number; name: string | null; body: string; created_at: string }
+
+function PlatformPromptEditor({
+  prompt,
+  onBodyChange,
+}: {
+  prompt: { id: string; label: string; body: string }
+  onBodyChange: (body: string) => void
+}) {
+  const { t } = useI18n()
+  const [draft, setDraft] = useState(prompt.body)
+  const [versions, setVersions] = useState<PromptVersion[]>([])
+  const [names, setNames] = useState<Record<string, string>>({})
+  const [versionToDelete, setVersionToDelete] = useState<PromptVersion | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  useEffect(() => {
+    setDraft(prompt.body)
+    let cancelled = false
+    void listPlatformPromptVersions(prompt.id).then((result) => {
+      if (cancelled) return
+      const next = result.data || []
+      setVersions(next)
+      setNames(Object.fromEntries(next.map((version) => [version.id, version.name || ""])))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [prompt.id, prompt.body])
+
+  const publish = (body: string, success: string) => {
+    const previous = prompt.body
+    startTransition(async () => {
+      const result = await savePlatformPrompt(prompt.id, body)
+      if (result.error) {
+        notify(result.error, "error")
+        setDraft(previous)
+        return
+      }
+      notify(success, "success")
+      onBodyChange(body)
+      const listed = await listPlatformPromptVersions(prompt.id)
+      if (listed.data) {
+        setVersions(listed.data)
+        setNames(Object.fromEntries(listed.data.map((version) => [version.id, version.name || ""])))
+      }
+    })
+  }
+
+  const rename = (version: PromptVersion, value: string) => {
+    const next = value.trim()
+    if (next === (version.name || "")) return
+    startTransition(async () => {
+      const result = await renamePlatformPromptVersion(prompt.id, version.id, next)
+      if (result.error) {
+        notify(result.error, "error")
+        setNames((current) => ({ ...current, [version.id]: version.name || "" }))
+        return
+      }
+      setVersions((current) => current.map((row) => (row.id === version.id ? { ...row, name: next || null } : row)))
+      notify(t("admin.platform.promptVersionRenamed"), "success")
+    })
+  }
+
+  const remove = () => {
+    const version = versionToDelete
+    if (!version) return
+    startTransition(async () => {
+      const result = await deletePlatformPromptVersion(prompt.id, version.id)
+      if (result.error) {
+        notify(result.error, "error")
+        return
+      }
+      setVersionToDelete(null)
+      notify(t("admin.platform.promptVersionDeleted"), "success")
+      const listed = await listPlatformPromptVersions(prompt.id)
+      if (listed.data) {
+        setVersions(listed.data)
+        setNames(Object.fromEntries(listed.data.map((row) => [row.id, row.name || ""])))
+      }
+    })
+  }
+
+  return (
+    <div className="min-w-0 flex-1 space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-base font-semibold">{prompt.label}</h2>
+        <Button size="sm" disabled={pending || draft.trim() === prompt.body.trim()} onClick={() => publish(draft, t("admin.platform.promptSaved"))}>
+          {t("admin.platform.savePrompt")}
+        </Button>
+      </div>
+      <Textarea
+        id={`prompt-${prompt.id}`}
+        rows={18}
+        className="min-h-[24rem]"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("admin.platform.promptVersions")}</p>
+        {versions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("admin.platform.promptVersionEmpty")}</p>
+        ) : (
+          <ul className="space-y-1">
+            {versions.map((version, index) => {
+              const current = index === 0
+              return (
+                <li key={version.id} className="group flex items-center gap-3">
+                  <Input
+                    value={names[version.id] ?? ""}
+                    placeholder={t("admin.platform.promptVersionLabel", undefined, { version: String(version.version) })}
+                    aria-label={t("admin.platform.promptVersionName")}
+                    className="h-8 w-44"
+                    onChange={(event) => setNames((currentNames) => ({ ...currentNames, [version.id]: event.target.value }))}
+                    onBlur={(event) => rename(version, event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur()
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-left text-sm",
+                      current ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => setDraft(version.body)}
+                  >
+                    {new Date(version.created_at).toLocaleString(undefined, { hour12: false })}
+                    {current ? ` · ${t("admin.platform.promptVersionCurrent")}` : ""}
+                  </button>
+                  {current ? null : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={pending}
+                      onClick={() => publish(version.body, t("admin.platform.promptRestored"))}
+                    >
+                      {t("admin.platform.promptRestore")}
+                    </Button>
+                  )}
+                  {current ? null : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="pointer-events-auto text-destructive opacity-0 hover:bg-transparent hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                      aria-label={t("admin.platform.promptDelete")}
+                      onClick={() => setVersionToDelete(version)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+      <AlertDialog open={versionToDelete != null} onOpenChange={(open) => { if (!open && !pending) setVersionToDelete(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("admin.platform.promptDeleteTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {versionToDelete
+                ? t("admin.platform.promptDeleteDescription", undefined, {
+                    name: versionToDelete.name?.trim() || t("admin.platform.promptVersionLabel", undefined, { version: String(versionToDelete.version) }),
+                    time: new Date(versionToDelete.created_at).toLocaleString(undefined, { hour12: false }),
+                  })
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>{t("common.actions.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={pending}
+              onClick={(event) => {
+                event.preventDefault()
+                remove()
+              }}
+            >
+              {t("common.actions.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
 export function PlatformLlmAdmin() {
   const { t } = useI18n()
   const [pending, startTransition] = useTransition()
@@ -85,8 +295,8 @@ export function PlatformLlmAdmin() {
   const [providerKeys, setProviderKeys] = useState<Record<string, string>>({})
   const [endpointDrafts, setEndpointDrafts] = useState<Record<string, string>>({})
   const [keyDialogId, setKeyDialogId] = useState<string | null>(null)
-  const [promptDrafts, setPromptDrafts] = useState<Record<string, string>>({})
-  const [openPromptIds, setOpenPromptIds] = useState<Record<string, string[]>>({})
+  const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null)
+  const [openPromptGroup, setOpenPromptGroup] = useState<string | null>("tools")
   const refreshGeneration = useRef(0)
 
   const refresh = () => {
@@ -99,11 +309,6 @@ export function PlatformLlmAdmin() {
         return
       }
       setCatalog(result.data)
-      const drafts: Record<string, string> = {}
-      for (const prompt of result.data?.prompts || []) {
-        drafts[(prompt as { id: string }).id] = (prompt as { body: string }).body
-      }
-      setPromptDrafts(drafts)
     })
   }
 
@@ -488,16 +693,19 @@ export function PlatformLlmAdmin() {
               <CardTitle>{t("admin.platform.tasksTitle")}</CardTitle>
               <CardDescription>{t("admin.platform.tasksDescription")}</CardDescription>
             </CardHeader>
-            <CardContent className={firstToolModelId ? "grid gap-4 md:grid-cols-2" : undefined}>
+            <CardContent className={firstToolModelId ? "flex flex-col gap-8" : undefined}>
               {!firstToolModelId ? (
                 <p className="text-sm text-muted-foreground">{t("admin.platform.tasksNeedModels")}</p>
               ) : (
-                PLATFORM_TASKS.map((task) => {
+                PLATFORM_TASKS.filter((task) => !HIDDEN_PLATFORM_TASKS.has(task)).map((task) => {
                   const assigned = taskModelByTask.get(task)
                   const value = assigned && toolModels.some((model) => model.id === assigned) ? assigned : firstToolModelId
                   return (
-                    <div key={task} className="space-y-2">
-                      <Label>{task}</Label>
+                    <div key={task} className="grid items-center gap-4 border-b border-border pb-8 last:border-0 last:pb-0 md:grid-cols-[minmax(0,1fr)_18rem] md:gap-10">
+                      <div className="space-y-1">
+                        <Label>{t(`admin.platform.taskLabel.${task}`)}</Label>
+                        <p className="text-sm text-muted-foreground">{t(`admin.platform.taskHint.${task}`)}</p>
+                      </div>
                       <Select
                         value={value}
                         onValueChange={(next) => {
@@ -523,7 +731,7 @@ export function PlatformLlmAdmin() {
                           )
                         }}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -542,107 +750,77 @@ export function PlatformLlmAdmin() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="prompts" className="space-y-6">
-          {["tools", "playbooks", "identity", "agents"].map((group) => {
-            const groupPrompts = (catalog.prompts || []).filter(
-              (prompt: { group_id: string }) => prompt.group_id === group,
+        <TabsContent value="prompts">
+          {(() => {
+            const prompts = PROMPT_GROUPS.flatMap((group) =>
+              ((catalog.prompts || []) as Array<{ id: string; group_id: string; label: string; body: string }>).filter(
+                (prompt) => prompt.group_id === group && !HIDDEN_PLATFORM_PROMPTS.has(prompt.id),
+              ),
             )
-            const groupIds = groupPrompts.map((prompt: { id: string }) => prompt.id)
-            const openIds = openPromptIds[group] || []
-            const allOpen = groupIds.length > 0 && groupIds.every((id: string) => openIds.includes(id))
+            const selected = prompts.find((prompt) => prompt.id === selectedPromptId) || prompts[0]
+            if (!selected) return null
             return (
-            <Card key={group}>
-              <CardHeader>
-                <CardTitle>{t(`admin.platform.promptGroup.${group}`)}</CardTitle>
-                {groupIds.length > 0 ? (
-                  <CardAction>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setOpenPromptIds((current) => ({
-                          ...current,
-                          [group]: allOpen ? [] : groupIds,
-                        }))
-                      }
-                    >
-                      {t(allOpen ? "admin.platform.collapsePrompts" : "admin.platform.expandPrompts")}
-                    </Button>
-                  </CardAction>
-                ) : null}
-              </CardHeader>
-              <CardContent>
-                <Accordion
-                  type="multiple"
-                  className="space-y-8"
-                  value={openIds}
-                  onValueChange={(value) =>
-                    setOpenPromptIds((current) => ({
+              <div className="flex items-start gap-8">
+                <nav className="sticky top-6 max-h-[calc(100vh-6rem)] w-64 shrink-0 space-y-1 self-start overflow-y-auto" aria-label={t("admin.platform.tabPrompts")}>
+                  {PROMPT_GROUPS.map((group) => {
+                    const groupPrompts = prompts.filter((prompt) => prompt.group_id === group)
+                    if (groupPrompts.length === 0) return null
+                    const open = openPromptGroup === group
+                    return (
+                      <div key={group}>
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                          aria-expanded={open}
+                          onClick={() => setOpenPromptGroup(open ? null : group)}
+                        >
+                          <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 transition-transform", open && "rotate-90")} />
+                          <span>{t(`admin.platform.promptGroup.${group}`)}</span>
+                        </button>
+                        {open ? (
+                          <div className="space-y-0.5 pb-2 pl-8">
+                            {groupPrompts.map((prompt) => (
+                              <button
+                                key={prompt.id}
+                                type="button"
+                                className="group/prompt relative block w-full rounded-md px-2 py-1.5 text-left text-sm leading-5"
+                                onClick={() => setSelectedPromptId(prompt.id)}
+                              >
+                                <span className="invisible block whitespace-normal break-words font-semibold" aria-hidden="true">
+                                  {prompt.label}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "absolute inset-x-2 top-1.5 whitespace-normal break-words",
+                                    prompt.id === selected.id
+                                      ? "font-semibold text-foreground"
+                                      : "text-muted-foreground group-hover/prompt:font-semibold group-hover/prompt:text-foreground",
+                                  )}
+                                >
+                                  {prompt.label}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                </nav>
+                <PlatformPromptEditor
+                  prompt={selected}
+                  onBodyChange={(body) =>
+                    patchCatalog((current) => ({
                       ...current,
-                      [group]: value,
+                      prompts: (current.prompts || []).map((row) =>
+                        row.id === selected.id ? { ...row, body } : row,
+                      ),
                     }))
                   }
-                >
-                  {groupPrompts.map((prompt: { id: string; label: string; body: string }) => (
-                      <AccordionItem key={prompt.id} value={prompt.id} className="rounded-md border px-4 last:border-b">
-                        <div className="flex items-center gap-3">
-                          <div className="min-w-0 flex-1">
-                            <AccordionTrigger className="py-3 hover:no-underline">
-                              <span className="text-sm font-medium">{prompt.label}</span>
-                            </AccordionTrigger>
-                          </div>
-                          <Button
-                            size="sm"
-                            className="shrink-0"
-                            disabled={(promptDrafts[prompt.id] ?? prompt.body) === prompt.body}
-                            onPointerDown={(event) => event.stopPropagation()}
-                            onClick={(event) => {
-                              event.preventDefault()
-                              event.stopPropagation()
-                              const body = promptDrafts[prompt.id] ?? prompt.body
-                              const previous = prompt.body
-                              patchCatalog((current) => ({
-                                ...current,
-                                prompts: (current.prompts || []).map((row) =>
-                                  row.id === prompt.id ? { ...row, body } : row,
-                                ),
-                              }))
-                              persistOrRevert(
-                                () => savePlatformPrompt(prompt.id, body),
-                                () => {
-                                  patchCatalog((current) => ({
-                                    ...current,
-                                    prompts: (current.prompts || []).map((row) =>
-                                      row.id === prompt.id ? { ...row, body: previous } : row,
-                                    ),
-                                  }))
-                                  setPromptDrafts((current) => ({ ...current, [prompt.id]: previous }))
-                                },
-                                t("admin.platform.promptSaved"),
-                              )
-                            }}
-                          >
-                            {t("admin.platform.savePrompt")}
-                          </Button>
-                        </div>
-                        <AccordionContent className="space-y-2 pb-3">
-                          <Textarea
-                            id={`prompt-${prompt.id}`}
-                            rows={group === "identity" ? 4 : 8}
-                            value={promptDrafts[prompt.id] ?? prompt.body}
-                            onChange={(event) =>
-                              setPromptDrafts((current) => ({ ...current, [prompt.id]: event.target.value }))
-                            }
-                          />
-                        </AccordionContent>
-                      </AccordionItem>
-                    ))}
-                </Accordion>
-              </CardContent>
-            </Card>
+                />
+              </div>
             )
-          })}
+          })()}
         </TabsContent>
 
         <TabsContent value="orgs">

@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -13,7 +14,7 @@ import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { DOCUMENT_ROLES, type DocumentOrigin, type DocumentRole, type ProgrammeBindings } from "@/lib/programme/domain"
 import { isChapterDocumentId } from "@/lib/programme/source-set-bindings"
-import { bindProgrammeDocumentRole, seedProgrammeCorpusFixtures } from "@/lib/actions/programme"
+import { bindProgrammeDocumentRole, createWritingGuide } from "@/lib/actions/programme"
 import { bindPublishedProgrammeAsPolicy, type ProgrammePublicationSummary } from "@/lib/actions/publish"
 import type { NotifyKind } from "@/lib/notify"
 
@@ -55,52 +56,42 @@ export function ProgrammeDocumentRoles({
   startTransition,
 }: Props) {
   const { t } = useI18n()
+  const [guidePrompt, setGuidePrompt] = useState("")
   const sourceDocs = corpusDocs.filter((doc) => !isChapterDocumentId(bindings, doc.id))
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">{t("workspace.programme.corpusHint")}</p>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          disabled={pending || !canBind}
-          onClick={() =>
-            startTransition(async () => {
-              const result = await seedProgrammeCorpusFixtures(workspaceId)
-              onMessage(
-                result.error ||
-                  t("workspace.programme.corpusSeeded", undefined, {
-                    count: String(result.data?.created ?? 0),
-                  }),
-                result.error ? "error" : "success",
-              )
-              onRefresh()
-            })
-          }
-        >
-          {t("workspace.programme.seedCorpus")}
-        </Button>
-      </div>
-      <ul className="space-y-2 text-sm">
-        {sourceDocs.length === 0 && (
-          <li>
-            {t("workspace.programme.corpusEmpty")} {t("workspace.programme.emptyNext.corpus")}
-          </li>
-        )}
-        {sourceDocs.map((doc) => (
-          <li key={doc.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2">
-            <span className="flex min-w-0 flex-wrap items-center gap-2">
-              <DocumentFileTypeIcon extension={doc.fileExtension} />
-              <span>{doc.title}</span>
-              <Badge variant="outline">
-                {doc.origin === "authority"
-                  ? t("workspace.programme.corpusOriginAuthority")
-                  : doc.origin === "generated"
-                    ? t("workspace.programme.corpusOriginGenerated")
-                    : doc.origin === "published"
-                      ? t("workspace.programme.corpusOriginPublished")
-                      : t("workspace.programme.corpusOriginUploaded")}
-              </Badge>
-            </span>
+    <div className="space-y-4">
+      <div className="overflow-hidden rounded-lg border">
+        <div className="border-b bg-muted px-4 py-3">
+          <p className="text-sm text-muted-foreground">{t("workspace.programme.corpusHint")}</p>
+        </div>
+        <ul className="divide-y text-sm">
+          {sourceDocs.length === 0 ? (
+            <li className="px-4 py-6 text-muted-foreground">
+              {t("workspace.programme.corpusEmpty")} {t("workspace.programme.emptyNext.corpus")}
+            </li>
+          ) : null}
+          {sourceDocs.map((doc) => {
+            const file = doc.title.match(/^(.*)\.(md|markdown|pdf|docx?|txt)$/i)
+            const name = file ? file[1].replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim() : doc.title
+            return (
+            <li key={doc.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+              <span className="flex min-w-0 flex-wrap items-center gap-2">
+                <DocumentFileTypeIcon extension={doc.fileExtension} />
+                <span>
+                  <span className="block">{name}</span>
+                  {file ? <span className="text-xs text-muted-foreground">{file[2].toLowerCase()}</span> : null}
+                </span>
+                <Badge variant="outline">
+                  {doc.origin === "authority"
+                    ? t("workspace.programme.corpusOriginAuthority")
+                    : doc.origin === "generated"
+                      ? t("workspace.programme.corpusOriginGenerated")
+                      : doc.origin === "published"
+                        ? t("workspace.programme.corpusOriginPublished")
+                        : t("workspace.programme.corpusOriginUploaded")}
+                </Badge>
+              </span>
             <label className="flex items-center gap-2 text-xs">
               <span className="text-muted-foreground">{t("workspace.programme.corpusRole")}</span>
               <Select
@@ -140,11 +131,46 @@ export function ProgrammeDocumentRoles({
               </Select>
             </label>
           </li>
-        ))}
-      </ul>
-      <div className="space-y-2 rounded-md border p-3">
-        <h3 className="text-sm font-medium">{t("workspace.programme.citePublishedTitle")}</h3>
-        <p className="text-sm text-muted-foreground">{t("workspace.programme.citePublishedHint")}</p>
+            )
+          })}
+        </ul>
+      </div>
+      <section className="space-y-3 rounded-lg border p-4">
+        <h3 className="text-sm font-semibold">{t("workspace.programme.documentRoles.programme_handbook")}</h3>
+        <p className="text-sm text-muted-foreground">{t("workspace.programme.writingGuideHelp")}</p>
+        <textarea
+          value={guidePrompt}
+          onChange={(event) => setGuidePrompt(event.target.value)}
+          placeholder={t("workspace.programme.writingGuidePrompt")}
+          rows={3}
+          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+          disabled={pending || !canBind}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending || !canBind}
+          onClick={() =>
+            startTransition(async () => {
+              const result = await createWritingGuide(workspaceId, guidePrompt)
+              onMessage(
+                result.error || t("workspace.programme.writingGuideCreated"),
+                result.error ? "error" : "success",
+              )
+              if (!result.error && result.data) onBindingsChange(result.data)
+              onRefresh()
+            })
+          }
+        >
+          {t("workspace.programme.writingGuideCreate")}
+        </Button>
+      </section>
+      <section className="overflow-hidden rounded-lg border">
+        <div className="border-b bg-muted px-4 py-3">
+          <h3 className="text-sm font-semibold">{t("workspace.programme.citePublishedTitle")}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">{t("workspace.programme.citePublishedHint")}</p>
+        </div>
+        <div className="p-4">
         {citablePublications.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("workspace.programme.citePublishedEmpty")}</p>
         ) : (
@@ -179,7 +205,8 @@ export function ProgrammeDocumentRoles({
             </Button>
           </div>
         )}
-      </div>
+        </div>
+      </section>
     </div>
   )
 }

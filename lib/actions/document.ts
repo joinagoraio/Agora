@@ -1748,14 +1748,8 @@ export async function generateWorkspaceDocumentDraft(
     return { error: "Workspace not found" }
   }
 
-  // Get user's language preference
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("language")
-    .eq("id", user.id)
-    .single()
-  
-  const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
+  const { writingLanguageForSpace } = await import("@/lib/programme/load-writing-language")
+  const userLanguage = await writingLanguageForSpace(workspace.space_id)
 
   // Use all workspace knowledge for initial document generation
   // This ensures the AI has access to all available workspace knowledge

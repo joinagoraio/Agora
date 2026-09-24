@@ -28,8 +28,9 @@ export async function listSpaceTemplates(spaceId: string): Promise<{
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("programme_templates")
-    .select("id, space_id, name, quality_rules, output_form, created_at")
+    .select("id, space_id, name, quality_rules, output_form, shared, created_at")
     .eq("space_id", spaceId)
+    .eq("shared", true)
     .order("created_at", { ascending: true })
   if (error) return { error: error.message, data: [] }
   const templates = (data || []).map(mapTemplateRow)
@@ -65,7 +66,7 @@ export async function getTemplateWithNodes(templateId: string): Promise<{
   const supabase = await createClient()
   const { data: template, error } = await supabase
     .from("programme_templates")
-    .select("id, space_id, name, quality_rules, output_form, created_at")
+    .select("id, space_id, name, quality_rules, output_form, shared, created_at")
     .eq("id", templateId)
     .maybeSingle()
   if (error || !template) return { error: error?.message || "Template not found", data: null }
@@ -116,8 +117,9 @@ export async function createProgrammeTemplate(input: {
       name: parsed.data.name,
       quality_rules: parsed.data.qualityRules ?? null,
       output_form: parsed.data.outputForm ?? null,
+      shared: true,
     })
-    .select("id, space_id, name, quality_rules, output_form, created_at")
+    .select("id, space_id, name, quality_rules, output_form, shared, created_at")
     .single()
   if (error || !data) return { error: error?.message || "Failed to create template" }
   revalidatePath(`/spaces/${input.spaceId}`)
@@ -415,10 +417,16 @@ export async function saveProgrammeAsTemplate(input: { workspaceId: string; name
     return { error: t("workspace.programme.saveAsTemplateNameRequired") }
   }
 
-  const cloned = await cloneProgrammeTemplate(workspace.space_id, template.id, name)
-  if (cloned.error || !cloned.data) return { error: cloned.error || t("space.settings.templates.saveError") }
+  const { data, error } = await supabase
+    .from("programme_templates")
+    .update({ name, shared: true })
+    .eq("id", template.id)
+    .select("id, space_id, name, quality_rules, output_form, shared, created_at")
+    .single()
+  if (error || !data) return { error: error?.message || t("space.settings.templates.saveError") }
   revalidatePath(`/workspaces/${input.workspaceId}/programme`)
-  return { data: cloned.data }
+  revalidatePath(`/spaces/${workspace.space_id}`)
+  return { data: { template: mapTemplateRow(data) } }
 }
 
 /** Idempotent handbook-shaped default. Second call returns the existing row. */

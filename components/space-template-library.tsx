@@ -39,7 +39,6 @@ import {
   getTemplateWithNodes,
   listSpaceTemplates,
   reorderOutlineNodes,
-  seedHandbookTemplateIfNone,
   updateProgrammeTemplate,
   upsertOutlineNode,
 } from "@/lib/actions/template"
@@ -288,21 +287,6 @@ export function SpaceTemplateLibrary({ spaceId, hideIntro = false }: Props) {
     })
   }
 
-  const seedHandbook = () => {
-    startTransition(async () => {
-      const seeded = await seedHandbookTemplateIfNone(spaceId)
-      if (seeded.error || !seeded.data) {
-        notify(seeded.error || t("space.settings.templates.saveError"), "error")
-        return
-      }
-      notify(
-        seeded.data.created ? t("space.settings.templates.seeded") : t("space.settings.templates.seedExists"),
-        seeded.data.created ? "success" : "info",
-      )
-      refreshList(seeded.data.template.id)
-    })
-  }
-
   const nodeForm = (
     <ChapterFields
       titleId={editingNodeId ? `chapter-title-${editingNodeId}` : "chapter-title-new"}
@@ -348,9 +332,6 @@ export function SpaceTemplateLibrary({ spaceId, hideIntro = false }: Props) {
             <Button disabled={pending} onClick={createBlank}>
               {t("space.settings.templates.create")}
             </Button>
-            <Button variant="outline" disabled={pending} onClick={seedHandbook}>
-              {t("space.settings.templates.seedHandbook")}
-            </Button>
           </div>
         </div>
       ) : (
@@ -367,9 +348,6 @@ export function SpaceTemplateLibrary({ spaceId, hideIntro = false }: Props) {
                 <DropdownMenuContent align="end" className="w-52">
                   <DropdownMenuItem disabled={pending} onSelect={createBlank}>
                     {t("space.settings.templates.create")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem disabled={pending} onSelect={seedHandbook}>
-                    {t("space.settings.templates.seedHandbook")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

@@ -114,7 +114,7 @@ export function SpaceLlmSettings({ spaceId, compact = false, hideHeading = false
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">{t("space.agents.modelsGlobalOnly")}</p>
         {state.usesAgoraKeys ? (
-          <p className="text-sm text-muted-foreground">{t("admin.agents.platformKeysOnly")}</p>
+          <p className="text-sm text-muted-foreground">{t("space.agents.platformKeysNote")}</p>
         ) : null}
       </div>
     )
@@ -130,7 +130,7 @@ export function SpaceLlmSettings({ spaceId, compact = false, hideHeading = false
           {state.policy === "authority_only"
             ? t("space.agents.modelsDescriptionAuthorityOnly")
             : t("space.agents.modelsDescriptionOverride")}
-          {state.usesAgoraKeys ? ` ${t("admin.agents.platformKeysOnly")}` : ""}
+          {state.usesAgoraKeys ? ` ${t("space.agents.platformKeysNote")}` : ""}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

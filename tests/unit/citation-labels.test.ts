@@ -17,6 +17,15 @@ describe("citation labels", () => {
     expect(formatCitationLabel({ documentId: "missing" })).toBe("missing")
   })
 
+  it("reads a filename title as a name", () => {
+    expect(
+      formatCitationLabel(
+        { documentId: "p1" },
+        [{ id: "p1", title: "02-woonprogramma-2024-stationspilots.md" }],
+      ),
+    ).toBe("02 woonprogramma 2024 stationspilots")
+  })
+
   it("collects cited document ids from nested findings", () => {
     expect(
       citedDocumentIdsFromUnknown([

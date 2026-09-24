@@ -197,7 +197,7 @@ export function builtinPlatformPrompt(id: string): string {
 export function applyPromptLanguage(body: string, language: string): string {
   const lang = language.trim()
   if (!lang) return body
-  return `${body}\n\nLANGUAGE REQUIREMENT:\n- The user's preferred language is ${lang}\n- You MUST write all output in ${lang}.`
+  return `${body}\n\nLANGUAGE REQUIREMENT:\n- Write all prose in ${lang}. This is the authority's writing language.\n- Copy quotations exactly as they appear in the source, even when that language differs.`
 }
 
 export async function ensurePlatformPromptSeeds() {

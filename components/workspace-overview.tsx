@@ -135,7 +135,7 @@ export function WorkspaceOverview({
     setIsEnhancing(true)
     try {
       if (field === "context") {
-        const result = await enhanceContextText(targetText.trim())
+        const result = await enhanceContextText(targetText.trim(), workspaceId)
         if (result.error) {
           setError(result.error)
           return
@@ -147,6 +147,7 @@ export function WorkspaceOverview({
       } else {
         const result = await enhanceWorkspaceText(targetText.trim(), {
           field,
+          workspaceId,
           workspaceName: draftName,
           summary: field === "description" ? draftSummary : undefined,
         })

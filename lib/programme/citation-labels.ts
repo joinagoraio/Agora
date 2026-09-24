@@ -18,6 +18,12 @@ export type CitationSection = {
   pageNumber?: number
 }
 
+function readableSourceTitle(title: string): string {
+  const file = title.match(/^(.*)\.(md|markdown|pdf|docx?|txt)$/i)
+  if (!file) return title
+  return file[1].replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim() || title
+}
+
 export function formatCitationLabel(
   citation: CitationLike,
   documents: CitationDocument[] = [],

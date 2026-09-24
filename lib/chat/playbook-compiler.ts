@@ -16,6 +16,7 @@ export type ChatScope = "authority" | "programme"
 
 export type CompileSystemPromptInput = {
   kind: PromptKind
+  /** Authority writing language. The interface language is separate and must not be passed here. */
   userLanguage: "Dutch" | "English"
   /** Identity layer. Omit to use the built-in default for `kind`. */
   identity?: string
@@ -107,6 +108,12 @@ const STRUCTURED_SAFETY_CORE = `SAFETY AND GROUNDING (code-owned):
 export const DEFAULT_MEASURES_PLAYBOOK = `MEASURE GENERATION RULES:
 - Distinguish ambition, goal, measure, and implementation clearly (use those exact type values)
 - Prefer concrete, implementable measures over vague aspirations
+- For each item with type "measure", state all of the following in the existing fields:
+  - the goal it serves, as one entry in contributesToVision, taken from the vision or the task in the evidence
+  - the role this authority takes, in ownerRole (for example directs, convenes, funds, regulates, or monitors). Do not assume the authority is a province
+  - the kind of measure, as the start of specificAction, using exactly one of these labels: "Research:", "Administrative agreement:", "Financial or legal instrument:", "Project:"
+  - the area of effect, in geography, only when the evidence names one. Otherwise omit geography
+- When the vision names a provincial interest or principle, put it in provincialInterests
 - Every measure MUST include at least one citation with a real documentId from the provided evidence list
 - If effectsDeviation is true, effectsJustification is required
 - Align measures with the programme outline chapters when provided
@@ -160,21 +167,18 @@ export const DEFAULT_DRAFT_PLAYBOOK = `STYLE AND FORMAT:
 const JSON_KINDS: PromptKind[] = ["measures", "analysis", "vision", "oer", "qc"]
 
 function languageBlock(userLanguage: "Dutch" | "English", kind: PromptKind): string {
-  const other = userLanguage === "Dutch" ? "Dutch" : "English"
+  const shared = `LANGUAGE REQUIREMENT:
+- Write all prose in ${userLanguage}. This is the authority's writing language.
+- Copy quotations exactly as they appear in the source, even when that language differs.`
+
   if (JSON_KINDS.includes(kind) || kind === "draft") {
-    return `LANGUAGE REQUIREMENT:
-- The user's preferred language is ${userLanguage}
-- You MUST write all narrative fields (title, specificAction, narrative, justifications) in ${userLanguage}
-- JSON keys and enum values (type, effectsDirection) stay in English as specified
-- Only use ${other} for human-readable text fields`
+    return `${shared}
+- This applies to narrative fields (title, specificAction, narrative, summary, justifications).
+- JSON keys and enum values (type, effectsDirection, disposition) stay in English as specified.`
   }
 
-  return `LANGUAGE REQUIREMENT:
-- The user's preferred language is ${userLanguage}
-- You MUST respond in ${userLanguage} at all times
-- All your responses, explanations, and answers must be in ${userLanguage}
-- If the user asks questions in ${other}, respond in ${userLanguage}
-- Only use ${other} for your responses`
+  return `${shared}
+- Reply in ${userLanguage} even when the question is in another language.`
 }
 
 function chatSafetyCore(options: {

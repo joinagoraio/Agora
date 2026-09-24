@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getClientIdentifier } from "@/lib/utils/request"
 import { assertUUIDParam } from "@/lib/utils/param-validation"
 import { ValidationError } from "@/lib/utils/errors"
+import { writingLanguageName } from "@/lib/programme/writing-language"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -104,7 +105,11 @@ export async function POST(
       return withRateLimit(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
     }
 
-    const { data: space } = await adminClient.from("spaces").select("name").eq("id", spaceId).maybeSingle()
+    const { data: space } = await adminClient
+      .from("spaces")
+      .select("name, writing_language")
+      .eq("id", spaceId)
+      .maybeSingle()
     const { data: items } = await adminClient
       .from("space_items")
       .select("id, payload")
@@ -139,7 +144,7 @@ export async function POST(
     const layers = await loadPromptLayers("chat")
     const compiled = compileSystemPrompt({
       kind: "chat",
-      userLanguage: parsed.data.language === "nl" ? "Dutch" : "English",
+      userLanguage: writingLanguageName(space?.writing_language),
       chatScope: "authority",
       identity: layers.identity,
       playbookBody: layers.playbook,

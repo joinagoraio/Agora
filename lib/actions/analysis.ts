@@ -331,8 +331,8 @@ async function executeBoundAgentAnalysis(input: {
   if (!gate.ok) return { error: gate.reason }
 
   const sections = await loadSourceSections(input.workspaceId, sourceIds)
-  const { data: profile } = await supabase.from("profiles").select("language").eq("id", user?.id || "").maybeSingle()
-  const userLanguage = profile?.language === "nl" ? "Dutch" : "English"
+  const { writingLanguageForSpace } = await import("@/lib/programme/load-writing-language")
+  const userLanguage = await writingLanguageForSpace(workspace.space_id)
 
   let outlineBlock = ""
   if (bindings.templateId) {

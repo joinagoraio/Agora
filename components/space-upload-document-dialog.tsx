@@ -1,6 +1,7 @@
 "use client"
 
-import { type ReactNode, useMemo, useRef, useState } from "react"
+import { type ReactNode, useRef, useState } from "react"
+import { ClassificationPicker } from "@/components/classification-picker"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -14,13 +15,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Loader2, Upload, X } from "lucide-react"
 import { IconTooltip } from "@/components/icon-tooltip"
@@ -61,16 +55,7 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
     resetFileInput()
   }
 
-  const classificationOptions = useMemo(
-    () => [
-      { value: "public" as const, label: t("workspace.common.classification.public") },
-      { value: "internal" as const, label: t("workspace.common.classification.internal") },
-      { value: "confidential" as const, label: t("workspace.common.classification.confidential") },
-    ],
-    [t],
-  )
-
-  const MAX_FILE_SIZE_BYTES = 9 * 1024 * 1024
+  const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 
   const safeJsonParse = async (res: Response, step: string): Promise<any> => {
     const text = await res.text()
@@ -281,18 +266,12 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
 
           <div className="space-y-2">
             <Label>{t("workspace.common.classification.label")}</Label>
-            <Select value={classification} onValueChange={(value) => setClassification(value as typeof classification)}>
-              <SelectTrigger>
-                <SelectValue placeholder={t("space.documents.upload.classificationPlaceholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                {classificationOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ClassificationPicker
+              value={classification}
+              onChange={setClassification}
+              scope="shared"
+              idPrefix="space-classification"
+            />
           </div>
 
           <div className="space-y-2">

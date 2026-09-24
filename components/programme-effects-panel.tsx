@@ -11,9 +11,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { ProgrammeToolSplit, ProgrammeToolSwitch } from "@/components/programme-tool-sheet"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { updateMeasureEffects } from "@/lib/actions/measures"
-import { runBoundAgentAnalysis } from "@/lib/actions/analysis"
 import { effectsDirectionSchema } from "@/lib/programme/structured-artefacts"
 import { matchFindingToMeasure } from "@/lib/programme/analysis-reports"
 import type { NotifyKind } from "@/lib/notify"
@@ -26,6 +26,17 @@ type MeasureRow = {
   effects_direction: string
   effects_deviation: boolean
   effects_justification: string | null
+}
+
+type FindingRow = {
+  id?: string
+  measureId?: string
+  summary?: string
+  oerTheme?: string
+  effectsDirection?: string
+  effectsDeviation?: boolean
+  effectsJustification?: string
+  citations?: Array<{ quote?: string }>
 }
 
 type Props = {
@@ -51,6 +62,8 @@ export function ProgrammeEffectsPanel({
 }: Props) {
   const { t } = useI18n()
   const [pending, startTransition] = useTransition()
+  const [view, setView] = useState<"record" | "report">("record")
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<
     Record<
       string,
@@ -77,9 +90,14 @@ export function ProgrammeEffectsPanel({
     setDrafts(next)
   }, [measures])
 
+  const directionLabel = (value: string) => t(`workspace.programme.effectsDirections.${value}`, value)
+  const latestEffects = reports.find((report) => report.report_type === "effects")
+  const reportRows: FindingRow[] = Array.isArray(latestEffects?.findings) ? (latestEffects.findings as FindingRow[]) : []
+  const active = measures.find((measure) => measure.id === selectedId) ?? measures[0] ?? null
+
   if (measures.length === 0) {
     return (
-      <div className="space-y-3">
+      <div className="space-y-3 p-6">
         <p className="text-sm text-muted-foreground">
           {t("workspace.programme.effectsEmpty")} {t("workspace.programme.emptyNext.effects")}
         </p>
@@ -90,208 +108,244 @@ export function ProgrammeEffectsPanel({
     )
   }
 
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">{t("workspace.programme.effectsHint")}</p>
-      <Button
-        variant="outline"
-        disabled={pending}
-        onClick={() =>
-          startTransition(async () => {
-            const result = await runBoundAgentAnalysis({ workspaceId, kind: "oer" })
-            if (result.error) onMessage(result.error, "error")
-            else onMessage(t("workspace.programme.oerDone"))
-            onRefresh()
-          })
-        }
-      >
-        {t("workspace.programme.runOer")}
-      </Button>
+  const activeDraft = active ? drafts[active.id] : null
+  const storedDirection = active && DIRECTIONS.includes(active.effects_direction as (typeof DIRECTIONS)[number])
+    ? active.effects_direction
+    : "unknown"
+  const matchesRecord = Boolean(
+    active &&
+      activeDraft &&
+      recordedIds.includes(active.id) &&
+      activeDraft.effectsDirection === storedDirection &&
+      activeDraft.effectsDeviation === Boolean(active.effects_deviation) &&
+      activeDraft.effectsJustification === (active.effects_justification || ""),
+  )
+  const needsJustification = Boolean(activeDraft?.effectsDeviation && !activeDraft.effectsJustification.trim())
+  const activeFinding = active
+    ? reportRows.find((item) =>
+        matchFindingToMeasure(
+          {
+            id: item.id || active.id,
+            summary: item.summary || active.title,
+            disposition: "adapt",
+            citations: [],
+            measureId: item.measureId,
+          },
+          [{ id: active.id, title: active.title }],
+        ),
+      )
+    : null
 
-      {(() => {
-        const latestEffects = reports.find((report) => report.report_type === "effects")
-        const rows = Array.isArray(latestEffects?.findings) ? latestEffects.findings : []
-        if (rows.length === 0) return null
-        return (
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b text-muted-foreground">
-                  <th className="p-2">{t("workspace.programme.measuresTitle")}</th>
-                  <th className="p-2">{t("workspace.programme.oerTheme")}</th>
-                  <th className="p-2">{t("workspace.programme.effectsDirectionLabel")}</th>
-                  <th className="p-2">{t("workspace.programme.effectsDeviation")}</th>
-                  <th className="p-2">{t("workspace.programme.effectsJustification")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((item: {
-                  id?: string
-                  measureId?: string
-                  summary?: string
-                  oerTheme?: string
-                  effectsDirection?: string
-                  effectsDeviation?: boolean
-                  effectsJustification?: string
-                  citations?: Array<{ quote?: string }>
-                }) => {
-                  const measure = matchFindingToMeasure(
-                    {
-                      id: item.id || item.measureId || "finding",
-                      summary: item.summary || "",
-                      disposition: "adapt",
-                      citations: [],
-                      measureId: item.measureId,
-                    },
-                    measures,
-                  )
-                  return (
-                    <tr key={item.id || `${item.measureId}-${item.oerTheme}`} className="border-b align-top">
-                      <td className="p-2">{measure?.title || item.summary}</td>
-                      <td className="p-2">{item.oerTheme || "—"}</td>
-                      <td className="p-2">{item.effectsDirection || "unknown"}</td>
-                      <td className="p-2">{item.effectsDeviation ? "yes" : "no"}</td>
-                      <td className="p-2">{item.effectsJustification || item.citations?.[0]?.quote || "—"}</td>
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 border-b px-6 pt-4">
+        <ProgrammeToolSwitch
+          label={t("workspace.programme.effectsViewLabel")}
+          value={view}
+          options={[
+            { id: "record", label: t("workspace.programme.effectsView.record") },
+            { id: "report", label: t("workspace.programme.effectsView.report") },
+          ]}
+          onChange={setView}
+        />
+      </div>
+      {view === "report" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <section className="overflow-hidden rounded-lg border bg-background">
+            <div className="border-b bg-muted px-4 py-3">
+              <h3 className="text-sm font-semibold">{t("workspace.programme.effectsReportTitle")}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">{t("workspace.programme.effectsReportHint")}</p>
+            </div>
+            {reportRows.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-muted-foreground">{t("workspace.programme.effectsReportEmpty")}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b text-muted-foreground">
+                      <th className="p-3 font-medium">{t("workspace.programme.measuresTitle")}</th>
+                      <th className="p-3 font-medium">{t("workspace.programme.oerTheme")}</th>
+                      <th className="p-3 font-medium">{t("workspace.programme.effectsDirectionLabel")}</th>
+                      <th className="p-3 font-medium">{t("workspace.programme.effectsDeviation")}</th>
                     </tr>
+                  </thead>
+                  <tbody>
+                    {reportRows.map((item) => {
+                      const measure = matchFindingToMeasure(
+                        {
+                          id: item.id || item.measureId || "finding",
+                          summary: item.summary || "",
+                          disposition: "adapt",
+                          citations: [],
+                          measureId: item.measureId,
+                        },
+                        measures,
+                      )
+                      return (
+                        <tr key={item.id || `${item.measureId}-${item.oerTheme}`} className="border-b align-top">
+                          <td className="p-3">{measure?.title || item.summary}</td>
+                          <td className="p-3">{item.oerTheme || "—"}</td>
+                          <td className="p-3">{directionLabel(item.effectsDirection || "unknown")}</td>
+                          <td className="p-3">
+                            {item.effectsDeviation ? t("workspace.programme.effectsYes") : t("workspace.programme.effectsNo")}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </div>
+      ) : (
+        <ProgrammeToolSplit
+          list={
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="shrink-0 border-b bg-muted px-4 py-3">
+                <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  {t("workspace.programme.effectsListTitle")}
+                </h3>
+                <p className="mt-1 text-xs text-foreground">{t("workspace.programme.effectsListHint")}</p>
+              </div>
+              <ul className="min-h-0 flex-1 overflow-y-auto bg-background text-sm">
+                {measures.map((measure) => {
+                  const selected = active?.id === measure.id
+                  const stored = DIRECTIONS.includes(measure.effects_direction as (typeof DIRECTIONS)[number])
+                    ? measure.effects_direction
+                    : "unknown"
+                  return (
+                    <li key={measure.id} className="border-b">
+                      <button
+                        type="button"
+                        aria-current={selected ? "true" : undefined}
+                        className={`w-full border-l-2 px-4 py-3 text-left ${selected ? "border-l-foreground bg-background" : "border-l-transparent hover:bg-muted/30"}`}
+                        onClick={() => setSelectedId(measure.id)}
+                      >
+                        <span className="block font-medium">{measure.title}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {directionLabel(stored)}
+                          {" · "}
+                          {recordedIds.includes(measure.id)
+                            ? t("workspace.programme.effectsSavedState")
+                            : t("workspace.programme.effectsNotRecorded")}
+                        </span>
+                      </button>
+                    </li>
                   )
                 })}
-              </tbody>
-            </table>
-          </div>
-        )
-      })()}
-
-      <ul className="space-y-4">
-        {measures.map((m) => {
-          const draft = drafts[m.id]
-          if (!draft) return null
-          const needsJustification = draft.effectsDeviation && !draft.effectsJustification.trim()
-          const matchesRecord =
-            recordedIds.includes(m.id) &&
-            draft.effectsDirection === (DIRECTIONS.includes(m.effects_direction as (typeof DIRECTIONS)[number])
-              ? m.effects_direction
-              : "unknown") &&
-            draft.effectsDeviation === Boolean(m.effects_deviation) &&
-            draft.effectsJustification === (m.effects_justification || "")
-          const latestEffects = reports.find((report) => report.report_type === "effects")
-          const finding = Array.isArray(latestEffects?.findings)
-            ? latestEffects.findings.find((item: { measureId?: string; id?: string; summary?: string }) =>
-                matchFindingToMeasure(
-                  {
-                    id: item.id || m.id,
-                    summary: item.summary || m.title,
-                    disposition: "adapt",
-                    citations: [],
-                    measureId: item.measureId,
-                  },
-                  [{ id: m.id, title: m.title }],
-                ),
-              )
-            : null
-          return (
-            <li key={m.id} className="space-y-3 rounded-md border p-3">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <div>
-                  <p className="font-medium">{m.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    [{m.workflow_status}] {m.measure_type}
-                  </p>
-                  {finding?.summary && (
-                    <p className="text-xs text-muted-foreground">
-                      {t("workspace.programme.oerFinding", undefined, { summary: String(finding.summary) })}
-                    </p>
-                  )}
-                </div>
-                <Button
-                  size="sm"
-                  disabled={pending || needsJustification || matchesRecord}
-                  onClick={() =>
-                    startTransition(async () => {
-                      const result = await updateMeasureEffects(workspaceId, m.id, {
-                        effectsDirection: draft.effectsDirection,
-                        effectsDeviation: draft.effectsDeviation,
-                        effectsJustification: draft.effectsJustification,
-                      })
-                      if (result.error) {
-                        onMessage(result.error, "error")
-                        return
+              </ul>
+            </div>
+          }
+          detail={
+            active && activeDraft ? (
+              <div className="p-6">
+                <section className="overflow-hidden rounded-lg border bg-background">
+                  <div className="flex flex-wrap items-start justify-between gap-2 border-b bg-muted px-4 py-3">
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-semibold">{active.title}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {active.measure_type}
+                        {" · "}
+                        {active.workflow_status}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      disabled={pending || needsJustification || matchesRecord}
+                      onClick={() =>
+                        startTransition(async () => {
+                          const result = await updateMeasureEffects(workspaceId, active.id, {
+                            effectsDirection: activeDraft.effectsDirection,
+                            effectsDeviation: activeDraft.effectsDeviation,
+                            effectsJustification: activeDraft.effectsJustification,
+                          })
+                          if (result.error) {
+                            onMessage(result.error, "error")
+                            return
+                          }
+                          onMessage(t("workspace.programme.effectsSaved", undefined, { title: active.title }))
+                          onRefresh()
+                        })
                       }
-                      onMessage(t("workspace.programme.effectsSaved", undefined, { title: m.title }))
-                      onRefresh()
-                    })
-                  }
-                >
-                  {matchesRecord ? t("workspace.programme.effectsSavedState") : t("workspace.programme.effectsSave")}
-                </Button>
+                    >
+                      {matchesRecord ? t("workspace.programme.effectsSavedState") : t("workspace.programme.effectsSave")}
+                    </Button>
+                  </div>
+                  <div className="space-y-4 px-4 py-4">
+                    {activeFinding?.summary ? (
+                      <p className="text-sm text-muted-foreground">
+                        {t("workspace.programme.oerFinding", undefined, { summary: String(activeFinding.summary) })}
+                      </p>
+                    ) : null}
+                    <div className="space-y-1">
+                      <Label htmlFor={`dir-${active.id}`}>{t("workspace.programme.effectsDirectionLabel")}</Label>
+                      <Select
+                        value={activeDraft.effectsDirection}
+                        onValueChange={(value) =>
+                          setDrafts((prev) => ({
+                            ...prev,
+                            [active.id]: {
+                              ...prev[active.id],
+                              effectsDirection: value as (typeof DIRECTIONS)[number],
+                            },
+                          }))
+                        }
+                      >
+                        <SelectTrigger id={`dir-${active.id}`} data-guidance-target="record-effects">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DIRECTIONS.map((direction) => (
+                            <SelectItem key={direction} value={direction}>
+                              {directionLabel(direction)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <label className="flex items-center gap-2 text-sm" htmlFor={`dev-${active.id}`}>
+                      <input
+                        id={`dev-${active.id}`}
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={activeDraft.effectsDeviation}
+                        onChange={(event) =>
+                          setDrafts((prev) => ({
+                            ...prev,
+                            [active.id]: { ...prev[active.id], effectsDeviation: event.target.checked },
+                          }))
+                        }
+                      />
+                      {t("workspace.programme.effectsDeviation")}
+                    </label>
+                    {activeDraft.effectsDeviation ? (
+                      <div className="space-y-1">
+                        <Label htmlFor={`just-${active.id}`}>{t("workspace.programme.effectsJustification")}</Label>
+                        <Textarea
+                          id={`just-${active.id}`}
+                          rows={3}
+                          value={activeDraft.effectsJustification}
+                          onChange={(event) =>
+                            setDrafts((prev) => ({
+                              ...prev,
+                              [active.id]: { ...prev[active.id], effectsJustification: event.target.value },
+                            }))
+                          }
+                          placeholder={t("workspace.programme.effectsJustificationPlaceholder")}
+                        />
+                        {needsJustification ? (
+                          <p className="text-xs text-destructive">{t("workspace.programme.effectsJustificationRequired")}</p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                </section>
               </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label htmlFor={`dir-${m.id}`}>{t("workspace.programme.effectsDirectionLabel")}</Label>
-                  <Select
-                    value={draft.effectsDirection}
-                    onValueChange={(value) =>
-                      setDrafts((prev) => ({
-                        ...prev,
-                        [m.id]: {
-                          ...prev[m.id],
-                          effectsDirection: value as (typeof DIRECTIONS)[number],
-                        },
-                      }))
-                    }
-                  >
-                    <SelectTrigger id={`dir-${m.id}`} data-guidance-target={measures[0]?.id === m.id ? "record-effects" : undefined}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DIRECTIONS.map((d) => (
-                        <SelectItem key={d} value={d}>
-                          {t(`workspace.programme.effectsDirections.${d}`)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-end gap-2 pb-1">
-                  <input
-                    id={`dev-${m.id}`}
-                    type="checkbox"
-                    className="h-4 w-4"
-                    checked={draft.effectsDeviation}
-                    onChange={(e) =>
-                      setDrafts((prev) => ({
-                        ...prev,
-                        [m.id]: { ...prev[m.id], effectsDeviation: e.target.checked },
-                      }))
-                    }
-                  />
-                  <Label htmlFor={`dev-${m.id}`}>{t("workspace.programme.effectsDeviation")}</Label>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor={`just-${m.id}`}>{t("workspace.programme.effectsJustification")}</Label>
-                <Textarea
-                  id={`just-${m.id}`}
-                  rows={3}
-                  value={draft.effectsJustification}
-                  onChange={(e) =>
-                    setDrafts((prev) => ({
-                      ...prev,
-                      [m.id]: { ...prev[m.id], effectsJustification: e.target.value },
-                    }))
-                  }
-                  placeholder={t("workspace.programme.effectsJustificationPlaceholder")}
-                />
-                {needsJustification && (
-                  <p className="text-xs text-destructive">{t("workspace.programme.effectsJustificationRequired")}</p>
-                )}
-              </div>
-            </li>
-          )
-        })}
-      </ul>
+            ) : null
+          }
+        />
+      )}
     </div>
   )
 }

@@ -12,7 +12,7 @@ export const HELP_GLOSSARY: Record<string, string> = {
   research:
     "Legacy workspace kind. Not a create-path. Explore with Ask on authority documents, or start a programme.",
   bindings:
-    "Which vision, effects report, handbook, and existing-policy files constrain this programme. Completing bind requires a vision and an existing-policy file. During setup, pick them in the three dropdowns on this page.",
+    "Which vision, effects report, writing guide, and existing-policy files constrain this programme. Completing bind requires a vision and an existing-policy file. During setup, pick them in the three dropdowns on this page.",
   environmental_vision:
     "The environmental vision is the adopted spatial strategy this programme must follow. On setup, pick it in the Vision dropdown.",
   existing_policy:
@@ -106,10 +106,10 @@ export const HELP_CORPUS = `
 Agora is where a team produces programmes: analyse sources, draft chapters, review, and export one official document.
 
 Display names (never use storage names in answers to users):
-- Authority (NL: Bevoegd gezag) — tenant. Chrome shows the proper name (e.g. Provincie Flevoland). URL still /spaces.
+- Authority (NL: Bevoegd gezag) — tenant. Chrome shows the proper name (e.g. your province or municipality). URL still /spaces.
 - Programme — one programme. Home is /workspaces/{id}/programme: the document itself, plus a Knowledge view. Tools (analysis, review, export) open over the document. Structure is the document reduced to chapter titles and descriptions (chapters list → Edit structure). One programme → one official programme document (chapters inside). Some programmes bind a vision and an effects report; those are document roles, not the product name.
 - Vision (omgevingsvisie) — authority Document with role environmental vision. Programmes bind it. It is not a programme.
-- Knowledge — Files (with roles: vision / effects / handbook / policy), Inherited, Evidence, Notes. The old research-folder library, restored here. Not a second programme document.
+- Knowledge — Files (with roles: vision / effects / writing guide / policy), Inherited, Evidence, Notes. The old research-folder library, restored here. Not a second programme document.
 - Ask — programme assistant (sources and drafts). Help — how Agora works. Separate.
 - Tenant admin — organisation above authorities. Dashboard Agents card → Settings opens Models: enable or disable providers and models, and choose Global / Global with authority override / Authorities only. API key fields stay hidden when the platform administrator set the organisation to use Agora keys; specialists can still be configured. When the platform administrator requires organisation keys, key fields follow that access option. Specialists are not managed from the profile menu.
 - Authority agents — named specialists on the authority page, between programmes and the shared library, visible to authority owners and admins only. Add or edit name, model, and purpose there. Also part of new-authority setup. Programmes bind those specialists under Properties → Agents; chapters may pick a draft agent.

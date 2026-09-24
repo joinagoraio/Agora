@@ -1,14 +1,15 @@
 "use client"
 
 import { useMemo, useState, useTransition, type ReactNode } from "react"
-import { ArrowLeft, BookOpen, LayoutTemplate, PenLine } from "lucide-react"
+import { ArrowLeft, LayoutTemplate, PenLine } from "lucide-react"
 
 import { UploadDocumentDialog } from "@/components/upload-document-dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { bindProgrammeDocumentRole, bindWorkspaceTemplate, seedProgrammeCorpusFixtures } from "@/lib/actions/programme"
-import { createBlankProgrammeOutline, ensureProgrammeOutline } from "@/lib/actions/outline"
+import { bindProgrammeDocumentRole, bindWorkspaceTemplate } from "@/lib/actions/programme"
+import { createBlankProgrammeOutline, previewDocxChapterHeadings } from "@/lib/actions/outline"
+import { createWorkspaceDocument } from "@/lib/actions/document"
 import { programmeSetupIncomplete, programmeSetupStep } from "@/lib/guidance/setup"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import type { ProgrammeBindings, ProgrammeTemplateSummary } from "@/lib/programme/domain"
@@ -52,6 +53,9 @@ export function ProgrammeSetupWizard({
   const { t } = useI18n()
   const [pending, startTransition] = useTransition()
   const [reviewingStructure, setReviewingStructure] = useState(false)
+  const [docxTitles, setDocxTitles] = useState<string[]>([])
+  const [docxHtml, setDocxHtml] = useState("")
+  const [docxName, setDocxName] = useState("")
   const derivedStep = programmeSetupStep(bindings)
   const step = reviewingStructure ? 1 : derivedStep
   const sourceDocs = useMemo(
@@ -67,16 +71,39 @@ export function ProgrammeSetupWizard({
     if (next && "environmentalVisionDocumentIds" in next) onBindingsChange(next)
   }
 
-  const createStandardOutline = () => {
+  const readDocx = (file: File) => {
+    const body = new FormData()
+    body.set("file", file)
     startTransition(async () => {
-      const result = await ensureProgrammeOutline(workspaceId, spaceId)
-      if (result.error) {
-        onMessage(result.error, "error")
+      const result = await previewDocxChapterHeadings(body)
+      if (result.error || !result.data) {
+        onMessage(result.error || t("workspace.programme.setupWizard.structureDocx"), "error")
         return
       }
-      if (result.data?.templateId) {
-        onBindingsChange({ ...bindings, templateId: result.data.templateId })
+      setDocxTitles(result.data.titles)
+      setDocxHtml(result.data.html)
+      setDocxName(result.data.fileName)
+    })
+  }
+
+  const acceptDocx = () => {
+    startTransition(async () => {
+      const created = await createBlankProgrammeOutline(workspaceId, spaceId, {
+        titles: docxTitles,
+        finishSetup: false,
+      })
+      if (created.error || !created.data) {
+        onMessage(created.error || t("workspace.programme.outlineLoadError"), "error")
+        return
       }
+      const stored = await createWorkspaceDocument(workspaceId, {
+        title: docxName.replace(/\.docx$/i, "") || docxName,
+        content: docxHtml,
+        classification: "internal",
+      })
+      if (stored.error) onMessage(stored.error, "error")
+      if (created.data.bindings) applyBindings(created.data.bindings)
+      setDocxTitles([])
       setReviewingStructure(false)
       onRefresh()
     })
@@ -124,17 +151,6 @@ export function ProgrammeSetupWizard({
     })
   }
 
-  const seedSources = () => {
-    startTransition(async () => {
-      const result = await seedProgrammeCorpusFixtures(workspaceId)
-      if (result.error) {
-        onMessage(result.error, "error")
-        return
-      }
-      onRefresh()
-    })
-  }
-
   return (
     <div className="flex h-full min-h-0 flex-1 items-start justify-center overflow-y-auto px-6 py-16 [font-variant-ligatures:none]">
       <div className={cn("w-full space-y-8", step === 1 ? "max-w-4xl" : "max-w-lg")}>
@@ -148,13 +164,13 @@ export function ProgrammeSetupWizard({
                 {t("workspace.programme.setupWizard.structureBody")}
               </p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <StructureCard
-                icon={<BookOpen className="h-5 w-5" />}
-                title={t("workspace.programme.setupWizard.structureStandardTitle")}
-                body={t("workspace.programme.setupWizard.structureStandardBody")}
+                icon={<PenLine className="h-5 w-5" />}
+                title={t("workspace.programme.setupWizard.structureBlankTitle")}
+                body={t("workspace.programme.setupWizard.structureBlankBody")}
                 disabled={pending || !canEdit}
-                onClick={createStandardOutline}
+                onClick={createBlankOutline}
               />
               <div
                 className={cn(
@@ -192,13 +208,34 @@ export function ProgrammeSetupWizard({
                   </Select>
                 )}
               </div>
-              <StructureCard
-                icon={<PenLine className="h-5 w-5" />}
-                title={t("workspace.programme.setupWizard.structureBlankTitle")}
-                body={t("workspace.programme.setupWizard.structureBlankBody")}
+            </div>
+            <div className="space-y-3 rounded-xl border p-5">
+              <h2 className="text-base font-semibold">{t("workspace.programme.setupWizard.structureDocx")}</h2>
+              <p className="text-sm text-muted-foreground">{t("workspace.programme.setupWizard.structureDocxHelp")}</p>
+              <input
+                type="file"
+                accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 disabled={pending || !canEdit}
-                onClick={createBlankOutline}
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) readDocx(file)
+                }}
               />
+              {pending && docxTitles.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("workspace.programme.setupWizard.structureDocxWorking")}</p>
+              ) : null}
+              {docxTitles.length > 0 ? (
+                <div className="space-y-3">
+                  <ul className="list-disc space-y-1 pl-5 text-sm">
+                    {docxTitles.map((title) => (
+                      <li key={title}>{title}</li>
+                    ))}
+                  </ul>
+                  <Button type="button" disabled={pending || !canEdit} onClick={acceptDocx}>
+                    {t("workspace.programme.setupWizard.structureDocxConfirm")}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -263,9 +300,6 @@ export function ProgrammeSetupWizard({
                   </Button>
                 }
               />
-              <Button type="button" variant="ghost" disabled={pending || !canEdit} onClick={seedSources}>
-                {t("workspace.programme.setupWizard.sourcesSeed")}
-              </Button>
               <Button
                 type="button"
                 disabled={pending || !canEdit || !requiredSourcesReady}

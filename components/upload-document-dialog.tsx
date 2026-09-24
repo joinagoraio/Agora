@@ -1,7 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useMemo, useState, useRef } from "react"
+import { useState, useRef } from "react"
+import { ClassificationPicker } from "@/components/classification-picker"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,9 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertTriangle, Upload, X, Loader2 } from "lucide-react"
+import { Upload, X, Loader2 } from "lucide-react"
 import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { useRouter } from "next/navigation"
@@ -49,16 +48,7 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
   const router = useRouter()
   const { t } = useI18n()
 
-  const classificationOptions = useMemo(
-    () => [
-      { value: "public" as const, label: t("workspace.common.classification.public") },
-      { value: "internal" as const, label: t("workspace.common.classification.internal") },
-      { value: "confidential" as const, label: t("workspace.common.classification.confidential") },
-    ],
-    [t],
-  )
-
-  const MAX_FILE_SIZE_BYTES = 9 * 1024 * 1024
+  const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 
   const getFileId = (file: File) => `${file.name}-${file.size}`
 
@@ -318,26 +308,12 @@ export function UploadDocumentDialog({ workspaceId, onSuccess, trigger }: Upload
         <div className="space-y-4 py-4 min-w-0 overflow-hidden">
         <div className="space-y-2">
           <Label htmlFor="classification">{t("workspace.common.classification.label")}</Label>
-          <Select value={classification} onValueChange={(value: any) => setClassification(value)}>
-            <SelectTrigger id="classification">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {classificationOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {classification === "confidential" && (
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription className="text-xs">
-                {t("workspace.common.classification.confidentialNotice")}
-              </AlertDescription>
-            </Alert>
-          )}
+          <ClassificationPicker
+            value={classification}
+            onChange={setClassification}
+            scope="programme"
+            idPrefix="programme-classification"
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="file-upload">{t("workspace.sources.upload.selectFiles")}</Label>

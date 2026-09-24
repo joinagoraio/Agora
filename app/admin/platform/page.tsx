@@ -32,7 +32,7 @@ export default async function PlatformAdminPage() {
         </div>
       </header>
       <main className="flex-1 bg-white">
-        <div className="container mx-auto max-w-5xl px-8 py-8">
+        <div className="container mx-auto max-w-6xl px-8 py-8">
           <PlatformLlmAdmin />
         </div>
       </main>

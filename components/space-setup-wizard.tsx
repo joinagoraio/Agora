@@ -8,7 +8,6 @@ import { createWorkspace } from "@/lib/actions/workspace"
 import { listSpaceTemplates } from "@/lib/actions/template"
 import { ProgrammeTemplatePicker } from "@/components/programme-template-picker"
 import { workspaceHomeHref, type ProgrammeTemplateSummary } from "@/lib/programme/domain"
-import { AddOverheidDocumentsDialog } from "@/components/add-overheid-documents-dialog"
 import { SpaceAgentsPanel } from "@/components/space-agents-panel"
 import { SpaceUploadDocumentDialog } from "@/components/space-upload-document-dialog"
 import { type SpaceDocumentItem } from "@/components/space-documents-panel"
@@ -22,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, RotateCcw, Sparkles, Upload, Wand2, X, Search } from "lucide-react"
+import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, RotateCcw, Sparkles, Upload, Wand2, X } from "lucide-react"
 import { DocumentFileTypeIcon } from "@/components/document-file-type-icon"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { IconTooltip } from "@/components/icon-tooltip"
@@ -44,6 +43,7 @@ type SpaceDetailsUpdate = {
   spaceType?: string | null
   visibility?: string | null
   jurisdiction?: Record<string, any> | null
+  writingLanguage?: "en" | "nl" | null
 }
 
 interface SpaceSetupWizardProps {
@@ -54,6 +54,7 @@ interface SpaceSetupWizardProps {
   spaceType?: string | null
   visibility?: string | null
   jurisdiction?: Record<string, any> | null
+  writingLanguage?: "en" | "nl" | null
   scope: SpaceScope
   documents: SpaceDocumentItem[]
   workspaces: SpaceWorkspace[]
@@ -74,6 +75,7 @@ export function SpaceSetupWizard({
   spaceType,
   visibility,
   jurisdiction,
+  writingLanguage,
   scope,
   documents,
   workspaces,
@@ -114,11 +116,6 @@ export function SpaceSetupWizard({
         description: t("space.wizard.steps.scope.description"),
       },
       {
-        key: "overheid",
-        title: t("space.wizard.steps.overheid.title"),
-        description: t("space.wizard.steps.overheid.description"),
-      },
-      {
         key: "documents",
         title: t("space.wizard.steps.documents.title"),
         description: t("space.wizard.steps.documents.description"),
@@ -146,10 +143,6 @@ export function SpaceSetupWizard({
       {
         title: t("space.wizard.welcome.coverItems.scope.title"),
         description: t("space.wizard.welcome.coverItems.scope.description"),
-      },
-      {
-        title: t("space.wizard.welcome.coverItems.official.title"),
-        description: t("space.wizard.welcome.coverItems.official.description"),
       },
       {
         title: t("space.wizard.welcome.coverItems.documents.title"),
@@ -194,6 +187,9 @@ export function SpaceSetupWizard({
 
   const [spaceTypeValue, setSpaceTypeValue] = useState(spaceType ?? "municipal")
   const [visibilityValue, setVisibilityValue] = useState(visibility ?? "internal")
+  const [writingLanguageValue, setWritingLanguageValue] = useState<"en" | "nl">(
+    writingLanguage === "nl" ? "nl" : "en",
+  )
 
   const initialJurisdictionLabel = useMemo(() => {
     if (!jurisdiction) return ""
@@ -241,7 +237,6 @@ export function SpaceSetupWizard({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null)
   const [localDocuments, setLocalDocuments] = useState<SpaceDocumentItem[]>(documents)
-  const [overheidDialogOpen, setOverheidDialogOpen] = useState(false)
 
   // Update local documents when prop changes
   useEffect(() => {
@@ -262,15 +257,6 @@ export function SpaceSetupWizard({
 
   const currentStepKey = steps[currentStep]?.key
   const trimmedJurisdiction = jurisdictionLabel.trim()
-  const scopeContextSegments = [summary, description].map((value) => (value || "").trim()).filter((value) => value.length > 0)
-  const overheidContext = scopeContextSegments.join("\n\n")
-  const canLaunchOverheidSearch = trimmedJurisdiction.length > 0 && scopeContextSegments.length > 0
-
-  useEffect(() => {
-    if (currentStepKey !== "overheid") {
-      setOverheidDialogOpen(false)
-    }
-  }, [currentStepKey])
 
   const isFirstStep = currentStep === 0
   const isLastStep = currentStep === steps.length - 1
@@ -307,6 +293,7 @@ export function SpaceSetupWizard({
     startEnhancing(async () => {
       const result = await enhanceScopeText(targetText, {
         field,
+        spaceId,
         spaceName: field === "summary" ? spaceName : undefined,
         missionStatement: field === "description" ? summary : undefined,
       })
@@ -419,6 +406,7 @@ export function SpaceSetupWizard({
         const updates: Record<string, any> = {
           space_type: spaceTypeValue,
           visibility: visibilityValue,
+          writing_language: writingLanguageValue,
         }
 
         const shouldUpdateJurisdiction =
@@ -440,6 +428,7 @@ export function SpaceSetupWizard({
         onSpaceDetailsChange({
           spaceType: spaceTypeValue,
           visibility: visibilityValue,
+          writingLanguage: writingLanguageValue,
           jurisdiction:
             jurisdictionLabel.trim().length > 0 ? { label: jurisdictionLabel.trim() } : {},
         })
@@ -681,6 +670,22 @@ export function SpaceSetupWizard({
                 <p className="text-xs text-muted-foreground">{t("space.wizard.basics.visibilityHelp")}</p>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="wizard-writing-language">{t("space.wizard.basics.writingLanguageLabel")}</Label>
+                <Select
+                  value={writingLanguageValue}
+                  onValueChange={(value) => setWritingLanguageValue(value === "nl" ? "nl" : "en")}
+                >
+                  <SelectTrigger id="wizard-writing-language">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en">{t("space.wizard.basics.writingLanguageOptions.en")}</SelectItem>
+                    <SelectItem value="nl">{t("space.wizard.basics.writingLanguageOptions.nl")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t("space.wizard.basics.writingLanguageHelp")}</p>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="wizard-jurisdiction">{t("space.wizard.basics.jurisdictionLabel")}</Label>
                 <div className="w-fit">
                   <Input
@@ -866,55 +871,6 @@ export function SpaceSetupWizard({
             </div>
           </div>
         )
-      case "overheid": {
-        const missingOverheidContextMessage = !trimmedJurisdiction
-          ? t("space.wizard.overheid.missingJurisdiction")
-          : scopeContextSegments.length === 0
-            ? t("space.wizard.overheid.missingScope")
-            : null
-
-        return (
-          <div className="space-y-6">
-            <div className="flex flex-col gap-2">
-              <h3 className="text-base font-semibold text-foreground">{t("space.wizard.overheid.title")}</h3>
-              <p className="text-sm text-muted-foreground">{t("space.wizard.overheid.description")}</p>
-            </div>
-            <div className="space-y-4 rounded-lg border border-dashed bg-muted/30 p-4">
-              <div className="flex items-start gap-3">
-                <Sparkles className="h-5 w-5 text-purple-500" />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">{t("space.wizard.overheid.aiTitle")}</p>
-                  <p className="text-xs text-muted-foreground">{t("space.wizard.overheid.aiDescription")}</p>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                {trimmedJurisdiction && <Badge variant="secondary">{trimmedJurisdiction}</Badge>}
-                {scopeContextSegments.length > 0 && (
-                  <span>
-                    {t("space.wizard.overheid.scopeInputs", undefined, { count: scopeContextSegments.length })}
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-col gap-2">
-                <Button
-                  type="button"
-                  onClick={() => setOverheidDialogOpen(true)}
-                  disabled={!canLaunchOverheidSearch}
-                  className="w-fit gap-2 bg-black text-white hover:bg-black/90"
-                >
-                  <Search className="h-4 w-4" />
-                  {t("space.wizard.overheid.searchButton")}
-                </Button>
-                {missingOverheidContextMessage ? (
-                  <p className="text-xs text-muted-foreground">{missingOverheidContextMessage}</p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">{t("space.wizard.overheid.reopenTip")}</p>
-                )}
-              </div>
-            </div>
-          </div>
-        )
-      }
       case "documents": {
         const documentPluralSuffix =
           localDocuments.length === 1 ? "" : t("space.wizard.documents.stats.pluralSuffix")
@@ -1229,26 +1185,6 @@ export function SpaceSetupWizard({
         </div>
         </DialogContent>
       </Dialog>
-      <AddOverheidDocumentsDialog
-        spaceId={spaceId}
-        workspaceLocation={trimmedJurisdiction || undefined}
-        workspaceContext={overheidContext || undefined}
-        open={overheidDialogOpen}
-        onOpenChange={setOverheidDialogOpen}
-        onSuccess={() => setStepError(null)}
-        onDocumentsAdded={(items) => {
-          if (Array.isArray(items) && items.length > 0) {
-            const normalized = items.filter(Boolean) as SpaceDocumentItem[]
-            if (normalized.length > 0) {
-              normalized.forEach((doc) => {
-                onDocumentUploaded(doc)
-              })
-              setLocalDocuments((current) => [...normalized, ...current])
-              setStepError(null)
-            }
-          }
-        }}
-      />
     </>
   )
 }
