@@ -144,6 +144,7 @@ import { ProgrammePolicyGraph } from "@/components/programme-policy-graph"
 import { ProgrammeDocumentRoles } from "@/components/programme-document-roles"
 import { ProgrammeKnowledgeView } from "@/components/programme-knowledge-view"
 import { ProgrammeDocumentChrome } from "@/components/programme-document-chrome"
+import { ProgrammeInterestsPanel } from "@/components/programme-interests-panel"
 import { OverflowTitle } from "@/components/overflow-title"
 import { ProgrammeTextHistoryProvider } from "@/components/programme-text-history"
 import { ProgrammeToolsToolbar } from "@/components/programme-tools-toolbar"
@@ -177,6 +178,7 @@ const SHEET_SECTIONS = new Set<ProgrammeWorkbenchSection>([
   "agents",
   "corpus",
   "analysis",
+  "interests",
   "measures",
   "effects",
   "provenance",
@@ -187,7 +189,7 @@ const SHEET_SECTIONS = new Set<ProgrammeWorkbenchSection>([
 ])
 
 const MENU_GROUPS: { id: "work" | "properties" | "output"; sections: ProgrammeWorkbenchSection[] }[] = [
-  { id: "work", sections: ["analysis", "measures", "effects", "provenance", "review"] },
+  { id: "work", sections: ["analysis", "interests", "measures", "effects", "provenance", "review"] },
   { id: "properties", sections: ["overview", "setup", "agents"] },
   { id: "output", sections: ["export", "publish", "consultation"] },
 ]
@@ -1817,6 +1819,18 @@ export function ProgrammeWorkbench({
               </div>
             }
           />
+          </ProgrammeToolPage>
+        </TabsContent>
+
+        <TabsContent value="interests" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ProgrammeToolPage fill title={t("workspace.programme.nav.interests")} purpose={t("workspace.programme.purpose.interests")}>
+            <ProgrammeInterestsPanel
+              workspaceId={workspaceId}
+              canEdit={chromeJob !== "reviewer" && accessRole !== "viewer"}
+              citationSources={citationCatalog.documents}
+              onMessage={notify}
+              onChanged={refresh}
+            />
           </ProgrammeToolPage>
         </TabsContent>
 

@@ -42,6 +42,7 @@ import {
   updateProgrammeTemplate,
   upsertOutlineNode,
 } from "@/lib/actions/template"
+import { listTemplateWorkupHeadings, saveTemplateWorkupHeadings } from "@/lib/actions/interests"
 import type { ProgrammeOutlineNode, ProgrammeTemplateSummary } from "@/lib/programme/domain"
 
 type Props = { spaceId: string; hideIntro?: boolean }
@@ -127,6 +128,8 @@ export function SpaceTemplateLibrary({ spaceId, hideIntro = false }: Props) {
   const [name, setName] = useState("")
   const [qualityRules, setQualityRules] = useState("")
   const [outputForm, setOutputForm] = useState("")
+  const [workupHeadings, setWorkupHeadings] = useState("")
+  const [savedWorkupHeadings, setSavedWorkupHeadings] = useState("")
   const [savedMeta, setSavedMeta] = useState({ name: "", qualityRules: "", outputForm: "" })
   const [nodeTitle, setNodeTitle] = useState("")
   const [nodePurpose, setNodePurpose] = useState("")
@@ -196,12 +199,15 @@ export function SpaceTemplateLibrary({ spaceId, hideIntro = false }: Props) {
       return
     }
     startTransition(async () => {
-      const result = await getTemplateWithNodes(selectedId)
+      const [result, headings] = await Promise.all([getTemplateWithNodes(selectedId), listTemplateWorkupHeadings(selectedId)])
       if (result.error || !result.data) {
         notify(result.error || t("space.settings.templates.loadError"), "error")
         return
       }
       applyLoaded(result.data.template, result.data.nodes)
+      const lines = headings.data.map((heading) => heading.label).join("\n")
+      setWorkupHeadings(lines)
+      setSavedWorkupHeadings(lines)
       resetNodeForm()
     })
   }, [selectedId, t])
@@ -210,7 +216,8 @@ export function SpaceTemplateLibrary({ spaceId, hideIntro = false }: Props) {
   const metaDirty =
     name.trim() !== savedMeta.name ||
     qualityRules !== savedMeta.qualityRules ||
-    outputForm !== savedMeta.outputForm
+    outputForm !== savedMeta.outputForm ||
+    workupHeadings.trim() !== savedWorkupHeadings.trim()
 
   const openAdd = () => {
     setEditingNodeId(null)
@@ -398,9 +405,21 @@ export function SpaceTemplateLibrary({ spaceId, hideIntro = false }: Props) {
                         qualityRules,
                         outputForm,
                       })
-                      notifyResult(saved.error, t("space.settings.templates.saved"))
-                      if (!saved.error) {
+                      const headingLines = workupHeadings
+                        .split("\n")
+                        .map((line) => line.trim())
+                        .filter(Boolean)
+                      const headingsSaved = saved.error
+                        ? { error: saved.error }
+                        : await saveTemplateWorkupHeadings(
+                            spaceId,
+                            selectedId,
+                            headingLines.map((label, index) => ({ key: `h${index + 1}`, label })),
+                          )
+                      notifyResult(headingsSaved.error, t("space.settings.templates.saved"))
+                      if (!headingsSaved.error) {
                         setSavedMeta({ name: name.trim(), qualityRules, outputForm })
+                        setSavedWorkupHeadings(headingLines.join("\n"))
                         refreshList(selectedId)
                       }
                     })
@@ -471,6 +490,18 @@ export function SpaceTemplateLibrary({ spaceId, hideIntro = false }: Props) {
                           placeholder={t("space.settings.templates.outputPlaceholder")}
                           disabled={pending}
                         />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="template-workup">{t("space.settings.templates.workupLabel")}</Label>
+                        <Textarea
+                          id="template-workup"
+                          value={workupHeadings}
+                          onChange={(event) => setWorkupHeadings(event.target.value)}
+                          rows={5}
+                          placeholder={t("space.settings.templates.workupPlaceholder")}
+                          disabled={pending}
+                        />
+                        <p className="text-xs text-muted-foreground">{t("space.settings.templates.workupHelp")}</p>
                       </div>
                     </AccordionContent>
                   </AccordionItem>

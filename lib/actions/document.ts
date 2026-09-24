@@ -1694,11 +1694,15 @@ async function programmeChapterEvidence(input: {
   const excluded = new Set(input.excludeIds.filter(Boolean))
   const { data } = await input.supabase
     .from("documents")
-    .select("id, title, content")
+    .select("id, title, content, metadata")
     .eq("workspace_id", input.workspaceId)
     .neq("status", "deleted")
     .neq("status", "archived")
-  const documents = (data || []).filter((row) => !excluded.has(row.id))
+  const documents = (data || []).filter((row) => {
+    if (excluded.has(row.id)) return false
+    const origin = ((row.metadata as Record<string, unknown> | null) || {}).origin
+    return origin !== "programme_interest_workup"
+  })
   const { selectEvidenceForTask } = await import("@/lib/programme/evidence-select")
   const selection = await selectEvidenceForTask({ supabase: input.supabase, documents, query: input.query })
   const sources = documents.map((document) => ({

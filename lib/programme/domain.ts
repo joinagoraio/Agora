@@ -207,6 +207,7 @@ export const PROGRAMME_WORKBENCH_SECTIONS = [
   "agents",
   "corpus",
   "analysis",
+  "interests",
   "outline",
   "editor",
   "measures",
