@@ -19,14 +19,26 @@ export type GroundednessEvidenceDoc = {
 export type GroundednessReport = {
   issues: GroundednessIssue[]
   citationCount: number
+  /** Citations whose quote was found in the cited source. */
+  verifiedCount: number
   factualClaimCount: number
   groundedClaimCount: number
   /** 0–1; 1 means every detected factual claim has a citation and every citation verifies. */
   score: number
 }
 
+/** Letters and digits only, so PDF line breaks, split words, and quote styles do not hide a real quote. */
 function normalizeForMatch(value: string): string {
-  return value.replace(/\s+/g, " ").trim().toLowerCase()
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "")
+}
+
+function quoteFound(corpus: string, quote: string): boolean {
+  const parts = quote
+    .split(/…|\.\.\.|\[\.\.\.\]/)
+    .map(normalizeForMatch)
+    .filter((part) => part.length >= 12)
+  if (parts.length === 0) return false
+  return parts.every((part) => corpus.includes(part))
 }
 
 function looksFactual(sentence: string): boolean {
@@ -39,15 +51,31 @@ function hasInlineCitationMarker(sentence: string): boolean {
   return /\[\^\d+\]|\[citation:/i.test(sentence)
 }
 
+/** Prose for claim counting: no markup, and each citation shrunk to a marker on the sentence it supports. */
+function claimSentences(text: string): string[] {
+  const prose = text
+    .replace(/<\/(p|h[1-6]|li|blockquote)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/\[citation:\s*\{[\s\S]*?\}\s*\]/g, "[citation:]")
+    .replace(/([.!?])(\s*\[citation:\])+/g, "$1[citation:]")
+  return prose
+    .split(/(?<=[.!?](?:\[citation:\])?)\s+|\n+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 40)
+}
+
 /**
  * Flag markdown/footnote-style claims that look factual but lack citation markers.
  */
 export function findUngroundedClaims(text: string): GroundednessIssue[] {
   const issues: GroundednessIssue[] = []
-  const sentences = text
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 40)
+  const sentences = claimSentences(text)
 
   for (const sentence of sentences) {
     if (looksFactual(sentence) && !hasInlineCitationMarker(sentence)) {
@@ -94,8 +122,7 @@ export function assessGroundedness(
     }
 
     const corpus = evidenceById.get(citation.structured.documentId) || ""
-    const needle = normalizeForMatch(quote)
-    if (!needle || !corpus.includes(needle)) {
+    if (!quoteFound(corpus, quote)) {
       issues.push({
         claim: quote.slice(0, 180),
         reason: "quote_not_found",
@@ -107,11 +134,7 @@ export function assessGroundedness(
     verified += 1
   }
 
-  const factualClaimCount =
-    text
-      .split(/(?<=[.!?])\s+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 40 && looksFactual(s)).length || 0
+  const factualClaimCount = claimSentences(text).filter(looksFactual).length
 
   const groundedClaimCount = Math.max(0, factualClaimCount - issues.filter((i) => i.reason === "missing_citation").length)
   const citationPenalty = citations.length === 0 ? 0 : verified / citations.length
@@ -126,6 +149,7 @@ export function assessGroundedness(
   return {
     issues,
     citationCount: citations.length,
+    verifiedCount: verified,
     factualClaimCount,
     groundedClaimCount,
     score: Math.max(0, Math.min(1, Number(score.toFixed(4)))),
@@ -158,7 +182,7 @@ export function assessMeasureCitations(
     }
     if (citation.quote) {
       const corpus = allowed.get(citation.documentId) || ""
-      if (!corpus.includes(normalizeForMatch(citation.quote))) {
+      if (!quoteFound(corpus, citation.quote)) {
         issues.push({
           claim: citation.quote.slice(0, 180),
           reason: "quote_not_found",

@@ -1,6 +1,6 @@
 import { jaccardSimilarity, tokenizeConsultationText } from "@/lib/programme/consultation-cluster"
 
-export const COHERENCE_KINDS = ["reinforces", "shared_measure", "dilemma"] as const
+export const COHERENCE_KINDS = ["dilemma", "reinforces", "shared_measure"] as const
 export type CoherenceKind = (typeof COHERENCE_KINDS)[number]
 
 export type CoherenceCitation = { documentId: string; pageNumber?: number; sectionId?: string; quote?: string }
@@ -51,65 +51,100 @@ export function mapCoherenceRow(row: Record<string, unknown>): CoherenceFinding 
 
 const SIGNAL_TEXT = {
   Dutch: {
-    serves: "Deze maatregel dient meerdere belangen tegelijk.",
-    similar: "Vergelijkbare maatregelen onder verschillende belangen; mogelijk één gezamenlijke maatregel.",
+    servesTitle: (count: number, names: string) => `${count === 1 ? "1 maatregel dient" : `${count} maatregelen dienen`} ${names}`,
+    serves: (count: number) => (count === 1 ? "Deze maatregel dient de genoemde belangen tegelijk:" : "Deze maatregelen dienen de genoemde belangen tegelijk:"),
+    similarTitle: (title: string) => `Mogelijk één gezamenlijke maatregel: ${title}`,
+    similar: "Deze maatregelen onder verschillende belangen lijken sterk op elkaar en kunnen mogelijk worden samengevoegd:",
+    and: " en ",
   },
   English: {
-    serves: "This measure serves several interests at once.",
-    similar: "Similar measures under different interests; possibly one joint measure.",
+    servesTitle: (count: number, names: string) => `${count === 1 ? "1 measure serves" : `${count} measures serve`} ${names}`,
+    serves: (count: number) => (count === 1 ? "This measure serves the named interests at once:" : "These measures serve the named interests at once:"),
+    similarTitle: (title: string) => `Possibly one joint measure: ${title}`,
+    similar: "These measures under different interests are very alike and could be merged:",
+    and: " and ",
   },
 } as const
 
-/** Links that follow from the measures themselves, before any model reads them. */
+function joinNames(names: string[], and: string) {
+  return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")}${and}${names[names.length - 1]}`
+}
+
+/** Links that follow from the measures themselves, grouped so each is one decision for staff. */
 export function coherenceSignals(
   measures: MeasureLike[],
-  selectedInterestIds: string[],
+  selectedInterests: InterestLike[],
   language: "Dutch" | "English",
 ): CoherenceDraft[] {
-  const selected = new Set(selectedInterestIds)
+  const text = SIGNAL_TEXT[language]
+  const order = new Map(selectedInterests.map((interest, index) => [interest.id, index]))
+  const shortName = new Map(selectedInterests.map((interest) => [interest.id, interest.reference || interest.label]))
   const active = measures.filter((measure) => measure.decision !== "drop")
+  const linkedOf = (measure: MeasureLike) =>
+    [...new Set((measure.interest_ids || []).filter((id) => order.has(id)))].sort((a, b) => order.get(a)! - order.get(b)!)
   const drafts: CoherenceDraft[] = []
 
+  const bySet = new Map<string, { interestIds: string[]; measures: MeasureLike[] }>()
   for (const measure of active) {
-    const interests = (measure.interest_ids || []).filter((id) => selected.has(id))
-    if (interests.length < 2) continue
+    const linked = linkedOf(measure)
+    if (linked.length < 2) continue
+    const key = linked.join("|")
+    const group = bySet.get(key) || { interestIds: linked, measures: [] }
+    group.measures.push(measure)
+    bySet.set(key, group)
+  }
+  for (const group of bySet.values()) {
+    const names = joinNames(group.interestIds.map((id) => shortName.get(id) || ""), text.and)
     drafts.push({
       kind: "shared_measure",
-      title: measure.title,
-      explanation: SIGNAL_TEXT[language].serves,
-      interestIds: interests,
-      measureIds: [measure.id],
+      title: text.servesTitle(group.measures.length, names),
+      explanation: `${text.serves(group.measures.length)} ${group.measures.map((measure) => measure.title).join("; ")}.`,
+      interestIds: group.interestIds,
+      measureIds: group.measures.map((measure) => measure.id),
       citations: [],
       origin: "signal",
     })
   }
 
   const tokens = new Map(active.map((measure) => [measure.id, tokenizeConsultationText(`${measure.title} ${measure.specific_action || ""}`)]))
-  const seen = new Set<string>()
+  const parent = new Map(active.map((measure) => [measure.id, measure.id]))
+  const root = (id: string): string => {
+    const next = parent.get(id)!
+    if (next === id) return id
+    const top = root(next)
+    parent.set(id, top)
+    return top
+  }
   for (let i = 0; i < active.length; i += 1) {
     for (let j = i + 1; j < active.length; j += 1) {
       const left = active[i]!
       const right = active[j]!
-      const leftInterests = (left.interest_ids || []).filter((id) => selected.has(id))
-      const rightInterests = (right.interest_ids || []).filter((id) => selected.has(id))
+      const leftInterests = linkedOf(left)
+      const rightInterests = linkedOf(right)
       if (leftInterests.length === 0 || rightInterests.length === 0) continue
-      const union = [...new Set([...leftInterests, ...rightInterests])]
-      if (union.length < 2 || leftInterests.every((id) => rightInterests.includes(id))) continue
-      const score = jaccardSimilarity(tokens.get(left.id) || [], tokens.get(right.id) || [])
-      if (score < 0.3) continue
-      const key = [left.id, right.id].sort().join("|")
-      if (seen.has(key)) continue
-      seen.add(key)
-      drafts.push({
-        kind: "shared_measure",
-        title: `${left.title} / ${right.title}`,
-        explanation: SIGNAL_TEXT[language].similar,
-        interestIds: union,
-        measureIds: [left.id, right.id],
-        citations: [],
-        origin: "signal",
-      })
+      if (leftInterests.join("|") === rightInterests.join("|")) continue
+      if (jaccardSimilarity(tokens.get(left.id) || [], tokens.get(right.id) || []) < 0.3) continue
+      parent.set(root(left.id), root(right.id))
     }
+  }
+  const clusters = new Map<string, MeasureLike[]>()
+  for (const measure of active) {
+    const key = root(measure.id)
+    clusters.set(key, [...(clusters.get(key) || []), measure])
+  }
+  for (const cluster of clusters.values()) {
+    if (cluster.length < 2) continue
+    const interestIds = [...new Set(cluster.flatMap(linkedOf))].sort((a, b) => order.get(a)! - order.get(b)!)
+    if (interestIds.length < 2) continue
+    drafts.push({
+      kind: "shared_measure",
+      title: text.similarTitle(cluster[0]!.title),
+      explanation: `${text.similar} ${cluster.map((measure) => measure.title).join("; ")}.`,
+      interestIds,
+      measureIds: cluster.map((measure) => measure.id),
+      citations: [],
+      origin: "signal",
+    })
   }
   return drafts
 }

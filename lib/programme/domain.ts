@@ -248,6 +248,9 @@ export type ProgrammeOutlineNode = {
   sortOrder: number
 }
 
+export const DEMO_PACK_SPACE_TYPES = ["national", "regional", "municipal"] as const
+export type DemoPackSpaceType = (typeof DEMO_PACK_SPACE_TYPES)[number]
+
 export const CHAPTER_INPUTS = ["measures", "interests", "coherence"] as const
 export type ChapterInput = (typeof CHAPTER_INPUTS)[number]
 

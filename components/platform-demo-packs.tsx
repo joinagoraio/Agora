@@ -35,6 +35,7 @@ import {
   type DemoPackChapter,
   type DemoPackFile,
 } from "@/lib/actions/demo-pack"
+import { DEMO_PACK_SPACE_TYPES, type DemoPackSpaceType } from "@/lib/programme/domain"
 import { DOCUMENT_ROLES, type DocumentRole } from "@/lib/programme/domain"
 
 const EMPTY: DemoPack = {
@@ -44,7 +45,10 @@ const EMPTY: DemoPack = {
   mission: "",
   description: "",
   jurisdiction: "",
+  spaceType: "municipal",
   defaultModelId: "",
+  workupHeadings: [],
+  focusInterests: [],
   chapters: [{ title: "", required: true }],
   files: [],
 }
@@ -61,6 +65,13 @@ export function PlatformDemoPacks() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [viewing, setViewing] = useState<DemoPackFile | null>(null)
+  const [headingsText, setHeadingsText] = useState("")
+  const [focusText, setFocusText] = useState("")
+
+  useEffect(() => {
+    setHeadingsText(draft.workupHeadings.map((heading) => heading.label).join("\n"))
+    setFocusText(draft.focusInterests.join(", "))
+  }, [draft.id, draft.workupHeadings, draft.focusInterests])
   const [pending, startTransition] = useTransition()
 
   const refresh = () => {
@@ -125,8 +136,17 @@ export function PlatformDemoPacks() {
   const languageName = (language: DemoPack["writingLanguage"]) =>
     t(`space.wizard.basics.writingLanguageOptions.${language}`)
 
-  const savedPack = () => ({
+  const savedPack = (): DemoPack => ({
     ...draft,
+    workupHeadings: headingsText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((label, index) => ({ key: `h${index + 1}`, label })),
+    focusInterests: focusText
+      .split(/[,\s]+/)
+      .map((value) => value.trim())
+      .filter(Boolean),
     chapters: draft.chapters.filter((chapter) => chapter.title.trim()),
     files: draft.files.filter((file) => file.title.trim() && file.text.trim()),
   })
@@ -285,6 +305,47 @@ export function PlatformDemoPacks() {
                 onChange={(event) => setDraft({ ...draft, jurisdiction: event.target.value })}
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="pack-space-type">{t("space.wizard.basics.scopeLabel")}</Label>
+              <Select
+                value={draft.spaceType}
+                onValueChange={(value) => setDraft({ ...draft, spaceType: value as DemoPackSpaceType })}
+              >
+                <SelectTrigger id="pack-space-type" className="max-w-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DEMO_PACK_SPACE_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {t(`space.wizard.basics.scopeOptions.${type}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">{t("admin.platform.demoPackSpaceTypeHelp")}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pack-headings">{t("space.settings.templates.workupLabel")}</Label>
+              <Textarea
+                id="pack-headings"
+                rows={6}
+                value={headingsText}
+                placeholder={t("space.settings.templates.workupPlaceholder")}
+                onChange={(event) => setHeadingsText(event.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">{t("admin.platform.demoPackHeadingsHelp")}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pack-focus">{t("admin.platform.demoPackFocus")}</Label>
+              <Input
+                id="pack-focus"
+                className="max-w-xs"
+                value={focusText}
+                placeholder="14, 15, 16"
+                onChange={(event) => setFocusText(event.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">{t("admin.platform.demoPackFocusHelp")}</p>
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -317,6 +378,12 @@ export function PlatformDemoPacks() {
                     ) : null}
                     {chapter.outputForm ? (
                       <p className="text-xs text-muted-foreground">{chapter.outputForm}</p>
+                    ) : null}
+                    {chapter.drawsOn?.length ? (
+                      <p className="text-xs text-muted-foreground">
+                        {t("space.settings.templates.drawsOn")}:{" "}
+                        {chapter.drawsOn.map((input) => t(`space.settings.templates.drawsOnInput.${input}`)).join(" · ")}
+                      </p>
                     ) : null}
                   </div>
                 </li>

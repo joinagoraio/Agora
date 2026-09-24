@@ -7,9 +7,21 @@ import { createSpace, deleteSpace, updateSpace, updateSpaceScope } from "@/lib/a
 import { createWorkspace } from "@/lib/actions/workspace"
 import { createProgrammeTemplate, upsertOutlineNode } from "@/lib/actions/template"
 import { publishSpaceItem } from "@/lib/actions/space-item"
-import { loadFlevolandDemoFiles } from "@/lib/programme/flevoland-demo-files"
-import { COMPACT_MEASURE_OUTPUT_FORM, LEEFREGIO_SEED_NODES } from "@/lib/programme/leefregio-seed"
-import { parseChapterInputs, type ChapterInput, type DocumentRole } from "@/lib/programme/domain"
+import {
+  FLEVOLAND_DEFAULT_MODEL_ID,
+  FLEVOLAND_FOCUS_INTERESTS,
+  FLEVOLAND_PROGRAMME_CHAPTERS,
+  FLEVOLAND_WORKUP_HEADINGS,
+} from "@/lib/programme/flevoland-programme-seed"
+import {
+  DEMO_PACK_SPACE_TYPES,
+  parseChapterInputs,
+  type ChapterInput,
+  type DemoPackSpaceType,
+  type DocumentRole,
+} from "@/lib/programme/domain"
+import { parseWorkupHeadings, type WorkupHeading } from "@/lib/programme/interests"
+import { logger } from "@/lib/utils/logger"
 import { revalidatePath } from "next/cache"
 import { isAllowedForAgoraKeyOrgs, usesAgoraPlatformKeys } from "@/lib/llm/catalog"
 import { getTenantLlmPolicies } from "@/lib/llm/resolve"
@@ -36,6 +48,8 @@ export type DemoPackModelChoice = {
   providerLabel: string
 }
 
+export type { DemoPackSpaceType }
+
 export type DemoPack = {
   id: string
   name: string
@@ -43,7 +57,10 @@ export type DemoPack = {
   mission: string
   description: string
   jurisdiction: string
+  spaceType: DemoPackSpaceType
   defaultModelId: string
+  workupHeadings: WorkupHeading[]
+  focusInterests: string[]
   chapters: DemoPackChapter[]
   files: DemoPackFile[]
 }
@@ -94,7 +111,10 @@ function mapPack(row: {
   mission?: string | null
   description?: string | null
   jurisdiction?: string | null
+  space_type?: string | null
   default_model_id?: string | null
+  workup_headings?: unknown
+  focus_interests?: string[] | null
   chapters: unknown
   files: unknown
 }): DemoPack {
@@ -105,7 +125,12 @@ function mapPack(row: {
     mission: row.mission?.trim() || "",
     description: row.description?.trim() || "",
     jurisdiction: row.jurisdiction?.trim() || "",
+    spaceType: DEMO_PACK_SPACE_TYPES.includes(row.space_type as DemoPackSpaceType)
+      ? (row.space_type as DemoPackSpaceType)
+      : "municipal",
     defaultModelId: row.default_model_id || "",
+    workupHeadings: parseWorkupHeadings(row.workup_headings),
+    focusInterests: (row.focus_interests || []).map((value) => value.trim()).filter(Boolean),
     chapters: asChapters(row.chapters),
     files: asFiles(row.files),
   }
@@ -113,34 +138,25 @@ function mapPack(row: {
 
 const FLEVOLAND_PACK_NAME = "Flevoland demo"
 
-const COMPACT_MEASURE_CHAPTERS = new Set(["Volkshuisvestingsprogramma", "Maatregelenprogramma"])
+/** Chapters from the earlier strong-living-regions structure, which the nine-part structure replaces. */
+const EARLIER_FLEVOLAND_CHAPTERS = new Set(["Volkshuisvestingsprogramma", "Maatregelenprogramma", "Inleiding en wettelijk kader"])
 
 function flevolandChapters() {
-  return LEEFREGIO_SEED_NODES.map((node) => ({
-    title: node.title,
-    purpose: node.purpose,
-    instructions: node.instructions,
-    outputForm: node.outputForm,
-    required: node.required,
-    sortOrder: node.sortOrder,
-  }))
+  return FLEVOLAND_PROGRAMME_CHAPTERS.map((chapter) => ({ ...chapter }))
 }
 
-function withCompactMeasureChapters(chapters: unknown) {
-  if (!Array.isArray(chapters)) return flevolandChapters()
-  return chapters.map((item) => {
-    if (!item || typeof item !== "object") return item
-    const row = item as Record<string, unknown>
-    if (typeof row.title !== "string" || !COMPACT_MEASURE_CHAPTERS.has(row.title)) return item
-    const node = LEEFREGIO_SEED_NODES.find((seed) => seed.title === row.title)
-    if (!node) return item
-    return {
-      ...row,
-      instructions: node.instructions,
-      outputForm: COMPACT_MEASURE_OUTPUT_FORM,
-    }
-  })
+function usesEarlierStructure(chapters: unknown) {
+  if (!Array.isArray(chapters) || chapters.length === 0) return true
+  return chapters.some(
+    (item) => item && typeof item === "object" && EARLIER_FLEVOLAND_CHAPTERS.has(String((item as { title?: unknown }).title)),
+  )
 }
+
+async function catalogModelId(admin: ReturnType<typeof createAdminClient>, modelId: string) {
+  const { data } = await admin.from("llm_models").select("id").eq("model_id", modelId).eq("enabled", true).limit(1).maybeSingle()
+  return (data?.id as string | undefined) ?? null
+}
+
 const FLEVOLAND_PROFILE = {
   mission: "Samen werken aan Flevoland in balans.",
   description:
@@ -158,22 +174,34 @@ export async function ensureFlevolandDemoPack() {
   if (existing) {
     const { data: row } = await admin
       .from("platform_demo_packs")
-      .select("mission")
-      .select("mission, chapters")
+      .select("mission, chapters, space_type, default_model_id, workup_headings, focus_interests")
       .eq("id", existing.id)
       .maybeSingle()
-    const patch: Record<string, unknown> = {
-      chapters: withCompactMeasureChapters(row?.chapters),
-      updated_at: new Date().toISOString(),
-    }
+    const patch: Record<string, unknown> = {}
     if (!row?.mission?.trim()) Object.assign(patch, FLEVOLAND_PROFILE)
-    await admin.from("platform_demo_packs").update(patch).eq("id", existing.id)
+    if (usesEarlierStructure(row?.chapters)) patch.chapters = flevolandChapters()
+    if (!row?.space_type) patch.space_type = "regional"
+    if (parseWorkupHeadings(row?.workup_headings).length === 0) patch.workup_headings = FLEVOLAND_WORKUP_HEADINGS
+    if (!row?.focus_interests?.length) patch.focus_interests = FLEVOLAND_FOCUS_INTERESTS
+    if (!row?.default_model_id) {
+      const modelId = await catalogModelId(admin, FLEVOLAND_DEFAULT_MODEL_ID)
+      if (modelId) patch.default_model_id = modelId
+    }
+    if (Object.keys(patch).length === 0) return
+    await admin
+      .from("platform_demo_packs")
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq("id", existing.id)
     return
   }
   await admin.from("platform_demo_packs").insert({
     name: FLEVOLAND_PACK_NAME,
     writing_language: "nl",
     ...FLEVOLAND_PROFILE,
+    space_type: "regional",
+    default_model_id: await catalogModelId(admin, FLEVOLAND_DEFAULT_MODEL_ID),
+    workup_headings: FLEVOLAND_WORKUP_HEADINGS,
+    focus_interests: FLEVOLAND_FOCUS_INTERESTS,
     chapters: flevolandChapters(),
   })
 }
@@ -198,7 +226,10 @@ export async function saveDemoPack(pack: DemoPack) {
     mission: pack.mission.trim() || null,
     description: pack.description.trim() || null,
     jurisdiction: pack.jurisdiction.trim() || null,
+    space_type: pack.spaceType,
     default_model_id: pack.defaultModelId.trim() || null,
+    workup_headings: parseWorkupHeadings(pack.workupHeadings),
+    focus_interests: pack.focusInterests.map((value) => value.trim()).filter(Boolean),
     chapters: pack.chapters,
     files: pack.files,
     updated_at: new Date().toISOString(),
@@ -325,7 +356,7 @@ export async function loadDemoPack(packId: string) {
   const pack = mapPack(row)
   if (!pack.defaultModelId) return { error: "Choose a default model for this pack before loading it." }
   const stamp = new Date().toISOString().slice(0, 16).replace("T", " ")
-  const created = await createSpace(`${pack.name} ${stamp}`)
+  const created = await createSpace(`${pack.name} ${stamp}`, { spaceType: pack.spaceType })
   if (created.error || !created.data) return { error: created.error || "Could not create the authority" }
   const spaceId = created.data.id as string
   const built = await buildLoadedPack(pack, spaceId)
@@ -385,6 +416,11 @@ async function buildLoadedPack(pack: DemoPack, spaceId: string): Promise<{ error
     })
     if (node.error) return { error: node.error }
   }
+  if (pack.workupHeadings.length > 0) {
+    const { saveTemplateWorkupHeadings } = await import("@/lib/actions/interests")
+    const headings = await saveTemplateWorkupHeadings(spaceId, template.data.id, pack.workupHeadings)
+    if (headings.error) return { error: headings.error }
+  }
 
   for (const file of pack.files) {
     const published = await publishSpaceItem(spaceId, {
@@ -416,6 +452,15 @@ async function buildLoadedPack(pack: DemoPack, spaceId: string): Promise<{ error
     const { bindProgrammeDocumentRole } = await import("@/lib/actions/programme")
     const bound = await bindProgrammeDocumentRole(workspace.data.id, match.id, file.role)
     if (bound.error) return { error: bound.error }
+  }
+
+  const { findProgrammeInterests, selectProgrammeInterestsByReference } = await import("@/lib/actions/interests")
+  const found = await findProgrammeInterests(workspace.data.id)
+  if (found.error) {
+    logger.warn("[DemoPack] Interests not found on load", { error: found.error })
+  } else if (pack.focusInterests.length > 0) {
+    const chosen = await selectProgrammeInterestsByReference(workspace.data.id, pack.focusInterests)
+    if (chosen.error) logger.warn("[DemoPack] Focus interests not chosen", { error: chosen.error })
   }
 
   return { workspaceId: workspace.data.id as string }

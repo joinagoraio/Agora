@@ -65,11 +65,7 @@ export async function runCoherenceAnalysis(workspaceId: string) {
 
   const { writingLanguageForSpace } = await import("@/lib/programme/load-writing-language")
   const userLanguage = await writingLanguageForSpace(workspace.space_id)
-  const signals = coherenceSignals(
-    measures,
-    interests.map((interest) => interest.id),
-    userLanguage,
-  )
+  const signals = coherenceSignals(measures, interests, userLanguage)
 
   const bindings = parseProgrammeBindings((workspace.metadata as Record<string, unknown>) || {})
   const { data: sourceRows } = await supabase
@@ -136,6 +132,8 @@ You compare interests that were first worked up one by one. Report only links th
 - "shared_measure": one measure could serve several interests, or measures under different interests could be combined.
 - "dilemma": interests pull against each other (for example the same space, grid capacity, water, or money), so a choice is needed.
 Each finding names at least two interests by their number, has a short title, two or three sentences of explanation, the measure ids it concerns when there are any, and citations with documentId, pageNumber, and an exact quote.
+Which measures already serve several interests, and which look alike, is listed for staff separately; do not report a measure only for that. Report a "shared_measure" only when combining or reshaping measures would create something the list does not already show.
+Give between three and eight findings, most important first. Look hard for dilemmas: they are what staff most need to see.
 Return JSON only: {"findings":[{"kind":"reinforces"|"shared_measure"|"dilemma","title":string,"interests":[string],"measureIds":[string],"explanation":string,"citations":[{"documentId":string,"pageNumber":number,"sectionId":string,"quote":string}]}]}.
 Do not invent documentIds, numbers, or decisions. Staff decide; you only point out links.`,
   })

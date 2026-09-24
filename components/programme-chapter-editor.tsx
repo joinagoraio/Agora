@@ -193,7 +193,7 @@ export function ProgrammeChapterEditor({
   const [content, setContent] = useState("")
   const [dirty, setDirty] = useState(false)
   const [draftInstructions, setDraftInstructions] = useState("")
-  const [groundednessScore, setGroundednessScore] = useState<number | null>(null)
+  const [groundedness, setGroundedness] = useState<{ found: number; total: number; uncited: number } | null>(null)
   const [pending, startTransition] = useTransition()
   const [nodeMeasures, setNodeMeasures] = useState<any[]>([])
   const [lockHolder, setLockHolder] = useState<string | null>(null)
@@ -636,12 +636,23 @@ export function ProgrammeChapterEditor({
           chapterOwnerId,
         },
       }))
-      setGroundednessScore(result.data.groundedness?.score ?? null)
+      const report = result.data.groundedness
+      const summary = report
+        ? {
+            found: report.verifiedCount ?? 0,
+            total: report.citationCount ?? 0,
+            uncited: (report.issues || []).filter((issue: { reason: string }) => issue.reason === "missing_citation").length,
+          }
+        : null
+      setGroundedness(summary)
       onMessage(
-        t("workspace.programme.editorRegenDone", undefined, {
-          score: String(result.data.groundedness?.score ?? "—"),
-          issues: String(result.data.groundedness?.issues?.length ?? 0),
-        }),
+        summary
+          ? t("workspace.programme.editorRegenDone", undefined, {
+              found: String(summary.found),
+              total: String(summary.total),
+              uncited: String(summary.uncited),
+            })
+          : t("workspace.programme.editorRegenDoneNoCheck"),
       )
     })
   }
@@ -654,11 +665,17 @@ export function ProgrammeChapterEditor({
         onMessage(result.error || t("workspace.programme.editorLoadError"), "error")
         return
       }
-      setGroundednessScore(result.data.score)
+      const summary = {
+        found: result.data.verifiedCount ?? 0,
+        total: result.data.citationCount ?? 0,
+        uncited: result.data.issues.filter((issue: { reason: string }) => issue.reason === "missing_citation").length,
+      }
+      setGroundedness(summary)
       onMessage(
         t("workspace.programme.editorGroundedness", undefined, {
-          score: String(result.data.score),
-          issues: String(result.data.issues.length),
+          found: String(summary.found),
+          total: String(summary.total),
+          uncited: String(summary.uncited),
         }),
       )
     })
@@ -1570,9 +1587,13 @@ export function ProgrammeChapterEditor({
               rows={4}
               placeholder={t("workspace.programme.editorInstructionsPlaceholder")}
             />
-            {groundednessScore != null ? (
+            {groundedness ? (
               <p className="text-xs text-muted-foreground">
-                {t("workspace.programme.editorGroundednessScore", undefined, { score: String(groundednessScore) })}
+                {t("workspace.programme.editorGroundednessScore", undefined, {
+                  found: String(groundedness.found),
+                  total: String(groundedness.total),
+                  uncited: String(groundedness.uncited),
+                })}
               </p>
             ) : null}
           </div>

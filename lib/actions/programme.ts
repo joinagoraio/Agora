@@ -1104,16 +1104,14 @@ export async function assessDocumentGroundedness(workspaceId: string, documentId
     .single()
   if (error || !document) return { error: error?.message || "Document not found" }
 
-  const { getAllWorkspaceKnowledge } = await import("@/lib/rag/search")
   const { assessGroundedness } = await import("@/lib/programme/reliability")
-  const { sources } = await getAllWorkspaceKnowledge(workspaceId, [documentId])
-  const evidence = (sources || [])
-    .map((s: { documentId?: string; id?: string; content?: string }) => {
-      const id = s.documentId || s.id
-      if (typeof id !== "string") return null
-      return { documentId: id, text: typeof s.content === "string" ? s.content : "" }
-    })
-    .filter((e): e is { documentId: string; text: string } => Boolean(e))
+  const { data: sourceRows } = await supabase
+    .from("documents")
+    .select("id, content")
+    .eq("workspace_id", workspaceId)
+    .neq("id", documentId)
+    .neq("status", "deleted")
+  const evidence = (sourceRows || []).map((row) => ({ documentId: row.id as string, text: (row.content as string | null) || "" }))
 
   const report = assessGroundedness(document.content || "", evidence)
   return { data: report }
@@ -1270,7 +1268,21 @@ export async function fillProgrammeChapters(
     return persistChain
   }
 
-  const queue = [...todo]
+  // Chapter documents are bound one at a time: the bindings are rewritten whole on each save.
+  const chapterIds = new Map<string, string>()
+  for (const node of todo) {
+    const chapter = await ensureChapterDocument(workspaceId, node.id, {
+      title: node.title,
+      purposeHtml: node.purpose,
+    })
+    if (chapter.error || !chapter.data) {
+      await persistProgress(node.id, "error", chapter.error)
+      continue
+    }
+    chapterIds.set(node.id, chapter.data.documentId)
+  }
+
+  const queue = todo.filter((node) => chapterIds.has(node.id))
   const workers = Array.from({ length: Math.min(FILL_CONCURRENCY, queue.length) }, async () => {
     while (queue.length) {
       const node = queue.shift()
@@ -1280,14 +1292,7 @@ export async function fillProgrammeChapters(
         queue.length = 0
         return
       }
-      const chapter = await ensureChapterDocument(workspaceId, node.id, {
-        title: node.title,
-        purposeHtml: node.purpose,
-      })
-      if (chapter.error || !chapter.data) {
-        await persistProgress(node.id, "error", chapter.error)
-        continue
-      }
+      const chapter = { data: { documentId: chapterIds.get(node.id)! } }
       if ((await loadLatestFillJob(workspaceId))?.cancelled || (await isFillCancelRequested(workspaceId))) {
         queue.length = 0
         return

@@ -12,6 +12,16 @@ export interface ParsedCitation {
   position: number // Character position in the message where citation was found
 }
 
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+}
+
 /**
  * Parse structured citations from AI response text
  * Looks for [citation:{...}] markers and extracts the JSON data
@@ -45,7 +55,8 @@ export function parseStructuredCitations(content: string): ParsedCitation[] {
         jsonStr = jsonStr.substring(0, endIndex)
       }
       
-      // Try to parse the JSON
+      // Drafts saved as HTML carry the JSON with escaped quotes.
+      if (jsonStr.includes("&quot;")) jsonStr = decodeHtmlEntities(jsonStr)
       const citationData = JSON.parse(jsonStr) as StructuredCitation
       
       if (citationData.quote && citationData.quote.length > 0) {

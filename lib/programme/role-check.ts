@@ -3,12 +3,41 @@ import { z } from "zod"
 export const ROLE_ACTORS = ["authority", "other_government", "other_party", "shared"] as const
 export type RoleActor = (typeof ROLE_ACTORS)[number]
 
+const ACTOR_ALIASES: Record<string, RoleActor> = {
+  this_authority: "authority",
+  province: "authority",
+  provincie: "authority",
+  own: "authority",
+  government: "other_government",
+  other_level: "other_government",
+  municipality: "other_government",
+  gemeente: "other_government",
+  state: "other_government",
+  rijk: "other_government",
+  waterschap: "other_government",
+  party: "other_party",
+  partners: "other_party",
+  market: "other_party",
+  joint: "shared",
+  gedeeld: "shared",
+  samen: "shared",
+}
+
+function normaliseActor(value: unknown) {
+  if (typeof value !== "string") return value
+  const key = value.trim().toLowerCase().replace(/[\s-]+/g, "_")
+  return (ROLE_ACTORS as readonly string[]).includes(key) ? key : ACTOR_ALIASES[key] ?? key
+}
+
 export const roleCheckSchema = z.object({
-  actor: z.enum(ROLE_ACTORS),
+  actor: z.preprocess(normaliseActor, z.enum(ROLE_ACTORS)),
   reason: z.string().min(3),
   quote: z.string().optional(),
   documentId: z.string().optional(),
-  pageNumber: z.number().int().positive().optional(),
+  pageNumber: z.preprocess(
+    (value) => (typeof value === "string" && /^\d+$/.test(value.trim()) ? Number(value) : value),
+    z.number().int().positive().optional(),
+  ),
 })
 
 export type RoleCheckInput = z.infer<typeof roleCheckSchema>

@@ -546,7 +546,11 @@ ${
   outlineIds.size > 0 && !options?.outlineNodeId
     ? `For each item, set "outlineNodeId" to the id in [brackets] of the PROGRAMME OUTLINE chapter it belongs to.\n\n`
     : ""
-}Return ONLY the JSON object with a "measures" array.`
+}Every measure object has these keys: "title", "type", "specificAction", "ownerRole", "geography", "timeline", "indicator", "contributesToVision", "provincialInterests", "challenge", "resources", "roleCheck", ${
+  outlineIds.size > 0 && !options?.outlineNodeId ? `"outlineNodeId", ` : ""
+}"citations". Leave out "geography" and "resources" only when the sources say nothing about them.
+
+Return ONLY the JSON object with a "measures" array.`
 
   let raw = ""
   try {

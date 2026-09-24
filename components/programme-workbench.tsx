@@ -1125,7 +1125,7 @@ export function ProgrammeWorkbench({
                   if (agents.error) {
                     notify(agents.error, "error")
                     setBindings(merged)
-                  } else if (agents.data) {
+                  } else if ("data" in agents && agents.data) {
                     setBindings({ ...agents.data, setupComplete: true })
                   } else {
                     setBindings(merged)

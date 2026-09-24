@@ -43,7 +43,20 @@ describe("reliability helpers (Phase 9)", () => {
       evidence,
     )
     expect(bad.issues.some((i) => i.reason === "quote_not_found")).toBe(true)
-    expect(bad.issues.some((i) => i.reason === "missing_citation")).toBe(true)
+    expect(bad.issues.some((i) => i.reason === "missing_citation")).toBe(false)
+  })
+
+  it("does not count sentences inside a quoted citation as uncited claims", () => {
+    const evidence = [
+      { documentId: "doc-1", text: "Het beleid moet passend zijn. Volgens de visie vereist dit samenwerking met gemeenten." },
+    ]
+    const html = `<p>De provincie moet samen met gemeenten optrekken volgens de visie. [citation:{&quot;quote&quot;:&quot;Het beleid moet passend zijn. Volgens de visie vereist dit samenwerking met gemeenten.&quot;,&quot;documentId&quot;:&quot;doc-1&quot;,&quot;pageNumber&quot;:3}]</p><p>Dit beleid moet ook zonder bron worden uitgevoerd volgens de planning van het Rijk.</p>`
+    const report = assessGroundedness(html, evidence)
+    expect(report.citationCount).toBe(1)
+    expect(report.issues.filter((i) => i.reason === "quote_not_found")).toHaveLength(0)
+    const missing = report.issues.filter((i) => i.reason === "missing_citation")
+    expect(missing).toHaveLength(1)
+    expect(missing[0]!.claim).toContain("zonder bron")
   })
 
   it("rejects measure citations for unknown documents", () => {

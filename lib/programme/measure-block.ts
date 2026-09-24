@@ -1,3 +1,5 @@
+import { parseRoleCheck } from "@/lib/programme/role-check"
+
 export type MeasureBlockSource = {
   title: string
   specific_action?: string | null
@@ -9,7 +11,13 @@ export type MeasureBlockSource = {
   provincial_interests?: string[] | null
   challenge?: string | null
   resources?: string | null
+  role_check?: unknown
 }
+
+const ACTORS = {
+  Dutch: { authority: "deze overheid", other_government: "andere overheid", other_party: "andere partij", shared: "gedeeld" },
+  English: { authority: "this authority", other_government: "other government", other_party: "other party", shared: "shared" },
+} as const
 
 const LABELS = {
   Dutch: {
@@ -22,6 +30,7 @@ const LABELS = {
     time: "Termijn",
     indicator: "Indicator",
     resources: "Middelen",
+    actor: "Wie handelt",
   },
   English: {
     goal: "Goal",
@@ -33,6 +42,7 @@ const LABELS = {
     time: "Timing",
     indicator: "Indicator",
     resources: "Resources",
+    actor: "Who acts",
   },
 } as const
 
@@ -47,6 +57,8 @@ export function formatMeasureBlock(measure: MeasureBlockSource, language: "Dutch
   add("interest", measure.provincial_interests?.join("; "))
   add("challenge", measure.challenge)
   add("role", measure.owner_role)
+  const roleCheck = parseRoleCheck(measure.role_check)
+  if (roleCheck) add("actor", `${ACTORS[language][roleCheck.actor]} — ${roleCheck.reason}`)
   add("action", measure.specific_action)
   add("area", measure.geography)
   add("time", measure.timeline)
