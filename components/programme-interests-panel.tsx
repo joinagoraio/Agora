@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ProgrammeCitationTooltip } from "@/components/programme-citation-tooltip"
+import { ProgrammeCoherenceView } from "@/components/programme-coherence-view"
 import { generateProgrammeMeasuresFromContext } from "@/lib/actions/measures"
 import {
   findProgrammeInterests,
@@ -40,6 +41,7 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
   const [workingIds, setWorkingIds] = useState<string[]>([])
   const [queue, setQueue] = useState<{ done: number; total: number } | null>(null)
   const [selectedOnly, setSelectedOnly] = useState(false)
+  const [view, setView] = useState<"interests" | "coherence">("interests")
   const [viewing, setViewing] = useState<{ interest: ProgrammeInterest; title: string; content: string; documentId: string } | null>(null)
 
   const refresh = useCallback(async () => {
@@ -137,8 +139,44 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
 
   const busy = finding || queue !== null
 
+  const viewSwitch = (
+    <div className="flex shrink-0 gap-1 border-b px-6 pt-3" role="tablist">
+      {(["interests", "coherence"] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          role="tab"
+          aria-selected={view === option}
+          className={cn(
+            "-mb-px border-b-2 px-3 py-2 text-sm",
+            view === option ? "border-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground",
+          )}
+          onClick={() => setView(option)}
+        >
+          {t(`workspace.programme.interests.view.${option}`)}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (view === "coherence") {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        {viewSwitch}
+        <ProgrammeCoherenceView
+          workspaceId={workspaceId}
+          interests={interests}
+          canEdit={canEdit}
+          citationSources={citationSources}
+          onMessage={onMessage}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {viewSwitch}
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
         <Button type="button" disabled={!canEdit || busy} onClick={find}>
           {finding ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
