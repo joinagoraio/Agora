@@ -6,6 +6,7 @@
 
 import { z } from "zod"
 import { AGENT_STAGES, DOCUMENT_ROLES } from "@/lib/programme/domain"
+import { roleCheckSchema } from "@/lib/programme/role-check"
 
 export const measureTypeSchema = z.enum(["ambition", "goal", "measure", "implementation"])
 
@@ -38,6 +39,7 @@ export const measureCandidateSchema = z.object({
   challenge: z.string().optional(),
   resources: z.string().optional(),
   interestIds: z.array(z.string()).optional(),
+  roleCheck: roleCheckSchema.optional().catch(undefined),
 })
 
 export type MeasureCandidate = z.infer<typeof measureCandidateSchema>

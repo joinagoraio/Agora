@@ -200,7 +200,7 @@ export async function upsertOutlineNode(input: {
     instructions: input.instructions ?? null,
     field_specs: input.fieldSpecs ?? [],
     quality_rules: input.qualityRules ?? null,
-    output_form: input.outputForm ?? null,
+    output_form: input.outputForm?.trim() || null,
     relation_hints: input.relationHints ?? null,
     ...(input.drawsOn !== undefined ? { draws_on: parseChapterInputs(input.drawsOn) } : {}),
     required: input.required ?? true,

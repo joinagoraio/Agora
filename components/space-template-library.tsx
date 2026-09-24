@@ -43,7 +43,7 @@ import {
   upsertOutlineNode,
 } from "@/lib/actions/template"
 import { listTemplateWorkupHeadings, saveTemplateWorkupHeadings } from "@/lib/actions/interests"
-import type { ProgrammeOutlineNode, ProgrammeTemplateSummary } from "@/lib/programme/domain"
+import { CHAPTER_INPUTS, type ChapterInput, type ProgrammeOutlineNode, type ProgrammeTemplateSummary } from "@/lib/programme/domain"
 
 type Props = { spaceId: string; hideIntro?: boolean }
 
@@ -53,10 +53,14 @@ function ChapterFields({
   purpose,
   instructions,
   required,
+  outputForm,
+  drawsOn,
   onTitle,
   onPurpose,
   onInstructions,
   onRequired,
+  onOutputForm,
+  onDrawsOn,
   pending,
 }: {
   titleId: string
@@ -64,10 +68,14 @@ function ChapterFields({
   purpose: string
   instructions: string
   required: boolean
+  outputForm: string
+  drawsOn: ChapterInput[]
   onTitle: (value: string) => void
   onPurpose: (value: string) => void
   onInstructions: (value: string) => void
   onRequired: (value: boolean) => void
+  onOutputForm: (value: string) => void
+  onDrawsOn: (value: ChapterInput[]) => void
   pending: boolean
 }) {
   const { t } = useI18n()
@@ -105,6 +113,36 @@ function ChapterFields({
           disabled={pending}
         />
       </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${titleId}-output`}>{t("space.settings.templates.nodeOutputForm")}</Label>
+        <Textarea
+          id={`${titleId}-output`}
+          value={outputForm}
+          onChange={(event) => onOutputForm(event.target.value)}
+          rows={2}
+          placeholder={t("space.settings.templates.nodeOutputFormPlaceholder")}
+          disabled={pending}
+        />
+      </div>
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">{t("space.settings.templates.drawsOn")}</legend>
+        <p className="text-xs text-muted-foreground">{t("space.settings.templates.drawsOnHelp")}</p>
+        {CHAPTER_INPUTS.map((input) => (
+          <div key={input} className="flex items-center justify-between gap-3">
+            <Label htmlFor={`${titleId}-draws-${input}`} className="font-normal">
+              {t(`space.settings.templates.drawsOnInput.${input}`)}
+            </Label>
+            <Switch
+              id={`${titleId}-draws-${input}`}
+              checked={drawsOn.includes(input)}
+              onCheckedChange={(checked) =>
+                onDrawsOn(checked ? [...drawsOn, input] : drawsOn.filter((value) => value !== input))
+              }
+              disabled={pending}
+            />
+          </div>
+        ))}
+      </fieldset>
       <div className="flex items-center justify-between gap-3">
         <Label htmlFor={`${titleId}-required`} className="font-normal">
           {t("space.settings.templates.required")}
@@ -135,6 +173,8 @@ export function SpaceTemplateLibrary({ spaceId, hideIntro = false }: Props) {
   const [nodePurpose, setNodePurpose] = useState("")
   const [nodeInstructions, setNodeInstructions] = useState("")
   const [nodeRequired, setNodeRequired] = useState(true)
+  const [nodeOutputForm, setNodeOutputForm] = useState("")
+  const [nodeDrawsOn, setNodeDrawsOn] = useState<ChapterInput[]>([])
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [confirmDeleteTemplate, setConfirmDeleteTemplate] = useState(false)
@@ -150,6 +190,8 @@ export function SpaceTemplateLibrary({ spaceId, hideIntro = false }: Props) {
     setNodePurpose("")
     setNodeInstructions("")
     setNodeRequired(true)
+    setNodeOutputForm("")
+    setNodeDrawsOn([])
   }
 
   const applyLoaded = (template: { name: string; qualityRules?: string | null; outputForm?: string | null }, nextNodes: ProgrammeOutlineNode[]) => {
@@ -225,6 +267,8 @@ export function SpaceTemplateLibrary({ spaceId, hideIntro = false }: Props) {
     setNodePurpose("")
     setNodeInstructions("")
     setNodeRequired(true)
+    setNodeOutputForm("")
+    setNodeDrawsOn([])
     setAdding(true)
   }
 
@@ -235,6 +279,8 @@ export function SpaceTemplateLibrary({ spaceId, hideIntro = false }: Props) {
     setNodePurpose(node.purpose || "")
     setNodeInstructions(node.instructions || "")
     setNodeRequired(node.required)
+    setNodeOutputForm(node.outputForm || "")
+    setNodeDrawsOn(node.drawsOn)
   }
 
   const saveNode = () => {
@@ -250,7 +296,8 @@ export function SpaceTemplateLibrary({ spaceId, hideIntro = false }: Props) {
         required: nodeRequired,
         fieldSpecs: editingNode?.fieldSpecs,
         qualityRules: editingNode?.qualityRules,
-        outputForm: editingNode?.outputForm,
+        outputForm: nodeOutputForm,
+        drawsOn: nodeDrawsOn,
         relationHints: editingNode?.relationHints,
         sortOrder: editingNode ? editingNode.sortOrder : nodes.length + 1,
       })
@@ -301,10 +348,14 @@ export function SpaceTemplateLibrary({ spaceId, hideIntro = false }: Props) {
       purpose={nodePurpose}
       instructions={nodeInstructions}
       required={nodeRequired}
+      outputForm={nodeOutputForm}
+      drawsOn={nodeDrawsOn}
       onTitle={setNodeTitle}
       onPurpose={setNodePurpose}
       onInstructions={setNodeInstructions}
       onRequired={setNodeRequired}
+      onOutputForm={setNodeOutputForm}
+      onDrawsOn={setNodeDrawsOn}
       pending={pending}
     />
   )

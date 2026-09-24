@@ -18,7 +18,14 @@ import { formatSourcePreview, resolveAgentSourceDocuments } from "@/lib/programm
 import { snapshotArtefact } from "@/lib/actions/collaboration"
 import { measureHasVisionPath, syncMeasureVisionPath } from "@/lib/actions/analysis"
 import { resolveMeasureVisionAnchors } from "@/lib/programme/vision-path"
+import { roleCheckInstruction, roleCheckSchema, stampRoleCheck } from "@/lib/programme/role-check"
 import { evaluateDistinctReviewerApproval, mergeCitationSets, parseProgrammePolicies } from "@/lib/programme/review-policy"
+
+async function spaceTypeFor(supabase: Awaited<ReturnType<typeof createClient>>, spaceId: string | null) {
+  if (!spaceId) return null
+  const { data } = await supabase.from("spaces").select("space_type").eq("id", spaceId).maybeSingle()
+  return (data?.space_type as string | undefined) ?? null
+}
 
 function extractJsonPayload(raw: string): string {
   const trimmed = raw.trim()
@@ -67,6 +74,7 @@ export async function upsertProgrammeMeasure(
     ...(measure.challenge !== undefined ? { challenge: measure.challenge || null } : {}),
     ...(measure.resources !== undefined ? { resources: measure.resources || null } : {}),
     ...(measure.interestIds !== undefined ? { interest_ids: measure.interestIds } : {}),
+    ...(measure.roleCheck ? { role_check: stampRoleCheck(measure.roleCheck) } : {}),
     updated_at: new Date().toISOString(),
     created_by: user?.id,
   }
@@ -419,6 +427,7 @@ export async function generateProgrammeMeasuresFromContext(
 
   const { writingLanguageForSpace } = await import("@/lib/programme/load-writing-language")
   const userLanguage = await writingLanguageForSpace(workspace.space_id)
+  const spaceType = await spaceTypeFor(supabase, workspace.space_id)
 
   const bindings = parseProgrammeBindings((workspace.metadata as Record<string, unknown>) || {})
   const agentId = boundAgentId(bindings, "measures")
@@ -531,6 +540,8 @@ ${
 }
 Also give, when the evidence supports it: "challenge" (the task or problem from the vision or policy this measure addresses) and "resources" (only what the sources say about means, costs, or funding; leave it out otherwise, never estimate).
 
+Add "roleCheck": {"actor", "reason", "quote", "documentId", "pageNumber"}. ${roleCheckInstruction(spaceType)}
+
 ${
   outlineIds.size > 0 && !options?.outlineNodeId
     ? `For each item, set "outlineNodeId" to the id in [brackets] of the PROGRAMME OUTLINE chapter it belongs to.\n\n`
@@ -635,6 +646,129 @@ ${
       model,
     },
   }
+}
+
+/** Say who has to act on each measure, going by the sources. Never blocks a measure. */
+export async function checkMeasureRoles(workspaceId: string) {
+  try {
+    await requireAuthAndPermission("workspace:update", { workspaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+  const supabase = await createClient()
+  const { data: workspace } = await supabase
+    .from("workspaces")
+    .select("name, metadata, space_id")
+    .eq("id", workspaceId)
+    .single()
+  if (!workspace) return { error: "Workspace not found" }
+
+  const { data: measureRows } = await supabase
+    .from("programme_measures")
+    .select("id, title, specific_action, owner_role, decision")
+    .eq("workspace_id", workspaceId)
+    .order("created_at", { ascending: true })
+  const measures = (measureRows || []).filter((m) => m.decision !== "drop").slice(0, 40)
+  if (measures.length === 0) return { error: "There are no measures to check yet." }
+
+  const { writingLanguageForSpace } = await import("@/lib/programme/load-writing-language")
+  const userLanguage = await writingLanguageForSpace(workspace.space_id)
+  const spaceType = await spaceTypeFor(supabase, workspace.space_id)
+  const bindings = parseProgrammeBindings((workspace.metadata as Record<string, unknown>) || {})
+  const agentId = boundAgentId(bindings, "measures")
+  const agentVersion = agentId ? (await getLatestAgentVersion(agentId)).data : null
+  const { documents } = await resolveAgentSourceDocuments({
+    workspaceId,
+    version: agentVersion,
+    bindings,
+    fallbackRoles: defaultSourceRolesForStage("measures"),
+  })
+  const { getTenantIdForSpace, resolveAgentVersionLlm } = await import("@/lib/llm/resolve")
+  const tenantId = workspace.space_id ? await getTenantIdForSpace(workspace.space_id) : null
+  let llm
+  try {
+    llm = await resolveAgentVersionLlm({ tenantId, spaceId: workspace.space_id, agentVersion })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not resolve the measures model" }
+  }
+
+  const measureList = measures
+    .map((m) => `- [${m.id}] ${m.title}${m.specific_action ? ` — ${m.specific_action}` : ""}${m.owner_role ? ` (role: ${m.owner_role})` : ""}`)
+    .join("\n")
+  const { selectEvidenceForTask, withCitationPages } = await import("@/lib/programme/evidence-select")
+  const evidence = await selectEvidenceForTask({
+    supabase,
+    documents,
+    query: `${measureList}\nrol taak bevoegdheid verantwoordelijk provincie gemeente Rijk waterschap partners role responsibility powers`,
+    budgetChars: 35000,
+  })
+  const { loadPromptLayers } = await import("@/lib/llm/prompts")
+  const layers = await loadPromptLayers("measures")
+  const { systemPrompt } = compileSystemPrompt({
+    kind: "measures",
+    userLanguage,
+    identity: layers.identity,
+    playbookBody: "",
+    runInstructions: "Check who has to act on each measure.",
+    runtimeSections: `ROLE CHECK:\n${roleCheckInstruction(spaceType)}`,
+  })
+  const userPrompt = `Measures:
+${measureList}
+
+Evidence (each piece shows its document id, section id, and page):
+${evidence.text || "(empty)"}
+
+Return ONLY a JSON object: {"checks": [{"measureId", "actor", "reason", "quote", "documentId", "pageNumber"}]}, one per measure, using the ids in [brackets]. Write the reason in ${userLanguage}.`
+
+  let raw = ""
+  try {
+    const completion = await completeLlm({
+      provider: llm.provider,
+      endpoint: llm.endpoint,
+      apiKey: llm.apiKey,
+      model: llm.model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.2,
+      maxTokens: 8000,
+      json: true,
+    })
+    raw = completion.text
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The role check failed" }
+  }
+  if (!raw.trim()) return { error: "The AI did not return any content" }
+
+  let checks: unknown[] = []
+  try {
+    const parsed = JSON.parse(extractJsonPayload(raw)) as { checks?: unknown[] }
+    checks = Array.isArray(parsed.checks) ? parsed.checks : []
+  } catch {
+    return { error: "The role check returned an unreadable answer. Try again." }
+  }
+  const ids = new Set(measures.map((m) => m.id))
+  let saved = 0
+  for (const item of checks) {
+    const measureId = (item as { measureId?: unknown })?.measureId
+    if (typeof measureId !== "string" || !ids.has(measureId)) continue
+    const parsed = roleCheckSchema.safeParse(item)
+    if (!parsed.success) continue
+    const [cited] = withCitationPages(
+      parsed.data.documentId ? [{ documentId: parsed.data.documentId, pageNumber: parsed.data.pageNumber, quote: parsed.data.quote }] : [],
+      evidence.spans,
+    )
+    const check = stampRoleCheck({ ...parsed.data, pageNumber: cited?.pageNumber ?? parsed.data.pageNumber })
+    const { error } = await supabase
+      .from("programme_measures")
+      .update({ role_check: check, updated_at: new Date().toISOString() })
+      .eq("id", measureId)
+      .eq("workspace_id", workspaceId)
+    if (!error) saved += 1
+  }
+  revalidatePath(`/workspaces/${workspaceId}/programme`)
+  return { data: { checked: saved, total: measures.length } }
 }
 
 export async function listProgrammeMeasures(workspaceId: string) {

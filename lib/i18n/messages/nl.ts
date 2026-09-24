@@ -530,6 +530,17 @@ export const nlMessages = {
         challenge: "Opgave",
         resources: "Middelen en kosten",
       },
+      roleCheck: {
+        label: "Wie handelt",
+        run: "Rollen controleren",
+        done: "Voor {{count}} van {{total}} maatregelen gecontroleerd wie handelt.",
+        actor: {
+          authority: "Deze overheid",
+          other_government: "Andere overheid",
+          other_party: "Andere partij",
+          shared: "Gedeeld",
+        },
+      },
       decision: {
         title: "Besluit medewerkers",
         keep: "Behouden",
@@ -2212,6 +2223,15 @@ export const nlMessages = {
         workupLabel: "Koppen per belang",
         workupPlaceholder: "Eén kop per regel, bijvoorbeeld: Onderbouwing",
         workupHelp: "Elk belang uit de visie wordt onder deze koppen uitgewerkt, in deze volgorde. Laat leeg voor de standaardlijst.",
+        nodeOutputForm: "Vorm",
+        nodeOutputFormPlaceholder: "De vaste opbouw die dit hoofdstuk volgt, bijvoorbeeld één blok met vaste velden per maatregel. Laat leeg voor lopende tekst.",
+        drawsOn: "Put uit",
+        drawsOnHelp: "Wat de AI naast de bronnen leest bij het schrijven van dit hoofdstuk.",
+        drawsOnInput: {
+          measures: "Alle maatregelen, per hoofdstuk",
+          interests: "Gekozen belangen en hun uitwerkingen",
+          coherence: "Verbanden tussen belangen die zijn behouden",
+        },
         saveMeta: "Sjabloon opslaan",
         saved: "Sjabloon opgeslagen",
         loadError: "Sjabloon laden mislukt",

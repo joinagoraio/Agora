@@ -530,6 +530,17 @@ export const enMessages = {
         challenge: "Challenge (opgave)",
         resources: "Resources and costs",
       },
+      roleCheck: {
+        label: "Who acts",
+        run: "Check roles",
+        done: "Checked who acts for {{count}} of {{total}} measures.",
+        actor: {
+          authority: "This authority",
+          other_government: "Other government",
+          other_party: "Other party",
+          shared: "Shared",
+        },
+      },
       decision: {
         title: "Staff decision",
         keep: "Keep",
@@ -2212,6 +2223,15 @@ export const enMessages = {
         workupLabel: "Headings for each interest",
         workupPlaceholder: "One heading per line, for example: Justification",
         workupHelp: "Every interest from the vision is worked up under these headings, in this order. Leave empty to use the standard list.",
+        nodeOutputForm: "Output form",
+        nodeOutputFormPlaceholder: "The fixed layout this chapter must follow, for example one labelled block per measure. Leave empty for prose.",
+        drawsOn: "Draws on",
+        drawsOnHelp: "Besides the sources, what the AI reads when it drafts this chapter.",
+        drawsOnInput: {
+          measures: "Every measure, grouped by chapter",
+          interests: "Chosen interests and their work-ups",
+          coherence: "Links across interests that staff kept",
+        },
         saveMeta: "Save template",
         saved: "Template saved",
         loadError: "Could not load template",

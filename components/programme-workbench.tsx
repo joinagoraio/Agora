@@ -80,6 +80,7 @@ import { getWorkspaceNotes } from "@/lib/actions/workspace-notes"
 import {
   listProgrammeMeasures,
   generateProgrammeMeasuresFromContext,
+  checkMeasureRoles,
   approveProgrammeMeasure,
   importMeasureCandidatesFromJson,
   setMeasureWorkflowStatus,
@@ -149,6 +150,8 @@ import { MeasureDecisionControl } from "@/components/measure-decision-control"
 import { MeasureSummaryLines } from "@/components/measure-summary-lines"
 import { listProgrammeInterests } from "@/lib/actions/interests"
 import type { ProgrammeInterest } from "@/lib/programme/interests"
+import { parseRoleCheck } from "@/lib/programme/role-check"
+import { Badge } from "@/components/ui/badge"
 import { OverflowTitle } from "@/components/overflow-title"
 import { ProgrammeTextHistoryProvider } from "@/components/programme-text-history"
 import { ProgrammeToolsToolbar } from "@/components/programme-tools-toolbar"
@@ -1883,6 +1886,29 @@ export function ProgrammeWorkbench({
             </Button>
             <Button
               variant="outline"
+              disabled={pending || measures.length === 0 || accessRole === "viewer"}
+              onClick={() =>
+                startTransition(async () => {
+                  const result = await checkMeasureRoles(workspaceId)
+                  if (result.error) {
+                    notify(result.error, "error")
+                    return
+                  }
+                  notify(
+                    t("workspace.programme.roleCheck.done", undefined, {
+                      count: String(result.data?.checked ?? 0),
+                      total: String(result.data?.total ?? 0),
+                    }),
+                    "success",
+                  )
+                  refresh()
+                })
+              }
+            >
+              {t("workspace.programme.roleCheck.run")}
+            </Button>
+            <Button
+              variant="outline"
               disabled={pending}
               onClick={() =>
                 startTransition(async () => {
@@ -2044,6 +2070,14 @@ export function ProgrammeWorkbench({
                           {t(`workspace.programme.chapterListStatus.${item.workflow_status}`, item.workflow_status)}
                           {item.decision ? ` · ${t(`workspace.programme.decision.status.${item.decision}`)}` : ""}
                         </span>
+                        {(() => {
+                          const roleCheck = parseRoleCheck(item.role_check)
+                          return roleCheck ? (
+                            <Badge variant="outline" className="mt-1 font-normal" title={roleCheck.reason}>
+                              {t(`workspace.programme.roleCheck.actor.${roleCheck.actor}`)}
+                            </Badge>
+                          ) : null
+                        })()}
                       </button>
                     </li>
                   )
@@ -2167,7 +2201,13 @@ export function ProgrammeWorkbench({
                   onMessage={notify}
                   onSaved={refresh}
                 />
-                <MeasureSummaryLines measure={m} interests={programmeInterests} />
+                <MeasureSummaryLines
+                  measure={m}
+                  interests={programmeInterests}
+                  sourceLabel={(documentId, pageNumber) =>
+                    formatCitationLabel({ documentId, pageNumber }, citationCatalog.documents, citationCatalog.sections)
+                  }
+                />
                 {editingMeasureId === m.id && (
                   <div className="grid gap-2 sm:grid-cols-2">
                     <label className="space-y-1 text-xs sm:col-span-2">

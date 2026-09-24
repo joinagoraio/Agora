@@ -1690,7 +1690,11 @@ async function programmeChapterEvidence(input: {
   workspaceId: string
   excludeIds: string[]
   query: string
-}): Promise<{ context: string; sources: Array<{ id: string; documentId: string; title: string; content: string }> }> {
+}): Promise<{
+  context: string
+  sources: Array<{ id: string; documentId: string; title: string; content: string }>
+  grounding: Array<{ documentId: string; text: string }>
+}> {
   const excluded = new Set(input.excludeIds.filter(Boolean))
   const { data } = await input.supabase
     .from("documents")
@@ -1714,7 +1718,8 @@ async function programmeChapterEvidence(input: {
       .map((span) => span.text)
       .join("\n"),
   }))
-  return { context: selection.text || "No documents found in the workspace.", sources }
+  const grounding = documents.map((document) => ({ documentId: document.id, text: document.content || "" }))
+  return { context: selection.text || "No documents found in the workspace.", sources, grounding }
 }
 
 export async function generateWorkspaceDocumentDraft(
@@ -1829,7 +1834,10 @@ export async function generateWorkspaceDocumentDraft(
   let nodeConstraint = ""
   let chapterTitle = ""
   let hasOutputForm = false
-  let programmeEvidence: { context: string; sources: any[] } | null = null
+  let interestInputs = ""
+  let coherenceInputs = ""
+  let programmeEvidence: { context: string; sources: any[]; grounding: Array<{ documentId: string; text: string }> } | null =
+    null
   if (outlineNodeId && bindings.templateId) {
     const outline = await listProgrammeOutlineNodes(bindings.templateId)
     const node = outline.data.find((n) => n.id === outlineNodeId)
@@ -1843,9 +1851,36 @@ export async function generateWorkspaceDocumentDraft(
         query: [node.title, node.purpose || "", node.instructions || "", instructions].join("\n"),
       })
       const { formatMeasureBlock, formatMeasureList } = await import("@/lib/programme/measure-block")
-      const allMeasures = ((await listProgrammeMeasures(workspaceId)).data || []).filter(
-        (m: { decision?: string | null }) => m.decision !== "drop",
+      const { withInterestLabels, formatInterestInputs, formatCoherenceInputs } = await import(
+        "@/lib/programme/chapter-inputs"
       )
+      const { listProgrammeInterests } = await import("@/lib/actions/interests")
+      const interests = (await listProgrammeInterests(workspaceId)).data
+      const allMeasures = withInterestLabels(
+        ((await listProgrammeMeasures(workspaceId)).data || []).filter(
+          (m: { decision?: string | null }) => m.decision !== "drop",
+        ),
+        interests,
+      )
+      if (node.drawsOn.includes("interests")) {
+        const workupIds = interests.filter((i) => i.selected && i.workupDocumentId).map((i) => i.workupDocumentId as string)
+        const { data: workupRows } = workupIds.length
+          ? await supabase.from("documents").select("id, content").in("id", workupIds)
+          : { data: [] as Array<{ id: string; content: string | null }> }
+        const contentById = new Map((workupRows || []).map((row) => [row.id, row.content || ""]))
+        const workups = new Map(
+          interests
+            .filter((i) => i.workupDocumentId && contentById.has(i.workupDocumentId))
+            .map((i) => [i.id, contentById.get(i.workupDocumentId as string) as string]),
+        )
+        interestInputs = formatInterestInputs(interests, workups, userLanguage)
+      }
+      if (node.drawsOn.includes("coherence")) {
+        const { listCoherenceFindings } = await import("@/lib/actions/coherence")
+        const findings = (await listCoherenceFindings(workspaceId)).data
+        const measureTitles = new Map(allMeasures.map((m: { id: string; title: string }) => [m.id, m.title]))
+        coherenceInputs = formatCoherenceInputs(findings, interests, measureTitles, userLanguage)
+      }
       const placed = allMeasures.filter((m: { outline_node_id?: string }) => m.outline_node_id === node.id)
       const usesWholeList = node.drawsOn.includes("measures")
       const measureSection = usesWholeList
@@ -1916,6 +1951,7 @@ Instructions:
 ${instructions.trim()}
 
 ${existingDraft}
+${[interestInputs, coherenceInputs].filter(Boolean).join("\n\n")}
 
 Workspace evidence:
 ${context}
@@ -1965,7 +2001,7 @@ ${citationInstruction}`
     .filter((e): e is { documentId: string; text: string } => Boolean(e))
 
   const { assessGroundedness } = await import("@/lib/programme/reliability")
-  const groundedness = assessGroundedness(generatedText, evidenceDocs)
+  const groundedness = assessGroundedness(generatedText, programmeEvidence?.grounding ?? evidenceDocs)
 
   const { computeUnusedSourceReport } = await import("@/lib/actions/generation-run")
   const { unusedDocumentIdsFromReport } = await import("@/lib/programme/unused-sources")
