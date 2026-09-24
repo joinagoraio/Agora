@@ -188,6 +188,9 @@ export const nlMessages = {
         title: "Agenten",
         subtitle: "Specialisten in al je bevoegd gezagen",
         settings: "Modelinstellingen",
+        notice:
+          "Dit zijn de aanbieders en modellen waarmee elk bevoegd gezag in dit account begint. Je kunt ze instellen voordat je een bevoegd gezag aanmaakt.",
+        noticeDismiss: "Niet meer tonen",
       },
     },
     spaces: {
@@ -1814,7 +1817,7 @@ export const nlMessages = {
         trigger: "Document uploaden",
         title: "Reikwijdtedocument uploaden",
         description:
-          "Voeg beleids-pdf's, memo's of ondersteunend onderzoek toe. Openbare bestanden gaan naar elk programma. Interne en vertrouwelijke blijven bij dit bevoegd gezag.",
+          "Upload de visie of een bestaand beleidsstuk. Openbare bestanden gaan naar elk programma, waar u ze labelt vóór de analyse. Interne en vertrouwelijke bestanden blijven bij dit bevoegd gezag en worden niet als programmabron gebruikt. Vertrouwelijke bestanden kunnen niet worden geëxporteerd.",
         fileLabel: "Bestand",
         fileHint: "PDF-, Word- of tekstbestanden. Max. 50 MB per bestand.",
         fileButton: "Bestand kiezen",
@@ -1910,12 +1913,12 @@ export const nlMessages = {
       panel: {
         title: "Gedeelde bestanden",
         description:
-          "Gedeelde bestanden voor {{space}}. Openbare bestanden gaan naar elk programma. Interne en vertrouwelijke blijven bij dit bevoegd gezag.",
+          "Bestanden die {{space}} voor zijn programma's bewaart. Openbare kopieën kunt u per programma labelen. Analyse heeft een visie en minstens één label voor bestaand beleid nodig.",
         untitled: "Naamloos document",
         viewList: "Weergave als lijst",
         viewGrid: "Weergave als raster",
         emptyTitle: "Nog geen bibliotheekdocumenten",
-        emptyDescription: "Upload beleid, richtlijnen of memo's zodat elk programma hetzelfde vertrekpunt heeft.",
+        emptyDescription: "Upload de visie en het bestaande beleid. Markeer ze als openbaar, zodat programma's ze kunnen labelen.",
         emptyUploadTrigger: "Document uploaden",
         summaryPlaceholder: "Nog geen samenvatting beschikbaar.",
         uploadedLabel: "Geüpload op {{date}}",
@@ -2066,7 +2069,7 @@ export const nlMessages = {
         summaryLabel: "Missie",
         summaryPlaceholder: "Samenvatting toevoegen",
         descriptionLabel: "Beschrijving",
-        descriptionPlaceholder: "Beschrijving toevoegen",
+        descriptionPlaceholder: "De vaste taak van dit bevoegd gezag, over alle programma's heen.",
         undoSummary: "Missie-aanpassing ongedaan maken",
         undoDescription: "Beschrijving-aanpassing ongedaan maken",
         enhanceSummary: "Samenvatting verbeteren met AI",
@@ -2392,9 +2395,9 @@ export const nlMessages = {
       steps: {
         welcome: { title: "Welkom", description: "Zie hoe een bevoegd gezag en een programma samenhangen" },
         basics: { title: "Basis van het bevoegd gezag", description: "Bepaal hoe Agora dit bevoegd gezag labelt en deelt" },
-        scope: { title: "Scope", description: "Schrijf de samenvatting die elk programma erft" },
+        scope: { title: "Scope", description: "Schrijf de missie en de taak die elk programma gebruikt" },
         overheid: { title: "Officiële bronnen", description: "Laat Agora publicaties van Overheid.nl ophalen" },
-        documents: { title: "Gedeelde bestanden", description: "Voeg de bestanden toe die dit bevoegd gezag voor zijn programma's bewaart" },
+        documents: { title: "Gedeelde bestanden", description: "Upload de visie en het bestaande beleid waaruit programma's worden geschreven" },
         agents: { title: "Agenten", description: "Voeg de specialisten toe die de programma's van dit bevoegd gezag kunnen gebruiken" },
         workspace: { title: "Eerste programma", description: "Maak je eerste programma" },
       },
@@ -2427,7 +2430,7 @@ export const nlMessages = {
           },
           scope: {
             title: "Scope.",
-            description: "Schrijf de missie en beschrijving die teams erven.",
+            description: "Schrijf de missie en de vaste taak die programma's gebruiken.",
           },
           official: {
             title: "Officiële bronnen.",
@@ -2435,7 +2438,7 @@ export const nlMessages = {
           },
           documents: {
             title: "Gedeelde bestanden.",
-            description: "Upload bestanden voor dit bevoegd gezag. Openbare bestanden gaan naar elk programma. Interne en vertrouwelijke blijven hier.",
+            description: "Upload de visie en het bestaande beleid. Openbare kopieën labelt u per programma, vóór de analyse.",
           },
           agents: {
             title: "Agenten.",
@@ -2450,7 +2453,7 @@ export const nlMessages = {
         benefitsItems: {
           structured: {
             title: "Gestructureerde scope.",
-            description: "Eén bron voor samenvatting, beschrijving en tijdspanne.",
+            description: "Een missie en een taak die de assistent in elk programma gebruikt.",
           },
           sharedDocs: {
             title: "Gedeelde bestanden.",
@@ -2496,18 +2499,18 @@ export const nlMessages = {
       },
       scopeStep: {
         title: "Vat het mandaat samen",
-        description: "Leg de samenvatting, beschrijving en tijdspanne vast die elk programma erft.",
+        description: "Schrijf de missie en de vaste taak. Vraag en elk programma van dit bevoegd gezag lezen beide.",
         missionLabel: "Missie",
         missionPlaceholder: "Korte beschrijving die iedereen op één lijn brengt.",
         missionUndo: "Missie-aanpassing ongedaan maken",
         missionEnhance: "Missie verbeteren met AI",
         missionEnhanceHelp: "Laat AI een betere missie opstellen.",
         descriptionLabel: "Beschrijving",
-        descriptionPlaceholder: "Beschrijf het beleid, de stakeholders en succescriteria.",
+        descriptionPlaceholder: "Waar dit bevoegd gezag verantwoordelijk voor is, over alle programma's heen.",
         descriptionUndo: "Beschrijving-aanpassing ongedaan maken",
         descriptionEnhance: "Beschrijving verbeteren met AI",
         descriptionEnhanceHelp: "Laat AI de beschrijving voor je uitwerken.",
-        descriptionHelp: "Houd het compact maar rijk genoeg voor collega's en de assistent.",
+        descriptionHelp: "De assistent gebruikt dit zodra hij in een programma van dit bevoegd gezag werkt.",
       },
       overheid: {
         title: "Importeer officiële referenties",
@@ -2522,14 +2525,15 @@ export const nlMessages = {
       },
       documents: {
         title: "Voeg ondersteunende documenten toe",
-        description: "Upload de bestanden die dit bevoegd gezag bewaart. Openbare bestanden gaan naar elk programma. Interne en vertrouwelijke blijven bij het bevoegd gezag. Vertrouwelijke bestanden kunnen niet worden geëxporteerd.",
+        description:
+          "Dit zijn de documenten waaruit latere programma's worden geschreven. Upload de omgevingsvisie en het bestaande beleid, en markeer ze als openbaar. Elk programma krijgt dan een kopie die u kunt labelen. Analyse start pas als de visie en minstens één bestaand-beleidbestand zijn gelabeld. Interne en vertrouwelijke bestanden blijven bij het bevoegd gezag en worden niet als programmabron gebruikt. Vertrouwelijke bestanden kunnen niet worden geëxporteerd.",
         stats: {
           none: "Nog geen documenten",
           count: "{{count}} document{{suffix}} geüpload",
           pluralSuffix: "en",
         },
         addMore: "Later kun je meer toevoegen via Gedeelde bestanden.",
-        emptyCallout: "Voeg de bestanden toe die dit bevoegd gezag bepalen.",
+        emptyCallout: "Upload de visie en het bestaande beleid. Markeer ze als openbaar, zodat programma's ze kunnen labelen.",
         recentlyAdded: "Recent toegevoegd",
         addedOn: "Toegevoegd op {{date}}",
         remove: "Document verwijderen",

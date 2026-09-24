@@ -107,13 +107,9 @@ export function buildWorkspaceContext({
   const spaceScopeMetadata = (((space?.metadata as Record<string, unknown> | null) ?? {}).scope ??
     null) as Record<string, unknown> | null
   const spaceScopeDescription = (spaceScopeMetadata?.description as string | undefined) ?? undefined
-  const spaceScopeTimeframe = (spaceScopeMetadata?.timeframe as string | undefined) ?? undefined
 
   if (spaceScopeDescription) {
     appendWorkspaceContextSection(`Authority description:\n${spaceScopeDescription}`)
-  }
-  if (spaceScopeTimeframe) {
-    appendWorkspaceContextSection(`Authority timeframe: ${spaceScopeTimeframe}`)
   }
 
   if (space?.jurisdiction && typeof space.jurisdiction === "object") {
@@ -136,7 +132,6 @@ export function buildWorkspaceContext({
       space?.name ||
       space?.description ||
       spaceScopeDescription ||
-      spaceScopeTimeframe ||
       (space?.jurisdiction &&
         typeof space.jurisdiction === "object" &&
         Object.values(space.jurisdiction as Record<string, unknown>).some(

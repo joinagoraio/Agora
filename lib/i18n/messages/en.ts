@@ -188,6 +188,9 @@ export const enMessages = {
         title: "Agents",
         subtitle: "Specialists across your authorities",
         settings: "Models settings",
+        notice:
+          "These are the providers and models every authority in this account starts from. You can set them before you create an authority.",
+        noticeDismiss: "Don't show this again",
       },
     },
     spaces: {
@@ -1813,7 +1816,7 @@ export const enMessages = {
         trigger: "Upload document",
         title: "Upload scope document",
         description:
-          "Add policy PDFs, memos, or supporting research. Public files are copied into every programme. Internal and confidential stay on this authority.",
+          "Upload the vision or an existing policy paper. Public files are copied into every programme, where you label them before analysis. Internal and confidential files stay on this authority and are not used as programme sources. Confidential files cannot be exported.",
         fileLabel: "File",
         fileHint: "PDF, Word, or text files. Max 50 MB per file.",
         fileButton: "Choose file",
@@ -1909,12 +1912,12 @@ export const enMessages = {
       panel: {
         title: "Shared files",
         description:
-          "Shared files for {{space}}. Public files are copied into every programme. Internal and confidential stay on this authority.",
+          "Files {{space}} keeps for its programmes. Public copies can be labelled on each programme. Analysis needs a vision and at least one existing-policy label.",
         untitled: "Untitled document",
         viewList: "Show as list",
         viewGrid: "Show as cards",
         emptyTitle: "No library documents yet",
-        emptyDescription: "Upload policies, directives, or briefing notes so every programme starts with the same foundation.",
+        emptyDescription: "Upload the vision and the existing policy. Mark them public so programmes can label them.",
         emptyUploadTrigger: "Upload a document",
         summaryPlaceholder: "No summary available yet.",
         uploadedLabel: "Uploaded {{date}}",
@@ -2066,7 +2069,7 @@ export const enMessages = {
         summaryLabel: "Mission Statement",
         summaryPlaceholder: "Add summary",
         descriptionLabel: "Description",
-        descriptionPlaceholder: "Add description",
+        descriptionPlaceholder: "The standing remit of this authority, across its programmes.",
         undoSummary: "Undo mission statement enhancement",
         undoDescription: "Undo description enhancement",
         enhanceSummary: "Enhance mission statement with AI",
@@ -2392,9 +2395,9 @@ export const enMessages = {
       steps: {
         welcome: { title: "Welcome", description: "See how an authority and a programme fit together" },
         basics: { title: "Authority basics", description: "Set how Agora labels and shares this authority" },
-        scope: { title: "Scope", description: "Write the summary every programme will inherit" },
+        scope: { title: "Scope", description: "Write the mission and remit every programme uses" },
         overheid: { title: "Official sources", description: "Let Agora pull Overheid.nl publications" },
-        documents: { title: "Shared files", description: "Add the files this authority keeps for its programmes" },
+        documents: { title: "Shared files", description: "Upload the vision and existing policy programmes are written from" },
         agents: { title: "Agents", description: "Add the specialists this authority's programmes can use" },
         workspace: { title: "First programme", description: "Create your first programme" },
       },
@@ -2427,7 +2430,7 @@ export const enMessages = {
           },
           scope: {
             title: "Scope.",
-            description: "Draft the mission statement and description programmes inherit.",
+            description: "Write the mission and the standing remit programmes use.",
           },
           official: {
             title: "Official sources.",
@@ -2435,7 +2438,7 @@ export const enMessages = {
           },
           documents: {
             title: "Shared files.",
-            description: "Upload files for this authority. Public files are copied into every programme. Internal and confidential stay here.",
+            description: "Upload the vision and existing policy. Public copies are what each programme labels before analysis.",
           },
           agents: {
             title: "Agents.",
@@ -2450,7 +2453,7 @@ export const enMessages = {
         benefitsItems: {
           structured: {
             title: "Structured scope.",
-            description: "A single source of truth for summaries, descriptions, and timeframe.",
+            description: "A mission and a remit the assistant uses in every programme.",
           },
           sharedDocs: {
             title: "Shared files.",
@@ -2496,18 +2499,18 @@ export const enMessages = {
       },
       scopeStep: {
         title: "Summarise the mandate",
-        description: "Capture the summary, description, and timeframe every programme will inherit.",
+        description: "Write the mission and the standing remit. Ask and every programme under this authority read both.",
         missionLabel: "Mission Statement",
         missionPlaceholder: "High-level statement to align everyone on the mission.",
         missionUndo: "Undo mission statement enhancement",
         missionEnhance: "Enhance mission statement with AI",
         missionEnhanceHelp: "Generate an improved mission statement with AI.",
         descriptionLabel: "Description",
-        descriptionPlaceholder: "Describe the policy remit, stakeholders, and success criteria driving this programme.",
+        descriptionPlaceholder: "What this authority is responsible for, across its programmes.",
         descriptionUndo: "Undo description enhancement",
         descriptionEnhance: "Enhance description with AI",
         descriptionEnhanceHelp: "Ask AI to develop the description for you.",
-        descriptionHelp: "Keep it concise but rich enough for colleagues and the assistant to act accurately.",
+        descriptionHelp: "The assistant uses this whenever it works inside a programme of this authority.",
       },
       overheid: {
         title: "Import official references",
@@ -2522,14 +2525,15 @@ export const enMessages = {
       },
       documents: {
         title: "Add supporting documents",
-        description: "Upload the files this authority keeps. Public files are copied into every programme. Internal and confidential stay on the authority. Confidential files cannot be exported.",
+        description:
+          "These are the documents later programmes are written from. Upload the environmental vision and the existing policy, and mark them public. Each programme then receives a copy you can label. Analysis will not run until the vision and at least one existing-policy file are labelled. Internal and confidential files stay on the authority and are not used as programme sources. Confidential files cannot be exported.",
         stats: {
           none: "No documents yet",
           count: "{{count}} document{{suffix}} uploaded",
           pluralSuffix: "s",
         },
         addMore: "You can add more later from Shared files.",
-        emptyCallout: "Add the files that define this authority.",
+        emptyCallout: "Upload the vision and the existing policy. Mark them public so programmes can label them.",
         recentlyAdded: "Recently added",
         addedOn: "Added {{date}}",
         remove: "Remove document",

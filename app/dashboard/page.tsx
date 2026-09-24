@@ -172,6 +172,8 @@ export default async function DashboardPage() {
                 agents={agentCount}
                 tenantId={tenantMembership.data?.tenantId}
                 canManageModels={canManageModels}
+                userId={user.id}
+                holdNotice={showProfileSetup}
               />
               <Separator className="my-8 shrink-0 bg-border" />
             </>

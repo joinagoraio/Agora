@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useEffect, useRef, useMemo, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 
 import { SearchField } from "@/components/search-field"
 import { SpaceSetupWizard } from "@/components/space-setup-wizard"
@@ -87,6 +88,8 @@ export function SpacePageClient({
   userRole = null,
 }: SpacePageClientProps) {
   const { t } = useI18n()
+  const router = useRouter()
+  const skipServerSnapshot = useRef(true)
   const [spaceTitle, setSpaceTitle] = useState(spaceName)
   const [spaceTitleDraft, setSpaceTitleDraft] = useState(spaceName)
   const [spaceDetails, setSpaceDetails] = useState({
@@ -135,10 +138,52 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
   const [writingLanguageDraft, setWritingLanguageDraft] = useState<"en" | "nl">(
     initialWritingLanguage === "nl" ? "nl" : "en",
   )
-  const [timeframeDraft, setTimeframeDraft] = useState(initialScope.timeframe ?? "")
   const [jurisdictionDraft, setJurisdictionDraft] = useState(formatJurisdiction(initialJurisdiction))
-  const [timeframeError, setTimeframeError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+
+  const closeWizard = () => {
+    setWizardOpen(false)
+    router.refresh()
+  }
+
+  useEffect(() => {
+    if (wizardOpen || isEditingScope) {
+      skipServerSnapshot.current = true
+      return
+    }
+    if (skipServerSnapshot.current) {
+      skipServerSnapshot.current = false
+      return
+    }
+    setSpaceTitle(spaceName)
+    setSpaceTitleDraft(spaceName)
+    setScopeState(initialScope)
+    setSummaryDraft(initialScope.summary ?? "")
+    setDescriptionDraft(initialScope.description ?? "")
+    setSpaceDetails({
+      spaceType: initialSpaceType ?? "municipal",
+      visibility: initialVisibility ?? "internal",
+      jurisdiction: initialJurisdiction ?? null,
+      writingLanguage: initialWritingLanguage === "nl" ? "nl" : "en",
+    })
+    setSpaceTypeDraft(initialSpaceType ?? "municipal")
+    setVisibilityDraft(initialVisibility ?? "internal")
+    setWritingLanguageDraft(initialWritingLanguage === "nl" ? "nl" : "en")
+    setJurisdictionDraft(formatJurisdiction(initialJurisdiction))
+    setDocuments(initialDocuments)
+    setWorkspaces(initialWorkspaces)
+  }, [
+    wizardOpen,
+    isEditingScope,
+    spaceName,
+    initialScope,
+    initialSpaceType,
+    initialVisibility,
+    initialJurisdiction,
+    initialWritingLanguage,
+    initialDocuments,
+    initialWorkspaces,
+  ])
   const [isSavingScope, startSavingScope] = useTransition()
   const [isEnhancing, startEnhancing] = useTransition()
   const [enhancingField, setEnhancingField] = useState<"summary" | "description" | null>(null)
@@ -154,10 +199,6 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
     const value = scopeState.description?.trim()
     return value && value.length > 0 ? value : null
   }, [scopeState.description])
-  const timeframeText = useMemo(() => {
-    const value = scopeState.timeframe?.trim()
-    return value && value.length > 0 ? value : null
-  }, [scopeState.timeframe])
   const jurisdictionText = useMemo(() => formatJurisdiction(spaceDetails.jurisdiction), [spaceDetails.jurisdiction])
 
   useEffect(() => {
@@ -168,9 +209,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
       setSpaceTypeDraft(spaceDetails.spaceType)
       setVisibilityDraft(spaceDetails.visibility)
       setWritingLanguageDraft(spaceDetails.writingLanguage === "nl" ? "nl" : "en")
-      setTimeframeDraft(scopeState.timeframe ?? "")
       setJurisdictionDraft(jurisdictionText)
-      setTimeframeError(null)
       setSaveError(null)
     }
   }, [isEditingScope, scopeState, spaceDetails, jurisdictionText, spaceTitle])
@@ -216,7 +255,6 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
               <Badge variant="outline">
                 {t(`space.wizard.basics.writingLanguageOptions.${spaceDetails.writingLanguage}`)}
               </Badge>
-              {timeframeText && <Badge variant="secondary">{timeframeText}</Badge>}
               {jurisdictionText && jurisdictionText.length > 0 && (
                 <span className="text-muted-foreground">{jurisdictionText}</span>
               )}
@@ -266,76 +304,12 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
     )
   }
 
-  const validateTimeframe = () => {
-    if (!timeframeDraft || timeframeDraft.trim().length === 0) {
-      setTimeframeError(null)
-      return true
-    }
-
-    const trimmed = timeframeDraft.trim()
-    const pattern = /^\d{4}(?:\s?[–-]\s?\d{4})?$/
-
-    if (!pattern.test(trimmed)) {
-      setTimeframeError(t("space.overview.timeframeError"))
-      return false
-    }
-
-    setTimeframeError(null)
-    return true
-  }
-
   const sanitizeJurisdiction = (value: string) => {
     const trimmed = value.trim()
     if (trimmed.length === 0) {
       return null
     }
     return { label: trimmed }
-  }
-
-  const handleTimeframeDraftChange = (value: string, inputType?: string | null) => {
-    if (!value) {
-      setTimeframeDraft("")
-      if (timeframeError) {
-        setTimeframeError(null)
-      }
-      return
-    }
-
-    const sanitized = value.replace(/[^\d\s–-]/g, "").replace(/\s+/g, " ")
-    const normalized = sanitized.replace("-", "–").replace(/\s*–\s*/, " – ")
-    const compactDigits = sanitized.replace(/\s|–|-/g, "")
-    const isDeleting = inputType?.startsWith("delete")
-
-    if (isDeleting) {
-      setTimeframeDraft(value)
-      if (timeframeError) {
-        setTimeframeError(null)
-      }
-      return
-    }
-
-    let nextValue = normalized
-
-    if (!sanitized.includes("–") && !sanitized.includes("-")) {
-      if (/^\d{4}$/.test(compactDigits)) {
-        nextValue = `${compactDigits} – `
-      } else {
-        nextValue = compactDigits
-      }
-    } else {
-      const [start, end = ""] = sanitized.split(/[–-]/)
-      const trimmedEnd = end.replace(/\s/g, "")
-      if (trimmedEnd.length > 4) {
-        const clipped = trimmedEnd.slice(0, 4)
-        const normalizedStart = start.trim()
-        nextValue = `${normalizedStart} – ${clipped}`
-      }
-    }
-
-    setTimeframeDraft(nextValue)
-    if (timeframeError) {
-      setTimeframeError(null)
-    }
   }
 
   const handleEditClick = () => {
@@ -345,9 +319,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
     setSpaceTypeDraft(spaceDetails.spaceType)
     setVisibilityDraft(spaceDetails.visibility)
     setWritingLanguageDraft(spaceDetails.writingLanguage === "nl" ? "nl" : "en")
-    setTimeframeDraft(scopeState.timeframe ?? "")
     setJurisdictionDraft(jurisdictionText)
-    setTimeframeError(null)
     setSaveError(null)
     setActiveField(null)
     setSummaryPrevious(null)
@@ -362,9 +334,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
     setSpaceTypeDraft(spaceDetails.spaceType)
     setVisibilityDraft(spaceDetails.visibility)
     setWritingLanguageDraft(spaceDetails.writingLanguage === "nl" ? "nl" : "en")
-    setTimeframeDraft(scopeState.timeframe ?? "")
     setJurisdictionDraft(jurisdictionText)
-    setTimeframeError(null)
     setSaveError(null)
     setActiveField(null)
     setSummaryPrevious(null)
@@ -373,19 +343,13 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
   }
 
   const handleSaveScope = () => {
-    if (!validateTimeframe()) {
-      return
-    }
-
     const nameValue = spaceTitleDraft.trim()
-    const normalizedTimeframe = timeframeDraft.trim().length > 0 ? timeframeDraft.trim().replace(/-/g, "–") : null
     const jurisdictionPayload = sanitizeJurisdiction(jurisdictionDraft)
 
     startSavingScope(async () => {
       const scopeResult = await updateSpaceScope(spaceId, {
         summary: summaryDraft.trim().length > 0 ? summaryDraft : null,
         description: descriptionDraft.trim().length > 0 ? descriptionDraft : null,
-        timeframe: normalizedTimeframe,
       })
 
       if (scopeResult.error) {
@@ -414,7 +378,6 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
       setScopeState({
         summary: summaryDraft.trim().length > 0 ? summaryDraft : null,
         description: descriptionDraft.trim().length > 0 ? descriptionDraft : null,
-        timeframe: normalizedTimeframe,
       })
       setSpaceDetails({
         spaceType: spaceTypeDraft,
@@ -522,8 +485,8 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
           documents={documents}
           workspaces={workspaces}
           initialWizardState={wizardState ?? undefined}
-          onDismissed={() => setWizardOpen(false)}
-          onCompleted={() => setWizardOpen(false)}
+          onDismissed={closeWizard}
+          onCompleted={closeWizard}
           onDocumentUploaded={handleDocumentUploaded}
           onWorkspaceCreated={handleWorkspaceCreated}
           onScopeUpdated={(nextScope) => setScopeState(nextScope)}
@@ -627,25 +590,6 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
               </Select>
               <p className="text-xs text-muted-foreground">{t("space.wizard.basics.writingLanguageHelp")}</p>
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="space-timeframe">{t("space.overview.edit.timeframeLabel")}</Label>
-            <Input
-              id="space-timeframe"
-              value={timeframeDraft}
-              onChange={(event) =>
-                handleTimeframeDraftChange(
-                  event.target.value,
-                  (event.nativeEvent as InputEvent | undefined)?.inputType ?? null,
-                )
-              }
-              onBlur={validateTimeframe}
-              placeholder={t("space.overview.edit.timeframePlaceholder")}
-              inputMode="numeric"
-              pattern="\d{4}(?:\s?–\s?\d{4})?"
-            />
-            {timeframeError && <p className="text-xs text-destructive">{timeframeError}</p>}
           </div>
 
           <div className="space-y-2">
@@ -766,6 +710,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
                 </div>
               )}
             </div>
+            <p className="text-xs text-muted-foreground">{t("space.wizard.scopeStep.descriptionHelp")}</p>
           </div>
 
           {saveError && <p className="text-sm text-destructive">{saveError}</p>}

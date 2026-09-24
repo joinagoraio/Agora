@@ -5,7 +5,7 @@ import Link from "next/link"
 import { FolderKanban, GripVertical, Info, Layers2, Star } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { ViewModeToggle, useCollectionViewMode } from "@/components/view-mode-toggle"
@@ -213,25 +213,23 @@ function CollectionCard({
   const Icon = collectionIcon(item.kind ?? fallbackKind)
   return (
     <Card
-      className={cn("group relative transition-all hover:shadow-md", onReorderPointerDown && "cursor-grab", className)}
+      className={cn(
+        "group relative justify-center gap-0 py-0 transition-all hover:shadow-md",
+        onReorderPointerDown && "cursor-grab",
+        className,
+      )}
       {...(itemAttr ? { [itemAttr]: favoriteItemKey(item) } : {})}
       onPointerDown={onReorderPointerDown}
     >
       {onReorderPointerDown ? (
-        <div
-          className={cn(
-            "absolute left-2 top-2 z-10 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100",
-            compact ? "left-2 top-1.5" : "left-3 top-2.5",
-          )}
-        >
+        <div className="absolute left-2 top-1/2 z-10 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100">
           <ReorderHandle label={reorderLabel ?? ""} onPointerDown={onReorderPointerDown} />
         </div>
       ) : null}
       {onTogglePin ? (
         <div
           className={cn(
-            "absolute right-3 top-2.5 z-10 transition-opacity",
-            compact ? "right-3 top-2" : "right-6 top-3",
+            "absolute right-3 top-1/2 z-10 -translate-y-1/2 transition-opacity",
             item.pinned
               ? "opacity-100"
               : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100",
@@ -240,24 +238,29 @@ function CollectionCard({
           <FavoriteToggle item={item} onTogglePin={onTogglePin} />
         </div>
       ) : null}
-      <Link href={item.href} className="block">
-        <CardHeader className={compact ? "p-3 pb-2" : undefined}>
-          <div className={cn("flex min-w-0 items-center gap-3", onTogglePin && "pr-7", onReorderPointerDown && "pl-6")}>
-            <Icon className={cn("shrink-0 text-primary", compact ? "h-4 w-4" : "h-5 w-5")} />
-            <CardTitle className={cn("mt-0 min-w-0", compact && "text-base")}>{item.title}</CardTitle>
-            {item.badge ? (
-              <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                {item.badge}
-              </span>
-            ) : null}
-          </div>
-        </CardHeader>
+      <Link
+        href={item.href}
+        className={cn(
+          "flex w-full",
+          item.description ? "flex-col justify-center" : "items-center",
+          compact ? "min-h-12 px-3" : "min-h-14 px-4 py-3",
+          onTogglePin && "pr-10",
+          onReorderPointerDown && "pl-8",
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <Icon className={cn("shrink-0 text-primary", compact ? "h-4 w-4" : "h-5 w-5")} />
+          <CardTitle className={cn("mt-0 min-w-0 leading-none", compact && "text-base")}>{item.title}</CardTitle>
+          {item.badge ? (
+            <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium leading-none text-primary">
+              {item.badge}
+            </span>
+          ) : null}
+        </div>
         {item.description ? (
-          <CardContent className={compact ? "px-3 pb-3 pt-0" : undefined}>
-            <p className={cn("text-sm text-muted-foreground", compact ? "line-clamp-1" : "line-clamp-2")}>
-              {item.description}
-            </p>
-          </CardContent>
+          <p className={cn("text-sm text-muted-foreground", compact ? "mt-1 line-clamp-1" : "mt-1 line-clamp-2")}>
+            {item.description}
+          </p>
         ) : null}
       </Link>
     </Card>

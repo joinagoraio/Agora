@@ -15,6 +15,20 @@ interface WelcomeUserDialogProps {
 
 const DISMISS_KEY_PREFIX = "agora:welcome-modal-dismissed:"
 const SESSION_SHOWN_KEY = "agora:welcome-modal-shown-this-session"
+const WELCOME_OPEN_EVENT = "agora:welcome-open"
+const WELCOME_CLOSED_EVENT = "agora:welcome-closed"
+
+let welcomeUserDialogOpen = false
+
+export function isWelcomeUserDialogOpen() {
+  return welcomeUserDialogOpen
+}
+
+function setWelcomeUserDialogOpen(open: boolean) {
+  welcomeUserDialogOpen = open
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new Event(open ? WELCOME_OPEN_EVENT : WELCOME_CLOSED_EVENT))
+}
 
 export function WelcomeUserDialog({ userId, userName, hasSpaces, hasWorkspaces }: WelcomeUserDialogProps) {
   const { t } = useI18n()
@@ -35,6 +49,7 @@ export function WelcomeUserDialog({ userId, userName, hasSpaces, hasWorkspaces }
 
     if (shouldShow) {
       setOpen(true)
+      setWelcomeUserDialogOpen(true)
       window.sessionStorage.setItem(SESSION_SHOWN_KEY, "1")
     }
   }, [dismissStorageKey, hasSpaces, hasWorkspaces])
@@ -43,6 +58,7 @@ export function WelcomeUserDialog({ userId, userName, hasSpaces, hasWorkspaces }
     if (typeof window !== "undefined" && shouldPersist) {
       window.localStorage.setItem(dismissStorageKey, "1")
     }
+    setWelcomeUserDialogOpen(false)
     setOpen(false)
   }
 

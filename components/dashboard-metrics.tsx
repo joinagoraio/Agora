@@ -4,11 +4,14 @@ import { useEffect, useState } from "react"
 import { Bot, FolderKanban, Layers2, Settings } from "lucide-react"
 
 import { prefetchTenantLlmAdminState, TenantLlmAdmin } from "@/components/tenant-llm-admin"
+import { isWelcomeUserDialogOpen } from "@/components/welcome-user-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { useI18n } from "@/lib/i18n/use-i18n"
+
+const MODELS_NOTICE_KEY_PREFIX = "agora:models-settings-notice-dismissed:"
 
 export function DashboardMetrics({
   authorities,
@@ -16,15 +19,50 @@ export function DashboardMetrics({
   agents,
   tenantId,
   canManageModels = false,
+  userId,
+  holdNotice = false,
 }: {
   authorities: number
   programmes: number
   agents: number
   tenantId?: string | null
   canManageModels?: boolean
+  userId?: string | null
+  holdNotice?: boolean
 }) {
   const { t } = useI18n()
   const [modelsOpen, setModelsOpen] = useState(false)
+  const [noticeDismissed, setNoticeDismissed] = useState(true)
+  const [welcomeOpen, setWelcomeOpen] = useState(false)
+  const emptyAccount = authorities === 0 && programmes === 0
+  const noticeStorageKey = userId ? `${MODELS_NOTICE_KEY_PREFIX}${userId}` : null
+
+  useEffect(() => {
+    if (!canManageModels || !emptyAccount || !noticeStorageKey || typeof window === "undefined") {
+      setNoticeDismissed(true)
+      return
+    }
+    setNoticeDismissed(window.localStorage.getItem(noticeStorageKey) === "1")
+    setWelcomeOpen(isWelcomeUserDialogOpen())
+    const onOpen = () => setWelcomeOpen(true)
+    const onClose = () => setWelcomeOpen(false)
+    window.addEventListener("agora:welcome-open", onOpen)
+    window.addEventListener("agora:welcome-closed", onClose)
+    return () => {
+      window.removeEventListener("agora:welcome-open", onOpen)
+      window.removeEventListener("agora:welcome-closed", onClose)
+    }
+  }, [canManageModels, emptyAccount, noticeStorageKey])
+
+  const showNotice =
+    canManageModels && emptyAccount && !holdNotice && !noticeDismissed && !welcomeOpen && !modelsOpen
+
+  const dismissNotice = () => {
+    if (noticeStorageKey && typeof window !== "undefined") {
+      window.localStorage.setItem(noticeStorageKey, "1")
+    }
+    setNoticeDismissed(true)
+  }
 
   useEffect(() => {
     if (!canManageModels || !tenantId) return
@@ -70,12 +108,24 @@ export function DashboardMetrics({
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
-                onClick={() => setModelsOpen(true)}
+                onClick={() => {
+                  dismissNotice()
+                  setModelsOpen(true)
+                }}
                 aria-label={t("dashboard.metrics.agents.settings")}
               >
                 <Settings className="h-4 w-4 text-muted-foreground" />
               </Button>
             </IconTooltip>
+          ) : null}
+          {showNotice ? (
+            <div className="absolute top-[calc(100%+0.5rem)] right-3 z-20 w-64 rounded-lg border bg-popover p-3 text-left shadow-lg">
+              <span aria-hidden className="absolute -top-1.5 right-3 h-3 w-3 rotate-45 border-t border-l bg-popover" />
+              <p className="text-sm text-foreground">{t("dashboard.metrics.agents.notice")}</p>
+              <Button type="button" variant="ghost" size="sm" className="mt-2 h-8 px-2" onClick={dismissNotice}>
+                {t("dashboard.metrics.agents.noticeDismiss")}
+              </Button>
+            </div>
           ) : null}
         </CardContent>
       </Card>

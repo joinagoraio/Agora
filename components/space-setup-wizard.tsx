@@ -204,8 +204,6 @@ export function SpaceSetupWizard({
 
   const [summary, setSummary] = useState(scope.summary ?? "")
   const [description, setDescription] = useState(scope.description ?? "")
-  const [timeframe, setTimeframe] = useState(scope.timeframe ?? "")
-  const [timeframeError, setTimeframeError] = useState<string | null>(null)
 
   const [originalSummary, setOriginalSummary] = useState<string | null>(null)
   const [originalDescription, setOriginalDescription] = useState<string | null>(null)
@@ -333,72 +331,6 @@ export function SpaceSetupWizard({
     }
   }
 
-  const handleTimeframeChange = (value: string, inputType?: string | null) => {
-    if (!value) {
-      setTimeframe("")
-      if (timeframeError) {
-        setTimeframeError(null)
-      }
-      return
-    }
-
-    const sanitized = value.replace(/[^\d\s–-]/g, "").replace(/\s+/g, " ")
-    const normalized = sanitized.replace("-", "–").replace(/\s*–\s*/, " – ")
-    const compactDigits = sanitized.replace(/\s|–|-/g, "")
-    const isDeleting = inputType?.startsWith("delete")
-
-    if (isDeleting) {
-      setTimeframe(value)
-      if (timeframeError) {
-        setTimeframeError(null)
-      }
-      return
-    }
-
-    let nextValue = normalized
-
-    if (!sanitized.includes("–") && !sanitized.includes("-")) {
-      if (/^\d{4}$/.test(compactDigits)) {
-        nextValue = `${compactDigits} – `
-      } else {
-        nextValue = compactDigits
-      }
-    } else {
-      const [start, end = ""] = sanitized.split(/[–-]/)
-      const trimmedEnd = end.replace(/\s/g, "")
-      if (trimmedEnd.length > 4) {
-        const clipped = trimmedEnd.slice(0, 4)
-        const normalizedStart = start.trim()
-        nextValue = `${normalizedStart} – ${clipped}`
-      }
-    }
-
-    setTimeframe(nextValue)
-    if (timeframeError) {
-      setTimeframeError(null)
-    }
-  }
-
-  const validateTimeframe = () => {
-    if (!timeframe || timeframe.trim().length === 0) {
-      setTimeframeError(null)
-      return true
-    }
-
-    const trimmed = timeframe.trim()
-    const pattern = /^\d{4}(?:\s?[–-]\s?\d{4})?$/
-
-    if (!pattern.test(trimmed)) {
-      setTimeframeError(t("space.overview.timeframeError"))
-      return false
-    }
-
-    const normalized = trimmed.replace("-", "–").replace(/\s*–\s*/, " – ").trim()
-    setTimeframe(normalized)
-    setTimeframeError(null)
-    return true
-  }
-
   const persistCurrentStep = async () => {
     const step = steps[currentStep]?.key
     switch (step) {
@@ -435,13 +367,9 @@ export function SpaceSetupWizard({
         return true
       }
       case "scope": {
-        if (!validateTimeframe()) {
-          return false
-        }
         const result = await updateSpaceScope(spaceId, {
           summary,
           description,
-          timeframe,
         })
         if (result?.error) {
           setStepError(result.error)
@@ -451,7 +379,6 @@ export function SpaceSetupWizard({
         onScopeUpdated({
           summary,
           description,
-          timeframe,
         })
         return true
       }
@@ -868,24 +795,6 @@ export function SpaceSetupWizard({
                   {t("space.wizard.scopeStep.descriptionHelp")}
                 </p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="wizard-timeframe">{t("space.overview.edit.timeframeLabel")}</Label>
-                <Input
-                  id="wizard-timeframe"
-                  value={timeframe}
-                  onChange={(event) =>
-                    handleTimeframeChange(
-                      event.target.value,
-                      (event.nativeEvent as InputEvent | undefined)?.inputType ?? null,
-                    )
-                  }
-                  onBlur={validateTimeframe}
-                  placeholder={t("space.overview.edit.timeframePlaceholder")}
-                  inputMode="numeric"
-                  pattern="\d{4}(?:\s?–\s?\d{4})?"
-                />
-                {timeframeError && <p className="text-xs text-destructive">{timeframeError}</p>}
-              </div>
             </div>
           </div>
         )
@@ -1034,15 +943,17 @@ export function SpaceSetupWizard({
                     placeholder={t("space.wizard.workspace.namePlaceholder")}
                   />
                 </div>
-                <ProgrammeTemplatePicker
-                  templates={workspaceTemplates}
-                  value={workspaceTemplateId}
-                  onChange={setWorkspaceTemplateId}
-                  disabled={workspaceIsCreating}
-                  id="wizard-workspace-template"
-                  label={t("space.wizard.workspace.templateLabel")}
-                  help={t("space.workspaces.dialog.templateHelp")}
-                />
+                {workspaceTemplates.length > 0 ? (
+                  <ProgrammeTemplatePicker
+                    templates={workspaceTemplates}
+                    value={workspaceTemplateId}
+                    onChange={setWorkspaceTemplateId}
+                    disabled={workspaceIsCreating}
+                    id="wizard-workspace-template"
+                    label={t("space.wizard.workspace.templateLabel")}
+                    help={t("space.workspaces.dialog.templateHelp")}
+                  />
+                ) : null}
                 <Button onClick={handleCreateWorkspace} disabled={workspaceIsCreating} className="w-fit">
                   {workspaceIsCreating ? (
                     <>

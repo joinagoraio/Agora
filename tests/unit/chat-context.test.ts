@@ -63,7 +63,7 @@ describe("buildWorkspaceContext", () => {
     expect(result.workspaceContextSection).not.toContain("Parent authority")
     expect(result.workspaceContextSection).toContain("Authority mission statement:\nAlignment with EU directives.")
     expect(result.workspaceContextSection).toContain("Authority description:\nEnsure compliance with Fit for 55")
-    expect(result.workspaceContextSection).toContain("Authority timeframe: 2024-2025")
+    expect(result.workspaceContextSection).not.toContain("Authority timeframe")
     expect(result.workspaceContextSection).toContain("Authority jurisdiction: Netherlands • Noord-Holland")
     expect(result.workspaceContextSection).not.toMatch(/workspace/i)
   })

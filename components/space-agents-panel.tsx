@@ -35,6 +35,12 @@ export function SpaceAgentsPanel({
 }: Props) {
   const { t } = useI18n()
   const [agents, setAgents] = useState<AgentRow[]>(initialAgents)
+  const agentKey = initialAgents.map((agent) => `${agent.id}:${agent.latestVersion?.id ?? ""}`).join(",")
+  useEffect(() => {
+    setAgents(initialAgents)
+    // The key is the server list. A new empty array each render must not wipe agents added in this panel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentKey])
   const [pending, startTransition] = useTransition()
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)

@@ -1,9 +1,8 @@
 "use client"
 
 import { type ReactNode, useRef, useState } from "react"
-import { ClassificationPicker } from "@/components/classification-picker"
-
 import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -265,13 +264,23 @@ export function SpaceUploadDocumentDialog({ spaceId, trigger, onUploaded }: Spac
           </div>
 
           <div className="space-y-2">
-            <Label>{t("workspace.common.classification.label")}</Label>
-            <ClassificationPicker
+            <Label htmlFor="space-classification">{t("workspace.common.classification.label")}</Label>
+            <Select
               value={classification}
-              onChange={setClassification}
-              scope="shared"
-              idPrefix="space-classification"
-            />
+              onValueChange={(value) => setClassification(value as "public" | "internal" | "confidential")}
+            >
+              <SelectTrigger id="space-classification" className="w-full">
+                <SelectValue placeholder={t("space.documents.upload.classificationPlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="public">{t("workspace.common.classification.public")}</SelectItem>
+                <SelectItem value="internal">{t("workspace.common.classification.internal")}</SelectItem>
+                <SelectItem value="confidential">{t("workspace.common.classification.confidential")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {t(`workspace.common.classification.sharedHelp.${classification}`)}
+            </p>
           </div>
 
           <div className="space-y-2">
