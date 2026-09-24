@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ProgrammeCitationTooltip } from "@/components/programme-citation-tooltip"
+import { generateProgrammeMeasuresFromContext } from "@/lib/actions/measures"
 import {
   findProgrammeInterests,
   getProgrammeInterestWorkup,
@@ -89,6 +90,23 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
     )
     onChanged?.()
     return true
+  }
+
+  const proposeMeasures = async (interest: ProgrammeInterest) => {
+    setWorkingIds((current) => [...current, interest.id])
+    const result = await generateProgrammeMeasuresFromContext(workspaceId, { interestId: interest.id, count: 4 })
+    setWorkingIds((current) => current.filter((id) => id !== interest.id))
+    if (result.error || !result.data) {
+      onMessage(result.error || t("workspace.programme.interests.workupError"), "error")
+      return
+    }
+    onMessage(
+      t("workspace.programme.interests.measuresProposed", undefined, {
+        count: String(result.data.saved),
+        interest: [interest.reference, interest.label].filter(Boolean).join(" "),
+      }),
+    )
+    onChanged?.()
   }
 
   const workUpSelected = async () => {
@@ -184,6 +202,17 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
                       {interest.workupDocumentId ? (
                         <Button type="button" size="sm" variant="outline" onClick={() => void open(interest)}>
                           {t("workspace.programme.interests.openWorkup")}
+                        </Button>
+                      ) : null}
+                      {interest.selected ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={!canEdit || working || busy}
+                          onClick={() => void proposeMeasures(interest)}
+                        >
+                          {t("workspace.programme.interests.proposeMeasures")}
                         </Button>
                       ) : null}
                       {interest.selected ? (

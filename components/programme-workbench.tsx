@@ -145,6 +145,10 @@ import { ProgrammeDocumentRoles } from "@/components/programme-document-roles"
 import { ProgrammeKnowledgeView } from "@/components/programme-knowledge-view"
 import { ProgrammeDocumentChrome } from "@/components/programme-document-chrome"
 import { ProgrammeInterestsPanel } from "@/components/programme-interests-panel"
+import { MeasureDecisionControl } from "@/components/measure-decision-control"
+import { MeasureSummaryLines } from "@/components/measure-summary-lines"
+import { listProgrammeInterests } from "@/lib/actions/interests"
+import type { ProgrammeInterest } from "@/lib/programme/interests"
 import { OverflowTitle } from "@/components/overflow-title"
 import { ProgrammeTextHistoryProvider } from "@/components/programme-text-history"
 import { ProgrammeToolsToolbar } from "@/components/programme-tools-toolbar"
@@ -207,6 +211,8 @@ const emptyMeasureDraft = {
   provincialInterests: "",
   narrative: "",
   outlineNodeId: "",
+  challenge: "",
+  resources: "",
 }
 
 function downloadBlob(filename: string, blob: Blob) {
@@ -323,6 +329,7 @@ export function ProgrammeWorkbench({
   }, [guidanceStrip])
   const [outlineNodeCount, setOutlineNodeCount] = useState(0)
   const [outlineChapters, setOutlineChapters] = useState<Array<{ id: string; title: string }>>([])
+  const [programmeInterests, setProgrammeInterests] = useState<ProgrammeInterest[]>([])
   const [snapshotLoaded, setSnapshotLoaded] = useState(false)
   const [wizardSession, setWizardSession] = useState(false)
   const [accessPanel, setAccessPanel] = useState<ProgrammeAccessPanel>(null)
@@ -666,6 +673,7 @@ export function ProgrammeWorkbench({
       }
       setReviewers(reviewerResult.data || [])
       setCurrentUserId(reviewerResult.currentUserId ?? null)
+      void listProgrammeInterests(workspaceId).then((listed) => setProgrammeInterests(listed.data || []))
       const [tpl, ag, cm, themeResult, docs, chapterResult, notesResult, consultationResult] = await Promise.all([
         listSpaceTemplates(spaceId),
         listSpaceAgents(spaceId),
@@ -2029,9 +2037,12 @@ export function ProgrammeWorkbench({
                           if (editingMeasureId && editingMeasureId !== item.id) setEditingMeasureId(null)
                         }}
                       >
-                        <span className="block font-medium">{item.title}</span>
+                        <span className={`block font-medium ${item.decision === "drop" ? "text-muted-foreground line-through" : ""}`}>
+                          {item.title}
+                        </span>
                         <span className="text-xs text-muted-foreground">
                           {t(`workspace.programme.chapterListStatus.${item.workflow_status}`, item.workflow_status)}
+                          {item.decision ? ` · ${t(`workspace.programme.decision.status.${item.decision}`)}` : ""}
                         </span>
                       </button>
                     </li>
@@ -2081,6 +2092,8 @@ export function ProgrammeWorkbench({
                           provincialInterests: (m.provincial_interests || []).join(", "),
                           narrative: m.narrative || "",
                           outlineNodeId: m.outline_node_id || "",
+                          challenge: m.challenge || "",
+                          resources: m.resources || "",
                         })
                       }}
                     >
@@ -2144,6 +2157,17 @@ export function ProgrammeWorkbench({
                     )}
                   </div>
                 </div>
+                <MeasureDecisionControl
+                  workspaceId={workspaceId}
+                  measureId={m.id}
+                  decision={m.decision ?? null}
+                  reason={m.decision_reason ?? null}
+                  decidedAt={m.decided_at ?? null}
+                  disabled={pending || accessRole === "viewer"}
+                  onMessage={notify}
+                  onSaved={refresh}
+                />
+                <MeasureSummaryLines measure={m} interests={programmeInterests} />
                 {editingMeasureId === m.id && (
                   <div className="grid gap-2 sm:grid-cols-2">
                     <label className="space-y-1 text-xs sm:col-span-2">
@@ -2229,6 +2253,20 @@ export function ProgrammeWorkbench({
                       />
                     </label>
                     <label className="space-y-1 text-xs sm:col-span-2">
+                      <span className="text-muted-foreground">{t("workspace.programme.measureField.challenge")}</span>
+                      <Input
+                        value={measureDraft.challenge}
+                        onChange={(e) => setMeasureDraft((p) => ({ ...p, challenge: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs sm:col-span-2">
+                      <span className="text-muted-foreground">{t("workspace.programme.measureField.resources")}</span>
+                      <Input
+                        value={measureDraft.resources}
+                        onChange={(e) => setMeasureDraft((p) => ({ ...p, resources: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs sm:col-span-2">
                       <span className="text-muted-foreground">{t("workspace.programme.measureField.chapter")}</span>
                       <Select
                         value={measureDraft.outlineNodeId || "none"}
@@ -2280,6 +2318,8 @@ export function ProgrammeWorkbench({
                             effectsJustification: m.effects_justification,
                             narrative: measureDraft.narrative,
                             outlineNodeId: measureDraft.outlineNodeId || null,
+                            challenge: measureDraft.challenge,
+                            resources: measureDraft.resources,
                             workflowStatus: m.workflow_status === "generated" ? "revised" : m.workflow_status,
                           })
                           notifyResult(result.error, t("workspace.programme.measureEdited"))

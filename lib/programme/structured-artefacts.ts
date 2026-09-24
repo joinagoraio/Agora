@@ -35,6 +35,9 @@ export const measureCandidateSchema = z.object({
   citations: z.array(measureCitationSchema).min(1),
   narrative: z.string().optional(),
   outlineNodeId: z.string().uuid().optional().nullable(),
+  challenge: z.string().optional(),
+  resources: z.string().optional(),
+  interestIds: z.array(z.string()).optional(),
 })
 
 export type MeasureCandidate = z.infer<typeof measureCandidateSchema>

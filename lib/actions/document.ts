@@ -1843,7 +1843,9 @@ export async function generateWorkspaceDocumentDraft(
         query: [node.title, node.purpose || "", node.instructions || "", instructions].join("\n"),
       })
       const { formatMeasureBlock, formatMeasureList } = await import("@/lib/programme/measure-block")
-      const allMeasures = (await listProgrammeMeasures(workspaceId)).data || []
+      const allMeasures = ((await listProgrammeMeasures(workspaceId)).data || []).filter(
+        (m: { decision?: string | null }) => m.decision !== "drop",
+      )
       const placed = allMeasures.filter((m: { outline_node_id?: string }) => m.outline_node_id === node.id)
       const usesWholeList = node.drawsOn.includes("measures")
       const measureSection = usesWholeList

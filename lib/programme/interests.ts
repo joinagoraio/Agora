@@ -76,6 +76,31 @@ export function mapInterestRow(row: Record<string, unknown>): ProgrammeInterest 
   }
 }
 
+/** Link free-text interest names (as a model or person wrote them) to interest records. */
+export function matchInterestIds(
+  names: string[],
+  interests: Array<{ id: string; reference: string | null; label: string }>,
+): string[] {
+  const normalize = (value: string) => value.toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, " ").trim()
+  const ids = new Set<string>()
+  for (const name of names) {
+    const text = normalize(name)
+    if (!text) continue
+    const byLabel = interests.find((interest) => {
+      const label = normalize(interest.label)
+      return label.length > 8 && (text.includes(label) || (text.length > 12 && label.includes(text)))
+    })
+    if (byLabel) {
+      ids.add(byLabel.id)
+      continue
+    }
+    const number = text.match(/(?:^|\D)(\d{1,3})(?:\D|$)/)?.[1]
+    const byReference = number ? interests.find((interest) => interest.reference === number) : undefined
+    if (byReference) ids.add(byReference.id)
+  }
+  return [...ids]
+}
+
 /** "Provinciaal belang 15: …", "Belang 3. …", "Principle 2: …" */
 const NUMBERED_INTEREST =
   /^((?:[A-Za-zÀ-ÿ]+\s+)?(?:belang|principe|uitgangspunt|interest|principle))\s+(\d{1,3})\s*[:.]\s+(.+)$/i

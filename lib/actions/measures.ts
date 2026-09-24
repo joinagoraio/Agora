@@ -64,6 +64,9 @@ export async function upsertProgrammeMeasure(
     narrative: measure.narrative ?? null,
     workflow_status: measure.workflowStatus ?? "generated",
     outline_node_id: measure.outlineNodeId ?? null,
+    ...(measure.challenge !== undefined ? { challenge: measure.challenge || null } : {}),
+    ...(measure.resources !== undefined ? { resources: measure.resources || null } : {}),
+    ...(measure.interestIds !== undefined ? { interest_ids: measure.interestIds } : {}),
     updated_at: new Date().toISOString(),
     created_by: user?.id,
   }
@@ -102,6 +105,49 @@ export async function upsertProgrammeMeasure(
   revalidatePath(`/workspaces/${workspaceId}`)
   revalidatePath(`/workspaces/${workspaceId}/programme`)
   return { data: saved }
+}
+
+/** Staff decide what happens to a proposed measure: keep it, adapt it, or drop it with a reason. */
+export async function setMeasureDecision(
+  workspaceId: string,
+  measureId: string,
+  decision: "keep" | "adapt" | "drop" | null,
+  reason?: string,
+) {
+  try {
+    await requireAuthAndPermission("workspace:update", { workspaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+  const trimmed = reason?.trim() || ""
+  if (decision === "drop" && !trimmed) return { error: "Give a reason for dropping this measure." }
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const { data, error } = await supabase
+    .from("programme_measures")
+    .update({
+      decision,
+      decision_reason: decision ? trimmed || null : null,
+      decided_by: decision ? user?.id ?? null : null,
+      decided_at: decision ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", measureId)
+    .eq("workspace_id", workspaceId)
+    .select("id, decision, decision_reason, decided_at")
+    .single()
+  if (error || !data) return { error: error?.message || "Measure not found" }
+  await snapshotArtefact({
+    workspaceId,
+    artefactType: "measure",
+    artefactId: measureId,
+    snapshot: data as Record<string, unknown>,
+    reason: decision ? `decision:${decision}` : "decision cleared",
+  })
+  revalidatePath(`/workspaces/${workspaceId}/programme`)
+  return { data }
 }
 
 export async function approveProgrammeMeasure(workspaceId: string, measureId: string) {
@@ -342,6 +388,8 @@ export async function generateProgrammeMeasuresFromContext(
     outlineNodeId?: string | null
     /** Extra words that describe what the measures are about, used to pick evidence. */
     focus?: string
+    /** The interest these measures are for; it is linked to every measure. */
+    interestId?: string | null
   },
 ) {
   try {
@@ -416,11 +464,34 @@ export async function generateProgrammeMeasuresFromContext(
     }
   }
 
+  const { data: interestRows } = await supabase
+    .from("programme_interests")
+    .select("id, reference, label, summary, selected")
+    .eq("workspace_id", workspaceId)
+    .order("sort_order", { ascending: true })
+  const interests = (interestRows || []) as Array<{
+    id: string
+    reference: string | null
+    label: string
+    summary: string | null
+    selected: boolean
+  }>
+  const focusInterest = options?.interestId ? interests.find((interest) => interest.id === options.interestId) : undefined
+  const interestName = (interest: { reference: string | null; label: string }) =>
+    [interest.reference, interest.label].filter(Boolean).join(" ")
+  const promptInterests = interests.filter((interest) => interest.selected || interest.id === focusInterest?.id)
+  const interestsBlock = (promptInterests.length ? promptInterests : interests).map((interest) => `- ${interestName(interest)}`).join("\n")
+
   const { selectEvidenceForTask } = await import("@/lib/programme/evidence-select")
   const evidence = await selectEvidenceForTask({
     supabase,
     documents,
-    query: [instructions, outlineBlock, options?.focus || ""].join("\n"),
+    query: [
+      instructions,
+      outlineBlock,
+      options?.focus || "",
+      focusInterest ? `${interestName(focusInterest)} ${focusInterest.summary || ""}` : "",
+    ].join("\n"),
   })
   const context = evidence.text
   const sourcePreview = formatSourcePreview(documents, { used: evidence.used, total: evidence.total })
@@ -451,6 +522,14 @@ Workspace evidence (each piece shows its document id, section id, and page):
 ${context || "(empty)"}
 
 In citations, give the documentId, the sectionId when shown, the pageNumber, and an exact quote from that piece.
+${
+  interestsBlock
+    ? `\nINTERESTS the vision names:\n${interestsBlock}\nIn "provincialInterests", name each interest a measure serves exactly as listed above, number first.${
+        focusInterest ? ` Every measure serves ${interestName(focusInterest)}; name others only when the evidence links them.` : ""
+      }\n`
+    : ""
+}
+Also give, when the evidence supports it: "challenge" (the task or problem from the vision or policy this measure addresses) and "resources" (only what the sources say about means, costs, or funding; leave it out otherwise, never estimate).
 
 ${
   outlineIds.size > 0 && !options?.outlineNodeId
@@ -507,9 +586,13 @@ ${
   const saved = []
   for (const measure of measures) {
     const proposedNode = measure.outlineNodeId && outlineIds.has(measure.outlineNodeId) ? measure.outlineNodeId : null
+    const { matchInterestIds } = await import("@/lib/programme/interests")
+    const linked = new Set(matchInterestIds(measure.provincialInterests || [], interests))
+    if (focusInterest) linked.add(focusInterest.id)
     const result = await upsertProgrammeMeasure(workspaceId, {
       ...measure,
       outlineNodeId: options?.outlineNodeId ?? proposedNode,
+      interestIds: [...linked],
     })
     if (result.data) saved.push(result.data)
   }

@@ -55,7 +55,9 @@ export async function composeWorkspaceProgramme(workspaceId: string, title: stri
   const { data: workspace } = await supabase.from("workspaces").select("metadata").eq("id", workspaceId).single()
   const bindings = parseProgrammeBindings((workspace?.metadata as Record<string, unknown>) || {})
   const nodes = bindings.templateId ? (await listProgrammeOutlineNodes(bindings.templateId)).data : []
-  const measures = (await listProgrammeMeasures(workspaceId)).data || []
+  const measures = ((await listProgrammeMeasures(workspaceId)).data || []).filter(
+    (m: { decision?: string | null }) => m.decision !== "drop",
+  )
   const chapters = []
   for (const node of nodes) {
     const docId = bindings.chapterDocuments?.[node.id]
@@ -323,7 +325,10 @@ export async function buildAuditPackageJson(workspaceId: string) {
 
   const [runs, measures, reports, jobs] = await Promise.all([
     supabase.from("generation_runs").select("id, kind, created_at, source_document_ids, unused_document_ids").eq("workspace_id", workspaceId),
-    supabase.from("programme_measures").select("id, title, workflow_status, citations").eq("workspace_id", workspaceId),
+    supabase
+      .from("programme_measures")
+      .select("id, title, workflow_status, citations, interest_ids, challenge, resources, decision, decision_reason, decided_by, decided_at")
+      .eq("workspace_id", workspaceId),
     supabase.from("analysis_reports").select("id, report_type, created_at").eq("workspace_id", workspaceId),
     supabase.from("export_jobs").select("id, format, status, created_at, completed_at").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(50),
   ])

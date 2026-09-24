@@ -2,7 +2,22 @@ import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
 import { splitTextIntoPages } from "@/lib/documents/text-pages"
-import { findNumberedInterests, parseWorkupHeadings } from "@/lib/programme/interests"
+import { findNumberedInterests, matchInterestIds, parseWorkupHeadings } from "@/lib/programme/interests"
+
+describe("matchInterestIds", () => {
+  const interests = [
+    { id: "a", reference: "15", label: "Voldoende, passende en betaalbare woningen voor iedereen" },
+    { id: "b", reference: "16", label: "Toekomstbestendige woningen en woonomgevingen in Flevoland" },
+    { id: "c", reference: "2", label: "Evenwichtige ontwikkeling van de verschillende leefregio’s in Flevoland" },
+  ]
+
+  it("matches by title or by the vision's number", () => {
+    expect(matchInterestIds(["Provinciaal belang 15: Voldoende, passende en betaalbare woningen voor iedereen"], interests)).toEqual(["a"])
+    expect(matchInterestIds(["belang 16"], interests)).toEqual(["b"])
+    expect(matchInterestIds(["2 Evenwichtige ontwikkeling van de verschillende leefregio's in Flevoland"], interests)).toEqual(["c"])
+    expect(matchInterestIds(["wonen", "nothing here"], interests)).toEqual([])
+  })
+})
 
 describe("findNumberedInterests", () => {
   const text = readFileSync(resolve(process.cwd(), "lib/programme/flevoland-sources/vision-2050.txt"), "utf8")
