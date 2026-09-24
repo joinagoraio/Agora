@@ -75,6 +75,12 @@ export const completeOpenAiCompatible: LlmAdapter = async (input, apiKey) => {
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "")
+    if (/insufficient_quota|credit_balance_exhausted/.test(detail)) {
+      throw new Error("The AI provider account has no credits left. Add credits to the provider account, then try again.")
+    }
+    if (response.status === 429) {
+      throw new Error("The AI provider is receiving too many requests. Wait a minute, then try again.")
+    }
     throw new Error(`OpenAI-compatible request failed (${response.status}): ${detail.slice(0, 400)}`)
   }
 
