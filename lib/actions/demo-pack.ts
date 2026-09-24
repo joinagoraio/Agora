@@ -3,7 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import { isSuperAdmin } from "@/lib/llm/resolve"
 import { createClient } from "@/lib/supabase/server"
-import { createSpace, deleteSpace, updateSpace } from "@/lib/actions/space"
+import { createSpace, deleteSpace, updateSpace, updateSpaceScope } from "@/lib/actions/space"
 import { createWorkspace } from "@/lib/actions/workspace"
 import { createProgrammeTemplate, upsertOutlineNode } from "@/lib/actions/template"
 import { publishSpaceItem } from "@/lib/actions/space-item"
@@ -30,6 +30,9 @@ export type DemoPack = {
   id: string
   name: string
   writingLanguage: "en" | "nl"
+  mission: string
+  description: string
+  jurisdiction: string
   chapters: DemoPackChapter[]
   files: DemoPackFile[]
 }
@@ -75,6 +78,9 @@ function mapPack(row: {
   id: string
   name: string
   writing_language: string
+  mission?: string | null
+  description?: string | null
+  jurisdiction?: string | null
   chapters: unknown
   files: unknown
 }): DemoPack {
@@ -82,12 +88,22 @@ function mapPack(row: {
     id: row.id,
     name: row.name,
     writingLanguage: row.writing_language === "nl" ? "nl" : "en",
+    mission: row.mission?.trim() || "",
+    description: row.description?.trim() || "",
+    jurisdiction: row.jurisdiction?.trim() || "",
     chapters: asChapters(row.chapters),
     files: asFiles(row.files),
   }
 }
 
 const FLEVOLAND_PACK_NAME = "Flevoland demo"
+
+const FLEVOLAND_PROFILE = {
+  mission: "Samen werken aan Flevoland in balans.",
+  description:
+    "Provincie Flevoland stuurt op de fysieke leefomgeving tot 2050. De ontwerp-omgevingsvisie werkt dat uit in drie strategieën: sterke leefregio's, innovatieve economische ecosystemen en een robuust polderraamwerk.",
+  jurisdiction: "Provincie Flevoland",
+}
 
 export async function ensureFlevolandDemoPack() {
   const admin = createAdminClient()
@@ -96,10 +112,21 @@ export async function ensureFlevolandDemoPack() {
     .select("id")
     .eq("name", FLEVOLAND_PACK_NAME)
     .maybeSingle()
-  if (existing) return
+  if (existing) {
+    const { data: row } = await admin
+      .from("platform_demo_packs")
+      .select("mission")
+      .eq("id", existing.id)
+      .maybeSingle()
+    if (!row?.mission?.trim()) {
+      await admin.from("platform_demo_packs").update(FLEVOLAND_PROFILE).eq("id", existing.id)
+    }
+    return
+  }
   await admin.from("platform_demo_packs").insert({
     name: FLEVOLAND_PACK_NAME,
     writing_language: "nl",
+    ...FLEVOLAND_PROFILE,
     chapters: LEEFREGIO_SEED_NODES.map((node) => ({
       title: node.title,
       purpose: node.purpose,
@@ -128,6 +155,9 @@ export async function saveDemoPack(pack: DemoPack) {
   const row = {
     name: pack.name.trim(),
     writing_language: pack.writingLanguage,
+    mission: pack.mission.trim() || null,
+    description: pack.description.trim() || null,
+    jurisdiction: pack.jurisdiction.trim() || null,
     chapters: pack.chapters,
     files: pack.files,
     updated_at: new Date().toISOString(),
@@ -187,12 +217,23 @@ export async function loadDemoPack(packId: string) {
     ...((space?.metadata as Record<string, unknown>) || {}),
     demo: true,
     demoPackId: pack.id,
+    setupWizard: {
+      completed: true,
+      dismissed: true,
+      completed_at: new Date().toISOString(),
+    },
   }
   const updated = await updateSpace(spaceId, {
     writing_language: pack.writingLanguage,
+    jurisdiction: pack.jurisdiction.trim() ? { label: pack.jurisdiction.trim() } : {},
     metadata,
   })
   if (updated.error) return { error: updated.error }
+  const scope = await updateSpaceScope(spaceId, {
+    summary: pack.mission.trim() || null,
+    description: pack.description.trim() || null,
+  })
+  if (scope.error) return { error: scope.error }
 
   const template = await createProgrammeTemplate({
     spaceId,
@@ -225,6 +266,10 @@ export async function loadDemoPack(packId: string) {
     templateId: template.data.id,
   })
   if (workspace.error || !workspace.data) return { error: workspace.error || "Could not create the programme" }
+
+  const { ensureDefaultAgentsBound } = await import("@/lib/actions/programme")
+  const agents = await ensureDefaultAgentsBound(workspace.data.id, spaceId)
+  if (agents.error) return { error: agents.error }
 
   const { data: documents } = await admin
     .from("documents")

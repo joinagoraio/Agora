@@ -102,7 +102,7 @@ export function SpacePageClient({
   const [documents, setDocuments] = useState<SpaceDocumentItem[]>(initialDocuments)
   const [workspaces, setWorkspaces] = useState<SpaceWorkspace[]>(initialWorkspaces)
   const [wizardOpen, setWizardOpen] = useState(
-    canManage && !(wizardState?.completed || wizardState?.dismissed),
+    canManage && !demoPack && !(wizardState?.completed || wizardState?.dismissed),
   )
   const [accessPanel, setAccessPanel] = useState<AuthorityAccessPanel>(null)
   const [isEditingScope, setIsEditingScope] = useState(false)
@@ -513,11 +513,12 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
       />
 
       {isEditingScope ? (
-        <div className="max-h-[42vh] shrink-0 space-y-4 overflow-y-auto rounded-lg border border-border bg-card/50 p-4 shadow-lg">
-          <h2 className="text-lg font-semibold text-foreground">
+        <div className="flex shrink-0 flex-col gap-4 overflow-hidden rounded-lg border border-border bg-card/50 p-4 shadow-lg">
+          <h2 className="shrink-0 text-lg font-semibold text-foreground">
             {t("common.labels.editing")}{" "}
             <span className="text-primary">{spaceTitle}</span>
           </h2>
+          <div className="max-h-[50vh] space-y-4 overflow-y-auto pr-1">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="space-title">{t("space.overview.edit.spaceTitleLabel")}</Label>
@@ -600,7 +601,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
                 value={summaryDraft}
                 onChange={(event) => setSummaryDraft(event.target.value)}
                 placeholder={t("space.overview.edit.summaryPlaceholder")}
-                rows={4}
+                rows={3}
                 className="pb-10"
                 onFocus={() => setActiveField("summary")}
                 onBlur={() => setActiveField((current) => (current === "summary" ? null : current))}
@@ -660,7 +661,7 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
                 value={descriptionDraft}
                 onChange={(event) => setDescriptionDraft(event.target.value)}
                 placeholder={t("space.overview.edit.descriptionPlaceholder")}
-                rows={8}
+                rows={4}
                 className="pb-10"
                 onFocus={() => setActiveField("description")}
                 onBlur={() => setActiveField((current) => (current === "description" ? null : current))}
@@ -713,9 +714,10 @@ const translateVisibilityBadge = (value: string | null | undefined, t: ReturnTyp
             <p className="text-xs text-muted-foreground">{t("space.wizard.scopeStep.descriptionHelp")}</p>
           </div>
 
-          {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+          </div>
+          {saveError && <p className="shrink-0 text-sm text-destructive">{saveError}</p>}
 
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border pt-4">
             <Button type="button" variant="ghost" onClick={handleCancelEdit} disabled={isSavingScope}>
               <X className="mr-2 h-4 w-4" />
               {t("space.overview.edit.cancel")}

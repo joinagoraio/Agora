@@ -33,7 +33,6 @@ export default async function DemoPacksPage() {
       </header>
       <main className="flex-1 bg-white">
         <div className="container mx-auto max-w-5xl px-8 py-8">
-          <h1 className="mb-6 text-2xl font-semibold">{t("admin.platform.demoPacks")}</h1>
           <PlatformDemoPacks />
         </div>
       </main>

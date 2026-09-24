@@ -2765,8 +2765,20 @@ export const nlMessages = {
       tabPrompts: "Prompts",
       tabOrgs: "Organisaties",
       demoPacks: "Demopakketten",
-      demoPacksHint: "Een pakket vult een leeg bevoegd gezag voor een demonstratie. Provincies zien deze pakketten niet.",
-      demoPackNew: "Nieuw pakket",
+      demoPacksHint:
+        "Een pakket is een kant-en-klaar bevoegd gezag voor een demonstratie. Mensen in dat bevoegd gezag zien deze pagina niet.",
+      demoPackSummary: "{{files}} bestanden · {{chapters}} hoofdstukken · {{language}}",
+      demoPackLoads:
+        "Laden maakt een nieuw bevoegd gezag van dit pakket. Het zet de missie, beschrijving en jurisdictie, kopieert de bestanden als openbaar, bewaart de hoofdstukstructuur, voegt de standaardspecialisten toe, opent één programma en labelt elk bestand. Een al geladen bevoegd gezag verandert niet.",
+      demoPackChaptersHelp: "Het programma begint met deze hoofdstukken.",
+      demoPackFilesHelp:
+        "Deze bestanden komen als openbaar op het bevoegd gezag. Het label zegt het programma welk bestand de visie is en welke bestaand beleid zijn.",
+      demoPackView: "Bekijken",
+      demoPackClose: "Sluiten",
+      demoPackEmpty: "Nog geen demopakketten.",
+      demoPackLoading: "Pakketten laden…",
+      demoPackNew: "Pakket toevoegen",
+      demoPackUntitled: "Nieuw pakket",
       demoPackName: "Naam",
       demoPackChapters: "Hoofdstukken",
       demoPackAddChapter: "Hoofdstuk toevoegen",

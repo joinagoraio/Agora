@@ -2764,8 +2764,20 @@ export const enMessages = {
       tabPrompts: "Prompts",
       tabOrgs: "Organisations",
       demoPacks: "Demo packs",
-      demoPacksHint: "A pack fills an empty authority for a demonstration. Provinces do not see these packs.",
-      demoPackNew: "New pack",
+      demoPacksHint:
+        "A pack is a ready-made authority for a demonstration. People in that authority do not see this page.",
+      demoPackSummary: "{{files}} files · {{chapters}} chapters · {{language}}",
+      demoPackLoads:
+        "Load creates a new authority from this pack. It sets the mission, description, and jurisdiction, copies the files in as public, saves the chapter structure, adds the default specialists, opens one programme, and labels each file. It does not change an authority you already loaded.",
+      demoPackChaptersHelp: "The programme starts with these chapters.",
+      demoPackFilesHelp:
+        "These files are copied onto the authority as public. The label tells the programme which file is the vision and which are existing policy.",
+      demoPackView: "View",
+      demoPackClose: "Close",
+      demoPackEmpty: "No demo packs yet.",
+      demoPackLoading: "Loading packs…",
+      demoPackNew: "Add pack",
+      demoPackUntitled: "New pack",
       demoPackName: "Name",
       demoPackChapters: "Chapters",
       demoPackAddChapter: "Add chapter",
