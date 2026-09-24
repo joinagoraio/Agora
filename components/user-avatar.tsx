@@ -1,5 +1,8 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { User } from "lucide-react"
+
 import { cn } from "@/lib/utils"
 import { toAppAvatarUrl } from "@/lib/profile/avatar-url"
 
@@ -9,31 +12,35 @@ type Props = {
   className?: string
 }
 
-function initials(name?: string | null) {
-  const parts = (name || "").trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return "?"
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
-}
-
 export function UserAvatar({ name, url, className }: Props) {
   const src = toAppAvatarUrl(url)
+  const [failed, setFailed] = useState(false)
 
-  if (src) {
+  useEffect(() => {
+    setFailed(false)
+  }, [src])
+
+  if (!src || failed) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={src} alt="" className={cn("h-8 w-8 rounded-full object-cover", className)} />
+      <span
+        className={cn(
+          "inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary",
+          className,
+        )}
+        aria-label={name?.trim() || "User"}
+      >
+        <User className="h-1/2 w-1/2" />
+      </span>
     )
   }
+
   return (
-    <span
-      className={cn(
-        "inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary",
-        className,
-      )}
-      aria-hidden
-    >
-      {initials(name)}
-    </span>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      className={cn("h-8 w-8 rounded-full object-cover", className)}
+      onError={() => setFailed(true)}
+    />
   )
 }
