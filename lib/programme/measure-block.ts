@@ -1,3 +1,4 @@
+import { byPriority, parseMeasurePriority } from "@/lib/programme/measure-priority"
 import { parseRoleCheck } from "@/lib/programme/role-check"
 
 export type MeasureBlockSource = {
@@ -12,7 +13,14 @@ export type MeasureBlockSource = {
   challenge?: string | null
   resources?: string | null
   role_check?: unknown
+  priority?: unknown
+  priority_reason?: string | null
 }
+
+const PRIORITY_WORDS = {
+  Dutch: { high: "hoog", medium: "middel", low: "laag" },
+  English: { high: "high", medium: "medium", low: "low" },
+} as const
 
 const ACTORS = {
   Dutch: { authority: "deze overheid", other_government: "andere overheid", other_party: "andere partij", shared: "gedeeld" },
@@ -31,6 +39,7 @@ const LABELS = {
     indicator: "Indicator",
     resources: "Middelen",
     actor: "Wie handelt",
+    priority: "Prioriteit (door medewerkers)",
   },
   English: {
     goal: "Goal",
@@ -43,6 +52,7 @@ const LABELS = {
     indicator: "Indicator",
     resources: "Resources",
     actor: "Who acts",
+    priority: "Priority (set by staff)",
   },
 } as const
 
@@ -52,6 +62,11 @@ export function formatMeasureBlock(measure: MeasureBlockSource, language: "Dutch
   const lines = [`- ${measure.title}`]
   const add = (key: keyof typeof label, value: string | null | undefined) => {
     if (value && value.trim()) lines.push(`  ${label[key]}: ${value.trim()}`)
+  }
+  const priority = parseMeasurePriority(measure.priority)
+  if (priority) {
+    const reason = measure.priority_reason?.trim()
+    add("priority", `${PRIORITY_WORDS[language][priority]}${reason ? ` — ${reason}` : ""}`)
   }
   add("goal", measure.contributes_to_vision?.join("; "))
   add("interest", measure.provincial_interests?.join("; "))
@@ -76,7 +91,7 @@ export function formatMeasureList(
   const unplacedTitle = language === "Dutch" ? "Niet in een hoofdstuk" : "Not in a chapter"
   const groups = new Map<string, string[]>()
   const titleFor = (id: string | null | undefined) => chapters.find((chapter) => chapter.id === id)?.title ?? unplacedTitle
-  for (const measure of measures) {
+  for (const measure of byPriority(measures)) {
     const title = titleFor(measure.outline_node_id)
     const list = groups.get(title) || []
     list.push(formatMeasureBlock(measure, language))

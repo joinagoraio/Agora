@@ -65,7 +65,8 @@ export async function composeWorkspaceProgramme(workspaceId: string, title: stri
     const { data: doc } = await supabase.from("documents").select("title, content").eq("id", docId).maybeSingle()
     if (doc) chapters.push({ node, title: doc.title || node.title, html: doc.content || "" })
   }
-  const composedMeasures = measures.map((m: Record<string, unknown>) => ({
+  const { byPriority } = await import("@/lib/programme/measure-priority")
+  const composedMeasures = byPriority(measures as Array<Record<string, unknown>>).map((m: Record<string, unknown>) => ({
     id: String(m.id),
     title: String(m.title || ""),
     measureType: String(m.measure_type || ""),
@@ -327,7 +328,7 @@ export async function buildAuditPackageJson(workspaceId: string) {
     supabase.from("generation_runs").select("id, kind, created_at, source_document_ids, unused_document_ids").eq("workspace_id", workspaceId),
     supabase
       .from("programme_measures")
-      .select("id, title, workflow_status, citations, interest_ids, challenge, resources, decision, decision_reason, decided_by, decided_at")
+      .select("id, title, workflow_status, citations, interest_ids, challenge, resources, decision, decision_reason, decided_by, decided_at, priority, priority_reason, prioritised_by, prioritised_at")
       .eq("workspace_id", workspaceId),
     supabase.from("analysis_reports").select("id, report_type, created_at").eq("workspace_id", workspaceId),
     supabase.from("export_jobs").select("id, format, status, created_at, completed_at").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(50),

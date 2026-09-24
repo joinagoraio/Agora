@@ -158,6 +158,47 @@ export async function setMeasureDecision(
   return { data }
 }
 
+/** Staff set how urgent a measure is; drafting orders measures by it. */
+export async function setMeasurePriority(
+  workspaceId: string,
+  measureId: string,
+  priority: "high" | "medium" | "low" | null,
+  reason?: string,
+) {
+  try {
+    await requireAuthAndPermission("workspace:update", { workspaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const { data, error } = await supabase
+    .from("programme_measures")
+    .update({
+      priority,
+      priority_reason: priority ? reason?.trim() || null : null,
+      prioritised_by: priority ? user?.id ?? null : null,
+      prioritised_at: priority ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", measureId)
+    .eq("workspace_id", workspaceId)
+    .select("id, priority, priority_reason, prioritised_at")
+    .single()
+  if (error || !data) return { error: error?.message || "Measure not found" }
+  await snapshotArtefact({
+    workspaceId,
+    artefactType: "measure",
+    artefactId: measureId,
+    snapshot: data as Record<string, unknown>,
+    reason: priority ? `priority:${priority}` : "priority cleared",
+  })
+  revalidatePath(`/workspaces/${workspaceId}/programme`)
+  return { data }
+}
+
 export async function approveProgrammeMeasure(workspaceId: string, measureId: string) {
   try {
     await requireAuthAndPermission("workspace:update", { workspaceId })

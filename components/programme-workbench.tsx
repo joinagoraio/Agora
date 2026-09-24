@@ -151,6 +151,8 @@ import { MeasureSummaryLines } from "@/components/measure-summary-lines"
 import { listProgrammeInterests } from "@/lib/actions/interests"
 import type { ProgrammeInterest } from "@/lib/programme/interests"
 import { parseRoleCheck } from "@/lib/programme/role-check"
+import { parseMeasurePriority } from "@/lib/programme/measure-priority"
+import { MeasurePriorityControl } from "@/components/measure-priority-control"
 import { Badge } from "@/components/ui/badge"
 import { OverflowTitle } from "@/components/overflow-title"
 import { ProgrammeTextHistoryProvider } from "@/components/programme-text-history"
@@ -2075,11 +2077,22 @@ export function ProgrammeWorkbench({
                         </span>
                         {(() => {
                           const roleCheck = parseRoleCheck(item.role_check)
-                          return roleCheck ? (
-                            <Badge variant="outline" className="mt-1 font-normal" title={roleCheck.reason}>
-                              {t(`workspace.programme.roleCheck.actor.${roleCheck.actor}`)}
-                            </Badge>
-                          ) : null
+                          const priority = item.decision === "drop" ? null : parseMeasurePriority(item.priority)
+                          if (!roleCheck && !priority) return null
+                          return (
+                            <span className="mt-1 flex flex-wrap gap-1">
+                              {priority ? (
+                                <Badge variant={priority === "high" ? "default" : "secondary"} className="font-normal">
+                                  {t(`workspace.programme.priority.badge.${priority}`)}
+                                </Badge>
+                              ) : null}
+                              {roleCheck ? (
+                                <Badge variant="outline" className="font-normal" title={roleCheck.reason}>
+                                  {t(`workspace.programme.roleCheck.actor.${roleCheck.actor}`)}
+                                </Badge>
+                              ) : null}
+                            </span>
+                          )
                         })()}
                       </button>
                     </li>
@@ -2204,6 +2217,17 @@ export function ProgrammeWorkbench({
                   onMessage={notify}
                   onSaved={refresh}
                 />
+                {m.decision !== "drop" ? (
+                  <MeasurePriorityControl
+                    workspaceId={workspaceId}
+                    measureId={m.id}
+                    priority={parseMeasurePriority(m.priority)}
+                    reason={m.priority_reason ?? null}
+                    disabled={pending || accessRole === "viewer"}
+                    onMessage={notify}
+                    onSaved={refresh}
+                  />
+                ) : null}
                 <MeasureSummaryLines
                   measure={m}
                   interests={programmeInterests}

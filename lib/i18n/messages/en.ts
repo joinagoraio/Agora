@@ -541,6 +541,30 @@ export const enMessages = {
           shared: "Shared",
         },
       },
+      priority: {
+        title: "Priority",
+        level: {
+          high: "High",
+          medium: "Medium",
+          low: "Low",
+        },
+        badge: {
+          high: "High priority",
+          medium: "Medium priority",
+          low: "Low priority",
+        },
+        none: "No priority yet. Staff decide which measures come first.",
+        clear: "Clear",
+        cleared: "Priority cleared",
+        addReason: "Add reason",
+        editReason: "Edit reason",
+        reasonPlaceholder: "Why this priority? (optional)",
+        saved: {
+          high: "Set to high priority",
+          medium: "Set to medium priority",
+          low: "Set to low priority",
+        },
+      },
       decision: {
         title: "Staff decision",
         keep: "Keep",

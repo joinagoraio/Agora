@@ -541,6 +541,30 @@ export const nlMessages = {
           shared: "Gedeeld",
         },
       },
+      priority: {
+        title: "Prioriteit",
+        level: {
+          high: "Hoog",
+          medium: "Middel",
+          low: "Laag",
+        },
+        badge: {
+          high: "Hoge prioriteit",
+          medium: "Middelhoge prioriteit",
+          low: "Lage prioriteit",
+        },
+        none: "Nog geen prioriteit. Medewerkers bepalen welke maatregelen voorgaan.",
+        clear: "Wissen",
+        cleared: "Prioriteit gewist",
+        addReason: "Reden toevoegen",
+        editReason: "Reden wijzigen",
+        reasonPlaceholder: "Waarom deze prioriteit? (optioneel)",
+        saved: {
+          high: "Hoge prioriteit ingesteld",
+          medium: "Middelhoge prioriteit ingesteld",
+          low: "Lage prioriteit ingesteld",
+        },
+      },
       decision: {
         title: "Besluit medewerkers",
         keep: "Behouden",

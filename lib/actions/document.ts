@@ -1851,6 +1851,7 @@ export async function generateWorkspaceDocumentDraft(
         query: [node.title, node.purpose || "", node.instructions || "", instructions].join("\n"),
       })
       const { formatMeasureBlock, formatMeasureList } = await import("@/lib/programme/measure-block")
+      const { byPriority, parseMeasurePriority } = await import("@/lib/programme/measure-priority")
       const { withInterestLabels, formatInterestInputs, formatCoherenceInputs } = await import(
         "@/lib/programme/chapter-inputs"
       )
@@ -1888,8 +1889,12 @@ export async function generateWorkspaceDocumentDraft(
           ? `All measures, by chapter:\n${formatMeasureList(allMeasures, outline.data, userLanguage)}`
           : "All measures: (none yet)"
         : placed.length
-          ? `Linked measures:\n${placed.map((m) => formatMeasureBlock(m, userLanguage)).join("\n")}`
+          ? `Linked measures:\n${byPriority(placed).map((m) => formatMeasureBlock(m, userLanguage)).join("\n")}`
           : "Linked measures: (none placed on this node)"
+      const shownMeasures = usesWholeList ? allMeasures : placed
+      const priorityRule = shownMeasures.some((m: { priority?: unknown }) => parseMeasurePriority(m.priority))
+        ? "PRIORITIES (set by staff, binding): Measures are listed high priority first. Keep that order wherever you list measures, and say which measures have high priority. Where the chapter covers execution, planning, resources, or monitoring, name the high-priority measures first and explain their order. Do not change or invent priorities; measures without one have no staff priority yet."
+        : ""
       nodeConstraint = [
         `TEMPLATE NODE CONSTRAINTS (mandatory):`,
         `Title: ${node.title}`,
@@ -1901,6 +1906,7 @@ export async function generateWorkspaceDocumentDraft(
         node.outputForm ? `Output form (binding): ${node.outputForm}` : "",
         node.relationHints ? `Relation hints: ${node.relationHints}` : "",
         measureSection,
+        priorityRule,
       ]
         .filter(Boolean)
         .join("\n")
