@@ -7,8 +7,10 @@ import {
   programmeDocumentTypeStyle,
   programmeChapterScrollTop,
   readProgrammeDocumentLayout,
+  readProgrammeShowComments,
   stepProgrammeScale,
   writeProgrammeDocumentLayout,
+  writeProgrammeShowComments,
 } from "@/lib/programme/document-layout"
 
 describe("programme document layout", () => {
@@ -20,7 +22,7 @@ describe("programme document layout", () => {
     expect(readProgrammeDocumentLayout()).toEqual({
       wide: true,
       scale: 1,
-      showComments: true,
+      showComments: false,
       paged: false,
       pageChrome: {
         showHeader: true,
@@ -34,7 +36,7 @@ describe("programme document layout", () => {
     expect(DEFAULT_PROGRAMME_DOCUMENT_LAYOUT).toEqual({
       wide: true,
       scale: 1,
-      showComments: true,
+      showComments: false,
       paged: false,
       pageChrome: {
         showHeader: true,
@@ -75,6 +77,13 @@ describe("programme document layout", () => {
         size: "sm",
       },
     })
+  })
+
+  it("keeps comments off until they are turned on for that programme", () => {
+    expect(readProgrammeShowComments("programme-a")).toBe(false)
+    writeProgrammeShowComments("programme-a", true)
+    expect(readProgrammeShowComments("programme-a")).toBe(true)
+    expect(readProgrammeShowComments("programme-b")).toBe(false)
   })
 
   it("treats missing wide as true and clamps scale", () => {

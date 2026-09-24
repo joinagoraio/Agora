@@ -26,10 +26,12 @@ import { notify } from "@/lib/notify"
 import {
   deleteDemoPack,
   listDemoPacks,
+  listDemoPackModels,
   loadDemoPack,
   removeLoadedDemos,
   saveDemoPack,
   type DemoPack,
+  type DemoPackModelChoice,
   type DemoPackChapter,
   type DemoPackFile,
 } from "@/lib/actions/demo-pack"
@@ -42,6 +44,7 @@ const EMPTY: DemoPack = {
   mission: "",
   description: "",
   jurisdiction: "",
+  defaultModelId: "",
   chapters: [{ title: "", required: true }],
   files: [],
 }
@@ -52,6 +55,7 @@ export function PlatformDemoPacks() {
   const detailRef = useRef<HTMLDivElement>(null)
   const creatingRef = useRef(false)
   const [packs, setPacks] = useState<DemoPack[]>([])
+  const [models, setModels] = useState<DemoPackModelChoice[]>([])
   const [draft, setDraft] = useState<DemoPack>(EMPTY)
   const [ready, setReady] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -61,7 +65,8 @@ export function PlatformDemoPacks() {
 
   const refresh = () => {
     startTransition(async () => {
-      const result = await listDemoPacks()
+      const [result, modelResult] = await Promise.all([listDemoPacks(), listDemoPackModels()])
+      setModels(modelResult.data || [])
       if (result.error) {
         setLoadError(result.error)
         notify(result.error, "error")
@@ -217,6 +222,26 @@ export function PlatformDemoPacks() {
                   <SelectItem value="nl">{t("space.wizard.basics.writingLanguageOptions.nl")}</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="pack-model">{t("admin.platform.demoPackModel")}</Label>
+              <Select
+                value={draft.defaultModelId || "none"}
+                onValueChange={(value) => setDraft({ ...draft, defaultModelId: value === "none" ? "" : value })}
+              >
+                <SelectTrigger id="pack-model">
+                  <SelectValue placeholder={t("admin.platform.demoPackModelEmpty")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t("admin.platform.demoPackModelEmpty")}</SelectItem>
+                  {models.map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      {model.providerLabel ? `${model.providerLabel} · ${model.label}` : model.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">{t("admin.platform.demoPackModelHelp")}</p>
             </div>
           </div>
 

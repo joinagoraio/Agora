@@ -51,7 +51,7 @@ import {
 } from "@/lib/actions/collaboration"
 import {
   addProgrammeComment,
-  clusterColleagueComments,
+  deleteProgrammeComment,
   listProgrammeCommentThemes,
   listProgrammeComments,
   setProgrammeCommentResolved,
@@ -80,8 +80,6 @@ import type { ProgrammeDocumentMode } from "@/lib/programme/document-mode"
 import {
   clickClosesProgrammeChapterEditor,
   clickDismissesWritingChapter,
-  preferredWritingChapterId,
-  shouldAutoActivateWritingChapter,
   visibleProgrammeChapterIds,
 } from "@/lib/programme/document-mode"
 import { renderProgrammeCitationHtml, type ProgrammeCitationSource } from "@/lib/programme/citation-display"
@@ -127,6 +125,7 @@ type Props = {
   draftAgents?: Array<{ id: string; name: string; stage: string; role: string }>
   onChapterOwnerChange?: () => void
   layout: ProgrammeDocumentLayout
+  commentRefreshKey?: number
   workspaceName?: string
   citationSources?: ProgrammeCitationSource[]
 }
@@ -154,6 +153,7 @@ export function ProgrammeChapterEditor({
   draftAgents = [],
   onChapterOwnerChange,
   layout,
+  commentRefreshKey = 0,
   workspaceName = "",
   citationSources = [],
 }: Props) {
@@ -172,10 +172,8 @@ export function ProgrammeChapterEditor({
   const dirtyIdsRef = useRef(new Set<string>())
   const selectedIdRef = useRef<string | null>(null)
   const pendingJumpRef = useRef<string | null>(null)
-  const didAutoActivateRef = useRef(false)
   const dismissWritingChapterRef = useRef<() => void>(() => {})
   const pointerDownInChromeRef = useRef(false)
-  if (activeChapterId) didAutoActivateRef.current = true
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const contentRef = useRef("")
   const documentIdRef = useRef<string | null>(null)
@@ -248,13 +246,6 @@ export function ProgrammeChapterEditor({
   const writableChapterList = nodes
     .filter((node) => canWriteNode(node.id))
     .map((node) => ({ id: node.id, title: node.title }))
-  const draftTargetId = preferredWritingChapterId(
-    writableChapterList.map((chapter) => ({
-      id: chapter.id,
-      title: chapter.title,
-      hasBody: Boolean(bodies[chapter.id]?.content?.replace(/<[^>]+>/g, "").trim()),
-    })),
-  )
   const visibleIds = visibleProgrammeChapterIds({
     mode: documentMode,
     allIds: nodes.map((item) => item.id),
@@ -268,24 +259,6 @@ export function ProgrammeChapterEditor({
     onWritableChaptersChange?.(writableChapterList)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes, bodies, currentUserId, accessRole, documentOwnerId, documentMode])
-
-  useEffect(() => {
-    const sectionOpen =
-      typeof window !== "undefined" && Boolean(new URLSearchParams(window.location.search).get("section"))
-    if (
-      !shouldAutoActivateWritingChapter({
-        alreadyActivated: didAutoActivateRef.current,
-        isWriting,
-        activeChapterId,
-        firstWritableId: draftTargetId,
-        sectionOpen,
-      })
-    ) {
-      return
-    }
-    didAutoActivateRef.current = true
-    onActivateChapter?.(draftTargetId)
-  }, [isWriting, activeChapterId, draftTargetId, onActivateChapter])
 
   const loadNodes = (templateId: string) => {
     setOutlineLoading(true)
@@ -633,7 +606,7 @@ export function ProgrammeChapterEditor({
     if (nodes.length === 0) return
     refreshComments()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, nodes, bodies])
+  }, [workspaceId, nodes, bodies, commentRefreshKey])
 
   const regenerateChapter = () => {
     if (!selected || !documentId || pending) return
@@ -701,6 +674,7 @@ export function ProgrammeChapterEditor({
       }
       setWorkflowStatus(status)
       onMessage(t(successKey))
+      onChapterOwnerChange?.()
     })
   }
 
@@ -1007,7 +981,6 @@ export function ProgrammeChapterEditor({
   )
 
   const closeChapterEditor = () => {
-    didAutoActivateRef.current = true
     if (!activeChapterId) return
     const editingId = activeChapterId
     flushChapterSave(editingId)
@@ -1289,10 +1262,26 @@ export function ProgrammeChapterEditor({
                       closeChapterEditor()
                     }
                     if (selectedId !== node.id) selectChapter(node.id)
+                    if (layout.showComments && !target?.closest(`[${BLOCK_ID_ATTR}]`)) {
+                      const block = document
+                        .getElementById(`chapter-${node.id}`)
+                        ?.querySelector(`[${BLOCK_ID_ATTR}]`)
+                      const blockId = block?.getAttribute(BLOCK_ID_ATTR)
+                      if (blockId) {
+                        setActiveBlockId(blockId)
+                        setCommentNodeId(node.id)
+                      }
+                    }
                   }}
                 >
                   <div className="relative flex items-start justify-between gap-2">
-                    <h2 className={`text-xl font-semibold tracking-tight ${canWriteThis ? "pr-16" : ""}`}>
+                    <h2
+                      className={cn(
+                        "text-xl font-semibold tracking-tight",
+                        canWriteThis && "pr-16",
+                        layout.showComments && !showEditor && "cursor-pointer",
+                      )}
+                    >
                       {chapterPurpose ? (
                         <IconTooltip
                           label={chapterPurpose}
@@ -1309,7 +1298,10 @@ export function ProgrammeChapterEditor({
                     {showEditor ? (
                       chapterToolsMenu
                     ) : isWriting && canWriteThis ? (
-                      <IconTooltip label={t("workspace.programme.focusEdit")} className="absolute top-0 right-0">
+                      <IconTooltip
+                        label={t("workspace.programme.focusEdit")}
+                        className="pointer-events-none absolute top-0 right-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+                      >
                         <Button
                           type="button"
                           variant="ghost"
@@ -1395,24 +1387,9 @@ export function ProgrammeChapterEditor({
                       }}
                     />
                   ) : (
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">
-                        {t("workspace.programme.editorNoDraft", undefined, { title: node.title })}
-                      </p>
-                      {isWriting && canAssignOwners && canWriteThis ? (
-                        <Button
-                          disabled={creatingNodeId === node.id}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            selectChapter(node.id)
-                            onActivateChapter?.(node.id)
-                            openOrCreate(node)
-                          }}
-                        >
-                          {t("workspace.programme.editorCreateStub")}
-                        </Button>
-                      ) : null}
-                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {t("workspace.programme.editorNoDraft", undefined, { title: node.title })}
+                    </p>
                   )}
                 </article>
               )
@@ -1422,7 +1399,6 @@ export function ProgrammeChapterEditor({
             <ProgrammeInlineComments
               rootId="programme-document-page"
               comments={railComments}
-              themes={commentThemes}
               activeBlockId={activeBlockId}
               showAll={layout.showComments}
               draft={commentDraft}
@@ -1435,21 +1411,12 @@ export function ProgrammeChapterEditor({
               reopenLabel={t("workspace.programme.commentReopen")}
               replyLabel={t("workspace.programme.commentReply")}
               replyPlaceholder={t("workspace.programme.commentReplyPlaceholder")}
+              deleteLabel={t("workspace.programme.commentDelete")}
+              deleteConfirmLabel={t("workspace.programme.commentDeleteConfirm")}
               placeholder={t("workspace.programme.chapterCommentPlaceholder")}
-              hint={t("workspace.programme.chapterCommentHint")}
-              clusterLabel={t("workspace.programme.colleagueClusterAction")}
               onDraftChange={setCommentDraft}
               onAdd={addParagraphComment}
               onReply={replyToComment}
-              onCluster={() => {
-                setCommentPending(true)
-                void (async () => {
-                  const result = await clusterColleagueComments(workspaceId)
-                  sayResult(result.error, t("workspace.programme.colleagueClustered"))
-                  refreshComments()
-                  setCommentPending(false)
-                })()
-              }}
               onSelect={(blockId) => {
                 setActiveBlockId(blockId)
                 const comment = railComments.find((row) => row.blockId === blockId)
@@ -1470,6 +1437,15 @@ export function ProgrammeChapterEditor({
                       ?.scrollIntoView({ behavior: "smooth", block: "center" })
                   })
                 }
+              }}
+              onDelete={(commentId) => {
+                setCommentPending(true)
+                void (async () => {
+                  const result = await deleteProgrammeComment(workspaceId, commentId)
+                  sayResult(result.error, t("workspace.programme.commentDeleted"))
+                  refreshComments()
+                  setCommentPending(false)
+                })()
               }}
               onToggleResolved={(commentId, resolved) => {
                 setCommentPending(true)

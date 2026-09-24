@@ -1,8 +1,6 @@
 import {
   clickClosesProgrammeChapterEditor,
   clickDismissesWritingChapter,
-  preferredWritingChapterId,
-  shouldAutoActivateWritingChapter,
   nextProgrammeDocumentSearch,
   parseFocusChapterIds,
   parseProgrammeDocumentMode,
@@ -13,16 +11,16 @@ import {
 } from "@/lib/programme/document-mode"
 
 describe("programme document modes", () => {
-  it("defaults to read and treats a bare chapter param as legacy Focus", () => {
-    expect(parseProgrammeDocumentMode(null)).toBe("read")
+  it("defaults to edit, including a chapter link with no mode", () => {
+    expect(parseProgrammeDocumentMode(null)).toBe("edit")
     expect(resolveProgrammeDocumentSearch({ mode: null, focus: null, chapter: null })).toEqual({
-      mode: "read",
+      mode: "edit",
       focusIds: [],
       chapterId: null,
     })
     expect(resolveProgrammeDocumentSearch({ mode: null, focus: null, chapter: "n1" })).toEqual({
-      mode: "focus",
-      focusIds: ["n1"],
+      mode: "edit",
+      focusIds: [],
       chapterId: "n1",
     })
   })
@@ -58,7 +56,7 @@ describe("programme document modes", () => {
         currentChapterId: "a",
         currentFocusIds: ["a"],
       }),
-    ).toEqual({ mode: null, focusIds: ["a"], chapterId: null })
+    ).toEqual({ mode: "read", focusIds: ["a"], chapterId: null })
     expect(
       nextProgrammeDocumentSearch({
         nextMode: "edit",
@@ -196,61 +194,6 @@ describe("programme document modes", () => {
         isEditorChrome: false,
       }),
     ).toBe(false)
-  })
-
-  it("opens the first writable chapter once, and a later clear stays clear", () => {
-    expect(
-      shouldAutoActivateWritingChapter({
-        alreadyActivated: false,
-        isWriting: true,
-        activeChapterId: null,
-        firstWritableId: "intro",
-        sectionOpen: false,
-      }),
-    ).toBe(true)
-    expect(
-      shouldAutoActivateWritingChapter({
-        alreadyActivated: false,
-        isWriting: true,
-        activeChapterId: "intro",
-        firstWritableId: "intro",
-        sectionOpen: false,
-      }),
-    ).toBe(false)
-    expect(
-      shouldAutoActivateWritingChapter({
-        alreadyActivated: true,
-        isWriting: true,
-        activeChapterId: null,
-        firstWritableId: "intro",
-        sectionOpen: false,
-      }),
-    ).toBe(false)
-    expect(
-      shouldAutoActivateWritingChapter({
-        alreadyActivated: false,
-        isWriting: true,
-        activeChapterId: null,
-        firstWritableId: "intro",
-        sectionOpen: true,
-      }),
-    ).toBe(false)
-  })
-
-  it("points writing at the first chapter that is not a framing heading", () => {
-    expect(
-      preferredWritingChapterId([
-        { id: "intro", title: "Inleiding en wettelijk kader", hasBody: false },
-        { id: "visie", title: "Visie 4.2", hasBody: false },
-        { id: "wonen", title: "Wonen en samenleving", hasBody: false },
-      ]),
-    ).toBe("wonen")
-    expect(
-      preferredWritingChapterId([
-        { id: "intro", title: "Inleiding", hasBody: false },
-        { id: "wonen", title: "Wonen", hasBody: true },
-      ]),
-    ).toBe("intro")
   })
 
   it("clears the writing chapter on a click that is not another chapter or an edit control", () => {

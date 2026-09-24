@@ -1,9 +1,10 @@
 "use client"
 
-import { useMemo, useState, useTransition, type ReactNode } from "react"
+import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react"
 import { ArrowLeft, LayoutTemplate, PenLine } from "lucide-react"
 
 import { UploadDocumentDialog } from "@/components/upload-document-dialog"
+import { useChatContext } from "@/components/workspace-chat-wrapper"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -11,7 +12,9 @@ import { bindProgrammeDocumentRole, bindWorkspaceTemplate } from "@/lib/actions/
 import { createBlankProgrammeOutline, previewDocxChapterHeadings } from "@/lib/actions/outline"
 import { createWorkspaceDocument } from "@/lib/actions/document"
 import { programmeSetupIncomplete, programmeSetupStep } from "@/lib/guidance/setup"
+import type { GuidanceMode } from "@/lib/guidance/jobs"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { fetchCsrfToken } from "@/lib/utils/csrf"
 import type { ProgrammeBindings, ProgrammeTemplateSummary } from "@/lib/programme/domain"
 import { isChapterDocumentId } from "@/lib/programme/source-set-bindings"
 import { cn } from "@/lib/utils"
@@ -33,6 +36,9 @@ type Props = {
   onBindingsChange: (bindings: ProgrammeBindings) => void
   onMessage: (message: string | null, kind?: NotifyKind) => void
   onRefresh: () => void
+  onGuidanceMode?: (mode: GuidanceMode) => void
+  onGuidanceSurfaces?: (surfaces: { sidebar: boolean; strip: boolean }) => void
+  onGuidanceStrip?: (show: boolean) => void
   onStartWriting: (next?: ProgrammeBindings) => void | Promise<void>
 }
 
@@ -48,10 +54,18 @@ export function ProgrammeSetupWizard({
   onBindingsChange,
   onMessage,
   onRefresh,
+  onGuidanceMode,
+  onGuidanceSurfaces,
+  onGuidanceStrip,
   onStartWriting,
 }: Props) {
   const { t } = useI18n()
+  const { setIsChatOpen, setPanelTab } = useChatContext()
   const [pending, startTransition] = useTransition()
+  const [showGuidance, setShowGuidance] = useState(false)
+  const [guidanceMode, setGuidanceMode] = useState<GuidanceMode>("expert")
+  const [sidebarOn, setSidebarOn] = useState(false)
+  const [stripOn, setStripOn] = useState(false)
   const [reviewingStructure, setReviewingStructure] = useState(false)
   const [docxTitles, setDocxTitles] = useState<string[]>([])
   const [docxHtml, setDocxHtml] = useState("")
@@ -66,6 +80,21 @@ export function ProgrammeSetupWizard({
   const policyId = bindings.existingPolicyDocumentIds[0] ?? ""
   const effectsId = bindings.environmentalEffectsReportDocumentIds[0] ?? ""
   const requiredSourcesReady = !programmeSetupIncomplete(bindings)
+
+  const guidanceOn = showGuidance && guidanceMode === "guided"
+  const showSidebar = guidanceOn && sidebarOn
+  const showStrip = guidanceOn && stripOn
+
+  useEffect(() => {
+    onGuidanceStrip?.(showStrip)
+    if (!showGuidance) return
+    if (showSidebar) {
+      setPanelTab("guidance")
+      setIsChatOpen(true)
+      return
+    }
+    setIsChatOpen(false)
+  }, [showGuidance, showSidebar, showStrip, onGuidanceStrip, setIsChatOpen, setPanelTab])
 
   const applyBindings = (next: ProgrammeBindings | undefined) => {
     if (next && "environmentalVisionDocumentIds" in next) onBindingsChange(next)
@@ -240,9 +269,17 @@ export function ProgrammeSetupWizard({
           </div>
         ) : null}
 
-        {step === 2 ? (
+        {step === 2 && !showGuidance ? (
           <div className="space-y-5">
-            <Button type="button" variant="ghost" className="-ml-2 h-8 px-2" onClick={() => setReviewingStructure(true)}>
+            <Button
+              type="button"
+              variant="ghost"
+              className="-ml-2 h-8 px-2"
+              onClick={() => {
+                setShowGuidance(false)
+                setReviewingStructure(true)
+              }}
+            >
               <ArrowLeft className="h-4 w-4" />
               {t("workspace.programme.setupWizard.back")}
             </Button>
@@ -303,18 +340,122 @@ export function ProgrammeSetupWizard({
               <Button
                 type="button"
                 disabled={pending || !canEdit || !requiredSourcesReady}
-                onClick={() => {
-                  startTransition(async () => {
-                    await onStartWriting(bindings)
-                  })
-                }}
+                onClick={() => setShowGuidance(true)}
               >
-                {t("workspace.programme.setupWizard.sourcesStart")}
+                {t("workspace.programme.setupWizard.sourcesContinue")}
               </Button>
             </div>
             {pending ? (
               <p className="text-sm text-muted-foreground">{t("workspace.programme.setupWizard.working")}</p>
             ) : null}
+          </div>
+        ) : null}
+
+        {step === 2 && showGuidance ? (
+          <div className="space-y-5">
+            <Button type="button" variant="ghost" className="-ml-2 h-8 px-2" onClick={() => setShowGuidance(false)}>
+              <ArrowLeft className="h-4 w-4" />
+              {t("workspace.programme.setupWizard.back")}
+            </Button>
+            <div className="space-y-2">
+              <h1 className="text-2xl font-semibold tracking-tight [font-variant-ligatures:none]">
+                {t("workspace.programme.setupWizard.guidanceTitle")}
+              </h1>
+              <p className="text-sm leading-relaxed text-muted-foreground [font-variant-ligatures:none]">
+                {t("workspace.programme.setupWizard.guidanceBody")}
+              </p>
+            </div>
+            <div className="flex gap-2" role="group" aria-label={t("workspace.programme.setupWizard.guidanceTitle")}>
+              <Button
+                type="button"
+                size="sm"
+                variant={guidanceMode === "expert" ? "default" : "outline"}
+                aria-pressed={guidanceMode === "expert"}
+                disabled={pending || !canEdit}
+                onClick={() => setGuidanceMode("expert")}
+              >
+                {t("workspace.programme.setupWizard.guidanceOff")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={guidanceMode === "guided" ? "default" : "outline"}
+                aria-pressed={guidanceMode === "guided"}
+                disabled={pending || !canEdit}
+                onClick={() => setGuidanceMode("guided")}
+              >
+                {t("workspace.programme.setupWizard.guidanceOn")}
+              </Button>
+            </div>
+            {guidanceMode === "guided" ? (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">{t("workspace.programme.setupWizard.guidancePlaceHint")}</p>
+                <div className="flex gap-2" role="group" aria-label={t("workspace.programme.setupWizard.guidancePlaceHint")}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={sidebarOn ? "default" : "outline"}
+                    aria-pressed={sidebarOn}
+                    disabled={pending || !canEdit}
+                    onClick={() => setSidebarOn((current) => !current)}
+                  >
+                    {t("workspace.programme.setupWizard.guidancePlaceSidebar")}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={stripOn ? "default" : "outline"}
+                    aria-pressed={stripOn}
+                    disabled={pending || !canEdit}
+                    onClick={() => setStripOn((current) => !current)}
+                  >
+                    {t("workspace.programme.setupWizard.guidancePlaceStrip")}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+            <Button
+              type="button"
+              disabled={pending || !canEdit}
+              onClick={() => {
+                startTransition(async () => {
+                  const surfaces = {
+                    sidebar: guidanceMode === "guided" && sidebarOn,
+                    strip: guidanceMode === "guided" && stripOn,
+                  }
+                  const token = await fetchCsrfToken()
+                  const response = await fetch("/api/profile/guidance", {
+                    method: "POST",
+                    credentials: "include",
+                    headers: {
+                      "Content-Type": "application/json",
+                      ...(token ? { "x-csrf-token": token } : {}),
+                    },
+                    body: JSON.stringify({
+                      guidanceMode,
+                      guidanceSidebar: surfaces.sidebar,
+                      guidanceStrip: surfaces.strip,
+                    }),
+                  })
+                  if (!response.ok) {
+                    onMessage(t("workspace.programme.setupWizard.guidanceSaveError"), "error")
+                    return
+                  }
+                  onGuidanceStrip?.(surfaces.strip)
+                  if (surfaces.sidebar) {
+                    setPanelTab("guidance")
+                    setIsChatOpen(true)
+                  } else {
+                    setIsChatOpen(false)
+                  }
+                  onGuidanceMode?.(guidanceMode)
+                  onGuidanceSurfaces?.(surfaces)
+                  await onStartWriting(bindings)
+                })
+              }}
+            >
+              {t("workspace.programme.setupWizard.sourcesStart")}
+            </Button>
           </div>
         ) : null}
       </div>
@@ -327,20 +468,26 @@ function StructureCard({
   title,
   body,
   disabled,
+  selected = false,
   onClick,
 }: {
   icon: ReactNode
   title: string
   body: string
   disabled: boolean
+  selected?: boolean
   onClick: () => void
 }) {
   return (
     <button
       type="button"
       disabled={disabled}
+      aria-pressed={selected}
       onClick={onClick}
-      className="flex flex-col rounded-xl border bg-card p-5 text-left shadow-sm transition-colors hover:border-foreground/30 hover:bg-muted/40 disabled:pointer-events-none disabled:opacity-60"
+      className={cn(
+        "flex flex-col rounded-xl border bg-card p-5 text-left shadow-sm transition-colors hover:border-foreground/30 hover:bg-muted/40 disabled:pointer-events-none disabled:opacity-60",
+        selected && "border-foreground",
+      )}
     >
       <span className="text-muted-foreground">{icon}</span>
       <h2 className="mt-4 text-base font-semibold">{title}</h2>

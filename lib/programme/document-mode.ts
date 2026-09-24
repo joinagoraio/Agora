@@ -2,7 +2,7 @@ export type ProgrammeDocumentMode = "read" | "edit" | "focus"
 
 export function parseProgrammeDocumentMode(value: string | null | undefined): ProgrammeDocumentMode {
   if (value === "edit" || value === "focus" || value === "read") return value
-  return "read"
+  return "edit"
 }
 
 export function parseFocusChapterIds(value: string | null | undefined): string[] {
@@ -32,10 +32,10 @@ export function resolveProgrammeDocumentSearch(input: {
     input.mode === "edit" || input.mode === "focus" || input.mode === "read" ? input.mode : null
   const focusIds = parseFocusChapterIds(input.focus)
 
-  if (explicitMode === "read" || (!explicitMode && !chapterId)) {
+  if (explicitMode === "read") {
     return { mode: "read", focusIds, chapterId: null }
   }
-  if (explicitMode === "edit") {
+  if (explicitMode === "edit" || !explicitMode) {
     return { mode: "edit", focusIds, chapterId }
   }
 
@@ -53,7 +53,7 @@ export function nextProgrammeDocumentSearch(input: {
   const writable = input.writableIds.filter(Boolean)
   const rememberedFocusIds = input.currentFocusIds.filter((id) => writable.includes(id))
   if (input.nextMode === "read") {
-    return { mode: null, focusIds: rememberedFocusIds, chapterId: null }
+    return { mode: "read", focusIds: rememberedFocusIds, chapterId: null }
   }
   if (input.nextMode === "edit") {
     const chapterId =
@@ -97,27 +97,6 @@ export function clickClosesProgrammeChapterEditor(input: {
   if (!input.activeChapterId) return false
   if (input.isEditorChrome) return false
   return input.clickedChapterId !== input.activeChapterId
-}
-
-const FRAMING_CHAPTER = /inleiding|wettelijk kader|legal framework|^visie\b/i
-
-export function preferredWritingChapterId(
-  chapters: Array<{ id: string; title: string; hasBody: boolean }>,
-): string | null {
-  const open = chapters.filter((chapter) => !chapter.hasBody)
-  const substantive = open.filter((chapter) => !FRAMING_CHAPTER.test(chapter.title))
-  return (substantive[0] || open[0])?.id ?? null
-}
-
-export function shouldAutoActivateWritingChapter(input: {
-  alreadyActivated: boolean
-  isWriting: boolean
-  activeChapterId: string | null
-  firstWritableId: string | null
-  sectionOpen: boolean
-}): boolean {
-  if (input.alreadyActivated || !input.isWriting || input.activeChapterId || !input.firstWritableId) return false
-  return !input.sectionOpen
 }
 
 export function clickDismissesWritingChapter(input: {

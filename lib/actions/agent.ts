@@ -412,7 +412,10 @@ export async function updateAgentMeta(input: {
 }
 
 /** Idempotent default specialists. Safe to call twice. */
-export async function seedDefaultSpaceAgents(spaceId: string) {
+export async function seedDefaultSpaceAgents(
+  spaceId: string,
+  options?: { catalogModelId?: string | null },
+) {
   try {
     await requireAuthAndPermission("space:update", { spaceId })
   } catch (error) {
@@ -427,14 +430,17 @@ export async function seedDefaultSpaceAgents(spaceId: string) {
   const tenantId = await getTenantIdForSpace(spaceId)
   if (!tenantId) return { error: "This authority has no organisation." }
   const catalog = await listAuthorityModels(spaceId)
-  const firstModel = (catalog.data || [])
+  const catalogModels = (catalog.data || [])
     .map((row) => {
       const model = Array.isArray(row.llm_models) ? row.llm_models[0] : row.llm_models
       if (!model || typeof model !== "object") return null
       const record = model as { id: string; provider_id: string; model_id: string }
       return record
     })
-    .find((row): row is { id: string; provider_id: string; model_id: string } => Boolean(row))
+    .filter((row): row is { id: string; provider_id: string; model_id: string } => Boolean(row))
+  const preferredId = options?.catalogModelId?.trim() || ""
+  const firstModel =
+    (preferredId ? catalogModels.find((row) => row.id === preferredId) : null) || catalogModels[0] || null
   if (!firstModel) {
     return { error: "Enable at least one model for this authority before seeding agents." }
   }

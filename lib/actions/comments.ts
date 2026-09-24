@@ -189,6 +189,42 @@ export async function addProgrammeComment(input: {
   return { data }
 }
 
+export async function deleteProgrammeComment(workspaceId: string, commentId: string) {
+  try {
+    await requireAuthAndPermission("workspace:update", { workspaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+  const supabase = await createClient()
+  const { data: existing, error: lookupError } = await supabase
+    .from("programme_comments")
+    .select("id, theme_id")
+    .eq("id", commentId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle()
+  if (lookupError) return { error: lookupError.message }
+  if (!existing) return { error: "Comment not found" }
+  const themeId = typeof existing.theme_id === "string" ? existing.theme_id : null
+  const { error } = await supabase
+    .from("programme_comments")
+    .delete()
+    .eq("id", commentId)
+    .eq("workspace_id", workspaceId)
+  if (error) return { error: error.message }
+  if (themeId) {
+    const { count } = await supabase
+      .from("programme_comments")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .eq("theme_id", themeId)
+    if (!count) {
+      await supabase.from("programme_comment_themes").delete().eq("id", themeId).eq("workspace_id", workspaceId)
+    }
+  }
+  revalidatePath(`/workspaces/${workspaceId}/programme`)
+  return { data: { id: commentId } }
+}
+
 export async function setProgrammeCommentResolved(workspaceId: string, commentId: string, resolved: boolean) {
   try {
     await requireAuthAndPermission("workspace:update", { workspaceId })

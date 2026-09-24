@@ -5,14 +5,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { UserAvatar } from "@/components/user-avatar"
 import { cn } from "@/lib/utils"
-import { nestColleagueComments, type ColleagueCommentThemeRecord } from "@/lib/programme/colleague-comments"
+import { nestColleagueComments } from "@/lib/programme/colleague-comments"
 import { groupProgrammeCommentThreads, offsetTopWithin, stackCommentAnchors } from "@/lib/programme/comment-layout"
 import type { AnchoredProgrammeComment } from "@/lib/programme/comment-anchor"
 
 type Props = {
   rootId: string
   comments: AnchoredProgrammeComment[]
-  themes?: ColleagueCommentThemeRecord[]
   activeBlockId: string | null
   showAll: boolean
   draft: string
@@ -25,21 +24,20 @@ type Props = {
   reopenLabel: string
   replyLabel: string
   replyPlaceholder: string
+  deleteLabel: string
+  deleteConfirmLabel: string
   placeholder: string
-  hint?: string
-  clusterLabel?: string
   onDraftChange: (value: string) => void
   onAdd: () => void
   onReply: (parentId: string, body: string) => void
+  onDelete: (commentId: string) => void
   onSelect: (blockId: string | null) => void
   onToggleResolved: (commentId: string, resolved: boolean) => void
-  onCluster?: () => void
 }
 
 export function ProgrammeInlineComments({
   rootId,
   comments,
-  themes = [],
   activeBlockId,
   showAll,
   draft,
@@ -52,15 +50,15 @@ export function ProgrammeInlineComments({
   reopenLabel,
   replyLabel,
   replyPlaceholder,
+  deleteLabel,
+  deleteConfirmLabel,
   placeholder,
-  hint,
-  clusterLabel,
   onDraftChange,
   onAdd,
   onReply,
+  onDelete,
   onSelect,
   onToggleResolved,
-  onCluster,
 }: Props) {
   const threads = useMemo(
     () => nestColleagueComments(comments.map((comment) => ({ ...comment, parentId: comment.parentId ?? null }))),
@@ -76,13 +74,11 @@ export function ProgrammeInlineComments({
       }),
     [threads, showAll, activeBlockId, canComment],
   )
-  const openThemes = themes.filter((theme) => !theme.addressed)
-  const showPrep = Boolean(showAll && (hint || onCluster || openThemes.length))
-
   const [tops, setTops] = useState<Record<string, number>>({})
   const [heights, setHeights] = useState<Record<string, number>>({})
   const [replyTo, setReplyTo] = useState<string | null>(null)
   const [replyDraft, setReplyDraft] = useState("")
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useLayoutEffect(() => {
@@ -90,7 +86,6 @@ export function ProgrammeInlineComments({
     if (!root) return
 
     const nextTops: Record<string, number> = {}
-    if (showPrep) nextTops.__prep__ = 0
     for (const key of grouped.keys()) {
       const selector = key.startsWith("doc:")
         ? `[data-chapter-document="${CSS.escape(key.slice(4))}"]`
@@ -101,24 +96,22 @@ export function ProgrammeInlineComments({
     setTops(nextTops)
 
     const nextHeights: Record<string, number> = {}
-    for (const key of [showPrep ? "__prep__" : "", ...grouped.keys()].filter(Boolean)) {
+    for (const key of grouped.keys()) {
       const card = cardRefs.current[key]
       if (card) nextHeights[key] = card.offsetHeight
     }
     setHeights(nextHeights)
-  }, [grouped, layoutKey, rootId, draft, activeBlockId, showPrep, replyTo, replyDraft, openThemes.length])
+  }, [grouped, layoutKey, rootId, draft, activeBlockId, replyTo, replyDraft])
 
   const stacked = stackCommentAnchors(
-    [showPrep ? "__prep__" : "", ...grouped.keys()]
-      .filter(Boolean)
-      .map((id) => ({
+    [...grouped.keys()].map((id) => ({
         id,
         preferredTop: tops[id] ?? 0,
         height: heights[id] ?? 120,
       })),
   )
 
-  if (grouped.size === 0 && !showPrep) return null
+  if (grouped.size === 0) return null
 
   const submitReply = (parentId: string) => {
     if (!replyDraft.trim() || pending) return
@@ -130,46 +123,6 @@ export function ProgrammeInlineComments({
   return (
     <div className={railClassName ?? "pointer-events-none absolute inset-y-0 right-0 w-72"} data-programme-comments>
       {stacked.map(({ id, top }) => {
-        if (id === "__prep__") {
-          return (
-            <div
-              key={id}
-              ref={(node) => {
-                cardRefs.current[id] = node
-              }}
-              className="pointer-events-auto absolute right-0 z-20 w-72"
-              style={{ top }}
-            >
-              <div className="rounded-lg border bg-amber-50/80 p-2 shadow-sm">
-                {hint ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
-                {onCluster && clusterLabel ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="mt-2 h-7 w-full text-[11px]"
-                    disabled={pending}
-                    onClick={onCluster}
-                  >
-                    {clusterLabel}
-                  </Button>
-                ) : null}
-                {activeBlockId && openThemes.length > 0 ? (
-                  <p className="mt-2 text-[11px] text-muted-foreground">
-                    {openThemes.map((theme) => theme.label).join(" · ")}
-                  </p>
-                ) : (
-                  openThemes.map((theme) => (
-                    <div key={theme.id} className="mt-2 border-t border-amber-200 pt-2">
-                      <p className="text-[11px] font-medium">{theme.label}</p>
-                      {theme.summary ? <p className="mt-1 text-[11px] text-muted-foreground">{theme.summary}</p> : null}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )
-        }
         const thread = grouped.get(id) || []
         const isActive = id === activeBlockId
         return (
@@ -217,6 +170,25 @@ export function ProgrammeInlineComments({
                         {reply.authorName ? <span className="font-medium">{reply.authorName} </span> : null}
                         <span className={cn(reply.resolved && "text-muted-foreground line-through")}>{reply.body}</span>
                       </p>
+                      {canComment ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 shrink-0 px-1 text-[11px] text-destructive"
+                          disabled={pending}
+                          onClick={() => {
+                            if (confirmDeleteId !== reply.id) {
+                              setConfirmDeleteId(reply.id)
+                              return
+                            }
+                            setConfirmDeleteId(null)
+                            onDelete(reply.id)
+                          }}
+                        >
+                          {confirmDeleteId === reply.id ? deleteConfirmLabel : deleteLabel}
+                        </Button>
+                      ) : null}
                     </div>
                   ))}
                   {isActive ? (
@@ -238,11 +210,31 @@ export function ProgrammeInlineComments({
                             size="sm"
                             className="h-6 px-1 text-[11px]"
                             onClick={() => {
+                              setConfirmDeleteId(null)
                               setReplyTo(replyTo === comment.id ? null : comment.id)
                               setReplyDraft("")
                             }}
                           >
                             {replyLabel}
+                          </Button>
+                        ) : null}
+                        {canComment ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-1 text-[11px] text-destructive"
+                            disabled={pending}
+                            onClick={() => {
+                              if (confirmDeleteId !== comment.id) {
+                                setConfirmDeleteId(comment.id)
+                                return
+                              }
+                              setConfirmDeleteId(null)
+                              onDelete(comment.id)
+                            }}
+                          >
+                            {confirmDeleteId === comment.id ? deleteConfirmLabel : deleteLabel}
                           </Button>
                         ) : null}
                       </div>

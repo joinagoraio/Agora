@@ -11,6 +11,8 @@ import { loadFlevolandDemoFiles } from "@/lib/programme/flevoland-demo-files"
 import { LEEFREGIO_SEED_NODES } from "@/lib/programme/leefregio-seed"
 import type { DocumentRole } from "@/lib/programme/domain"
 import { revalidatePath } from "next/cache"
+import { isAllowedForAgoraKeyOrgs, usesAgoraPlatformKeys } from "@/lib/llm/catalog"
+import { getTenantLlmPolicies } from "@/lib/llm/resolve"
 
 export type DemoPackChapter = {
   title: string
@@ -26,6 +28,12 @@ export type DemoPackFile = {
   role: DocumentRole
 }
 
+export type DemoPackModelChoice = {
+  id: string
+  label: string
+  providerLabel: string
+}
+
 export type DemoPack = {
   id: string
   name: string
@@ -33,6 +41,7 @@ export type DemoPack = {
   mission: string
   description: string
   jurisdiction: string
+  defaultModelId: string
   chapters: DemoPackChapter[]
   files: DemoPackFile[]
 }
@@ -81,6 +90,7 @@ function mapPack(row: {
   mission?: string | null
   description?: string | null
   jurisdiction?: string | null
+  default_model_id?: string | null
   chapters: unknown
   files: unknown
 }): DemoPack {
@@ -91,6 +101,7 @@ function mapPack(row: {
     mission: row.mission?.trim() || "",
     description: row.description?.trim() || "",
     jurisdiction: row.jurisdiction?.trim() || "",
+    defaultModelId: row.default_model_id || "",
     chapters: asChapters(row.chapters),
     files: asFiles(row.files),
   }
@@ -158,6 +169,7 @@ export async function saveDemoPack(pack: DemoPack) {
     mission: pack.mission.trim() || null,
     description: pack.description.trim() || null,
     jurisdiction: pack.jurisdiction.trim() || null,
+    default_model_id: pack.defaultModelId.trim() || null,
     chapters: pack.chapters,
     files: pack.files,
     updated_at: new Date().toISOString(),
@@ -201,6 +213,80 @@ export async function removeLoadedDemos(packId: string) {
   return { data: { removed: matches.length } }
 }
 
+export async function listDemoPackModels() {
+  const auth = await requireSuperAdmin()
+  if ("error" in auth) return { error: auth.error, data: [] as DemoPackModelChoice[] }
+  const admin = createAdminClient()
+  const { data: membership } = await admin
+    .from("tenant_members")
+    .select("tenant_id")
+    .eq("user_id", auth.user.id)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  const policies = membership?.tenant_id ? await getTenantLlmPolicies(membership.tenant_id) : null
+  const agoraKeys = policies ? usesAgoraPlatformKeys(policies.keyPolicy) : false
+  const { data, error } = await admin
+    .from("llm_models")
+    .select("id, label, model_id, enabled, default_for_tenants, sort_order, llm_providers(label)")
+    .eq("enabled", true)
+    .order("sort_order")
+  if (error) return { error: error.message, data: [] as DemoPackModelChoice[] }
+  const choices = (data || []).flatMap((row) => {
+    if (agoraKeys && !isAllowedForAgoraKeyOrgs(row)) return []
+    const provider = Array.isArray(row.llm_providers) ? row.llm_providers[0] : row.llm_providers
+    const providerLabel = provider && typeof provider === "object" && "label" in provider ? String(provider.label) : ""
+    return [
+      {
+        id: row.id as string,
+        label: (row.label as string) || (row.model_id as string),
+        providerLabel,
+      },
+    ]
+  })
+  return { data: choices }
+}
+
+async function enablePackModel(spaceId: string, modelId: string) {
+  const admin = createAdminClient()
+  const { data: model, error } = await admin
+    .from("llm_models")
+    .select("id, provider_id, enabled, default_for_tenants")
+    .eq("id", modelId)
+    .maybeSingle()
+  if (error || !model?.enabled || !model.provider_id) {
+    return { error: error?.message || "Choose a default model that is still available." }
+  }
+  const { data: space } = await admin.from("spaces").select("tenant_id").eq("id", spaceId).maybeSingle()
+  if (!space?.tenant_id) return { error: "Authority not found" }
+  const now = new Date().toISOString()
+  const { accessPolicy, keyPolicy } = await getTenantLlmPolicies(space.tenant_id)
+  if (usesAgoraPlatformKeys(keyPolicy) && !isAllowedForAgoraKeyOrgs(model)) {
+    return { error: "That model is not allowed for this organisation." }
+  }
+  const spaceProvider = await admin.from("space_llm_provider_settings").upsert(
+    { space_id: spaceId, provider_id: model.provider_id, enabled: true, updated_at: now },
+    { onConflict: "space_id,provider_id" },
+  )
+  if (spaceProvider.error) return { error: spaceProvider.error.message }
+  const spaceModel = await admin
+    .from("space_llm_settings")
+    .upsert({ space_id: spaceId, model_id: model.id, enabled: true }, { onConflict: "space_id,model_id" })
+  if (spaceModel.error) return { error: spaceModel.error.message }
+  if (accessPolicy === "global") {
+    const tenantProvider = await admin.from("tenant_llm_provider_settings").upsert(
+      { tenant_id: space.tenant_id, provider_id: model.provider_id, enabled: true, updated_at: now },
+      { onConflict: "tenant_id,provider_id" },
+    )
+    if (tenantProvider.error) return { error: tenantProvider.error.message }
+    const tenantModel = await admin
+      .from("tenant_llm_settings")
+      .upsert({ tenant_id: space.tenant_id, model_id: model.id, enabled: true }, { onConflict: "tenant_id,model_id" })
+    if (tenantModel.error) return { error: tenantModel.error.message }
+  }
+  return { data: { id: model.id as string } }
+}
+
 export async function loadDemoPack(packId: string) {
   const auth = await requireSuperAdmin()
   if ("error" in auth) return { error: auth.error }
@@ -235,6 +321,11 @@ export async function loadDemoPack(packId: string) {
   })
   if (scope.error) return { error: scope.error }
 
+  if (pack.defaultModelId) {
+    const enabled = await enablePackModel(spaceId, pack.defaultModelId)
+    if (enabled.error) return { error: enabled.error }
+  }
+
   const template = await createProgrammeTemplate({
     spaceId,
     name: pack.name,
@@ -268,7 +359,9 @@ export async function loadDemoPack(packId: string) {
   if (workspace.error || !workspace.data) return { error: workspace.error || "Could not create the programme" }
 
   const { ensureDefaultAgentsBound } = await import("@/lib/actions/programme")
-  const agents = await ensureDefaultAgentsBound(workspace.data.id, spaceId)
+  const agents = await ensureDefaultAgentsBound(workspace.data.id, spaceId, {
+    catalogModelId: pack.defaultModelId || null,
+  })
   if (agents.error) return { error: agents.error }
 
   const { data: documents } = await admin

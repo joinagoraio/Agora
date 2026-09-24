@@ -16,10 +16,32 @@ export function stableBlockId(text: string, index: number) {
   return `b${(hash >>> 0).toString(16)}`
 }
 
+const BLOCK_ELEMENT = "p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol, table, div, pre, hr, figure"
+
+function wrapLooseBlocks(root: HTMLElement) {
+  const pending: ChildNode[] = []
+  const flush = (before: ChildNode | null) => {
+    const hasText = pending.some((node) => (node.textContent || "").replace(/\s+/g, "").length > 0)
+    if (hasText) {
+      const paragraph = root.ownerDocument.createElement("p")
+      for (const node of pending) paragraph.appendChild(node)
+      root.insertBefore(paragraph, before)
+    }
+    pending.length = 0
+  }
+  for (const node of [...root.childNodes]) {
+    const isBlock = node.nodeType === Node.ELEMENT_NODE && (node as Element).matches(BLOCK_ELEMENT)
+    if (isBlock) flush(node)
+    else pending.push(node)
+  }
+  flush(null)
+}
+
 export function ensureBlockIdsInHtml(html: string): string {
   if (!html?.trim() || typeof window === "undefined") return html
   const doc = window.document.implementation.createHTMLDocument("")
   doc.body.innerHTML = html
+  wrapLooseBlocks(doc.body)
   doc.body.querySelectorAll("p, h1, h2, h3, blockquote").forEach((el, index) => {
     if (!el.getAttribute(BLOCK_ID_ATTR)) {
       el.setAttribute(BLOCK_ID_ATTR, stableBlockId(el.textContent || "", index))

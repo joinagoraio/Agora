@@ -7,6 +7,28 @@ import {
 } from "@/lib/programme/page-chrome"
 
 const STORAGE_KEY = "agora:programme-document-layout"
+
+export function programmeCommentsStorageKey(workspaceId: string) {
+  return `agora:programme-show-comments:${workspaceId}`
+}
+
+export function readProgrammeShowComments(workspaceId: string): boolean {
+  if (typeof window === "undefined") return false
+  try {
+    return window.localStorage.getItem(programmeCommentsStorageKey(workspaceId)) === "true"
+  } catch {
+    return false
+  }
+}
+
+export function writeProgrammeShowComments(workspaceId: string, showComments: boolean) {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(programmeCommentsStorageKey(workspaceId), showComments ? "true" : "false")
+  } catch {
+    // Preference is local only.
+  }
+}
 const MIN_SCALE = 0.5
 const MAX_SCALE = 2
 
@@ -23,7 +45,7 @@ export type ProgrammeDocumentLayout = {
 export const DEFAULT_PROGRAMME_DOCUMENT_LAYOUT: ProgrammeDocumentLayout = {
   wide: true,
   scale: 1,
-  showComments: true,
+  showComments: false,
   paged: false,
   pageChrome: DEFAULT_PROGRAMME_PAGE_CHROME,
 }
@@ -57,7 +79,7 @@ export function readProgrammeDocumentLayout(): ProgrammeDocumentLayout {
     return {
       wide: parsed.wide !== false,
       scale: clampScale(typeof parsed.scale === "number" ? parsed.scale : 1),
-      showComments: parsed.showComments !== false,
+      showComments: parsed.showComments === true,
       paged: parsed.paged === true,
       pageChrome: parseProgrammePageChrome(parsed.pageChrome),
     }

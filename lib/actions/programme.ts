@@ -1146,10 +1146,14 @@ export async function previewBoundAgentSources(workspaceId: string, stage: impor
   }
 }
 
-export async function ensureDefaultAgentsBound(workspaceId: string, spaceId: string) {
+export async function ensureDefaultAgentsBound(
+  workspaceId: string,
+  spaceId: string,
+  options?: { catalogModelId?: string | null },
+) {
   try {
     const { seedDefaultSpaceAgents, listSpaceAgents } = await import("@/lib/actions/agent")
-    const seeded = await seedDefaultSpaceAgents(spaceId)
+    const seeded = await seedDefaultSpaceAgents(spaceId, options)
     if (seeded.error) return { error: seeded.error }
     const listed = (await listSpaceAgents(spaceId)).data || seeded.data?.agents || []
     const current = await getProgrammeBindings(workspaceId)

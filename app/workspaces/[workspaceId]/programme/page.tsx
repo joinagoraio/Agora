@@ -60,10 +60,12 @@ export default async function ProgrammeWorkbenchPage({
         .eq("workspace_id", workspaceId)
         .eq("user_id", user.id)
         .maybeSingle(),
-      supabase.from("profiles").select("guidance_mode, expert_prompt_dismissed_at").eq("id", user.id).maybeSingle(),
+      supabase.from("profiles").select("guidance_mode, guidance_sidebar, guidance_strip, expert_prompt_dismissed_at").eq("id", user.id).maybeSingle(),
     ])
 
   const guidanceMode: GuidanceMode = profile?.guidance_mode === "expert" ? "expert" : "guided"
+  const guidanceSidebar = Boolean(profile?.guidance_sidebar)
+  const guidanceStrip = Boolean(profile?.guidance_strip)
   const isCreator = workspace.created_by === user.id
   if (
     !canAccessProgramme({
@@ -99,7 +101,8 @@ export default async function ProgrammeWorkbenchPage({
         workspaceId={workspace.id}
         workspaceName={workspace.name}
         canManage={canManage}
-        defaultPanelTab={guidanceMode === "guided" ? "guidance" : "ask"}
+        defaultOpen={guidanceMode === "guided" && guidanceSidebar}
+        defaultPanelTab={guidanceMode === "guided" && guidanceSidebar ? "guidance" : "ask"}
       >
       <ProgrammeWorkbench
         workspaceId={workspace.id}
@@ -113,6 +116,8 @@ export default async function ProgrammeWorkbenchPage({
         spaceJob={spaceMembership?.job ?? "none"}
         workspaceJob={workspaceMembership?.job ?? "author"}
         guidanceMode={guidanceMode}
+        guidanceSidebar={guidanceSidebar}
+        guidanceStrip={guidanceStrip}
         expertPromptDismissed={Boolean(profile?.expert_prompt_dismissed_at)}
         helpAiEnabled={resolveHelpAiEnabled({
           spaceHelpAiDisabled: isSpaceHelpAiDisabled(space?.metadata),

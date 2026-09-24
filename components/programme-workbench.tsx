@@ -152,7 +152,9 @@ import {
   mergeProgrammeDocumentLayout,
   programmeDocumentCanvasClass,
   readProgrammeDocumentLayout,
+  readProgrammeShowComments,
   writeProgrammeDocumentLayout,
+  writeProgrammeShowComments,
   type ProgrammeDocumentLayout,
   type ProgrammeDocumentLayoutPatch,
 } from "@/lib/programme/document-layout"
@@ -267,6 +269,8 @@ type Props = {
   spaceJob?: string | null
   workspaceJob?: string | null
   guidanceMode?: GuidanceMode
+  guidanceSidebar?: boolean
+  guidanceStrip?: boolean
   expertPromptDismissed?: boolean
   helpAiEnabled?: boolean
   canAccessSettings?: boolean
@@ -286,6 +290,8 @@ export function ProgrammeWorkbench({
   spaceJob = "none",
   workspaceJob = "author",
   guidanceMode = "guided",
+  guidanceSidebar = false,
+  guidanceStrip = false,
   expertPromptDismissed = false,
   helpAiEnabled = false,
   canAccessSettings = false,
@@ -303,9 +309,14 @@ export function ProgrammeWorkbench({
   const searchParams = useSearchParams()
 
   const [liveGuidanceMode, setLiveGuidanceMode] = useState<GuidanceMode>(guidanceMode)
+  const [liveGuidanceStrip, setLiveGuidanceStrip] = useState(guidanceStrip)
+  const [previewStrip, setPreviewStrip] = useState(false)
   useEffect(() => {
     setLiveGuidanceMode(guidanceMode)
   }, [guidanceMode])
+  useEffect(() => {
+    setLiveGuidanceStrip(guidanceStrip)
+  }, [guidanceStrip])
   const [outlineNodeCount, setOutlineNodeCount] = useState(0)
   const [snapshotLoaded, setSnapshotLoaded] = useState(false)
   const [wizardSession, setWizardSession] = useState(false)
@@ -352,16 +363,20 @@ export function ProgrammeWorkbench({
   const sheetOpen = !isKnowledgeView && SHEET_SECTIONS.has(activeSection) && !sheetDismissed
 
   useEffect(() => {
-    setDocumentLayout(readProgrammeDocumentLayout())
-  }, [])
+    setDocumentLayout({
+      ...readProgrammeDocumentLayout(),
+      showComments: readProgrammeShowComments(workspaceId),
+    })
+  }, [workspaceId])
 
   const patchDocumentLayout = useCallback((patch: ProgrammeDocumentLayoutPatch) => {
     setDocumentLayout((current) => {
       const next = mergeProgrammeDocumentLayout(current, patch)
       writeProgrammeDocumentLayout(next)
+      if (patch.showComments !== undefined) writeProgrammeShowComments(workspaceId, next.showComments)
       return next
     })
-  }, [])
+  }, [workspaceId])
 
   useEffect(() => {
     setSheetDismissed(false)
@@ -509,6 +524,7 @@ export function ProgrammeWorkbench({
   const [measureInstructions, setMeasureInstructions] = useState("")
   const [measureImportJson, setMeasureImportJson] = useState("")
   const [pending, startTransition] = useTransition()
+  const [commentRefreshKey, setCommentRefreshKey] = useState(0)
   const [templates, setTemplates] = useState<ProgrammeTemplateSummary[]>([])
   const [agents, setAgents] = useState<
     Array<{ id: string; name: string; role: string; stage: string; provider: string }>
@@ -982,12 +998,28 @@ export function ProgrammeWorkbench({
             writableChapters={writableChapters}
             focusChapterIds={documentSearch.focusIds}
             onFocusChapterIdsChange={setFocusVisibleIds}
+            findCommonNotes={
+              !isKnowledgeView && documentLayout.showComments
+                ? {
+                    label: t("workspace.programme.colleagueClusterAction"),
+                    disabled: pending,
+                    onClick: () =>
+                      startTransition(async () => {
+                        const result = await clusterColleagueComments(workspaceId)
+                        notifyResult(result.error, t("workspace.programme.colleagueClustered"))
+                        setCommentRefreshKey((key) => key + 1)
+                        setReviewPane("notes")
+                        setSection("review")
+                        refresh()
+                      }),
+                  }
+                : undefined
+            }
           />
         }
       />
       )}
-      {!showSetupWizard &&
-      liveGuidanceMode === "guided" &&
+      {(previewStrip || (!showSetupWizard && liveGuidanceMode === "guided" && liveGuidanceStrip)) &&
       pipeline.firstIncomplete &&
       pipeline.firstIncomplete !== "orient" ? (
         <div
@@ -1059,6 +1091,9 @@ export function ProgrammeWorkbench({
                 onBindingsChange={setBindings}
                 onMessage={notify}
                 onRefresh={refresh}
+                onGuidanceMode={setLiveGuidanceMode}
+                onGuidanceSurfaces={(surfaces) => setLiveGuidanceStrip(surfaces.strip)}
+                onGuidanceStrip={setPreviewStrip}
                 onStartWriting={async (next) => {
                   const merged = { ...(next ?? bindings), setupComplete: true }
                   const result = await updateProgrammeBindings(workspaceId, merged)
@@ -1113,6 +1148,7 @@ export function ProgrammeWorkbench({
               draftAgents={agents.filter((agent) => agent.stage === "draft" || agent.stage === "chat")}
               onChapterOwnerChange={refresh}
               layout={documentLayout}
+              commentRefreshKey={commentRefreshKey}
               workspaceName={workspaceName}
               citationSources={citationCatalog.documents}
             />
@@ -2587,6 +2623,7 @@ export function ProgrammeWorkbench({
                 startTransition(async () => {
                   const result = await clusterColleagueComments(workspaceId)
                   notifyResult(result.error, t("workspace.programme.colleagueClustered"))
+                  setCommentRefreshKey((key) => key + 1)
                   refresh()
                 })
               }

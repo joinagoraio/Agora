@@ -7,6 +7,8 @@ export type WorkspaceJob = (typeof WORKSPACE_JOBS)[number]
 export type GuidanceJob = "administrator" | "author" | "reviewer"
 
 export type GuidanceMode = "guided" | "expert"
+export type GuidancePlace = "sidebar" | "strip"
+export type GuidanceSurfaces = { sidebar: boolean; strip: boolean }
 
 export function isSpaceJob(value: unknown): value is SpaceJob {
   return value === "administrator" || value === "none"

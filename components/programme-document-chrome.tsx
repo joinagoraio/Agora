@@ -1,6 +1,6 @@
 "use client"
 
-import { AlignJustify, BookOpen, ChevronDown, ChevronsLeftRight, Eye, FileText, Focus, GalleryVertical, MessageSquare, PanelTop, PencilLine, Redo, Undo, ZoomIn, ZoomOut } from "lucide-react"
+import { AlignJustify, BookOpen, ChevronDown, ChevronsLeftRight, Eye, FileText, Focus, GalleryVertical, MessageSquare, PanelTop, PencilLine, Redo, Search, Undo, ZoomIn, ZoomOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -44,6 +44,7 @@ type Props = {
   writableChapters: WritableChapter[]
   focusChapterIds: string[]
   onFocusChapterIdsChange: (ids: string[]) => void
+  findCommonNotes?: { label: string; disabled?: boolean; onClick: () => void }
   compact?: boolean
 }
 
@@ -62,6 +63,7 @@ export function ProgrammeDocumentChrome({
   writableChapters,
   focusChapterIds,
   onFocusChapterIdsChange,
+  findCommonNotes,
   compact = false,
 }: Props) {
   const { t } = useI18n()
@@ -122,6 +124,20 @@ export function ProgrammeDocumentChrome({
               <MessageSquare className={iconClass} />
             </Button>
           </IconTooltip>
+          {findCommonNotes ? (
+            <IconTooltip label={findCommonNotes.label}>
+              <Button
+                type="button"
+                variant="ghost"
+                size={buttonSize}
+                aria-label={findCommonNotes.label}
+                disabled={findCommonNotes.disabled}
+                onClick={findCommonNotes.onClick}
+              >
+                <Search className={iconClass} />
+              </Button>
+            </IconTooltip>
+          ) : null}
           <Divider />
           <div className="flex items-center" role="group" aria-label={t("workspace.programme.layoutAria")}>
             <IconTooltip label={t("workspace.programme.layoutWide")}>
