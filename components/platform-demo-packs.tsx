@@ -306,6 +306,9 @@ export function PlatformDemoPacks() {
                     {chapter.instructions ? (
                       <p className="text-xs text-muted-foreground">{chapter.instructions}</p>
                     ) : null}
+                    {chapter.outputForm ? (
+                      <p className="text-xs text-muted-foreground">{chapter.outputForm}</p>
+                    ) : null}
                   </div>
                 </li>
               ))}

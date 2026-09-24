@@ -8,7 +8,7 @@ import { createWorkspace } from "@/lib/actions/workspace"
 import { createProgrammeTemplate, upsertOutlineNode } from "@/lib/actions/template"
 import { publishSpaceItem } from "@/lib/actions/space-item"
 import { loadFlevolandDemoFiles } from "@/lib/programme/flevoland-demo-files"
-import { LEEFREGIO_SEED_NODES } from "@/lib/programme/leefregio-seed"
+import { COMPACT_MEASURE_OUTPUT_FORM, LEEFREGIO_SEED_NODES } from "@/lib/programme/leefregio-seed"
 import type { DocumentRole } from "@/lib/programme/domain"
 import { revalidatePath } from "next/cache"
 import { isAllowedForAgoraKeyOrgs, usesAgoraPlatformKeys } from "@/lib/llm/catalog"
@@ -67,6 +67,7 @@ function asChapters(value: unknown): DemoPackChapter[] {
         purpose: typeof row.purpose === "string" ? row.purpose : "",
         instructions: typeof row.instructions === "string" ? row.instructions : "",
         required: row.required !== false,
+        outputForm: typeof row.outputForm === "string" ? row.outputForm : "",
         sortOrder: typeof row.sortOrder === "number" ? row.sortOrder : undefined,
       },
     ]
@@ -109,6 +110,34 @@ function mapPack(row: {
 
 const FLEVOLAND_PACK_NAME = "Flevoland demo"
 
+const COMPACT_MEASURE_CHAPTERS = new Set(["Volkshuisvestingsprogramma", "Maatregelenprogramma"])
+
+function flevolandChapters() {
+  return LEEFREGIO_SEED_NODES.map((node) => ({
+    title: node.title,
+    purpose: node.purpose,
+    instructions: node.instructions,
+    outputForm: node.outputForm,
+    required: node.required,
+    sortOrder: node.sortOrder,
+  }))
+}
+
+function withCompactMeasureChapters(chapters: unknown) {
+  if (!Array.isArray(chapters)) return flevolandChapters()
+  return chapters.map((item) => {
+    if (!item || typeof item !== "object") return item
+    const row = item as Record<string, unknown>
+    if (typeof row.title !== "string" || !COMPACT_MEASURE_CHAPTERS.has(row.title)) return item
+    const node = LEEFREGIO_SEED_NODES.find((seed) => seed.title === row.title)
+    if (!node) return item
+    return {
+      ...row,
+      instructions: node.instructions,
+      outputForm: COMPACT_MEASURE_OUTPUT_FORM,
+    }
+  })
+}
 const FLEVOLAND_PROFILE = {
   mission: "Samen werken aan Flevoland in balans.",
   description:
@@ -127,25 +156,22 @@ export async function ensureFlevolandDemoPack() {
     const { data: row } = await admin
       .from("platform_demo_packs")
       .select("mission")
+      .select("mission, chapters")
       .eq("id", existing.id)
       .maybeSingle()
-    if (!row?.mission?.trim()) {
-      await admin.from("platform_demo_packs").update(FLEVOLAND_PROFILE).eq("id", existing.id)
+    const patch: Record<string, unknown> = {
+      chapters: withCompactMeasureChapters(row?.chapters),
+      updated_at: new Date().toISOString(),
     }
+    if (!row?.mission?.trim()) Object.assign(patch, FLEVOLAND_PROFILE)
+    await admin.from("platform_demo_packs").update(patch).eq("id", existing.id)
     return
   }
   await admin.from("platform_demo_packs").insert({
     name: FLEVOLAND_PACK_NAME,
     writing_language: "nl",
     ...FLEVOLAND_PROFILE,
-    chapters: LEEFREGIO_SEED_NODES.map((node) => ({
-      title: node.title,
-      purpose: node.purpose,
-      instructions: node.instructions,
-      required: node.required,
-      sortOrder: node.sortOrder,
-    })),
-    files: loadFlevolandDemoFiles(),
+    chapters: flevolandChapters(),
   })
 }
 
@@ -339,6 +365,7 @@ export async function loadDemoPack(packId: string) {
       purpose: chapter.purpose,
       instructions: chapter.instructions,
       required: chapter.required !== false,
+      outputForm: chapter.outputForm,
       sortOrder: chapter.sortOrder ?? index + 1,
     })
     if (node.error) return { error: node.error }

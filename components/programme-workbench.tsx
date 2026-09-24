@@ -159,6 +159,7 @@ import {
   type ProgrammeDocumentLayoutPatch,
 } from "@/lib/programme/document-layout"
 import { UserAvatar } from "@/components/user-avatar"
+import { UserMenu } from "@/components/user-menu"
 import { WorkspaceNotesPanel, type WorkspaceNote } from "@/components/workspace-notes-panel"
 import { getDocumentFileExtension } from "@/lib/utils/document-files"
 import { ArrowLeft, MoreVertical } from "lucide-react"
@@ -950,29 +951,9 @@ export function ProgrammeWorkbench({
               <OverflowTitle title={workspaceName} fit className="text-2xl font-semibold tracking-tight" />
             </div>
           </div>
-          {canAccessSettings ? (
-            <div className="relative z-10 ml-auto">
-              <DropdownMenu>
-                <IconTooltip label={t("space.workspaces.dropdownMenuSr")} side="bottom">
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      variant={accessPanel ? "secondary" : "ghost"}
-                      size="icon"
-                      className="h-8 w-8"
-                      aria-label={t("space.workspaces.dropdownMenuSr")}
-                      aria-haspopup="menu"
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </IconTooltip>
-                <DropdownMenuContent align="end" className="w-44">
-                  <ProgrammeAccessMenuItems onPick={(panel) => setAccessPanel(panel)} />
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          ) : null}
+          <div className="relative z-10 ml-auto">
+            <UserMenu />
+          </div>
         </div>
       </header>
       {showSetupWizard ? null : (
@@ -985,6 +966,28 @@ export function ProgrammeWorkbench({
         publicationLoaded={snapshotLoaded}
         published={Boolean(publication)}
         onSaveAsTemplate={canAccessSettings ? () => setSaveAsTemplateOpen(true) : undefined}
+        menu={
+          canAccessSettings ? (
+            <DropdownMenu>
+              <IconTooltip label={t("space.workspaces.dropdownMenuSr")} side="bottom">
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant={accessPanel ? "secondary" : "ghost"}
+                    size="icon-sm"
+                    aria-label={t("space.workspaces.dropdownMenuSr")}
+                    aria-haspopup="menu"
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </IconTooltip>
+              <DropdownMenuContent align="end" className="w-44">
+                <ProgrammeAccessMenuItems onPick={(panel) => setAccessPanel(panel)} />
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : undefined
+        }
         chrome={
           <ProgrammeDocumentChrome
             compact

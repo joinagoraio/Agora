@@ -2,6 +2,10 @@ import type { HandbookSeedNode } from "@/lib/programme/handbook-seed"
 
 export const LEEFREGIO_TEMPLATE_NAME = "Omgevingsprogramma Sterke Leefregio's"
 
+/** Compact measure block for the Flevoland session: goals, provincial role, concrete action. */
+export const COMPACT_MEASURE_OUTPUT_FORM =
+  "Elke maatregel is alleen dit blok, in deze volgorde. Doel: de visieregel die de maatregel dient. Provinciale rol. Maatregel: de concrete actie. Gebied, alleen als een bron een gebied noemt. Termijn. Indicator. Geen langer verhaal om het blok heen."
+
 export const LEEFREGIO_SEED_NODES: HandbookSeedNode[] = [
   {
     title: "Inleiding en wettelijk kader",
@@ -73,24 +77,24 @@ export const LEEFREGIO_SEED_NODES: HandbookSeedNode[] = [
     title: "Volkshuisvestingsprogramma",
     purpose: "Het verplichte volkshuisvestingsprogramma-in-ontwikkeling.",
     instructions:
-      "Verwerk het gebonden housing_programme. Neem bestaande teksten niet één-op-één over; maak er programmamaatregelen van die op de visie aansluiten.",
+      "Verwerk het gebonden housing_programme. Neem bestaande teksten niet één-op-één over. Zet elke programmamaatregel in het compacte blok: doel, provinciale rol, concrete actie, gebied alleen als een bron dat noemt, termijn en indicator.",
     required: true,
     sortOrder: 6,
     fieldSpecs: [{ key: "housing_programme", label: "Volkshuisvestingskoppeling", required: true }],
-    qualityRules: "Geen blinde overname van het bestaande woonprogramma.",
-    outputForm: "Narratief plus maatregelen op dit knooppunt.",
+    qualityRules: "Geen blinde overname van het bestaande woonprogramma. Geen maatregel buiten het compacte blok.",
+    outputForm: COMPACT_MEASURE_OUTPUT_FORM,
     relationHints: "Bronnen: gebonden woonprogramma of bestaand beleid plus gebonden visie.",
   },
   {
     title: "Maatregelenprogramma",
     purpose: "Registerverhaal: concrete SMART-maatregelen.",
     instructions:
-      "Stel samen vanuit het maatregelenregister op de outline-knooppunten. Verzin geen maatregelen die niet in het register staan.",
+      "Stel samen vanuit het maatregelenregister op de outline-knooppunten. Verzin geen maatregelen die niet in het register staan. Schrijf elke maatregel als het compacte blok: doel, provinciale rol, concrete actie, gebied alleen als een bron dat noemt, termijn en indicator.",
     required: true,
     sortOrder: 7,
     fieldSpecs: [{ key: "measure_count", label: "Verwacht aantal maatregelen", required: false }],
-    qualityRules: "Elke maatregel heeft citaten en een specifieke actie.",
-    outputForm: "Gegroepeerd per knooppunt; bijlage-klaar.",
+    qualityRules: "Elke maatregel heeft een citaat en blijft binnen het compacte blok.",
+    outputForm: COMPACT_MEASURE_OUTPUT_FORM,
     relationHints: "Bronnen: analyse + register. Graaf: maatregel → doel → ambitie.",
   },
   {

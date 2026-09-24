@@ -1817,7 +1817,24 @@ export async function generateWorkspaceDocumentDraft(
         node.outputForm ? `Output form: ${node.outputForm}` : "",
         node.relationHints ? `Relation hints: ${node.relationHints}` : "",
         placed.length
-          ? `Linked measures:\n${placed.map((m: { title: string; specific_action?: string }) => `- ${m.title}: ${m.specific_action || ""}`).join("\n")}`
+          ? `Linked measures:\n${placed.map((m: {
+              title: string
+              specific_action?: string | null
+              owner_role?: string | null
+              geography?: string | null
+              timeline?: string | null
+              indicator?: string | null
+              contributes_to_vision?: string[] | null
+            }) => {
+              const lines = [`- ${m.title}`]
+              if (m.contributes_to_vision?.length) lines.push(`  Doel: ${m.contributes_to_vision.join("; ")}`)
+              if (m.owner_role) lines.push(`  Provinciale rol: ${m.owner_role}`)
+              if (m.specific_action) lines.push(`  Maatregel: ${m.specific_action}`)
+              if (m.geography) lines.push(`  Gebied: ${m.geography}`)
+              if (m.timeline) lines.push(`  Termijn: ${m.timeline}`)
+              if (m.indicator) lines.push(`  Indicator: ${m.indicator}`)
+              return lines.join("\n")
+            }).join("\n")}`
           : "Linked measures: (none placed on this node)",
       ]
         .filter(Boolean)

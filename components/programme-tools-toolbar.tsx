@@ -152,6 +152,7 @@ export function ProgrammeToolsToolbar({
   published,
   onSaveAsTemplate,
   chrome,
+  menu,
 }: {
   groups: { id: string; sections: ProgrammeWorkbenchSection[] }[]
   activeSection: ProgrammeWorkbenchSection
@@ -162,6 +163,7 @@ export function ProgrammeToolsToolbar({
   published: boolean
   onSaveAsTemplate?: () => void
   chrome?: ReactNode
+  menu?: ReactNode
 }) {
   const { t } = useI18n()
   const shellRef = useRef<HTMLDivElement>(null)
@@ -403,6 +405,12 @@ export function ProgrammeToolsToolbar({
           {tools}
           <ToolbarDivider />
           {dockToggle}
+          {menu ? (
+            <>
+              <ToolbarDivider />
+              {menu}
+            </>
+          ) : null}
         </nav>
       </div>
     )
@@ -459,6 +467,12 @@ export function ProgrammeToolsToolbar({
         </IconTooltip>
         <ToolbarDivider />
         {dockToggle}
+        {menu ? (
+          <>
+            <ToolbarDivider />
+            {menu}
+          </>
+        ) : null}
       </nav>
     </div>
   )
