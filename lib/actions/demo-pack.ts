@@ -9,7 +9,7 @@ import { createProgrammeTemplate, upsertOutlineNode } from "@/lib/actions/templa
 import { publishSpaceItem } from "@/lib/actions/space-item"
 import { loadFlevolandDemoFiles } from "@/lib/programme/flevoland-demo-files"
 import { COMPACT_MEASURE_OUTPUT_FORM, LEEFREGIO_SEED_NODES } from "@/lib/programme/leefregio-seed"
-import type { DocumentRole } from "@/lib/programme/domain"
+import { parseChapterInputs, type ChapterInput, type DocumentRole } from "@/lib/programme/domain"
 import { revalidatePath } from "next/cache"
 import { isAllowedForAgoraKeyOrgs, usesAgoraPlatformKeys } from "@/lib/llm/catalog"
 import { getTenantLlmPolicies } from "@/lib/llm/resolve"
@@ -18,6 +18,8 @@ export type DemoPackChapter = {
   title: string
   purpose?: string
   instructions?: string
+  outputForm?: string
+  drawsOn?: ChapterInput[]
   required?: boolean
   sortOrder?: number
 }
@@ -68,6 +70,7 @@ function asChapters(value: unknown): DemoPackChapter[] {
         instructions: typeof row.instructions === "string" ? row.instructions : "",
         required: row.required !== false,
         outputForm: typeof row.outputForm === "string" ? row.outputForm : "",
+        drawsOn: parseChapterInputs(row.drawsOn),
         sortOrder: typeof row.sortOrder === "number" ? row.sortOrder : undefined,
       },
     ]
@@ -320,10 +323,23 @@ export async function loadDemoPack(packId: string) {
   const { data: row, error } = await admin.from("platform_demo_packs").select("*").eq("id", packId).maybeSingle()
   if (error || !row) return { error: error?.message || "Pack not found" }
   const pack = mapPack(row)
+  if (!pack.defaultModelId) return { error: "Choose a default model for this pack before loading it." }
   const stamp = new Date().toISOString().slice(0, 16).replace("T", " ")
   const created = await createSpace(`${pack.name} ${stamp}`)
   if (created.error || !created.data) return { error: created.error || "Could not create the authority" }
   const spaceId = created.data.id as string
+  const built = await buildLoadedPack(pack, spaceId)
+  if (built.error) {
+    await deleteSpace(spaceId).catch(() => undefined)
+    return { error: built.error }
+  }
+  revalidatePath("/dashboard")
+  revalidatePath("/admin/demo-packs")
+  return { data: { spaceId, workspaceId: built.workspaceId as string } }
+}
+
+async function buildLoadedPack(pack: DemoPack, spaceId: string): Promise<{ error?: string; workspaceId?: string }> {
+  const admin = createAdminClient()
   const { data: space } = await admin.from("spaces").select("metadata").eq("id", spaceId).maybeSingle()
   const metadata = {
     ...((space?.metadata as Record<string, unknown>) || {}),
@@ -347,10 +363,8 @@ export async function loadDemoPack(packId: string) {
   })
   if (scope.error) return { error: scope.error }
 
-  if (pack.defaultModelId) {
-    const enabled = await enablePackModel(spaceId, pack.defaultModelId)
-    if (enabled.error) return { error: enabled.error }
-  }
+  const enabled = await enablePackModel(spaceId, pack.defaultModelId)
+  if (enabled.error) return { error: enabled.error }
 
   const template = await createProgrammeTemplate({
     spaceId,
@@ -366,6 +380,7 @@ export async function loadDemoPack(packId: string) {
       instructions: chapter.instructions,
       required: chapter.required !== false,
       outputForm: chapter.outputForm,
+      drawsOn: chapter.drawsOn,
       sortOrder: chapter.sortOrder ?? index + 1,
     })
     if (node.error) return { error: node.error }
@@ -403,7 +418,5 @@ export async function loadDemoPack(packId: string) {
     if (bound.error) return { error: bound.error }
   }
 
-  revalidatePath("/dashboard")
-  revalidatePath("/admin/demo-packs")
-  return { data: { spaceId, workspaceId: workspace.data.id as string } }
+  return { workspaceId: workspace.data.id as string }
 }

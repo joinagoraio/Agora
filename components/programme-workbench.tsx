@@ -204,6 +204,7 @@ const emptyMeasureDraft = {
   contributesToVision: "",
   provincialInterests: "",
   narrative: "",
+  outlineNodeId: "",
 }
 
 function downloadBlob(filename: string, blob: Blob) {
@@ -319,6 +320,7 @@ export function ProgrammeWorkbench({
     setLiveGuidanceStrip(guidanceStrip)
   }, [guidanceStrip])
   const [outlineNodeCount, setOutlineNodeCount] = useState(0)
+  const [outlineChapters, setOutlineChapters] = useState<Array<{ id: string; title: string }>>([])
   const [snapshotLoaded, setSnapshotLoaded] = useState(false)
   const [wizardSession, setWizardSession] = useState(false)
   const [accessPanel, setAccessPanel] = useState<ProgrammeAccessPanel>(null)
@@ -708,8 +710,10 @@ export function ProgrammeWorkbench({
       if (templateId) {
         const nodes = await listProgrammeOutlineNodes(templateId)
         setOutlineNodeCount(nodes.data?.length ?? 0)
+        setOutlineChapters((nodes.data || []).map((node) => ({ id: node.id, title: node.title })))
       } else {
         setOutlineNodeCount(0)
+        setOutlineChapters([])
       }
       setSnapshotLoaded(true)
       } catch (error) {
@@ -2062,6 +2066,7 @@ export function ProgrammeWorkbench({
                           contributesToVision: (m.contributes_to_vision || []).join(", "),
                           provincialInterests: (m.provincial_interests || []).join(", "),
                           narrative: m.narrative || "",
+                          outlineNodeId: m.outline_node_id || "",
                         })
                       }}
                     >
@@ -2210,6 +2215,27 @@ export function ProgrammeWorkbench({
                       />
                     </label>
                     <label className="space-y-1 text-xs sm:col-span-2">
+                      <span className="text-muted-foreground">{t("workspace.programme.measureField.chapter")}</span>
+                      <Select
+                        value={measureDraft.outlineNodeId || "none"}
+                        onValueChange={(value) =>
+                          setMeasureDraft((p) => ({ ...p, outlineNodeId: value === "none" ? "" : value }))
+                        }
+                      >
+                        <SelectTrigger className="w-full" size="sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">{t("workspace.programme.measureField.chapterNone")}</SelectItem>
+                          {outlineChapters.map((chapter) => (
+                            <SelectItem key={chapter.id} value={chapter.id}>
+                              {chapter.title}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </label>
+                    <label className="space-y-1 text-xs sm:col-span-2">
                       <span className="text-muted-foreground">{t("workspace.programme.measureField.narrative")}</span>
                       <Textarea
                         rows={3}
@@ -2239,7 +2265,7 @@ export function ProgrammeWorkbench({
                             effectsDeviation: m.effects_deviation,
                             effectsJustification: m.effects_justification,
                             narrative: measureDraft.narrative,
-                            outlineNodeId: m.outline_node_id,
+                            outlineNodeId: measureDraft.outlineNodeId || null,
                             workflowStatus: m.workflow_status === "generated" ? "revised" : m.workflow_status,
                           })
                           notifyResult(result.error, t("workspace.programme.measureEdited"))

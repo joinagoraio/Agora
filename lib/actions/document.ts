@@ -1799,13 +1799,24 @@ export async function generateWorkspaceDocumentDraft(
 
   let nodeConstraint = ""
   let chapterTitle = ""
+  let hasOutputForm = false
   if (outlineNodeId && bindings.templateId) {
     const outline = await listProgrammeOutlineNodes(bindings.templateId)
     const node = outline.data.find((n) => n.id === outlineNodeId)
     if (node) {
       chapterTitle = node.title
-      const nodeMeasures = (await listProgrammeMeasures(workspaceId)).data || []
-      const placed = nodeMeasures.filter((m: { outline_node_id?: string }) => m.outline_node_id === node.id)
+      hasOutputForm = Boolean(node.outputForm?.trim())
+      const { formatMeasureBlock, formatMeasureList } = await import("@/lib/programme/measure-block")
+      const allMeasures = (await listProgrammeMeasures(workspaceId)).data || []
+      const placed = allMeasures.filter((m: { outline_node_id?: string }) => m.outline_node_id === node.id)
+      const usesWholeList = node.drawsOn.includes("measures")
+      const measureSection = usesWholeList
+        ? allMeasures.length
+          ? `All measures, by chapter:\n${formatMeasureList(allMeasures, outline.data, userLanguage)}`
+          : "All measures: (none yet)"
+        : placed.length
+          ? `Linked measures:\n${placed.map((m) => formatMeasureBlock(m, userLanguage)).join("\n")}`
+          : "Linked measures: (none placed on this node)"
       nodeConstraint = [
         `TEMPLATE NODE CONSTRAINTS (mandatory):`,
         `Title: ${node.title}`,
@@ -1814,28 +1825,9 @@ export async function generateWorkspaceDocumentDraft(
         node.purpose ? `Purpose: ${node.purpose.replace(/<[^>]+>/g, " ").slice(0, 800)}` : "",
         node.instructions ? `Chapter instructions: ${node.instructions}` : "",
         node.qualityRules ? `Quality rules: ${node.qualityRules}` : "",
-        node.outputForm ? `Output form: ${node.outputForm}` : "",
+        node.outputForm ? `Output form (binding): ${node.outputForm}` : "",
         node.relationHints ? `Relation hints: ${node.relationHints}` : "",
-        placed.length
-          ? `Linked measures:\n${placed.map((m: {
-              title: string
-              specific_action?: string | null
-              owner_role?: string | null
-              geography?: string | null
-              timeline?: string | null
-              indicator?: string | null
-              contributes_to_vision?: string[] | null
-            }) => {
-              const lines = [`- ${m.title}`]
-              if (m.contributes_to_vision?.length) lines.push(`  Doel: ${m.contributes_to_vision.join("; ")}`)
-              if (m.owner_role) lines.push(`  Provinciale rol: ${m.owner_role}`)
-              if (m.specific_action) lines.push(`  Maatregel: ${m.specific_action}`)
-              if (m.geography) lines.push(`  Gebied: ${m.geography}`)
-              if (m.timeline) lines.push(`  Termijn: ${m.timeline}`)
-              if (m.indicator) lines.push(`  Indicator: ${m.indicator}`)
-              return lines.join("\n")
-            }).join("\n")}`
-          : "Linked measures: (none placed on this node)",
+        measureSection,
       ]
         .filter(Boolean)
         .join("\n")
@@ -1866,10 +1858,15 @@ export async function generateWorkspaceDocumentDraft(
     ? `Existing draft (for reference, you may replace or improve it):\n${document.content}\n`
     : ""
 
+  const lengthInstruction = hasOutputForm
+    ? "Follow the chapter's output form exactly. Keep it compact: no introduction, summary, or narrative around what the output form asks for."
+    : effectiveCitationMode === "strict"
+      ? "Write extensively in long-form prose."
+      : "Write extensively: use the full workspace evidence to develop your argument in long-form prose. You may include a substantive executive summary at the top if useful, but the main content must be detailed, paragraph-based narrative that explores the available knowledge in depth—not a short summary or bullet-point overview."
   const citationInstruction =
     effectiveCitationMode === "strict"
-      ? `Output a polished document in Markdown. For EVERY factual claim include a structured citation [citation:{"quote":"exact text","documentId":"…","pageNumber":1}] using only evidence document IDs. Write extensively in long-form prose.`
-      : `Output a polished document in Markdown. Include citations inline when referring to specific evidence, using footnote-style references like [^1]. Write extensively: use the full workspace evidence to develop your argument in long-form prose. You may include a substantive executive summary at the top if useful, but the main content must be detailed, paragraph-based narrative that explores the available knowledge in depth—not a short summary or bullet-point overview.`
+      ? `Output a polished document in Markdown. For EVERY factual claim include a structured citation [citation:{"quote":"exact text","documentId":"…","pageNumber":1}] using only evidence document IDs. ${lengthInstruction}`
+      : `Output a polished document in Markdown. Include citations inline when referring to specific evidence, using footnote-style references like [^1]. ${lengthInstruction}`
 
   const userPrompt = `Draft a document according to the following instructions.
 

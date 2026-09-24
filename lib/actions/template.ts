@@ -6,8 +6,10 @@ import { requireAuthAndPermission } from "@/lib/middleware/authorization"
 import {
   mapOutlineRow,
   mapTemplateRow,
+  parseChapterInputs,
   parseProgrammeBindings,
   summarizeTemplates,
+  type ChapterInput,
   type OutlineEditorDraft,
   type ProgrammeOutlineNode,
   type ProgrammeTemplate,
@@ -19,7 +21,7 @@ import { LEEFREGIO_SEED_NODES, LEEFREGIO_TEMPLATE_META, LEEFREGIO_TEMPLATE_NAME 
 import { programmeTemplateMetaSchema } from "@/lib/programme/structured-artefacts"
 
 const OUTLINE_SELECT =
-  "id, template_id, parent_id, title, purpose, instructions, field_specs, quality_rules, output_form, relation_hints, required, sort_order"
+  "id, template_id, parent_id, title, purpose, instructions, field_specs, quality_rules, output_form, relation_hints, draws_on, required, sort_order"
 
 export async function listSpaceTemplates(spaceId: string): Promise<{
   data: ProgrammeTemplateSummary[]
@@ -181,6 +183,7 @@ export async function upsertOutlineNode(input: {
   qualityRules?: string | null
   outputForm?: string | null
   relationHints?: string | null
+  drawsOn?: ChapterInput[]
   required?: boolean
   sortOrder?: number
   parentId?: string | null
@@ -199,6 +202,7 @@ export async function upsertOutlineNode(input: {
     quality_rules: input.qualityRules ?? null,
     output_form: input.outputForm ?? null,
     relation_hints: input.relationHints ?? null,
+    ...(input.drawsOn !== undefined ? { draws_on: parseChapterInputs(input.drawsOn) } : {}),
     required: input.required ?? true,
     sort_order: input.sortOrder ?? 1,
     parent_id: input.parentId ?? null,
@@ -344,6 +348,7 @@ export async function cloneProgrammeTemplate(spaceId: string, templateId: string
       qualityRules: node.qualityRules,
       outputForm: node.outputForm,
       relationHints: node.relationHints,
+      drawsOn: node.drawsOn,
       required: node.required,
       sortOrder: node.sortOrder,
       parentId: node.parentId ? idMap.get(node.parentId) ?? null : null,

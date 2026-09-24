@@ -194,9 +194,18 @@ export function PlatformDemoPacks() {
               <h2 className="text-lg font-semibold">{draft.name || t("admin.platform.demoPackUntitled")}</h2>
               <p className="max-w-2xl text-sm text-muted-foreground">{t("admin.platform.demoPackLoads")}</p>
             </div>
-            <Button type="button" disabled={pending || !draft.name.trim()} onClick={loadPack}>
-              {t("admin.platform.demoPackLoad")}
-            </Button>
+            <div className="flex flex-col items-end gap-1">
+              <Button
+                type="button"
+                disabled={pending || !draft.name.trim() || !draft.defaultModelId}
+                onClick={loadPack}
+              >
+                {t("admin.platform.demoPackLoad")}
+              </Button>
+              {!draft.defaultModelId ? (
+                <p className="text-xs text-muted-foreground">{t("admin.platform.demoPackModelRequired")}</p>
+              ) : null}
+            </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">

@@ -242,8 +242,17 @@ export type ProgrammeOutlineNode = {
   qualityRules: string | null
   outputForm: string | null
   relationHints: string | null
+  drawsOn: ChapterInput[]
   required: boolean
   sortOrder: number
+}
+
+export const CHAPTER_INPUTS = ["measures", "interests", "coherence"] as const
+export type ChapterInput = (typeof CHAPTER_INPUTS)[number]
+
+export function parseChapterInputs(raw: unknown): ChapterInput[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((value): value is ChapterInput => (CHAPTER_INPUTS as readonly string[]).includes(value))
 }
 
 export type ProgrammeTemplate = {
@@ -327,6 +336,7 @@ export function mapOutlineRow(row: {
   quality_rules?: string | null
   output_form?: string | null
   relation_hints?: string | null
+  draws_on?: unknown
   required: boolean
   sort_order: number
 }): ProgrammeOutlineNode {
@@ -341,6 +351,7 @@ export function mapOutlineRow(row: {
     qualityRules: row.quality_rules ?? null,
     outputForm: row.output_form ?? null,
     relationHints: row.relation_hints ?? null,
+    drawsOn: parseChapterInputs(row.draws_on),
     required: row.required,
     sortOrder: row.sort_order,
   }

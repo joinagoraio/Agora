@@ -397,8 +397,10 @@ export async function generateProgrammeMeasuresFromContext(
   const playbookBody = agentVersion?.instructions || layers.playbook
 
   let outlineBlock = "(no outline bound yet)"
+  const outlineIds = new Set<string>()
   if (bindings.templateId) {
     const outline = await listProgrammeOutlineNodes(bindings.templateId)
+    for (const node of outline.data) outlineIds.add(node.id)
     if (outline.data.length > 0) {
       outlineBlock = outline.data
         .map((n, i) => {
@@ -436,7 +438,11 @@ ${instructions}
 Workspace evidence:
 ${context || "(empty)"}
 
-Return ONLY the JSON object with a "measures" array.`
+${
+  outlineIds.size > 0 && !options?.outlineNodeId
+    ? `For each item, set "outlineNodeId" to the id in [brackets] of the PROGRAMME OUTLINE chapter it belongs to.\n\n`
+    : ""
+}Return ONLY the JSON object with a "measures" array.`
 
   let raw = ""
   try {
@@ -482,9 +488,10 @@ Return ONLY the JSON object with a "measures" array.`
 
   const saved = []
   for (const measure of measures) {
+    const proposedNode = measure.outlineNodeId && outlineIds.has(measure.outlineNodeId) ? measure.outlineNodeId : null
     const result = await upsertProgrammeMeasure(workspaceId, {
       ...measure,
-      outlineNodeId: options?.outlineNodeId ?? measure.outlineNodeId ?? null,
+      outlineNodeId: options?.outlineNodeId ?? proposedNode,
     })
     if (result.data) saved.push(result.data)
   }
