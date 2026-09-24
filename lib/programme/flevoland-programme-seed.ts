@@ -14,8 +14,13 @@ type SeedChapter = {
 const GUARDRAILS =
   "Schrijf bevestigend en concreet. Verdeel geen woningaantallen over gemeenten en presenteer dit niet als het wettelijke volkshuisvestingsprogramma. Noem geen bedragen die niet in de bronnen staan."
 
+/** Earlier wordings of the measure form, replaced in the stored pack by the current one. */
+export const FLEVOLAND_EARLIER_MEASURE_OUTPUT_FORMS = [
+  "Orden de maatregelen per provinciaal belang, met het belang als tussenkop. Elke maatregel is alleen dit blok, in deze volgorde: Doel (de visieregel die de maatregel dient). Opgave. Rol van de provincie en wie verder handelt. Maatregel: de concrete actie. Gebied, alleen als een bron een gebied noemt. Termijn. Indicator. Middelen, alleen als een bron ze noemt. Geen langer verhaal om de blokken heen.",
+]
+
 export const FLEVOLAND_MEASURE_OUTPUT_FORM =
-  "Orden de maatregelen per provinciaal belang, met het belang als tussenkop. Elke maatregel is alleen dit blok, in deze volgorde: Doel (de visieregel die de maatregel dient). Opgave. Rol van de provincie en wie verder handelt. Maatregel: de concrete actie. Gebied, alleen als een bron een gebied noemt. Termijn. Indicator. Middelen, alleen als een bron ze noemt. Geen langer verhaal om de blokken heen."
+  "Orden de maatregelen per provinciaal belang, met het belang als tussenkop. Elke maatregel begint met zijn titel als kop op het niveau onder het belang, gevolgd door alleen dit blok, in deze volgorde: Doel (de visieregel die de maatregel dient). Opgave. Rol van de provincie en wie verder handelt. Maatregel: de concrete actie. Gebied, alleen als een bron een gebied noemt. Termijn. Indicator. Middelen, alleen als een bron ze noemt. Geen langer verhaal om de blokken heen."
 
 /** The nine parts of Flevoland's final programme structure. */
 export const FLEVOLAND_PROGRAMME_CHAPTERS: SeedChapter[] = [

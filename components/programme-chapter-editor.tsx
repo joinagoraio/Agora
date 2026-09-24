@@ -269,7 +269,6 @@ export function ProgrammeChapterEditor({
           onMessage(result.error, "error")
           return
         }
-        setNodes(result.data)
         const listed = await listProgrammeChapters(workspaceId)
         const nextBodies: Record<string, ChapterBody> = {}
         for (const chapter of listed.data || []) {
@@ -282,6 +281,7 @@ export function ProgrammeChapterEditor({
           }
         }
         setBodies(nextBodies)
+        setNodes(result.data)
         const preferredId =
           (activeChapterId && result.data.some((node) => node.id === activeChapterId) && activeChapterId) ||
           (selectedId && result.data.some((node) => node.id === selectedId) ? selectedId : null)

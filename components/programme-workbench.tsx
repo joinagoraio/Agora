@@ -547,6 +547,7 @@ export function ProgrammeWorkbench({
   const [corpusDocs, setCorpusDocs] = useState<
     Array<{ id: string; title: string; document_role: string | null; origin: DocumentOrigin; fileExtension: string }>
   >([])
+  const [corpusLoaded, setCorpusLoaded] = useState(false)
   const [notes, setNotes] = useState<WorkspaceNote[]>([])
   const [graph, setGraph] = useState<{ nodes: any[]; edges: any[] }>({ nodes: [], edges: [] })
   const [duplicates, setDuplicates] = useState<Array<Array<{ id: string; title: string; score?: number; reason?: string }>>>([])
@@ -718,6 +719,7 @@ export function ProgrammeWorkbench({
           }),
         ),
       )
+      setCorpusLoaded(true)
       setNotes((notesResult.data || []) as WorkspaceNote[])
       const templateId = b.data?.templateId
       if (templateId) {
@@ -1107,6 +1109,7 @@ export function ProgrammeWorkbench({
                 bindings={bindings}
                 templates={templates}
                 corpusDocs={corpusDocs}
+                corpusLoading={!corpusLoaded}
                 canEdit={canRunSetup}
                 onBindingsChange={setBindings}
                 onMessage={notify}

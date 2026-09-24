@@ -137,7 +137,7 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
     [viewing, workspaceId, citationSources],
   )
 
-  const busy = finding || queue !== null
+  const busy = finding || queue !== null || workingIds.length > 0
 
   const viewSwitch = (
     <div className="flex shrink-0 gap-1 border-b px-6 pt-3" role="tablist">

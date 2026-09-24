@@ -9,7 +9,9 @@ import { createProgrammeTemplate, upsertOutlineNode } from "@/lib/actions/templa
 import { publishSpaceItem } from "@/lib/actions/space-item"
 import {
   FLEVOLAND_DEFAULT_MODEL_ID,
+  FLEVOLAND_EARLIER_MEASURE_OUTPUT_FORMS,
   FLEVOLAND_FOCUS_INTERESTS,
+  FLEVOLAND_MEASURE_OUTPUT_FORM,
   FLEVOLAND_PROGRAMME_CHAPTERS,
   FLEVOLAND_WORKUP_HEADINGS,
 } from "@/lib/programme/flevoland-programme-seed"
@@ -152,6 +154,23 @@ function usesEarlierStructure(chapters: unknown) {
   )
 }
 
+const EARLIER_MEASURE_FORMS = new Set(FLEVOLAND_EARLIER_MEASURE_OUTPUT_FORMS)
+
+function usesEarlierMeasureForm(chapters: unknown) {
+  return (
+    Array.isArray(chapters) &&
+    chapters.some((item) => item && typeof item === "object" && EARLIER_MEASURE_FORMS.has(String((item as { outputForm?: unknown }).outputForm)))
+  )
+}
+
+function withCurrentMeasureForm(chapters: unknown[]) {
+  return chapters.map((item) =>
+    item && typeof item === "object" && EARLIER_MEASURE_FORMS.has(String((item as { outputForm?: unknown }).outputForm))
+      ? { ...(item as Record<string, unknown>), outputForm: FLEVOLAND_MEASURE_OUTPUT_FORM }
+      : item,
+  )
+}
+
 async function catalogModelId(admin: ReturnType<typeof createAdminClient>, modelId: string) {
   const { data } = await admin.from("llm_models").select("id").eq("model_id", modelId).eq("enabled", true).limit(1).maybeSingle()
   return (data?.id as string | undefined) ?? null
@@ -180,6 +199,7 @@ export async function ensureFlevolandDemoPack() {
     const patch: Record<string, unknown> = {}
     if (!row?.mission?.trim()) Object.assign(patch, FLEVOLAND_PROFILE)
     if (usesEarlierStructure(row?.chapters)) patch.chapters = flevolandChapters()
+    else if (usesEarlierMeasureForm(row?.chapters)) patch.chapters = withCurrentMeasureForm(row?.chapters as unknown[])
     if (!row?.space_type) patch.space_type = "regional"
     if (parseWorkupHeadings(row?.workup_headings).length === 0) patch.workup_headings = FLEVOLAND_WORKUP_HEADINGS
     if (!row?.focus_interests?.length) patch.focus_interests = FLEVOLAND_FOCUS_INTERESTS

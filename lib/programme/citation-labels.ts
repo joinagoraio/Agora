@@ -33,7 +33,7 @@ export function formatCitationLabel(
   const section = citation.sectionId
     ? sections.find((item) => item.id === citation.sectionId)
     : undefined
-  const title = document?.title?.trim() || citation.documentId
+  const title = document?.title?.trim() ? readableSourceTitle(document.title.trim()) : citation.documentId
   const sectionTitle = section?.title?.trim()
   const page = citation.pageNumber || section?.pageNumber
   const parts = [title]

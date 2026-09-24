@@ -706,6 +706,7 @@ export const nlMessages = {
         guidanceSaveError: "Die keuze kon niet worden opgeslagen. Probeer het opnieuw.",
         sourcesPick: "Kies een bestand",
         sourcesEmpty: "Nog geen bestanden. Upload er een.",
+        sourcesLoading: "Bestanden laden…",
         sourcesUpload: "Upload een bestand",
         structureDocx: "Begin vanuit een DOCX",
         structureDocxHelp: "Kop 1 en Kop 2 worden hoofdstukken die u kunt bewerken. Het document blijft bewaard. PDF wordt niet gelezen voor hoofdstukken.",
@@ -768,7 +769,10 @@ export const nlMessages = {
         empty: "Nog geen verbanden. Vergelijk de gekozen belangen om te zien waar ze elkaar versterken, waar één maatregel meerdere belangen dient, en waar ze botsen.",
         showAll: "Alle paren tonen",
         keep: "Behouden",
+        kept: "Behouden",
         setAside: "Terzijde leggen",
+        setAsideDone: "Terzijde gelegd",
+        undo: "Klik om dit besluit ongedaan te maken",
         reason: "Waarom wordt dit terzijde gelegd?",
         source: "Bron",
         kind: {

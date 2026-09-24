@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Loader2 } from "lucide-react"
+import { Check, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -41,6 +41,7 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
   const [running, setRunning] = useState(false)
   const [pair, setPair] = useState<string | null>(null)
   const [dropping, setDropping] = useState<{ id: string; reason: string } | null>(null)
+  const [savingId, setSavingId] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     const listed = await listCoherenceFindings(workspaceId)
@@ -77,7 +78,10 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
   }
 
   const decide = async (finding: CoherenceFinding, decision: "keep" | "drop" | null, reason?: string) => {
+    if (savingId) return
+    setSavingId(finding.id)
     const result = await setCoherenceDecision(workspaceId, finding.id, decision, reason)
+    setSavingId(null)
     if (result.error) {
       onMessage(result.error, "error")
       return
@@ -202,7 +206,11 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
                   {list.map((finding) => (
                     <li
                       key={finding.id}
-                      className={cn("space-y-2 rounded-lg border p-3", finding.decision === "drop" && "opacity-60")}
+                      className={cn(
+                        "space-y-2 rounded-lg border p-3",
+                        finding.decision === "keep" && "border-foreground/50 bg-muted/30",
+                        finding.decision === "drop" && "opacity-60",
+                      )}
                     >
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0 space-y-1">
@@ -220,23 +228,32 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
                             type="button"
                             size="sm"
                             variant={finding.decision === "keep" ? "default" : "outline"}
-                            disabled={!canEdit}
+                            aria-pressed={finding.decision === "keep"}
+                            title={finding.decision === "keep" ? t("workspace.programme.coherence.undo") : undefined}
+                            disabled={!canEdit || savingId === finding.id}
                             onClick={() => void decide(finding, finding.decision === "keep" ? null : "keep")}
                           >
-                            {t("workspace.programme.coherence.keep")}
+                            {finding.decision === "keep" ? <Check className="h-4 w-4" /> : null}
+                            {finding.decision === "keep"
+                              ? t("workspace.programme.coherence.kept")
+                              : t("workspace.programme.coherence.keep")}
                           </Button>
                           <Button
                             type="button"
                             size="sm"
                             variant={finding.decision === "drop" ? "default" : "outline"}
-                            disabled={!canEdit}
+                            aria-pressed={finding.decision === "drop"}
+                            title={finding.decision === "drop" ? t("workspace.programme.coherence.undo") : undefined}
+                            disabled={!canEdit || savingId === finding.id}
                             onClick={() =>
                               finding.decision === "drop"
                                 ? void decide(finding, null)
                                 : setDropping({ id: finding.id, reason: "" })
                             }
                           >
-                            {t("workspace.programme.coherence.setAside")}
+                            {finding.decision === "drop"
+                              ? t("workspace.programme.coherence.setAsideDone")
+                              : t("workspace.programme.coherence.setAside")}
                           </Button>
                         </div>
                       </div>

@@ -32,6 +32,7 @@ type Props = {
   bindings: ProgrammeBindings
   templates: ProgrammeTemplateSummary[]
   corpusDocs: CorpusDoc[]
+  corpusLoading?: boolean
   canEdit: boolean
   onBindingsChange: (bindings: ProgrammeBindings) => void
   onMessage: (message: string | null, kind?: NotifyKind) => void
@@ -50,6 +51,7 @@ export function ProgrammeSetupWizard({
   bindings,
   templates,
   corpusDocs,
+  corpusLoading = false,
   canEdit,
   onBindingsChange,
   onMessage,
@@ -292,7 +294,11 @@ export function ProgrammeSetupWizard({
               </p>
             </div>
             {sourceDocs.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t("workspace.programme.setupWizard.sourcesEmpty")}</p>
+              <p className="text-sm text-muted-foreground">
+                {corpusLoading
+                  ? t("workspace.programme.setupWizard.sourcesLoading")
+                  : t("workspace.programme.setupWizard.sourcesEmpty")}
+              </p>
             ) : (
               <div className="space-y-4">
                 <SourcePicker

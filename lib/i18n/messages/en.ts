@@ -706,6 +706,7 @@ export const enMessages = {
         guidanceSaveError: "Could not save that choice. Try again.",
         sourcesPick: "Choose a file",
         sourcesEmpty: "No files here yet. Upload one.",
+        sourcesLoading: "Loading the files…",
         sourcesUpload: "Upload a file",
         structureDocx: "Start from a DOCX",
         structureDocxHelp: "Heading 1 and Heading 2 become chapters you can edit. The document is kept. PDF is not read for chapters.",
@@ -768,7 +769,10 @@ export const enMessages = {
         empty: "No links yet. Compare the chosen interests to see where they reinforce each other, where a measure can serve several, and where they conflict.",
         showAll: "Show every pair",
         keep: "Keep",
+        kept: "Kept",
         setAside: "Set aside",
+        setAsideDone: "Set aside",
+        undo: "Click to undo this decision",
         reason: "Why is this set aside?",
         source: "Source",
         kind: {
