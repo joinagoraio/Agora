@@ -460,8 +460,21 @@ export function SpaceSetupWizard({
     }
   }
 
+  const rememberStep = (stepIndex: number) => {
+    void updateSpaceSetupState(spaceId, { current_step: stepIndex }).then((result) => {
+      if (result?.error) setStepError(result.error)
+    })
+  }
+
   const handleNext = async () => {
     setStepError(null)
+    const nextStep = Math.min(currentStep + 1, steps.length - 1)
+    if (steps[currentStep]?.key === "welcome") {
+      setCurrentStep(nextStep)
+      rememberStep(nextStep)
+      return
+    }
+
     setIsSubmitting(true)
 
     const canAdvance = await persistCurrentStep()
@@ -470,7 +483,6 @@ export function SpaceSetupWizard({
       return
     }
 
-    const nextStep = Math.min(currentStep + 1, steps.length - 1)
     const result = await updateSpaceSetupState(spaceId, { current_step: nextStep })
     setIsSubmitting(false)
     if (result?.error) {
@@ -572,6 +584,12 @@ export function SpaceSetupWizard({
     }
 
     setStepError(null)
+
+    if (steps[currentStep]?.key === "welcome" && targetStep > currentStep) {
+      setCurrentStep(targetStep)
+      rememberStep(targetStep)
+      return
+    }
 
     if (targetStep > currentStep) {
       setIsSubmitting(true)
