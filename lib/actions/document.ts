@@ -1684,6 +1684,35 @@ export async function updateWorkspaceDocument(
   return { data: updatedDocument }
 }
 
+/** Evidence for one programme chapter: the relevant parts of every source, not the opening pages. */
+async function programmeChapterEvidence(input: {
+  supabase: Awaited<ReturnType<typeof createClient>>
+  workspaceId: string
+  excludeIds: string[]
+  query: string
+}): Promise<{ context: string; sources: Array<{ id: string; documentId: string; title: string; content: string }> }> {
+  const excluded = new Set(input.excludeIds.filter(Boolean))
+  const { data } = await input.supabase
+    .from("documents")
+    .select("id, title, content")
+    .eq("workspace_id", input.workspaceId)
+    .neq("status", "deleted")
+    .neq("status", "archived")
+  const documents = (data || []).filter((row) => !excluded.has(row.id))
+  const { selectEvidenceForTask } = await import("@/lib/programme/evidence-select")
+  const selection = await selectEvidenceForTask({ supabase: input.supabase, documents, query: input.query })
+  const sources = documents.map((document) => ({
+    id: document.id,
+    documentId: document.id,
+    title: document.title || document.id,
+    content: selection.spans
+      .filter((span) => span.documentId === document.id)
+      .map((span) => span.text)
+      .join("\n"),
+  }))
+  return { context: selection.text || "No documents found in the workspace.", sources }
+}
+
 export async function generateWorkspaceDocumentDraft(
   workspaceId: string,
   documentId: string,
@@ -1751,10 +1780,6 @@ export async function generateWorkspaceDocumentDraft(
   const { writingLanguageForSpace } = await import("@/lib/programme/load-writing-language")
   const userLanguage = await writingLanguageForSpace(workspace.space_id)
 
-  // Use all workspace knowledge for initial document generation
-  // This ensures the AI has access to all available workspace knowledge
-  const { context, sources } = await getAllWorkspaceKnowledge(workspaceId, [documentId])
-
   const bindings = parseProgrammeBindings((workspace.metadata as Record<string, unknown>) || {})
   const { resolveDraftAgentId } = await import("@/lib/programme/domain")
   const { getLatestAgentVersion } = await import("@/lib/actions/agent")
@@ -1800,12 +1825,19 @@ export async function generateWorkspaceDocumentDraft(
   let nodeConstraint = ""
   let chapterTitle = ""
   let hasOutputForm = false
+  let programmeEvidence: { context: string; sources: any[] } | null = null
   if (outlineNodeId && bindings.templateId) {
     const outline = await listProgrammeOutlineNodes(bindings.templateId)
     const node = outline.data.find((n) => n.id === outlineNodeId)
     if (node) {
       chapterTitle = node.title
       hasOutputForm = Boolean(node.outputForm?.trim())
+      programmeEvidence = await programmeChapterEvidence({
+        supabase,
+        workspaceId,
+        excludeIds: [documentId, ...Object.values(bindings.chapterDocuments || {})],
+        query: [node.title, node.purpose || "", node.instructions || "", instructions].join("\n"),
+      })
       const { formatMeasureBlock, formatMeasureList } = await import("@/lib/programme/measure-block")
       const allMeasures = (await listProgrammeMeasures(workspaceId)).data || []
       const placed = allMeasures.filter((m: { outline_node_id?: string }) => m.outline_node_id === node.id)
@@ -1833,6 +1865,8 @@ export async function generateWorkspaceDocumentDraft(
         .join("\n")
     }
   }
+
+  const { context, sources } = programmeEvidence ?? (await getAllWorkspaceKnowledge(workspaceId, [documentId]))
 
   const { systemPrompt } = compileSystemPrompt({
     kind: "draft",

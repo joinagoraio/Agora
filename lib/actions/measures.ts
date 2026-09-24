@@ -14,7 +14,7 @@ import { boundAgentId, defaultSourceRolesForStage, parseProgrammeBindings } from
 import { listProgrammeOutlineNodes } from "@/lib/actions/outline"
 import { completeLlm } from "@/lib/llm"
 import { getLatestAgentVersion } from "@/lib/actions/agent"
-import { formatSourceEvidence, formatSourcePreview, resolveAgentSourceDocuments } from "@/lib/programme/source-set"
+import { formatSourcePreview, resolveAgentSourceDocuments } from "@/lib/programme/source-set"
 import { snapshotArtefact } from "@/lib/actions/collaboration"
 import { measureHasVisionPath, syncMeasureVisionPath } from "@/lib/actions/analysis"
 import { resolveMeasureVisionAnchors } from "@/lib/programme/vision-path"
@@ -335,7 +335,14 @@ export async function importMeasureCandidatesFromJson(workspaceId: string, rawJs
 
 export async function generateProgrammeMeasuresFromContext(
   workspaceId: string,
-  options?: { instructions?: string; count?: number; temperature?: number; outlineNodeId?: string | null },
+  options?: {
+    instructions?: string
+    count?: number
+    temperature?: number
+    outlineNodeId?: string | null
+    /** Extra words that describe what the measures are about, used to pick evidence. */
+    focus?: string
+  },
 ) {
   try {
     await requireAuthAndPermission("workspace:update", { workspaceId })
@@ -374,10 +381,7 @@ export async function generateProgrammeMeasuresFromContext(
     bindings,
     fallbackRoles: defaultSourceRolesForStage("measures"),
   })
-  const context = formatSourceEvidence(documents)
-  const sourcePreview = formatSourcePreview(documents)
-
-  if (sourceIds.length === 0 && !context.trim()) {
+  if (sourceIds.length === 0 && documents.every((document) => !document.content.trim())) {
     return { error: "Add workspace documents (or bind an agent source set) before generating measures" }
   }
 
@@ -412,6 +416,14 @@ export async function generateProgrammeMeasuresFromContext(
     }
   }
 
+  const { selectEvidenceForTask } = await import("@/lib/programme/evidence-select")
+  const evidence = await selectEvidenceForTask({
+    supabase,
+    documents,
+    query: [instructions, outlineBlock, options?.focus || ""].join("\n"),
+  })
+  const context = evidence.text
+  const sourcePreview = formatSourcePreview(documents, { used: evidence.used, total: evidence.total })
   const evidenceIdList = sourceIds.map((id) => `- ${id}`).join("\n") || "- (none)"
   const evidenceDocs = documents.map((d) => ({ documentId: d.id, text: d.content }))
 
@@ -435,8 +447,10 @@ ${workspace.location ? `Location: ${workspace.location}` : ""}
 Author instructions:
 ${instructions}
 
-Workspace evidence:
+Workspace evidence (each piece shows its document id, section id, and page):
 ${context || "(empty)"}
+
+In citations, give the documentId, the sectionId when shown, the pageNumber, and an exact quote from that piece.
 
 ${
   outlineIds.size > 0 && !options?.outlineNodeId
@@ -468,7 +482,11 @@ ${
 
   const payload = extractJsonPayload(raw)
   const parsed = parseMeasureCandidatesJson(payload)
-  let measures = parsed.measures
+  const { withCitationPages } = await import("@/lib/programme/evidence-select")
+  let measures = parsed.measures.map((measure) => ({
+    ...measure,
+    citations: withCitationPages(measure.citations, evidence.spans),
+  }))
   const errors = [...parsed.errors]
 
   const accepted = []

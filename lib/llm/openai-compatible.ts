@@ -7,6 +7,8 @@ import {
 import type { LlmAdapter } from "@/lib/llm/types"
 
 const DEFAULT_OPENAI_ENDPOINT = "https://api.openai.com/v1"
+/** Reasoning models spend completion tokens on thinking before they answer. */
+const REASONING_MIN_COMPLETION_TOKENS = 32000
 
 function readCompletionText(payload: {
   choices?: Array<{ message?: { content?: unknown } }>
@@ -33,7 +35,8 @@ function readCompletionText(payload: {
 export const completeOpenAiCompatible: LlmAdapter = async (input, apiKey) => {
   const base = (input.endpoint || DEFAULT_OPENAI_ENDPOINT).replace(/\/$/, "")
   const fixedSampling = modelHasFixedSampling(input.model)
-  const maxTokens = input.maxTokens ?? 8000
+  const requested = input.maxTokens ?? 8000
+  const maxTokens = fixedSampling ? Math.max(requested, REASONING_MIN_COMPLETION_TOKENS) : requested
 
   const send = (options: { completionTokens: boolean; temperature: boolean }) =>
     fetch(`${base}/chat/completions`, {
@@ -76,7 +79,11 @@ export const completeOpenAiCompatible: LlmAdapter = async (input, apiKey) => {
   }
 
   const payload = (await response.json()) as {
-    choices?: Array<{ message?: { content?: unknown } }>
+    choices?: Array<{ message?: { content?: unknown }; finish_reason?: string }>
   }
-  return { text: readCompletionText(payload), provider: "openai-compatible", model: input.model }
+  const text = readCompletionText(payload)
+  if (!text && payload.choices?.[0]?.finish_reason === "length") {
+    throw new Error(`${input.model} reached its length limit before it answered. Try again with less evidence or a smaller model.`)
+  }
+  return { text, provider: "openai-compatible", model: input.model }
 }

@@ -4,6 +4,8 @@ import { randomUUID } from "node:crypto"
 import { revalidatePath } from "next/cache"
 
 import { createAdminClient } from "@/lib/supabase/admin"
+import { splitTextIntoPages } from "@/lib/documents/text-pages"
+import { rebuildDocumentSectionsWithClient } from "@/lib/documents/rebuild-sections"
 
 type SpaceDocumentPayload = {
   title?: string | null
@@ -140,46 +142,33 @@ async function upsertWorkspaceDocumentForScope(
   async function upsertDocumentPageContent(documentId: string) {
     if (!content || content.length === 0) return
 
-    const textContent = content.substring(0, 200000)
-    const pagePayload = {
-      text_content: textContent,
-      text_items: [],
-      character_offsets: {},
-      page_number: 1,
-      document_id: documentId,
-    }
+    const pages = splitTextIntoPages(content)
+    if (pages.length === 0) return
 
-    const { data: existingPage, error: pageFetchError } = await adminClient
-      .from("document_pages")
-      .select("id")
-      .eq("document_id", documentId)
-      .order("page_number", { ascending: true })
-      .limit(1)
-      .maybeSingle()
-
-    if (pageFetchError) {
-      console.error("[ScopeDocuments] Failed to check existing document page:", pageFetchError)
+    const { error: deleteError } = await adminClient.from("document_pages").delete().eq("document_id", documentId)
+    if (deleteError) {
+      console.error("[ScopeDocuments] Failed to clear document pages:", deleteError)
       return false
     }
 
-    if (existingPage) {
-      const { error: updatePageError } = await adminClient
-        .from("document_pages")
-        .update({
-          text_content: textContent,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existingPage.id)
-
-      if (updatePageError) {
-        console.error("[ScopeDocuments] Failed to update document page content:", updatePageError)
-      }
-    } else {
-      const { error: insertPageError } = await adminClient.from("document_pages").insert(pagePayload)
+    for (let start = 0; start < pages.length; start += 100) {
+      const { error: insertPageError } = await adminClient.from("document_pages").insert(
+        pages.slice(start, start + 100).map((page) => ({
+          text_content: page.text,
+          text_items: [],
+          character_offsets: {},
+          page_number: page.pageNumber,
+          document_id: documentId,
+        })),
+      )
       if (insertPageError) {
-        console.error("[ScopeDocuments] Failed to insert document page content:", insertPageError)
+        console.error("[ScopeDocuments] Failed to insert document pages:", insertPageError)
+        return false
       }
     }
+
+    const sections = await rebuildDocumentSectionsWithClient(adminClient, documentId, workspaceId)
+    if (sections.error) console.error("[ScopeDocuments] Failed to rebuild sections:", sections.error)
   }
 
   // Check if we already created a document for this workspace from this scope item

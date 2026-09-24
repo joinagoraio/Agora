@@ -292,7 +292,7 @@ async function executeBoundAgentAnalysis(input: {
   const { parseProgrammeBindings, boundAgentId, defaultSourceRolesForStage } = await import("@/lib/programme/domain")
   const { getLatestAgentVersion, getAgentVersionById } = await import("@/lib/actions/agent")
   const { resolveAgentSourceDocuments, formatSourcePreview } = await import("@/lib/programme/source-set")
-  const { formatSectionEvidenceReport, preflightAnalysisRun, conflictFindings } = await import(
+  const { preflightAnalysisRun, conflictFindings } = await import(
     "@/lib/programme/analysis-reports"
   )
   const { computeUnusedSourceReport } = await import("@/lib/actions/generation-run")
@@ -330,7 +330,6 @@ async function executeBoundAgentAnalysis(input: {
   const gate = preflightAnalysisRun({ kind: input.kind, agentId: agentVersion?.agentId || agentId, bindings, documents })
   if (!gate.ok) return { error: gate.reason }
 
-  const sections = await loadSourceSections(input.workspaceId, sourceIds)
   const { writingLanguageForSpace } = await import("@/lib/programme/load-writing-language")
   const userLanguage = await writingLanguageForSpace(workspace.space_id)
 
@@ -353,7 +352,19 @@ async function executeBoundAgentAnalysis(input: {
           ? "effects"
           : "quality"
 
-  const evidence = formatSectionEvidenceReport(documents, sections)
+  const { selectEvidenceForTask } = await import("@/lib/programme/evidence-select")
+  const selection = await selectEvidenceForTask({
+    supabase,
+    documents,
+    query: [ANALYSIS_FOCUS[input.kind], input.instructions || "", outlineBlock, measureBlock].join("\n"),
+    budgetChars: 50000,
+  })
+  const evidence = {
+    text: selection.text,
+    used: selection.used,
+    total: selection.total,
+    read: selection.spans.map((span) => ({ documentId: span.documentId, title: span.title, page: span.pageNumber })),
+  }
   const layers = await loadPromptLayers(input.kind)
   const { systemPrompt } = compileSystemPrompt({
     kind: input.kind,
@@ -388,13 +399,14 @@ async function executeBoundAgentAnalysis(input: {
           content:
             input.kind === "oer"
               ? `Produce the effects JSON report. Each finding must include measureId from the MEASURES list, oerTheme, effectsDirection, effectsDeviation, effectsJustification when deviation is true, and citations into the effects report. ${input.instructions || ""}`
-              : `Produce the ${reportType} JSON report for workspace ${workspace.name}. Use sectionId in citations when evidence has sectionId. ${input.instructions || ""}`,
+              : `Produce the ${reportType} JSON report for workspace ${workspace.name}. In citations, give the documentId, the sectionId when shown, the pageNumber, and an exact quote. ${input.instructions || ""}`,
         },
       ],
       json: true,
       maxTokens: 8000,
     })
     raw = completion.text
+    if (!raw.trim()) return { error: `${model} returned an empty answer. Try the analysis again.` }
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Analysis run failed" }
   }
@@ -409,7 +421,11 @@ async function executeBoundAgentAnalysis(input: {
     return { error: `Invented documentIds are not allowed: ${invented.join(", ")}` }
   }
 
-  let findings = parsed.report.findings
+  const { withCitationPages } = await import("@/lib/programme/evidence-select")
+  let findings = parsed.report.findings.map((finding) => ({
+    ...finding,
+    citations: withCitationPages(finding.citations, selection.spans),
+  }))
   if (input.kind === "qc") {
     const { overlapFindingsFromMeasures } = await import("@/lib/programme/measure-duplicates")
     const overlap = overlapFindingsFromMeasures(
@@ -446,7 +462,11 @@ async function executeBoundAgentAnalysis(input: {
     instructions: input.instructions ?? `${input.kind} agent job`,
     sourceDocumentIds: sourceIds,
     unusedDocumentIds: unusedDocumentIdsFromReport(unused.data || []),
-    citations: { unusedSources: unused.data || [], groundedness, evidenceCap: evidence },
+    citations: {
+      unusedSources: unused.data || [],
+      groundedness,
+      evidenceCap: { used: evidence.used, total: evidence.total, read: evidence.read },
+    },
     userId: user?.id,
   })
 
@@ -477,22 +497,13 @@ async function executeBoundAgentAnalysis(input: {
   return saved
 }
 
-async function loadSourceSections(workspaceId: string, documentIds: string[]) {
-  if (documentIds.length === 0) return []
-  const supabase = await createClient()
-  const { data } = await supabase
-    .from("document_sections")
-    .select("id, document_id, title, page_number, start_offset")
-    .eq("workspace_id", workspaceId)
-    .in("document_id", documentIds)
-    .order("page_number", { ascending: true })
-  return (data || []).map((row) => ({
-    id: row.id,
-    documentId: row.document_id,
-    title: row.title,
-    pageNumber: row.page_number,
-    startOffset: row.start_offset,
-  }))
+/** Words that describe what each analysis looks for, in both writing languages, used to pick evidence. */
+const ANALYSIS_FOCUS: Record<"analysis" | "vision" | "oer" | "qc", string> = {
+  analysis:
+    "beleid beleidsregels doelen doelstellingen maatregelen rol ambitie opgave belang uitvoering policy rules goals measures role ambition challenge interest",
+  vision: "ambitie ambities belang belangen principe opgave opgaven doel doelen ambition interest principle challenge goal",
+  oer: "effect effecten milieu risico mitigatie beoordeling alternatief effects environment risk mitigation assessment",
+  qc: "maatregel doel indicator termijn rol monitoring measure goal indicator timing role monitoring",
 }
 
 async function startAnalysisJob(workspaceId: string, kind: "analysis" | "qc", label: string) {
