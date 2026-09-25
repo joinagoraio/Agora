@@ -144,6 +144,7 @@ import { ProgrammeInterestsPanel } from "@/components/programme-interests-panel"
 import { MeasureDecisionControl } from "@/components/measure-decision-control"
 import { MeasureSummaryLines } from "@/components/measure-summary-lines"
 import { DemoTourPanel, DemoTourStrip, useDemoTour, useTourSheetInsets } from "@/components/demo-tour"
+import { ENOUGH_MEASURES_PER_INTEREST } from "@/lib/programme/demo-tour"
 import { listProgrammeInterests } from "@/lib/actions/interests"
 import type { ProgrammeInterest } from "@/lib/programme/interests"
 import { parseRoleCheck } from "@/lib/programme/role-check"
@@ -911,10 +912,13 @@ export function ProgrammeWorkbench({
   ]
   const pendingMeasures = measures.filter((m) => m.workflow_status !== "approved")
   const activeReport = reports.find((report) => report.id === selectedReportId) ?? reports[0] ?? null
-  const measuredInterestIds = useMemo(
-    () => [...new Set(measures.flatMap((measure) => (Array.isArray(measure.interest_ids) ? (measure.interest_ids as string[]) : [])))],
-    [measures],
-  )
+  const measuredInterestIds = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const id of measures.flatMap((measure) => (Array.isArray(measure.interest_ids) ? (measure.interest_ids as string[]) : []))) {
+      counts.set(id, (counts.get(id) ?? 0) + 1)
+    }
+    return [...counts].filter(([, count]) => count >= ENOUGH_MEASURES_PER_INTEREST).map(([id]) => id)
+  }, [measures])
   const shownMeasures = sortAndFilterMeasures(measures, {
     sort: measureSort,
     filter: measureFilter,

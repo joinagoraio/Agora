@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { listProgrammeChapters } from "@/lib/actions/programme"
 import { spaceCost, type SpaceCost } from "@/lib/llm/usage"
 import { isSuperAdmin } from "@/lib/llm/resolve"
-import type { TourFacts } from "@/lib/programme/demo-tour"
+import { ENOUGH_MEASURES_PER_INTEREST, type TourFacts } from "@/lib/programme/demo-tour"
 
 /** What has been done in a programme so far, so the tour knows which steps are finished. */
 export async function getTourFacts(workspaceId: string): Promise<{ data: TourFacts; cost: SpaceCost | null }> {
@@ -33,7 +33,10 @@ export async function getTourFacts(workspaceId: string): Promise<{ data: TourFac
   const metadata = (workspace.metadata as Record<string, unknown> | null) || {}
   const bindings = (metadata.programmeBindings as Record<string, unknown> | undefined) || {}
   const chosen = (interests || []).filter((interest) => interest.selected)
-  const measured = new Set((measures || []).flatMap((measure) => (measure.interest_ids as string[] | null) || []))
+  const perInterest = new Map<string, number>()
+  for (const id of (measures || []).flatMap((measure) => (measure.interest_ids as string[] | null) || [])) {
+    perInterest.set(id, (perInterest.get(id) ?? 0) + 1)
+  }
   const chapterRows = chapters.data || []
 
   const [analysis, coherence, coherenceDecided, comments, themes, freezes, publications, consultations, responses, redrafts] =
@@ -56,7 +59,7 @@ export async function getTourFacts(workspaceId: string): Promise<{ data: TourFac
     interests: (interests || []).length,
     chosen: chosen.length,
     workups: chosen.filter((interest) => interest.workup_document_id).length,
-    measuredInterests: chosen.filter((interest) => measured.has(interest.id)).length,
+    measuredInterests: chosen.filter((interest) => (perInterest.get(interest.id) ?? 0) >= ENOUGH_MEASURES_PER_INTEREST).length,
     measures: (measures || []).length,
     decided: (measures || []).filter((measure) => measure.decision).length,
     dropped: (measures || []).filter((measure) => measure.decision === "drop").length,

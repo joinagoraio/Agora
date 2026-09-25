@@ -18,6 +18,9 @@ export type TourText = {
   narration: string
 }
 
+/** An interest counts as having measures once it has this many, so one broad proposal does not cover three interests. */
+export const ENOUGH_MEASURES_PER_INTEREST = 3
+
 /** Counts of what exists in the programme, such as work-ups written or chapters approved. */
 export type TourFacts = Record<string, number>
 
