@@ -26,10 +26,10 @@ The chapters are written during part 8, so there is no waiting in front of the r
 
 ## The day before and the morning of
 
-1. **Credits.** Check the OpenAI balance. A full run cost US$ 3.06 in the local test (see *Cost* below); keep at least US$ 20 of headroom.
+1. **Credits.** Check the OpenAI balance. A full run cost US$ 3.13 on live (see *Cost* below); keep at least US$ 20 of headroom.
 2. **Narration.** Platform admin → Demo packs → Flevoland demo → *Tour narration*. It should read 36 of 36 for Dutch and English, for both the female and the male voice. If not, press **Record narration** and wait two minutes.
 3. **Fresh demo.** On the same page, press **Load demo** (or **Reset** in the amber demo strip of an earlier demo). This creates a new authority with the files, the nine-part structure and interests 14, 15 and 16 chosen. Open the programme; the setup wizard opens on the sources. This is where part 1 starts.
-4. **Backup programme.** Load a second demo and run it up to and including part 7 (chapters written). If an AI step fails or runs slow on the day, switch to the backup at the same step. Keep it in a second browser tab.
+4. **Backup programme.** The demo loaded at 10:09 on 25 September ("Flevoland demo 2026-09-25 10:09") has been run through the whole tour on live and is complete up to consultation. Keep it open in a second browser tab; if an AI step fails or runs slow on the day, switch to it at the same step. Do not press Reset or End demo on it.
 5. **Language.** The tour and the voice follow the screen language. Set Agora to Nederlands (user menu) for a Dutch room.
 6. **Sound.** Connect the laptop audio to the room. Play step 1's narration once to set the volume.
 7. **Browser.** Use one window, full screen, zoom at 100 percent. Keep the side panel open on the **Tour** tab.
@@ -45,6 +45,10 @@ The chapters are written during part 8, so there is no waiting in front of the r
 - **If Autopilot cannot go on**, it stops with a note in the side panel ("Do this step by hand, then press Continue"). Do that step, then press Continue.
 - The tour remembers its step per programme in this browser, so a reload does not lose your place.
 - Only platform admins in a loaded demo see the tour. Nobody else does.
+
+## How long Autopilot takes
+
+On its own, without questions, Autopilot presents the whole tour in about 30 minutes: 12 minutes up to the break and 15 minutes after it (live, 25 September). The half-day timetable above leaves room for the talk around each step; pause Autopilot whenever you want to explain more or take questions.
 
 ## Waiting times
 
@@ -66,11 +70,11 @@ Agora records the tokens of every AI call and shows the running cost of the demo
 
 | Item | Cost |
 | --- | --- |
-| One full run, measured locally | US$ 3.06 |
-| of which: eight chapters and one redraft | US$ 1.88 |
-| of which: three work-ups | US$ 0.40 |
-| of which: measure proposals | US$ 0.37 |
-| of which: analysis | US$ 0.26 |
+| One full run, measured on live (25 September) | US$ 3.13 |
+| of which: eight chapters and one redraft | US$ 1.93 |
+| of which: three work-ups | US$ 0.41 |
+| of which: measure proposals | US$ 0.36 |
+| of which: analysis | US$ 0.27 |
 | of which: comparison | US$ 0.15 |
 | Recording all narration (2 voices, 2 languages, once) | US$ 0.63 |
 | A spoken answer to a question from the room | estimated US$ 0.05 to 0.15; recorded per answer |

@@ -323,7 +323,7 @@ export function DemoTourProvider({
       }
       const waitForElement = async (action: { target: string; state?: string; optional?: boolean }, enabledOnly: boolean) => {
         const started = Date.now()
-        const limit = action.optional ? 4000 : 20000
+        const limit = action.optional ? 10000 : 30000
         for (;;) {
           const el = findTarget(action.target, action.state, enabledOnly)
           if (el) return el

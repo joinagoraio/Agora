@@ -152,8 +152,8 @@ const AUTOPILOT: Record<string, Pick<TourStep, "auto" | "doneWhen">> = {
   review: {
     doneWhen: [at("approved")],
     auto: [
-      click("request-review", { unless: at("reviewRequested"), optional: true }),
-      wait(2500),
+      click("request-review", { unless: at("reviewRequested") }),
+      { do: "waitFor", condition: at("reviewRequested"), timeoutMs: 60000 },
       click("approve-chapter"),
       { do: "waitFor", condition: at("approved"), timeoutMs: 30000 },
     ],
