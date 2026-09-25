@@ -66,6 +66,7 @@ async function visionPages(supabase: Awaited<ReturnType<typeof createClient>>, d
 
 /** Ask the model for the interests when the vision does not number them. */
 async function findInterestsWithModel(input: {
+  workspaceId: string
   supabase: Awaited<ReturnType<typeof createClient>>
   documents: Array<{ id: string; title: string; content: string }>
 }): Promise<FoundInterest[] | { error: string }> {
@@ -80,6 +81,7 @@ async function findInterestsWithModel(input: {
   const { resolvePlatformTaskLlm } = await import("@/lib/llm/resolve")
   const llm = await resolvePlatformTaskLlm("summarize")
   const completion = await completeLlm({
+    usage: { workspaceId: input.workspaceId, kind: "interests" },
     provider: llm.provider,
     endpoint: llm.endpoint,
     apiKey: llm.apiKey,
@@ -139,7 +141,7 @@ export async function findProgrammeInterests(workspaceId: string) {
   const documents = await visionPages(supabase, bindings.environmentalVisionDocumentIds)
   let found: FoundInterest[] = documents.flatMap((document) => findNumberedInterests(document.pages, document.id))
   if (found.length < 3) {
-    const fromModel = await findInterestsWithModel({ supabase, documents })
+    const fromModel = await findInterestsWithModel({ workspaceId, supabase, documents })
     if ("error" in fromModel) return { error: fromModel.error }
     found = fromModel
   }
@@ -326,6 +328,7 @@ Rules:
   let text = ""
   try {
     const completion = await completeLlm({
+      usage: { workspaceId, kind: "workup" },
       provider: llm.provider,
       endpoint: llm.endpoint,
       apiKey: llm.apiKey,

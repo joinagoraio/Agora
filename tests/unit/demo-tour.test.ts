@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 
-import { parseDemoTour, tourStartMinutes, tourStepQuery } from "@/lib/programme/demo-tour"
+import { parseDemoTour, stepDone, tourStartMinutes, tourStepQuery, type TourAction } from "@/lib/programme/demo-tour"
 import { FLEVOLAND_TOUR } from "@/lib/programme/flevoland-tour"
 
 const componentSource = readdirSync(join(process.cwd(), "components"))
@@ -38,6 +38,35 @@ describe("Flevoland demo tour", () => {
       const analysis = target === "run-analysis" && componentSource.includes('"run-analysis"')
       expect(literal || templated || analysis, target).toBe(true)
     }
+  })
+
+  it("lets the autopilot reach only buttons that exist, and check only facts that are counted", () => {
+    const factsSource = readFileSync(join(process.cwd(), "lib/actions/demo-tour.ts"), "utf8")
+    const actions = (list: TourAction[]): TourAction[] => list.flatMap((action) => (action.do === "group" ? [action, ...actions(action.actions)] : [action]))
+    const all = FLEVOLAND_TOUR.steps.flatMap((step) => actions(step.auto ?? []))
+    expect(all.length).toBeGreaterThan(20)
+    for (const action of all) {
+      if (action.do === "click" || action.do === "type") {
+        const literal = componentSource.includes(`data-guidance-target="${action.target}"`)
+        const templated = /^(decision|priority|tool-switch)-/.test(action.target) || action.target === "run-analysis"
+        expect(literal || templated, action.target).toBe(true)
+      }
+    }
+    const conditions = [
+      ...FLEVOLAND_TOUR.steps.flatMap((step) => step.doneWhen ?? []),
+      ...all.flatMap((action) => [action.unless, action.onlyIf, action.do === "waitFor" ? action.condition : undefined]),
+    ].filter((condition): condition is NonNullable<typeof condition> => Boolean(condition))
+    for (const condition of conditions) {
+      expect(factsSource.includes(`    ${condition.fact}`), condition.fact).toBe(true)
+      if (condition.atLeastFact) expect(factsSource.includes(`    ${condition.atLeastFact}`), condition.atLeastFact).toBe(true)
+    }
+  })
+
+  it("knows which steps are done from the facts", () => {
+    const workup = FLEVOLAND_TOUR.steps.find((step) => step.id === "workup")!
+    expect(stepDone(workup, { workups: 2, chosen: 3 })).toBe(false)
+    expect(stepDone(workup, { workups: 3, chosen: 3 })).toBe(true)
+    expect(stepDone(workup, null)).toBe(false)
   })
 
   it("keeps the parts in the agreed half-day order", () => {

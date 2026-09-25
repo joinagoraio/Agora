@@ -142,6 +142,7 @@ Do not invent documentIds, numbers, or decisions. Staff decide; you only point o
   let raw = ""
   try {
     const completion = await completeLlm({
+      usage: { workspaceId, kind: "coherence" },
       provider: llm.provider,
       endpoint: llm.endpoint,
       apiKey: llm.apiKey,

@@ -1,7 +1,7 @@
-import type { DemoTour, TourStep, TourText } from "@/lib/programme/demo-tour"
+import type { DemoTour, TourAction, TourCondition, TourStep, TourText } from "@/lib/programme/demo-tour"
 
 /** Raise when the steps or texts change, so stored packs pick up the new tour. */
-export const FLEVOLAND_TOUR_VERSION = 3
+export const FLEVOLAND_TOUR_VERSION = 5
 
 type Place = TourStep["place"]
 
@@ -20,6 +20,188 @@ const DOC: Place = { view: "document" }
 const READ: Place = { view: "document", mode: "read" }
 const section = (name: NonNullable<Place["section"]>): Place => ({ view: "document", section: name })
 
+const click = (target: string, extra: Partial<Extract<TourAction, { do: "click" }>> = {}): TourAction => ({ do: "click", target, ...extra })
+const wait = (ms: number): TourAction => ({ do: "wait", ms })
+const at = (fact: string, min = 1): TourCondition => ({ fact, min })
+
+/** What the autopilot does on each step, and when a step counts as done. */
+const AUTOPILOT: Record<string, Pick<TourStep, "auto" | "doneWhen">> = {
+  sources: {
+    doneWhen: [at("setup")],
+    auto: [click("start-writing"), { do: "waitFor", condition: at("setup"), timeoutMs: 60000 }, wait(2000)],
+  },
+  "run-analysis": {
+    doneWhen: [at("analysis")],
+    auto: [click("run-analysis"), { do: "waitFor", condition: at("analysis"), timeoutMs: 420000 }],
+  },
+  "vision-view": { auto: [click("tool-switch-vision"), { do: "waitNarration" }, click("tool-switch-findings")] },
+  workup: {
+    doneWhen: [{ fact: "workups", min: 1, atLeastFact: "chosen" }],
+    auto: [click("workup-chosen"), { do: "waitJob", kind: "workup" }, wait(2000)],
+  },
+  "open-workup": { auto: [click("open-workup"), { do: "waitNarration" }, { do: "key", key: "Escape" }] },
+  propose: {
+    doneWhen: [{ fact: "measuredInterests", min: 1, atLeastFact: "chosen" }],
+    auto: [1, 2, 3].map(() => ({
+      do: "group" as const,
+      unless: { fact: "measuredInterests", min: 1, atLeastFact: "chosen" },
+      actions: [click("propose-measures", { state: "todo" }), { do: "waitJob" as const, kind: "measures" as const }, wait(4000)],
+    })),
+  },
+  register: { auto: [click("measure-row")] },
+  decide: {
+    doneWhen: [at("decided", 3), at("dropped")],
+    auto: [
+      { do: "group", unless: at("decided", 1), actions: [click("measure-row", { state: "undecided" }), click("decision-keep"), wait(1500)] },
+      {
+        do: "group",
+        unless: at("decided", 2),
+        actions: [
+          click("measure-row", { state: "undecided" }),
+          click("decision-adapt"),
+          {
+            do: "type",
+            target: "decision-reason",
+            text: {
+              nl: "Sluit aan op de bestaande woningbouwmonitor, zodat gemeenten niet twee keer rapporteren.",
+              en: "Tie this to the existing housing monitor, so municipalities do not report twice.",
+            },
+          },
+          click("decision-confirm"),
+          wait(1500),
+        ],
+      },
+      {
+        do: "group",
+        unless: at("dropped"),
+        actions: [
+          click("measure-row", { state: "undecided" }),
+          click("decision-drop"),
+          {
+            do: "type",
+            target: "decision-reason",
+            text: {
+              nl: "Valt buiten de rol van de provincie; gemeenten regelen dit al zelf.",
+              en: "Outside the province's role; municipalities already arrange this themselves.",
+            },
+          },
+          click("decision-confirm"),
+          wait(1500),
+        ],
+      },
+    ],
+  },
+  priority: {
+    doneWhen: [at("prioritised", 3)],
+    auto: [
+      { do: "group", unless: at("prioritised", 1), actions: [click("measure-row", { state: "unprioritised" }), click("priority-high"), wait(1500)] },
+      { do: "group", unless: at("prioritised", 2), actions: [click("measure-row", { state: "unprioritised" }), click("priority-high"), wait(1500)] },
+      { do: "group", unless: at("prioritised", 3), actions: [click("measure-row", { state: "unprioritised" }), click("priority-low"), wait(1500)] },
+    ],
+  },
+  roles: {
+    doneWhen: [at("rolesChecked")],
+    auto: [click("check-roles"), { do: "waitJob", kind: "roles" }, wait(1500)],
+  },
+  break: { auto: [{ do: "waitNarration" }, { do: "pause" }] },
+  compare: {
+    doneWhen: [at("coherence")],
+    auto: [click("compare-interests"), { do: "waitJob", kind: "coherence" }, wait(2500)],
+  },
+  grid: {
+    auto: [click("coherence-cell", { optional: true }), { do: "waitNarration" }, click("coherence-show-all", { optional: true })],
+  },
+  dilemmas: {
+    doneWhen: [at("coherenceDecided", 2)],
+    auto: [
+      click("coherence-keep", { state: "dilemma undecided", optional: true, unless: at("coherenceDecided", 1) }),
+      wait(1200),
+      click("coherence-keep", { state: "shared_measure undecided", optional: true, unless: at("coherenceDecided", 2) }),
+      wait(1200),
+      {
+        do: "group",
+        optional: true,
+        unless: at("coherenceDecided", 3),
+        actions: [
+          click("coherence-drop", { state: "reinforces undecided", optional: true }),
+          {
+            do: "type",
+            target: "coherence-reason",
+            optional: true,
+            text: {
+              nl: "Dit volgt al uit de gedeelde maatregelen; het programma hoeft het niet apart te noemen.",
+              en: "This already follows from the shared measures; the programme need not name it separately.",
+            },
+          },
+          click("coherence-drop-confirm", { optional: true }),
+        ],
+      },
+    ],
+  },
+  effects: {
+    doneWhen: [at("effects")],
+    auto: [click("save-effects"), { do: "waitFor", condition: at("effects"), timeoutMs: 30000 }],
+  },
+  write: {
+    doneWhen: [{ fact: "chaptersWritten", min: 1, atLeastFact: "chapters" }],
+    auto: [click("write-chapters"), wait(3000)],
+  },
+  comments: { auto: [click("show-comments", { state: "off", optional: true })] },
+  "common-notes": { auto: [click("find-common-notes", { optional: true, onlyIf: at("comments", 2) })] },
+  review: {
+    doneWhen: [at("approved")],
+    auto: [
+      click("request-review", { unless: at("reviewRequested"), optional: true }),
+      wait(2500),
+      click("approve-chapter"),
+      { do: "waitFor", condition: at("approved"), timeoutMs: 30000 },
+    ],
+  },
+  "read-programme": {
+    auto: [
+      { do: "waitJob", kind: "fill" },
+      { do: "scrollTo", text: "Ambities en doelen" },
+      wait(15000),
+      { do: "scrollTo", text: "Beleidsuitwerking en maatregelen" },
+    ],
+  },
+  redraft: {
+    doneWhen: [at("redrafts")],
+    auto: [
+      click("chapter-edit"),
+      wait(1500),
+      click("chapter-tools"),
+      wait(800),
+      click("regenerate-chapter"),
+      { do: "waitJob", kind: "chapter" },
+      wait(2000),
+    ],
+  },
+  audit: {
+    doneWhen: [at("freezes")],
+    auto: [
+      click("demo-approve-rest", { unless: at("allApproved") }),
+      { do: "waitFor", condition: at("allApproved"), timeoutMs: 60000 },
+      wait(1500),
+      click("audit-pack"),
+      { do: "waitFor", condition: at("freezes"), timeoutMs: 60000 },
+    ],
+  },
+  word: { auto: [click("export-docx"), wait(3000)] },
+  publish: {
+    doneWhen: [at("publications")],
+    auto: [click("publish-snapshot"), { do: "waitFor", condition: at("publications"), timeoutMs: 60000 }],
+  },
+  consultation: {
+    doneWhen: [at("consultations")],
+    auto: [click("open-consultation"), { do: "waitFor", condition: at("consultations"), timeoutMs: 60000 }],
+  },
+}
+
+function withAutopilot(steps: TourStep[]): TourStep[] {
+  return steps.map((item) => ({ ...item, ...AUTOPILOT[item.id] }))
+}
+
 export const FLEVOLAND_TOUR: DemoTour = {
   version: FLEVOLAND_TOUR_VERSION,
   blocks: [
@@ -37,7 +219,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
     { id: "publish", title: { nl: "Publiceren en inspraak", en: "Publish and consult" }, minutes: 20 },
     { id: "questions", title: { nl: "Vragen", en: "Questions" }, minutes: 15 },
   ],
-  steps: [
+  steps: withAutopilot([
     step(
       "welcome",
       "setup",
@@ -381,7 +563,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       { target: "measure-staff", estMinutes: 5 },
       {
         title: "Prioriteit",
-        action: "Geef twee maatregelen 'Hoog' en één 'Laag'. Zet daarna 'Maatregelen sorteren' op 'Prioriteit eerst'.",
+        action: "Geef twee maatregelen 'Hoog' en één 'Laag'. De lijst staat op 'Prioriteit eerst'.",
         why: "De prioriteit bepaalt de volgorde in het programma. De delen over uitvoering en middelen noemen de hoge prioriteit eerst.",
         expect: "De lijst staat op prioriteit, met de gevallen maatregel onderaan.",
         narration:
@@ -389,7 +571,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       },
       {
         title: "Priority",
-        action: "Give two measures 'High' and one 'Low'. Then set 'Sort measures' to 'Priority first'.",
+        action: "Give two measures 'High' and one 'Low'. The list is sorted 'Priority first'.",
         why: "Priority sets the order in the programme. The parts on execution and resources name the high-priority measures first.",
         expect: "The list is in priority order, with the dropped measure at the bottom.",
         narration:
@@ -719,7 +901,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       { target: "audit-pack", estMinutes: 6 },
       {
         title: "Het auditpakket",
-        action: "Klik 'Auditpakket maken'.",
+        action: "Keur voor de demo eerst de overige hoofdstukken in één keer goed ('Demo: keur de rest goed'), en klik dan 'Auditpakket maken'.",
         why: "Het auditpakket legt een versie vast met alle AI-runs, maatregelen, besluiten en bronnen, met een digitale vingerafdruk. Zo kan de provincie later aantonen hoe het programma tot stand kwam.",
         expect: "Een bestand wordt gedownload; onder aan de pagina staat 'Vastgelegde versie van …'.",
         narration:
@@ -727,7 +909,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       },
       {
         title: "The audit pack",
-        action: "Click 'Build audit pack'.",
+        action: "For the demo, first approve the remaining chapters in one go ('Demo: approve the rest'), then click 'Build audit pack'.",
         why: "The audit pack fixes a version with every AI run, measure, decision and source, with a digital fingerprint. The province can later show how the programme came about.",
         expect: "A file downloads; the page shows 'Fixed version from …'.",
         narration:
@@ -844,5 +1026,5 @@ export const FLEVOLAND_TOUR: DemoTour = {
           "That was Agora, from vision to consultation. The civil servant decided at every step, and every claim can be traced to a page in the province's own documents. We would be glad to take your questions.",
       },
     ),
-  ],
+  ]),
 }

@@ -49,6 +49,7 @@ export function MeasurePriorityControl({ workspaceId, measureId, priority, reaso
             variant={priority === option ? "default" : "outline"}
             aria-pressed={priority === option}
             disabled={disabled || pending}
+            data-guidance-target={`priority-${option}`}
             onClick={() => (priority === option ? undefined : save(option))}
           >
             {t(`workspace.programme.priority.level.${option}`)}

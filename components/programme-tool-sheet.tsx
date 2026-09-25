@@ -212,6 +212,7 @@ export function ProgrammeToolSwitch<T extends string>({
           <button
             key={option.id}
             type="button"
+            data-guidance-target={`tool-switch-${option.id}`}
             role="tab"
             aria-selected={selected}
             className={cn(

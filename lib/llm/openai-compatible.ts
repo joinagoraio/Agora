@@ -86,10 +86,16 @@ export const completeOpenAiCompatible: LlmAdapter = async (input, apiKey) => {
 
   const payload = (await response.json()) as {
     choices?: Array<{ message?: { content?: unknown }; finish_reason?: string }>
+    usage?: { prompt_tokens?: number; completion_tokens?: number }
   }
   const text = readCompletionText(payload)
   if (!text && payload.choices?.[0]?.finish_reason === "length") {
     throw new Error(`${input.model} reached its length limit before it answered. Try again with less evidence or a smaller model.`)
   }
-  return { text, provider: "openai-compatible", model: input.model }
+  return {
+    text,
+    provider: "openai-compatible",
+    model: input.model,
+    tokens: { input: payload.usage?.prompt_tokens ?? 0, output: payload.usage?.completion_tokens ?? 0 },
+  }
 }

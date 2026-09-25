@@ -865,6 +865,7 @@ export function ProgrammeChapterEditor({
               variant="ghost"
               size="icon-sm"
               aria-label={t("workspace.programme.chapterTools")}
+              data-guidance-target="chapter-tools"
               className="relative"
             >
               <MoreVertical className="h-4 w-4" />
@@ -919,7 +920,7 @@ export function ProgrammeChapterEditor({
             </DropdownMenuSub>
           ) : null}
           <DropdownMenuSeparator />
-          <DropdownMenuItem disabled={pending || !documentId} onSelect={() => regenerateChapter()}>
+          <DropdownMenuItem disabled={pending || !documentId} onSelect={() => regenerateChapter()} data-guidance-target="regenerate-chapter">
             {t("workspace.programme.editorRegenStrict")}
           </DropdownMenuItem>
           <DropdownMenuItem disabled={pending || !documentId} onSelect={() => checkGroundedness()}>
@@ -1349,6 +1350,7 @@ export function ProgrammeChapterEditor({
                           variant="ghost"
                           size="icon-sm"
                           aria-label={t("workspace.programme.focusEdit")}
+                          data-guidance-target="chapter-edit"
                           onClick={(event) => {
                             event.stopPropagation()
                             selectChapter(node.id)

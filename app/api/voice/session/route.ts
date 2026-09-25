@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { isSuperAdmin, platformOpenAiKey } from "@/lib/llm/resolve"
-import { NARRATION_VOICE } from "@/lib/programme/demo-narration"
+import { NARRATION_VOICES } from "@/lib/programme/demo-narration"
 
 const REALTIME_MODEL = process.env.DEMO_REALTIME_MODEL || "gpt-realtime"
 
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser()
   if (!user || !(await isSuperAdmin(user.id))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const body = (await request.json().catch(() => ({}))) as { workspaceId?: string; language?: string; step?: string }
+  const body = (await request.json().catch(() => ({}))) as { workspaceId?: string; language?: string; voice?: string; step?: string }
   if (!body.workspaceId) return NextResponse.json({ error: "Missing programme" }, { status: 400 })
   const language = body.language === "nl" ? "nl" : "en"
   const apiKey = await platformOpenAiKey()
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
         type: "realtime",
         model: REALTIME_MODEL,
         instructions,
-        audio: { output: { voice: NARRATION_VOICE } },
+        audio: { output: { voice: NARRATION_VOICES[body.voice === "male" ? "male" : "female"] } },
       },
     }),
   })

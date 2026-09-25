@@ -252,6 +252,7 @@ export function ProgrammeEffectsPanel({
                     </div>
                     <Button
                       size="sm"
+                      data-guidance-target="save-effects"
                       disabled={pending || needsJustification || matchesRecord}
                       onClick={() =>
                         startTransition(async () => {

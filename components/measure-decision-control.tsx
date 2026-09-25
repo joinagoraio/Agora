@@ -81,6 +81,7 @@ export function MeasureDecisionControl({
               variant={decision === option ? "default" : "outline"}
               aria-pressed={decision === option}
               disabled={disabled || pending}
+              data-guidance-target={`decision-${option}`}
               onClick={() => pick(option)}
             >
               {t(`workspace.programme.decision.${option}`)}
@@ -99,10 +100,17 @@ export function MeasureDecisionControl({
             className="min-w-64 flex-1"
             value={draftReason}
             autoFocus
+            data-guidance-target="decision-reason"
             placeholder={t(`workspace.programme.decision.reasonPlaceholder.${choice}`)}
             onChange={(event) => setDraftReason(event.target.value)}
           />
-          <Button type="button" size="sm" disabled={pending || (choice === "drop" && !draftReason.trim())} onClick={() => save(choice, draftReason)}>
+          <Button
+            type="button"
+            size="sm"
+            data-guidance-target="decision-confirm"
+            disabled={pending || (choice === "drop" && !draftReason.trim())}
+            onClick={() => save(choice, draftReason)}
+          >
             {t("workspace.programme.decision.confirm")}
           </Button>
           <Button type="button" size="sm" variant="ghost" onClick={() => setChoice(null)}>

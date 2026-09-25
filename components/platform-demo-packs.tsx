@@ -540,6 +540,8 @@ export function PlatformDemoPacks() {
                             measures: String(demo.measures),
                             documents: String(demo.documents),
                           })}
+                          {" · "}
+                          {t("admin.platform.loadedDemoCost", "AI cost about US$ {{cost}}", { cost: demo.costUsd.toFixed(2) })}
                         </span>
                       </span>
                       <Button type="button" size="sm" variant="outline" onClick={() => router.push(`/spaces/${demo.spaceId}`)}>
@@ -657,7 +659,9 @@ function TourNarrationRow({ packId }: { packId: string }) {
   }
   useEffect(load, [packId])
 
-  const complete = status ? status.recorded.nl === status.steps && status.recorded.en === status.steps : false
+  const complete = status
+    ? Object.values(status.recorded).every((voice) => voice.nl === status.steps && voice.en === status.steps)
+    : false
   useEffect(() => {
     if (!recording || complete) {
       if (complete) setRecording(false)
@@ -674,12 +678,18 @@ function TourNarrationRow({ packId }: { packId: string }) {
       <h3 className="text-sm font-semibold">{t("admin.platform.tourNarration", "Tour narration")}</h3>
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <span className="text-muted-foreground">
-          {t("admin.platform.tourNarrationStatus", "{{steps}} steps · Dutch {{nl}} recorded · English {{en}} recorded · voice {{voice}}", {
-            steps: String(status.steps),
-            nl: String(status.recorded.nl),
-            en: String(status.recorded.en),
-            voice: status.voice,
-          })}
+          {(["female", "male"] as const)
+            .map((voice) =>
+              t("admin.platform.tourNarrationStatus", "{{voice}}: Dutch {{nl}} of {{steps}}, English {{en}} of {{steps}}", {
+                voice: `${t(`demoTour.voice.${voice}`, voice)} (${status.voices[voice]})`,
+                steps: String(status.steps),
+                nl: String(status.recorded[voice].nl),
+                en: String(status.recorded[voice].en),
+              }),
+            )
+            .join(" · ")}
+          {" · "}
+          {t("admin.platform.tourNarrationCost", "recording cost so far about US$ {{cost}}", { cost: status.costUsd.toFixed(2) })}
         </span>
         <Button
           type="button"

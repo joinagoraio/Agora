@@ -24,6 +24,7 @@ import {
 } from "@/lib/programme/domain"
 import { parseWorkupHeadings, type WorkupHeading } from "@/lib/programme/interests"
 import { parseDemoTour, type DemoTour } from "@/lib/programme/demo-tour"
+import { spaceCost } from "@/lib/llm/usage"
 import { FLEVOLAND_TOUR, FLEVOLAND_TOUR_VERSION } from "@/lib/programme/flevoland-tour"
 import { logger } from "@/lib/utils/logger"
 import { revalidatePath } from "next/cache"
@@ -56,6 +57,8 @@ export type LoadedDemo = {
   measures: number
   documents: number
   tour: DemoTour | null
+  /** AI cost so far, in US dollars. */
+  costUsd: number
 }
 
 export type DemoPackModelChoice = {
@@ -352,10 +355,11 @@ async function describeLoadedDemo(
     const { count: total } = await admin.from(table).select("id", { count: "exact", head: true }).in("workspace_id", workspaceIds)
     return total ?? 0
   }
-  const [measures, documents, pack] = await Promise.all([
+  const [measures, documents, pack, cost] = await Promise.all([
     count("programme_measures"),
     count("documents"),
     admin.from("platform_demo_packs").select("tour").eq("id", String(metadata.demoPackId)).maybeSingle(),
+    spaceCost(space.id),
   ])
   return {
     spaceId: space.id,
@@ -367,6 +371,7 @@ async function describeLoadedDemo(
     measures,
     documents,
     tour: parseDemoTour(pack.data?.tour),
+    costUsd: cost.totalUsd,
   }
 }
 

@@ -1968,6 +1968,7 @@ ${citationInstruction}`
   try {
     const { completeLlm } = await import("@/lib/llm")
     const completion = await completeLlm({
+      usage: { workspaceId, kind: "chapter" },
       provider,
       endpoint: resolvedEndpoint || agentVersion?.endpoint,
       apiKey: resolvedApiKey,

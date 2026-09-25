@@ -26,8 +26,8 @@ The chapters are written during part 8, so there is no waiting in front of the r
 
 ## The day before and the morning of
 
-1. **Credits.** Check the OpenAI balance. A full run (analysis, three work-ups, three measure proposals, role check, comparison, eight chapters, one redraft) costs a few euros; keep at least 20 euros of headroom.
-2. **Narration.** Platform admin → Demo packs → Flevoland demo → *Tour narration*. It should read 36 of 36 for both Dutch and English. If not, press **Record narration** and wait about a minute.
+1. **Credits.** Check the OpenAI balance. A full run cost US$ 3.06 in the local test (see *Cost* below); keep at least US$ 20 of headroom.
+2. **Narration.** Platform admin → Demo packs → Flevoland demo → *Tour narration*. It should read 36 of 36 for Dutch and English, for both the female and the male voice. If not, press **Record narration** and wait two minutes.
 3. **Fresh demo.** On the same page, press **Load demo** (or **Reset** in the amber demo strip of an earlier demo). This creates a new authority with the files, the nine-part structure and interests 14, 15 and 16 chosen. Open the programme; the setup wizard opens on the sources. This is where part 1 starts.
 4. **Backup programme.** Load a second demo and run it up to and including part 7 (chapters written). If an AI step fails or runs slow on the day, switch to the backup at the same step. Keep it in a second browser tab.
 5. **Language.** The tour and the voice follow the screen language. Set Agora to Nederlands (user menu) for a Dutch room.
@@ -39,6 +39,10 @@ The chapters are written during part 8, so there is no waiting in front of the r
 - The blue strip under the toolbar shows the part, the step and **Back** / **Next**. **Next** goes to the right screen, opens the right tab or panel, and outlines the button to press in blue.
 - The side panel shows, for the current step: **What to do**, **Why**, **What is happening** (with live progress while an AI step runs) and **What the room sees**, plus the other steps in this part.
 - **Play narration** (the play button) reads the current step aloud. **Let the voice present** (the speaker button) plays the narration automatically each time you press **Next**. You still press the outlined buttons yourself.
+- **Voice** (in the side panel): *Female* (OpenAI "marin") or *Male* (OpenAI "cedar"). The live questions use the same voice.
+- **Autopilot** (*Automatisch* on a Dutch screen; in the strip and the side panel) lets Agora present on its own: it plays the narration, goes to the right screen, presses the buttons, types the reasons for decisions, waits for the AI steps, and moves on. It pauses itself at the break. Press **Pause autopilot** at any moment, for example for a question; press **Continue** to go on from the current step.
+- **By hand and back.** While paused you can do anything by hand. Agora checks the programme itself (work-ups written, measures decided, chapters approved, a version fixed, and so on), so when you press **Continue** it skips what is already done. A green tick next to a step means its result exists.
+- **If Autopilot cannot go on**, it stops with a note in the side panel ("Do this step by hand, then press Continue"). Do that step, then press Continue.
 - The tour remembers its step per programme in this browser, so a reload does not lose your place.
 - Only platform admins in a loaded demo see the tour. Nobody else does.
 
@@ -56,12 +60,28 @@ The chapters are written during part 8, so there is no waiting in front of the r
 
 Work-ups, measure proposals, the comparison, role checks, chapter writing and redrafts keep running on the server if you go elsewhere or reload. The analysis does not; stay on the Analysis screen until it finishes.
 
+## Cost
+
+Agora records the tokens of every AI call and shows the running cost of the demo at the bottom of the Tour panel, and per loaded demo on the demo packs page. Prices are OpenAI's list prices in US dollars (September 2026): GPT-5.6 US$ 4 per million input tokens and US$ 20 per million output tokens.
+
+| Item | Cost |
+| --- | --- |
+| One full run, measured locally | US$ 3.06 |
+| of which: eight chapters and one redraft | US$ 1.88 |
+| of which: three work-ups | US$ 0.40 |
+| of which: measure proposals | US$ 0.37 |
+| of which: analysis | US$ 0.26 |
+| of which: comparison | US$ 0.15 |
+| Recording all narration (2 voices, 2 languages, once) | US$ 0.63 |
+| A spoken answer to a question from the room | estimated US$ 0.05 to 0.15; recorded per answer |
+
 ## If something goes wrong
 
 - **An AI step says the provider has no credits or is rate limiting.** Top up, wait a minute, and press the button once more. Meanwhile switch to the backup programme at the same step.
 - **An AI step takes much longer than the table.** Carry on talking; the side panel shows progress. After twice the usual time, switch to the backup.
 - **The voice does not play.** Read the text under **Why** in the side panel, or the narration below.
 - **The wrong screen is showing.** Press **Show me where** in the side panel, or **Back** then **Next**.
+- **Autopilot stopped with a note.** Do the step by hand, then press **Continue**.
 - **Everything is broken.** Use the demo strip's **Reset** to load a fresh copy, then open the backup tab.
 
 ## What the demo does not show
@@ -236,8 +256,8 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 
 #### 16. Prioriteit / Priority · 5 min · 1:20
 
-- **Doen / Do:** Geef twee maatregelen 'Hoog' en één 'Laag'. Zet daarna 'Maatregelen sorteren' op 'Prioriteit eerst'.
-  Give two measures 'High' and one 'Low'. Then set 'Sort measures' to 'Priority first'.
+- **Doen / Do:** Geef twee maatregelen 'Hoog' en één 'Laag'. De lijst staat op 'Prioriteit eerst'.
+  Give two measures 'High' and one 'Low'. The list is sorted 'Priority first'.
 - **De zaal ziet / The room sees:** De lijst staat op prioriteit, met de gevallen maatregel onderaan.
 
 > **NL:** Niet alles kan tegelijk. De ambtenaar geeft maatregelen een prioriteit: hoog, middel of laag, met een reden als dat nodig is. Het programma volgt die volgorde. Straks ziet u in de hoofdstukken dat de hoge prioriteit eerst staat.
@@ -404,8 +424,8 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 
 #### 31. Het auditpakket / The audit pack · 6 min · 3:04
 
-- **Doen / Do:** Klik 'Auditpakket maken'.
-  Click 'Build audit pack'.
+- **Doen / Do:** Keur voor de demo eerst de overige hoofdstukken in één keer goed ('Demo: keur de rest goed'), en klik dan 'Auditpakket maken'.
+  For the demo, first approve the remaining chapters in one go ('Demo: approve the rest'), then click 'Build audit pack'.
 - **De zaal ziet / The room sees:** Een bestand wordt gedownload; onder aan de pagina staat 'Vastgelegde versie van …'.
 
 > **NL:** Als het programma straks ter discussie staat, bij de Staten of bij de rechter, wil de provincie kunnen laten zien hoe het tot stand kwam. Het auditpakket legt een versie vast met alle AI-runs, alle maatregelen, alle besluiten met naam en reden, en alle bronnen, met een digitale vingerafdruk. Die versie is ook wat we zo publiceren.

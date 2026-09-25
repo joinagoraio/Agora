@@ -166,6 +166,7 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
                           <td key={column.id} className="h-10 min-w-[8.5rem]">
                             <button
                               type="button"
+                              data-guidance-target="coherence-cell"
                               disabled={total === 0}
                               aria-pressed={pair === key}
                               aria-label={`${name(row)} × ${name(column)}`}
@@ -205,7 +206,7 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
                     b: pair.split("|").map((id) => byId.get(id)).filter(Boolean).map((interest) => name(interest!))[1] || "",
                   })}
                 </span>
-                <Button type="button" size="sm" variant="outline" onClick={() => setPair(null)}>
+                <Button type="button" size="sm" variant="outline" onClick={() => setPair(null)} data-guidance-target="coherence-show-all">
                   <X className="h-4 w-4" />
                   {t("workspace.programme.coherence.showAll")}
                 </Button>
@@ -255,6 +256,7 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
                             variant={finding.decision === "keep" ? "default" : "outline"}
                             aria-pressed={finding.decision === "keep"}
                             data-guidance-target="coherence-keep"
+                            data-guidance-state={`${finding.kind} ${finding.decision ?? "undecided"}`}
                             title={finding.decision === "keep" ? t("workspace.programme.coherence.undo") : undefined}
                             disabled={!canEdit || savingId === finding.id}
                             onClick={() => void decide(finding, finding.decision === "keep" ? null : "keep")}
@@ -269,6 +271,8 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
                             size="sm"
                             variant={finding.decision === "drop" ? "default" : "outline"}
                             aria-pressed={finding.decision === "drop"}
+                            data-guidance-target="coherence-drop"
+                            data-guidance-state={`${finding.kind} ${finding.decision ?? "undecided"}`}
                             title={finding.decision === "drop" ? t("workspace.programme.coherence.undo") : undefined}
                             disabled={!canEdit || savingId === finding.id}
                             onClick={() =>
@@ -299,6 +303,7 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
                           <Input
                             className="min-w-64 flex-1"
                             autoFocus
+                            data-guidance-target="coherence-reason"
                             value={dropping.reason}
                             placeholder={t("workspace.programme.coherence.reason")}
                             onChange={(event) => setDropping({ id: finding.id, reason: event.target.value })}
@@ -307,6 +312,7 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
                             type="button"
                             size="sm"
                             disabled={!dropping.reason.trim()}
+                            data-guidance-target="coherence-drop-confirm"
                             onClick={() => void decide(finding, "drop", dropping.reason)}
                           >
                             {t("workspace.programme.decision.confirm")}

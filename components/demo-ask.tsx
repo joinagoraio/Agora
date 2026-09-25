@@ -12,7 +12,17 @@ import { cn } from "@/lib/utils"
 type Status = "off" | "connecting" | "ready" | "listening" | "answering"
 
 /** Push-to-talk questions from the room, answered by a live voice that knows this programme. */
-export function DemoAskControl({ workspaceId, language, stepTitle }: { workspaceId: string; language: "nl" | "en"; stepTitle: string }) {
+export function DemoAskControl({
+  workspaceId,
+  language,
+  voice,
+  stepTitle,
+}: {
+  workspaceId: string
+  language: "nl" | "en"
+  voice: "female" | "male"
+  stepTitle: string
+}) {
   const { t } = useI18n()
   const [status, setStatus] = useState<Status>("off")
   const peer = useRef<RTCPeerConnection | null>(null)
@@ -44,9 +54,9 @@ export function DemoAskControl({ workspaceId, language, stepTitle }: { workspace
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", ...(token ? { "x-csrf-token": token } : {}) },
-        body: JSON.stringify({ workspaceId, language, step: stepTitle }),
+        body: JSON.stringify({ workspaceId, language, voice, step: stepTitle }),
       })
-      const session = (await response.json().catch(() => null)) as { value?: string; error?: string } | null
+      const session = (await response.json().catch(() => null)) as { value?: string; model?: string; error?: string } | null
       if (!response.ok || !session?.value) throw new Error(session?.error || t("demoTour.askFailed", "The live voice could not start."))
 
       const connection = new RTCPeerConnection()
@@ -69,7 +79,19 @@ export function DemoAskControl({ workspaceId, language, stepTitle }: { workspace
         setStatus("ready")
       }
       events.onmessage = (message) => {
-        const event = JSON.parse(String(message.data)) as { type?: string; error?: { message?: string } }
+        const event = JSON.parse(String(message.data)) as {
+          type?: string
+          error?: { message?: string }
+          response?: { usage?: Record<string, unknown> }
+        }
+        if (event.type === "response.done" && event.response?.usage) {
+          void fetch("/api/voice/usage", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json", ...(token ? { "x-csrf-token": token } : {}) },
+            body: JSON.stringify({ workspaceId, model: session.model, usage: event.response.usage }),
+          })
+        }
         if (event.type === "response.done" || event.type === "output_audio_buffer.stopped") setStatus((current) => (current === "answering" ? "ready" : current))
         if (event.type === "error" && event.error?.message) notify(event.error.message, "error")
       }

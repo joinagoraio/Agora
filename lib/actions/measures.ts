@@ -596,6 +596,7 @@ Return ONLY the JSON object with a "measures" array.`
   let raw = ""
   try {
     const completion = await completeLlm({
+      usage: { workspaceId, kind: "measures" },
       provider,
       endpoint: llm.endpoint,
       apiKey: llm.apiKey,
@@ -768,6 +769,7 @@ Return ONLY a JSON object: {"checks": [{"measureId", "actor", "reason", "quote",
   let raw = ""
   try {
     const completion = await completeLlm({
+      usage: { workspaceId, kind: "roles" },
       provider: llm.provider,
       endpoint: llm.endpoint,
       apiKey: llm.apiKey,

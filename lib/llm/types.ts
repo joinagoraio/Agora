@@ -14,12 +14,15 @@ export type LlmCompleteInput = {
   maxTokens?: number
   json?: boolean
   reasoningEffort?: "low" | "medium" | "high"
+  /** Records token use against a programme, so demo and programme costs can be shown. */
+  usage?: { workspaceId?: string | null; kind: string }
 }
 
 export type LlmCompleteResult = {
   text: string
   provider: string
   model: string
+  tokens?: { input: number; output: number }
 }
 
 export type LlmAdapter = (input: LlmCompleteInput, apiKey: string) => Promise<LlmCompleteResult>

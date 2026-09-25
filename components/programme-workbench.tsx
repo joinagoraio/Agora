@@ -911,6 +911,10 @@ export function ProgrammeWorkbench({
   ]
   const pendingMeasures = measures.filter((m) => m.workflow_status !== "approved")
   const activeReport = reports.find((report) => report.id === selectedReportId) ?? reports[0] ?? null
+  const measuredInterestIds = useMemo(
+    () => [...new Set(measures.flatMap((measure) => (Array.isArray(measure.interest_ids) ? (measure.interest_ids as string[]) : [])))],
+    [measures],
+  )
   const shownMeasures = sortAndFilterMeasures(measures, {
     sort: measureSort,
     filter: measureFilter,
@@ -1941,6 +1945,7 @@ export function ProgrammeWorkbench({
               workspaceId={workspaceId}
               canEdit={chromeJob !== "reviewer" && accessRole !== "viewer"}
               citationSources={citationCatalog.documents}
+              measuredInterestIds={measuredInterestIds}
               onMessage={notify}
               onChanged={refresh}
             />
@@ -2179,6 +2184,8 @@ export function ProgrammeWorkbench({
                       <button
                         type="button"
                         aria-current={selected ? "true" : undefined}
+                        data-guidance-target="measure-row"
+                        data-guidance-state={[item.decision ? "decided" : "undecided", !dropped && !priority ? "unprioritised" : ""].join(" ").trim()}
                         className={`w-full border-l-2 px-4 py-3 text-left ${selected ? "border-l-foreground bg-background" : "border-l-transparent hover:bg-muted/30"}`}
                         onClick={() => {
                           setSelectedMeasureId(item.id)
@@ -3511,6 +3518,31 @@ export function ProgrammeWorkbench({
           {!observability?.hasSuccessfulExport && (
             <p className="text-sm text-muted-foreground">{t("workspace.programme.emptyNext.export")}</p>
           )}
+          {demoTour && chapters.some((chapter) => chapter.workflowStatus !== "approved") ? (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <p className="min-w-0 flex-1">{t("workspace.programme.demoApproveHint")}</p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                data-guidance-target="demo-approve-rest"
+                onClick={() =>
+                  startTransition(async () => {
+                    const result = await approveAllProgrammeLocally(workspaceId)
+                    if (result.error) {
+                      notify(result.error, "error")
+                      return
+                    }
+                    notify(t("workspace.programme.demoApproveDone"))
+                    refresh()
+                  })
+                }
+              >
+                {t("workspace.programme.demoApproveAction")}
+              </Button>
+            </div>
+          ) : null}
           <section className="overflow-hidden rounded-lg border">
             <div className="border-b bg-muted px-4 py-3">
               <p className="text-sm text-muted-foreground">{t("workspace.programme.exportComposeHint")}</p>

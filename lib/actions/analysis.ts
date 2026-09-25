@@ -388,6 +388,7 @@ async function executeBoundAgentAnalysis(input: {
   const provider = llm.provider
   try {
     const completion = await completeLlm({
+      usage: { workspaceId: input.workspaceId, kind: `analysis_${input.kind}` },
       provider,
       endpoint: llm.endpoint,
       apiKey: llm.apiKey,

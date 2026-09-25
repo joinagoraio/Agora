@@ -39,11 +39,17 @@ export const completeAnthropic: LlmAdapter = async (input, apiKey) => {
 
   const payload = (await response.json()) as {
     content?: Array<{ type?: string; text?: string }>
+    usage?: { input_tokens?: number; output_tokens?: number }
   }
   const text = (payload.content || [])
     .filter((block) => block.type === "text" && block.text)
     .map((block) => block.text)
     .join("\n")
     .trim()
-  return { text, provider: "anthropic", model: input.model }
+  return {
+    text,
+    provider: "anthropic",
+    model: input.model,
+    tokens: { input: payload.usage?.input_tokens ?? 0, output: payload.usage?.output_tokens ?? 0 },
+  }
 }

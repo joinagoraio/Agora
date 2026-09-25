@@ -25,7 +25,19 @@ export async function completeLlm(input: LlmCompleteInput): Promise<LlmCompleteR
       `No API key provided for provider "${input.provider}". Store a key in Platform admin (or organisation keys if this org uses its own accounts).`,
     )
   }
-  return adapter(input, apiKey)
+  const result = await adapter(input, apiKey)
+  if (input.usage && result.tokens) {
+    const { recordLlmUsage } = await import("@/lib/llm/usage")
+    await recordLlmUsage({
+      workspaceId: input.usage.workspaceId ?? null,
+      kind: input.usage.kind,
+      provider: result.provider,
+      model: result.model,
+      inputTokens: result.tokens.input,
+      outputTokens: result.tokens.output,
+    })
+  }
+  return result
 }
 
 export function listLlmProviders(): string[] {

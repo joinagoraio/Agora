@@ -28,11 +28,13 @@ type Props = {
   workspaceId: string
   canEdit: boolean
   citationSources: ProgrammeCitationSource[]
+  /** Interests that already have measures. */
+  measuredInterestIds?: string[]
   onMessage: (message: string | null, kind?: NotifyKind) => void
   onChanged?: () => void
 }
 
-export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources, onMessage, onChanged }: Props) {
+export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources, measuredInterestIds = [], onMessage, onChanged }: Props) {
   const { t } = useI18n()
   const [interests, setInterests] = useState<ProgrammeInterest[]>([])
   const [headings, setHeadings] = useState<WorkupHeading[]>([])
@@ -279,6 +281,7 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
                           disabled={!canEdit || working || busy}
                           onClick={() => void proposeMeasures(interest)}
                           data-guidance-target="propose-measures"
+                          data-guidance-state={measuredInterestIds.includes(interest.id) ? "done" : "todo"}
                         >
                           {t("workspace.programme.interests.proposeMeasures")}
                         </Button>

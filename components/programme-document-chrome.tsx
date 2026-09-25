@@ -121,6 +121,7 @@ export function ProgrammeDocumentChrome({
               aria-label={layout.showComments ? t("workspace.programme.hideComments") : t("workspace.programme.showComments")}
               onClick={() => onLayoutChange({ showComments: !layout.showComments })}
               data-guidance-target="show-comments"
+              data-guidance-state={layout.showComments ? "on" : "off"}
             >
               <MessageSquare className={iconClass} />
             </Button>
