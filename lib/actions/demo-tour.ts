@@ -39,7 +39,7 @@ export async function getTourFacts(workspaceId: string): Promise<{ data: TourFac
   }
   const chapterRows = chapters.data || []
 
-  const [analysis, coherence, coherenceDecided, comments, themes, freezes, publications, consultations, responses, redrafts] =
+  const [analysis, coherence, coherenceDecided, comments, themes, freezes, publications, consultations, responses, redrafts, digests] =
     await Promise.all([
       count("analysis_reports", (query) => query.eq("report_type", "existing_policy")),
       count("programme_coherence_findings"),
@@ -51,6 +51,7 @@ export async function getTourFacts(workspaceId: string): Promise<{ data: TourFac
       count("programme_consultations"),
       count("consultation_comments"),
       count("programme_jobs", (query) => query.eq("kind", "chapter").eq("status", "done")),
+      count("demo_digests"),
     ])
 
   const facts: TourFacts = {
@@ -80,6 +81,7 @@ export async function getTourFacts(workspaceId: string): Promise<{ data: TourFac
     publications,
     consultations,
     responses,
+    digests,
   }
   const cost = (await isSuperAdmin(user.id)) && workspace.space_id ? await spaceCost(workspace.space_id as string) : null
   return { data: facts, cost }

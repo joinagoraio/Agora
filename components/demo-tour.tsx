@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { useProgrammeJobs } from "@/components/programme-jobs-provider"
 import { DemoAskControl } from "@/components/demo-ask"
 import { useChatContext } from "@/components/workspace-chat-wrapper"
+import { DemoDigestBlock } from "@/components/demo-digest"
+import { SPEECH_VOICE_KEY } from "@/lib/speech/voice-pref"
 import { getTourFacts } from "@/lib/actions/demo-tour"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { cn } from "@/lib/utils"
@@ -65,8 +67,6 @@ type ContextValue = {
 
 const TourContext = createContext<ContextValue | null>(null)
 
-/** The last voice chosen in this browser; Ask's read-aloud uses it outside a demo too. */
-export const SPEECH_VOICE_KEY = "agora.speechVoice"
 
 function rememberSpeechVoice(voice: TourVoice) {
   try {
@@ -756,7 +756,7 @@ function TourBar() {
         ) : null}
       </div>
       <AutopilotButtons compact />
-      <DemoAskControl workspaceId={tour.workspaceId} language={language} voice={tour.voice} stepTitle={text.title} />
+      <DemoAskControl workspaceId={tour.workspaceId} language={language} voice={tour.voice} stepTitle={text.title} stepId={step.id} />
       <VoiceButton />
       <VoiceToggle />
       <Button
@@ -907,6 +907,7 @@ export function DemoTourPanel() {
         <Block label={t("demoTour.expect", "What the room sees")}>
           <p>{text.expect}</p>
         </Block>
+        {step.panel === "digest" ? <DemoDigestBlock workspaceId={tour.workspaceId} language={language} /> : null}
         {tour.narrationUrl ? (
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">

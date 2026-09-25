@@ -64,6 +64,8 @@ export type TourStep = {
   }
   /** A step that belongs to an optional part of the tour, shown only when the pack turns it on. */
   option?: TourOption
+  /** Something extra the tour panel shows on this step, such as the summary of what the room asked. */
+  panel?: TourPanel
   /** The `data-guidance-target` of the button to highlight. */
   target?: string
   /** The `data-guidance-target` of a tab or opener to click on arrival, for sub-views and modals. */
@@ -121,6 +123,9 @@ export type TourBlock = { id: string; title: Record<TourLanguage, string>; minut
 
 export const TOUR_PAGES = ["programme", "authority", "platform"] as const
 export type TourPage = (typeof TOUR_PAGES)[number]
+
+export const TOUR_PANELS = ["digest"] as const
+export type TourPanel = (typeof TOUR_PANELS)[number]
 
 export const TOUR_OPTIONS = ["aiSetup"] as const
 export type TourOption = (typeof TOUR_OPTIONS)[number]
@@ -212,6 +217,7 @@ export function parseDemoTour(raw: unknown, { allOptions = false }: { allOptions
           page: TOUR_PAGES.find((page) => page === place.page && page !== "programme"),
         },
         option: TOUR_OPTIONS.find((option) => option === step.option),
+        panel: TOUR_PANELS.find((panel) => panel === step.panel),
         target: typeof step.target === "string" ? step.target : undefined,
         click: typeof step.click === "string" ? step.click : undefined,
         waitForJob: job,

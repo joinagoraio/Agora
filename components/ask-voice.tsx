@@ -5,7 +5,8 @@ import { Loader2, Mic, Square, Volume2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { IconTooltip } from "@/components/icon-tooltip"
-import { SPEECH_VOICE_KEY, useDemoTour } from "@/components/demo-tour"
+import { useDemoTour } from "@/components/demo-tour"
+import { SPEECH_VOICE_KEY } from "@/lib/speech/voice-pref"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { notify } from "@/lib/notify"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
@@ -129,12 +130,17 @@ export function ReadAloudButton({
   text,
   workspaceId,
   autoPlay = false,
+  guidanceTarget = "read-aloud",
+  withLabel = false,
 }: {
   id: string
   text: string
   workspaceId?: string
   /** Start reading as soon as the button appears, for answers to spoken questions. */
   autoPlay?: boolean
+  guidanceTarget?: string
+  /** Show the label next to the icon. */
+  withLabel?: boolean
 }) {
   const { t, language } = useI18n()
   const voice = useSpeechVoice()
@@ -170,11 +176,12 @@ export function ReadAloudButton({
         size="sm"
         className="h-7 px-2 text-xs"
         aria-label={label}
-        data-guidance-target="read-aloud"
+        data-guidance-target={guidanceTarget}
         disabled={loading}
         onClick={() => (playing ? stopCurrent() : void play())}
       >
         {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : playing ? <Square className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+        {withLabel ? <span>{label}</span> : null}
       </Button>
     </IconTooltip>
   )

@@ -1,7 +1,7 @@
 import type { DemoTour, TourAction, TourCondition, TourStep, TourText } from "@/lib/programme/demo-tour"
 
 /** Raise when the steps or texts change, so stored packs pick up the new tour. */
-export const FLEVOLAND_TOUR_VERSION = 8
+export const FLEVOLAND_TOUR_VERSION = 9
 
 type Place = TourStep["place"]
 
@@ -29,6 +29,15 @@ const AUTOPILOT: Record<string, Pick<TourStep, "auto" | "doneWhen">> = {
   sources: {
     doneWhen: [at("setup")],
     auto: [click("start-writing"), { do: "waitFor", condition: at("setup"), timeoutMs: 60000 }, wait(2000)],
+  },
+  digest: {
+    auto: [
+      click("make-digest"),
+      { do: "waitFor", condition: at("digests"), timeoutMs: 180000 },
+      { do: "waitNarration" },
+      wait(1000),
+      click("read-digest", { optional: true }),
+    ],
   },
   "platform-ai": { auto: [{ do: "waitNarration" }] },
   "authority-models": {
@@ -237,6 +246,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
     { id: "accountability", title: { nl: "Verantwoording", en: "Accountability" }, minutes: 20 },
     { id: "publish", title: { nl: "Publiceren en inspraak", en: "Publish and consult" }, minutes: 20 },
     { id: "questions", title: { nl: "Vragen", en: "Questions" }, minutes: 15 },
+    { id: "heard", title: { nl: "Wat we hebben gehoord", en: "What we heard" }, minutes: 5 },
   ],
   steps: withAutopilot([
     step(
@@ -259,6 +269,28 @@ export const FLEVOLAND_TOUR: DemoTour = {
         expect: "Flevoland's new programme, still without text.",
         narration:
           "Welcome. This afternoon we show how Agora helps the province of Flevoland write an environmental programme. We start from the environmental vision and the policy that already exists, work through the provincial interests to concrete measures, and finish with a programme that is ready for public consultation. Everything you see runs on real documents: the draft Flevoland 2050 environmental vision and four documents on housing. Agora does not write instead of the civil servant. It reads, proposes and backs up; the civil servant decides. And every claim points to a page in a source. One more thing before we start: Agora is not listening. What you hear was recorded in advance. Only while we hold down the Questions button is the microphone on, and only that one question goes to the AI. As soon as we let go, the microphone is off again.",
+      },
+    ),
+    step(
+      "different-kind",
+      "setup",
+      DOC,
+      { estMinutes: 2 },
+      {
+        title: "Een ander soort applicatie",
+        action: "Laat het scherm staan; dit hoort bij de inleiding.",
+        why: "Agora is geen vast product. Het is door mensen en AI samen ontwikkeld en groeit mee met hoe het gebruikt wordt. De vragen van vandaag helpen het beter te maken.",
+        expect: "Het programma van Flevoland, nog zonder tekst.",
+        narration:
+          "Agora is een ander soort applicatie. Het is ontwikkeld door mensen en AI samen, vanuit een gedeeld begrip van wat de ambtenaar nodig heeft. Daardoor is het geen vast product: het groeit mee met hoe u ermee werkt. Wat u vandaag vraagt, aan de knop Vragen of in het venster Vraag, helpt ons Agora beter te maken. Alleen die vragen en antwoorden bewaren we, voor een samenvatting aan het eind van de middag. Deze rondleiding zelf is nog in bèta: een interne functie voor demonstraties, die later nieuwe gebruikers kan helpen op weg te komen, of ervaren gebruikers meer uit Agora te halen.",
+      },
+      {
+        title: "A different kind of application",
+        action: "Leave the screen as it is; this is part of the introduction.",
+        why: "Agora is not a fixed product. It was developed by people and AI together and grows with the way it is used. Today's questions help make it better.",
+        expect: "Flevoland's programme, still without text.",
+        narration:
+          "Agora is a different kind of application. It was developed by people and AI together, from a shared understanding of what civil servants need. So it is not a fixed product: it grows with the way you work with it. What you ask today, with the Questions button or in the Ask window, helps us make Agora better. Only those questions and answers are kept, for a summary at the end of the afternoon. This tour itself is still in beta: an internal feature for demonstrations, which could later help new users get started, or help experienced users get more out of Agora.",
       },
     ),
     step(
@@ -1120,5 +1152,32 @@ export const FLEVOLAND_TOUR: DemoTour = {
           "That was Agora, from vision to consultation. The civil servant decided at every step, and every claim can be traced to a page in the province's own documents. We would be glad to take your questions. Would you like to ask Agora itself? Then we hold down the Questions button while you speak. Only then is the microphone on.",
       },
     ),
+    {
+      ...step(
+        "digest",
+        "heard",
+        DOC,
+        { target: "make-digest", estMinutes: 5 },
+        {
+          title: "Wat we hebben gehoord",
+          action: "Klik 'Maak de samenvatting' in het panel Rondleiding. Lees de verbeterpunten voor of laat ze voorlezen.",
+          why: "Hier maakt het gesprek van vandaag Agora beter: de vragen worden verbeterpunten voor het team.",
+          happening: "Agora leest de vragen en antwoorden van vandaag, uit het venster Vraag en van de knop Vragen, en vat ze samen zonder namen en zonder vragen letterlijk te herhalen.",
+          expect: "Onderwerpen, waar de antwoorden tekortschoten, wat onduidelijk was, verbeterpunten en vervolgvragen.",
+          narration:
+            "Tot slot kijken we terug op wat u vandaag heeft gevraagd. Agora leest alle vragen en antwoorden van deze middag en vat ze samen: welke onderwerpen er speelden, waar de antwoorden tekortschoten, en wat er beter kan. Zonder namen, en zonder uw vragen letterlijk te herhalen. Zo groeit Agora: uw vragen worden verbeterpunten voor het team. Dank u wel.",
+        },
+        {
+          title: "What we heard",
+          action: "Click 'Make the summary' in the Tour panel. Read out the improvement points, or let them be read aloud.",
+          why: "This is where today's conversation makes Agora better: the questions become improvement points for the team.",
+          happening: "Agora reads today's questions and answers, from the Ask window and the Questions button, and summarises them without names and without repeating questions word for word.",
+          expect: "Topics, where the answers fell short, what was unclear, improvement points and follow-up questions.",
+          narration:
+            "Finally, we look back at what you asked today. Agora reads all the questions and answers from this afternoon and summarises them: which topics came up, where the answers fell short, and what could be better. Without names, and without repeating your questions word for word. This is how Agora grows: your questions become improvement points for the team. Thank you.",
+        },
+      ),
+      panel: "digest",
+    },
   ]),
 }

@@ -8,7 +8,7 @@ The same script drives the guided tour in the app (Tour tab in the side panel, a
 
 | Part | Starts | Minutes |
 | --- | --- | --- |
-| 1. Set up for Flevoland | 0:00 | 20 |
+| 1. Set up for Flevoland (now opens with "Een ander soort applicatie") | 0:00 | 22 |
 | (optional) How the AI is set up | 0:20 | 8 |
 | 2. What policy already exists | 0:20 | 17 |
 | 3. Interests and work-ups | 0:37 | 20 |
@@ -22,6 +22,7 @@ The same script drives the guided tour in the app (Tour tab in the side panel, a
 | 10. Accountability | 2:50 | 20 |
 | 11. Publish and consult | 3:10 | 20 |
 | 12. Questions | 3:30 | 15 |
+| 13. What we heard (summary of the room's questions) | 3:45 | 5 |
 
 The chapters are written during part 8, so there is no waiting in front of the room. With the optional AI set-up part turned on, every later part starts 8 minutes later.
 
@@ -52,6 +53,7 @@ On Platform admin → Demo packs → Flevoland demo:
 - **By hand and back.** While paused you can do anything by hand. Agora checks the programme itself (work-ups written, measures decided, chapters approved, a version fixed, and so on), so when you press **Continue** it skips what is already done. A green tick next to a step means its result exists.
 - **If Autopilot cannot go on**, it stops with a note in the side panel ("Do this step by hand, then press Continue"). Do that step, then press Continue.
 - **Ask by voice.** In the Ask tab, the microphone button in the question box records a question: click to start (*Microfoon aan*), click to stop; it stops by itself after a minute. The words appear as the question and are sent; Ask answers from the programme's sources with citations on screen, and the answer is read aloud automatically. Every answer has a speaker button to read it aloud again. Typed questions are not read aloud unless you press the speaker. On live, reading starts about 20 seconds after the question: most of that is Ask writing the answer.
+- **What the room asks is kept, and summarised at the end.** Questions asked with **Vragen** (spoken) and in the Ask window, with their answers, are kept for the demo; nothing else is recorded. The second step says so to the room. The last step, **Wat we hebben gehoord**, has a **Maak de samenvatting** button (Autopilot presses it) that turns them into topics, where the answers fell short, what seemed unclear or missing, numbered improvement points, and follow-up questions for the team, without names and without quoting questions; it can be read aloud. The summaries stay on Demo packs → **Wat de zaal vroeg** (with **Download**), also after the demo is ended.
 - **Agora does not listen in.** The narration is recorded in advance, and the AI steps read the programme's documents, not the room. The microphone is switched on only while someone holds down **Questions** (*Vragen*), and released as soon as they let go; the button says *microphone off* / *microfoon uit* the rest of the time. The welcome and the closing narration say this to the room.
 - The tour remembers its step per programme in this browser, so a reload does not lose your place; if Autopilot was running, it carries on after the reload.
 - **Document view.** The document uses the wide reading width, adapting to the space it has. With comments on (**Toon commentaar**), comments sit beside their paragraph when there is room (from about 1,060 px of document width); when there is not, for example on a laptop with the side panel open, they fold into a small **Opmerkingen (n)** button at the top right that opens a panel, and opens by itself when you comment on a paragraph. **Pages** switches to page view, as it will look in Word or PDF, and back.
@@ -111,7 +113,7 @@ Agora records the tokens of every AI call and shows the running cost of the demo
 
 Each step lists what to do in Dutch and English, what the room should see, and what the voice says.
 
-### Opzetten voor Flevoland / Set up for Flevoland (20 min, from 0:00)
+### Opzetten voor Flevoland / Set up for Flevoland (22 min, from 0:00)
 
 #### 1. Welkom: wat Agora is / Welcome: what Agora is · 4 min · 0:00
 
@@ -123,7 +125,17 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Welcome. This afternoon we show how Agora helps the province of Flevoland write an environmental programme. We start from the environmental vision and the policy that already exists, work through the provincial interests to concrete measures, and finish with a programme that is ready for public consultation. Everything you see runs on real documents: the draft Flevoland 2050 environmental vision and four documents on housing. Agora does not write instead of the civil servant. It reads, proposes and backs up; the civil servant decides. And every claim points to a page in a source. One more thing before we start: Agora is not listening. What you hear was recorded in advance. Only while we hold down the Questions button is the microphone on, and only that one question goes to the AI. As soon as we let go, the microphone is off again.
 
-#### 2. Bronnen met een rol / Sources with a role · 3 min · 0:04
+#### 2. Een ander soort applicatie / A different kind of application · 2 min · 0:04
+
+- **Doen / Do:** Laat het scherm staan; dit hoort bij de inleiding.
+  Leave the screen as it is; this is part of the introduction.
+- **De zaal ziet / The room sees:** Het programma van Flevoland, nog zonder tekst.
+
+> **NL:** Agora is een ander soort applicatie. Het is ontwikkeld door mensen en AI samen, vanuit een gedeeld begrip van wat de ambtenaar nodig heeft. Daardoor is het geen vast product: het groeit mee met hoe u ermee werkt. Wat u vandaag vraagt, aan de knop Vragen of in het venster Vraag, helpt ons Agora beter te maken. Alleen die vragen en antwoorden bewaren we, voor een samenvatting aan het eind van de middag. Deze rondleiding zelf is nog in bèta: een interne functie voor demonstraties, die later nieuwe gebruikers kan helpen op weg te komen, of ervaren gebruikers meer uit Agora te halen.
+>
+> **EN:** Agora is a different kind of application. It was developed by people and AI together, from a shared understanding of what civil servants need. So it is not a fixed product: it grows with the way you work with it. What you ask today, with the Questions button or in the Ask window, helps us make Agora better. Only those questions and answers are kept, for a summary at the end of the afternoon. This tour itself is still in beta: an internal feature for demonstrations, which could later help new users get started, or help experienced users get more out of Agora.
+
+#### 3. Bronnen met een rol / Sources with a role · 3 min · 0:06
 
 - **Doen / Do:** Controleer dat de omgevingsvisie en het bestaande beleid gekozen zijn, en klik 'Begin met schrijven'.
   Check that the environmental vision and the existing policy are chosen, then click 'Start writing'.
@@ -133,7 +145,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** First, the sources. Each source gets a role. The environmental vision sets the direction. The housing documents are existing policy, which we will test in a moment. Agora only uses what is linked here. Nothing comes in from the internet, and nothing the province did not supply itself.
 
-#### 3. De structuur van de provincie / The province's structure · 3 min · 0:07
+#### 4. De structuur van de provincie / The province's structure · 3 min · 0:09
 
 - **Doen / Do:** Laat de negen delen in de structuur zien. Beweeg over een kop om te lezen wat erin hoort.
   Show the nine parts in the structure. Hover a heading to read what belongs in it.
@@ -143,7 +155,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Next, the structure. Flevoland has a fixed layout for environmental programmes: nine parts, from positioning and context to the formal aspects. That structure is set up here. Agora writes inside it, and each part knows what belongs in it and which sources it draws on.
 
-#### 4. De bibliotheek van het programma / The programme's library · 3 min · 0:10
+#### 5. De bibliotheek van het programma / The programme's library · 3 min · 0:12
 
 - **Doen / Do:** Laat de bestanden zien en wijs op de rol bij elk bestand.
   Show the files and point at the role of each one.
@@ -153,7 +165,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** This is the programme's library. The environmental vision, the note on Flevoland's housing task, the starting note and the plan of approach for the housing programme, and the progress report on house building. Agora does not just read the first pages. For each question it looks up the relevant parts, down to the page.
 
-#### 5. Wie is eigenaar, wat is verplicht / Who owns it, what is required · 3 min · 0:13
+#### 6. Wie is eigenaar, wat is verplicht / Who owns it, what is required · 3 min · 0:15
 
 - **Doen / Do:** Laat de documenteigenaar en het reviewbeleid zien.
   Show the document owner and the review policy.
@@ -163,7 +175,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** In the configuration the province records who owns the programme and how approval works. For example: may the writer approve their own chapter, or must a second civil servant sign off? Those are choices for the organisation, not for the software.
 
-#### 6. Specialisten achter elke stap / Specialists behind each step · 4 min · 0:16
+#### 7. Specialisten achter elke stap / Specialists behind each step · 4 min · 0:18
 
 - **Doen / Do:** Laat de lijst specialisten zien en open er één.
   Show the list of specialists and open one.
@@ -173,9 +185,9 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Behind each step is a specialist: one analyses existing policy, one proposes measures, one writes, one checks effects and one checks quality. Each has its own instructions, its own sources and its own language model. The province can change them, and every version is kept. So you can always trace which instructions produced a text.
 
-### Hoe de AI is ingericht / How the AI is set up (8 min, from 0:20)
+### Hoe de AI is ingericht / How the AI is set up (8 min, from 0:22)
 
-#### 7. Welke AI, en via wiens account / Which AI, and on whose account · 3 min · 0:20 · *optional part: show how the AI is set up* · *on Platform admin*
+#### 8. Welke AI, en via wiens account / Which AI, and on whose account · 3 min · 0:22 · *optional part: show how the AI is set up* · *on Platform admin*
 
 - **Doen / Do:** Laat de aanbieders en modellen zien die het platform toestaat. Open het tabblad met organisaties niet.
   Show the providers and models the platform allows. Do not open the organisations tab.
@@ -185,7 +197,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Which AI does Agora use, and on whose account? These are the platform settings: which providers and which language models are allowed. For each organisation it is recorded whether Agora works with the platform's keys or with the organisation's own. The keys themselves are never shown; it only says that a key is on file.
 
-#### 8. De modellen van dit bevoegd gezag / This authority's models · 2 min · 0:23 · *optional part: show how the AI is set up* · *on the authority page*
+#### 9. De modellen van dit bevoegd gezag / This authority's models · 2 min · 0:25 · *optional part: show how the AI is set up* · *on the authority page*
 
 - **Doen / Do:** Klik bij Agenten op 'Modellen' en laat zien welke modellen dit bevoegd gezag gebruikt.
   Under Agents, click 'Models' and show which models this authority uses.
@@ -195,7 +207,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Within what the platform allows, the province itself chooses which models its staff use. That is set here, at the level of the authority. So an organisation can, for example, allow only models that meet its own requirements.
 
-#### 9. Eén specialist van dichtbij / One specialist up close · 3 min · 0:25 · *optional part: show how the AI is set up* · *on the authority page*
+#### 10. Eén specialist van dichtbij / One specialist up close · 3 min · 0:27 · *optional part: show how the AI is set up* · *on the authority page*
 
 - **Doen / Do:** Open één specialist bij Agenten: laat de instructies, het model en de eerdere versies zien.
   Open one specialist under Agents: show its instructions, model and earlier versions.
@@ -205,9 +217,9 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** This is one specialist up close. You see the instructions it works with, which sources it may read and which model it uses. Every change becomes a new version, with a note. So for every text in the programme you can find out later which version produced it. Then we go back to the programme.
 
-### Wat er al aan beleid is / What policy already exists (17 min, from 0:28)
+### Wat er al aan beleid is / What policy already exists (17 min, from 0:30)
 
-#### 10. Het bestaande beleid toetsen / Test the existing policy · 5 min · 0:28
+#### 11. Het bestaande beleid toetsen / Test the existing policy · 5 min · 0:30
 
 - **Doen / Do:** Klik 'Bestaand-beleid analyseren'. Dit duurt ongeveer twee minuten.
   Click 'Run existing-policy analysis'. It takes about two minutes.
@@ -218,7 +230,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Before the province writes new policy, it wants to know what is already there. Agora now sets the existing housing policy against the environmental vision. For each topic you get a verdict: adopt, adapt, drop, or: this is still missing. That is work that often takes weeks today. Here it takes about two minutes.
 
-#### 11. Bevindingen met bron / Findings with a source · 8 min · 0:33
+#### 12. Bevindingen met bron / Findings with a source · 8 min · 0:35
 
 - **Doen / Do:** Lees een bevinding met 'Aanpassen' voor, en wijs op het visiedoel, het belang en de bronnen eronder.
   Read out a finding labelled 'Adapt', and point at the vision goal, the interest and the sources below it.
@@ -228,7 +240,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Look at a finding labelled adapt. You see what must change, which goal in the vision it touches, which provincial interest it belongs to, and which documents show it, with page numbers. None of this is the software's opinion. It is a reading of the documents that the civil servant can check.
 
-#### 12. Maatregelen en de visie / Measures and the vision · 4 min · 0:41
+#### 13. Maatregelen en de visie / Measures and the vision · 4 min · 0:43
 
 - **Doen / Do:** Klik bovenaan op 'Maatregelen en de visie'.
   Click 'Measures and the vision' at the top.
@@ -238,9 +250,9 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** This view turns it around, seen from the vision. Which goals are already covered, and where are the gaps? Once there are measures, they hang off this view too.
 
-### Belangen en uitwerkingen / Interests and work-ups (20 min, from 0:45)
+### Belangen en uitwerkingen / Interests and work-ups (20 min, from 0:47)
 
-#### 13. De belangen uit de visie / The interests in the vision · 5 min · 0:45
+#### 14. De belangen uit de visie / The interests in the vision · 5 min · 0:47
 
 - **Doen / Do:** Laat de lijst zien. De belangen 14, 15 en 16 over wonen zijn gekozen. Is de lijst leeg, klik dan 'Belangen zoeken'.
   Show the list. Interests 14, 15 and 16 on housing are chosen. If the list is empty, click 'Find interests'.
@@ -250,7 +262,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** The environmental vision names a set of provincial interests. Agora took them from the vision, each with the page where it appears. This programme is about housing, so we work with three interests: vital towns and villages, enough affordable homes, and future-proof living environments.
 
-#### 14. De belangen uitwerken / Work up the interests · 8 min · 0:50
+#### 15. De belangen uitwerken / Work up the interests · 8 min · 0:52
 
 - **Doen / Do:** Klik 'Gekozen uitwerken'. Dit loopt op de achtergrond, ongeveer twee minuten per belang.
   Click 'Work up chosen'. It runs in the background, about two minutes per interest.
@@ -261,7 +273,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Agora now works up the three interests. For each one it looks up what the vision asks, what existing policy already covers and what is still missing, and puts that under the structure's headings. This runs on the server. We can show something else meanwhile, or even leave the page: the work continues.
 
-#### 15. Een uitwerking lezen / Read a work-up · 7 min · 0:58
+#### 16. Een uitwerking lezen / Read a work-up · 7 min · 1:00
 
 - **Doen / Do:** Klik 'Uitwerking openen' bij belang 14, scroll door de koppen en beweeg over een bronverwijzing.
   Click 'Open work-up' for interest 14, scroll through the headings and hover a source reference.
@@ -271,9 +283,9 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** This is the work-up for vital towns and villages. It is working material, not a chapter: what the vision asks, which policy exists, where it rubs, and what is missing. Hover a source reference and you see the quote and the page. The chapters will build on these work-ups.
 
-### Maatregelen / Measures (33 min, from 1:05)
+### Maatregelen / Measures (33 min, from 1:07)
 
-#### 16. Maatregelen voorstellen / Propose measures · 8 min · 1:05
+#### 17. Maatregelen voorstellen / Propose measures · 8 min · 1:07
 
 - **Doen / Do:** Klik 'Maatregelen voorstellen' bij belang 14. Als dat klaar is, doe hetzelfde bij 15 en 16, één tegelijk.
   Click 'Propose measures' for interest 14. When it finishes, do the same for 15 and 16, one at a time.
@@ -284,7 +296,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** From interests to measures. For each interest Agora proposes a handful of concrete measures. Not: we aim for more affordable homes. But: who does what, with which instrument, when, and how we know it works. Each measure points to the sources it rests on.
 
-#### 17. Het register / The register · 7 min · 1:13
+#### 18. Het register / The register · 7 min · 1:15
 
 - **Doen / Do:** Loop één maatregel door: belangen, doel, opgave, actie, rol, tijdpad, indicator, wie handelt en bronnen.
   Walk through one measure: interests, goal, challenge, action, role, timeline, indicator, who acts and sources.
@@ -294,7 +306,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** This is the measures register. Look at one measure. Which interests it belongs to, the goal, the challenge, the concrete action, the province's role, the timeline, and how you measure it. And importantly: who actually acts? The province itself, a municipality, or a housing association? That is stated explicitly.
 
-#### 18. De ambtenaar besluit / Staff decide · 8 min · 1:20
+#### 19. De ambtenaar besluit / Staff decide · 8 min · 1:22
 
 - **Doen / Do:** Kies bij één maatregel 'Behouden', bij een andere 'Aanpassen' met wat er moet veranderen, en laat er één vallen met een reden.
   Choose 'Keep' on one measure, 'Adapt' on another with what should change, and drop one with a reason.
@@ -304,7 +316,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Here the civil servant decides. This measure we keep. This one must change, and we write down what should change. And this one we drop, with a reason. Every decision is recorded: who, when and why. A dropped measure does not go into the programme. But the decision is kept, so later anyone can see it was removed on purpose.
 
-#### 19. Prioriteit / Priority · 5 min · 1:28
+#### 20. Prioriteit / Priority · 5 min · 1:30
 
 - **Doen / Do:** Geef twee maatregelen 'Hoog' en één 'Laag'. De lijst staat op 'Prioriteit eerst'.
   Give two measures 'High' and one 'Low'. The list is sorted 'Priority first'.
@@ -314,7 +326,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Not everything can happen at once. The civil servant gives measures a priority: high, medium or low, with a reason where needed. The programme follows that order. Later you will see in the chapters that the high-priority measures come first.
 
-#### 20. Klopt de rol van de provincie? / Is the province's role right? · 5 min · 1:33
+#### 21. Klopt de rol van de provincie? / Is the province's role right? · 5 min · 1:35
 
 - **Doen / Do:** Klik 'Rollen controleren'.
   Click 'Check roles'.
@@ -325,9 +337,9 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** A familiar trap: a programme promises things the province cannot do itself. Agora checks, for each measure, who really acts and whether the province has an instrument for it. Where a municipality or housing association has to act, it says so, and explains why.
 
-### Pauze / Break (15 min, from 1:38)
+### Pauze / Break (15 min, from 1:40)
 
-#### 21. Pauze / Break · 15 min · 1:38
+#### 22. Pauze / Break · 15 min · 1:40
 
 - **Doen / Do:** Pauze. Laat het scherm op het document staan.
   Break. Leave the screen on the document.
@@ -337,9 +349,9 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Let's take a short break. After the break we look at how the three interests fit together, where they clash, and then we let Agora write the programme.
 
-### Samenhang tussen belangen / Across interests (20 min, from 1:53)
+### Samenhang tussen belangen / Across interests (20 min, from 1:55)
 
-#### 22. Belangen naast elkaar / Interests side by side · 7 min · 1:53
+#### 23. Belangen naast elkaar / Interests side by side · 7 min · 1:55
 
 - **Doen / Do:** Klik 'Gekozen belangen vergelijken'. Dit duurt ongeveer een minuut.
   Click 'Compare chosen interests'. It takes about a minute.
@@ -350,7 +362,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Interests do not stand alone. Building more homes touches the quality of the living environment. Agora now sets the three work-ups and their measures side by side, and looks for three things: where they reinforce each other, where one measure can serve two interests, and where they clash.
 
-#### 23. Het raster / The grid · 6 min · 2:00
+#### 24. Het raster / The grid · 6 min · 2:02
 
 - **Doen / Do:** Klik in het raster op een vakje om alleen dat paar te zien. Klik 'Alle paren tonen' om terug te gaan.
   Click a cell in the grid to see only that pair. Click 'Show every pair' to go back.
@@ -360,7 +372,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Each cell is a pair of interests. The letters count what was found: reinforcing, a shared measure, or a dilemma. Click a cell and you see only that pair.
 
-#### 24. Dilemma's houden of opzij zetten / Keep or set aside · 7 min · 2:06
+#### 25. Dilemma's houden of opzij zetten / Keep or set aside · 7 min · 2:08
 
 - **Doen / Do:** Houd een dilemma en een gedeelde maatregel met 'Behouden'. Zet er één opzij met een reden.
   Keep a dilemma and a shared measure with 'Keep'. Set one aside with a reason.
@@ -370,9 +382,9 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Here too the civil servant decides. This dilemma is real, so we keep it: the programme must say something about it. This shared measure we keep as well. And this one we set aside, with a reason. Only what is kept goes into the programme.
 
-### Effecten / Effects (10 min, from 2:13)
+### Effecten / Effects (10 min, from 2:15)
 
-#### 25. Effecten per maatregel / Effects per measure · 10 min · 2:13
+#### 26. Effecten per maatregel / Effects per measure · 10 min · 2:15
 
 - **Doen / Do:** Kies bij een maatregel de richting (positief, negatief, neutraal) en klik 'Effecten opslaan'.
   Choose a measure's direction (positive, negative, neutral) and click 'Save effects'.
@@ -382,9 +394,9 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** An environmental vision comes with an environmental effects report. For each measure the province records here whether it helps or harms the living environment, and where a measure departs from the report, a reason must be written down. With the effects report linked, Agora checks this automatically too. That report is not in this demo, so we show the recording.
 
-### Het programma schrijven / Write the programme (5 min, from 2:23)
+### Het programma schrijven / Write the programme (5 min, from 2:25)
 
-#### 26. Het programma laten schrijven / Let Agora write the programme · 5 min · 2:23
+#### 27. Het programma laten schrijven / Let Agora write the programme · 5 min · 2:25
 
 - **Doen / Do:** Klik 'Lege hoofdstukken schrijven'. Ga daarna meteen door; dit loopt ongeveer acht minuten.
   Click 'Write empty chapters'. Then move straight on; it takes about eight minutes.
@@ -395,9 +407,9 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Now we let Agora write the programme. Each part knows what belongs in it and what it draws on: the work-ups, the links the civil servant kept, and the measures in priority order. This takes about eight minutes. We won't wait: meanwhile we show how colleagues work together.
 
-### Samenwerken / Working together (20 min, from 2:28)
+### Samenwerken / Working together (20 min, from 2:30)
 
-#### 27. Notities van collega's / Colleagues' notes · 6 min · 2:28
+#### 28. Notities van collega's / Colleagues' notes · 6 min · 2:30
 
 - **Doen / Do:** Zet 'Toon commentaar' aan, selecteer een zin in een klaar hoofdstuk en plaats een notitie.
   Turn on 'Show comments', select a sentence in a finished chapter and add a note.
@@ -407,7 +419,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** While Agora writes, colleagues read along. They leave notes on a sentence, as they are used to in Word. The difference: the notes are attached to the live programme, not to a copy that goes round by email.
 
-#### 28. Notities die hetzelfde zeggen / Notes that say the same · 5 min · 2:34
+#### 29. Notities die hetzelfde zeggen / Notes that say the same · 5 min · 2:36
 
 - **Doen / Do:** Klik 'Zoek gemeenschappelijke notities'.
   Click 'Find common notes'.
@@ -417,7 +429,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** When ten colleagues read along, three of them often say the same thing. Agora groups notes on the same point, so the writer can answer once and mark them handled in one go.
 
-#### 29. Review en goedkeuring / Review and approval · 5 min · 2:39
+#### 30. Review en goedkeuring / Review and approval · 5 min · 2:41
 
 - **Doen / Do:** Klik 'Review vragen' bij het eerste hoofdstuk, en daarna 'Keur hoofdstuk goed'.
   Click 'Request review' on the first chapter, then 'Approve chapter'.
@@ -427,7 +439,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Each chapter and each measure has a status: draft, in review, approved. The writer requests a review, and a colleague approves it or sends it back with a request. So it is always clear what is done and what is not.
 
-#### 30. Waar staat het programma? / Where does the programme stand? · 4 min · 2:44
+#### 31. Waar staat het programma? / Where does the programme stand? · 4 min · 2:46
 
 - **Doen / Do:** Laat zien wat klaar is en wat nog open staat.
   Show what is done and what is still open.
@@ -437,9 +449,9 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** The project lead doesn't need to phone round. This one screen shows what is done, what is in review and what is still open.
 
-### Het resultaat lezen / Read the result (10 min, from 2:48)
+### Het resultaat lezen / Read the result (10 min, from 2:50)
 
-#### 31. Het geschreven programma / The written programme · 10 min · 2:48
+#### 32. Het geschreven programma / The written programme · 10 min · 2:50
 
 - **Doen / Do:** Open 'Hoofdstukken' en ga naar het deel over samenhang en daarna het deel met de maatregelen. Wijs op de volgorde en op de gevallen maatregel die ontbreekt.
   Open 'Chapters' and go to the part on coherence, then the part with the measures. Point at the order and at the dropped measure that is absent.
@@ -449,9 +461,9 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** The programme is written. Look at the part on coherence: it holds the links the civil servant kept, not the ones set aside. And in the part with the measures, they are in priority order. The measure we dropped is not there. Every claim has a source reference; hover it and you see the quote.
 
-### Verantwoording / Accountability (20 min, from 2:58)
+### Verantwoording / Accountability (20 min, from 3:00)
 
-#### 32. Eén hoofdstuk opnieuw, streng op bronnen / Redraft one chapter, strict on sources · 6 min · 2:58
+#### 33. Eén hoofdstuk opnieuw, streng op bronnen / Redraft one chapter, strict on sources · 6 min · 3:00
 
 - **Doen / Do:** Klik het potlood bij een hoofdstuk, open het menu van dat hoofdstuk en kies 'Opnieuw genereren met strikte citaties'.
   Click the pencil on a chapter, open that chapter's menu and choose 'Regenerate with strict citations'.
@@ -462,7 +474,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Trust has to be checkable. We have this chapter rewritten with strict rules on sources. Then Agora looks up every quote in its source and reports how many it found. A quote that cannot be found is flagged.
 
-#### 33. Herleidbaarheid / Provenance · 8 min · 3:04
+#### 34. Herleidbaarheid / Provenance · 8 min · 3:06
 
 - **Doen / Do:** Open een hoofdstuk-run: laat de score zien, de beweringen die gecontroleerd moeten worden, en de ongebruikte bronnen.
   Open a chapter run: show the score, the claims to check, and the sources left unused.
@@ -472,7 +484,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** This is where Agora accounts for itself. For every time it produced text: which model, which sources, and how well the claims were backed. A score of one hundred means every claim has a quote that is in the source. What does not hold up is shown plainly: this claim has no source, this quote was not found. The civil servant knows exactly what still needs checking.
 
-#### 34. Het auditpakket / The audit pack · 6 min · 3:12
+#### 35. Het auditpakket / The audit pack · 6 min · 3:14
 
 - **Doen / Do:** Keur voor de demo eerst de overige hoofdstukken in één keer goed ('Demo: keur de rest goed'), en klik dan 'Auditpakket maken'.
   For the demo, first approve the remaining chapters in one go ('Demo: approve the rest'), then click 'Build audit pack'.
@@ -482,9 +494,9 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** If the programme is challenged later, in the provincial council or in court, the province wants to show how it came about. The audit pack fixes a version with every AI run, every measure, every decision with name and reason, and every source, with a digital fingerprint. That version is also what we publish next.
 
-### Publiceren en inspraak / Publish and consult (20 min, from 3:18)
+### Publiceren en inspraak / Publish and consult (20 min, from 3:20)
 
-#### 35. Naar Word / To Word · 4 min · 3:18
+#### 36. Naar Word / To Word · 4 min · 3:20
 
 - **Doen / Do:** Klik 'Word' en open het bestand.
   Click 'Word' and open the file.
@@ -494,7 +506,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** For the council and its house style, the province works in Word. One click and the programme comes out as a Word document, with the chapters, the measures in priority order, and the source references.
 
-#### 36. Publiceren voor inspraak / Publish for consultation · 5 min · 3:22
+#### 37. Publiceren voor inspraak / Publish for consultation · 5 min · 3:24
 
 - **Doen / Do:** Kies wie de versie mag lezen en klik 'Publiceer deze versie'. Open daarna de publieke pagina.
   Choose who may read the version and click 'Publish this version'. Then open the public page.
@@ -504,7 +516,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Now we publish the fixed version. Residents, municipalities and partners read exactly the version that is in the audit pack. The draft the civil servants work in stays internal. Formal enactment happens separately; this is the version to respond to.
 
-#### 37. De inspraakperiode / The consultation period · 6 min · 3:27
+#### 38. De inspraakperiode / The consultation period · 6 min · 3:29
 
 - **Doen / Do:** Kies de data en klik 'Open consultatie'. Plaats op de publieke pagina een reactie als inwoner.
   Pick the dates and click 'Open consultation'. On the public page, leave a comment as a resident.
@@ -514,7 +526,7 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** We open the consultation period. A resident responds to the published version, and the response arrives here. Comments are about exactly the text that was published, not a draft that has changed since.
 
-#### 38. Reacties verwerken / Handle the responses · 5 min · 3:33
+#### 39. Reacties verwerken / Handle the responses · 5 min · 3:35
 
 - **Doen / Do:** Groepeer de reacties op onderwerp, beantwoord er één en leg het besluit vast.
   Group the responses by topic, answer one and record the decision.
@@ -524,9 +536,9 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** The province must show what it did with the responses. Agora groups them by topic, the civil servant answers them and records what happens with each one. That overview becomes part of the accountability record.
 
-### Vragen / Questions (15 min, from 3:38)
+### Vragen / Questions (15 min, from 3:40)
 
-#### 39. Vragen / Questions · 15 min · 3:38
+#### 40. Vragen / Questions · 15 min · 3:40
 
 - **Doen / Do:** Open de vloer voor vragen. Wilt u een vraag door Agora laten beantwoorden, klik dan 'Vragen' en houd de knop ingedrukt terwijl de vraag wordt gesteld.
   Open the floor for questions. To let Agora answer one, click 'Questions' and hold the button down while the question is asked.
@@ -535,4 +547,17 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 > **NL:** Dat was Agora, van visie tot inspraak. De ambtenaar besliste bij elke stap, en elke bewering is terug te voeren op een bladzijde in de eigen stukken van de provincie. We horen graag uw vragen. Wilt u Agora zelf iets vragen? Dan houden we de knop Vragen ingedrukt terwijl u spreekt. Alleen dan staat de microfoon aan.
 >
 > **EN:** That was Agora, from vision to consultation. The civil servant decided at every step, and every claim can be traced to a page in the province's own documents. We would be glad to take your questions. Would you like to ask Agora itself? Then we hold down the Questions button while you speak. Only then is the microphone on.
+
+### Wat we hebben gehoord / What we heard (5 min, from 3:55)
+
+#### 41. Wat we hebben gehoord / What we heard · 5 min · 3:55
+
+- **Doen / Do:** Klik 'Maak de samenvatting' in het panel Rondleiding. Lees de verbeterpunten voor of laat ze voorlezen.
+  Click 'Make the summary' in the Tour panel. Read out the improvement points, or let them be read aloud.
+- **AI-stap / AI step:** Agora leest de vragen en antwoorden van vandaag, uit het venster Vraag en van de knop Vragen, en vat ze samen zonder namen en zonder vragen letterlijk te herhalen.
+- **De zaal ziet / The room sees:** Onderwerpen, waar de antwoorden tekortschoten, wat onduidelijk was, verbeterpunten en vervolgvragen.
+
+> **NL:** Tot slot kijken we terug op wat u vandaag heeft gevraagd. Agora leest alle vragen en antwoorden van deze middag en vat ze samen: welke onderwerpen er speelden, waar de antwoorden tekortschoten, en wat er beter kan. Zonder namen, en zonder uw vragen letterlijk te herhalen. Zo groeit Agora: uw vragen worden verbeterpunten voor het team. Dank u wel.
+>
+> **EN:** Finally, we look back at what you asked today. Agora reads all the questions and answers from this afternoon and summarises them: which topics came up, where the answers fell short, and what could be better. Without names, and without repeating your questions word for word. This is how Agora grows: your questions become improvement points for the team. Thank you.
 

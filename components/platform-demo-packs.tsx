@@ -53,6 +53,8 @@ import {
   type DemoPackFile,
 } from "@/lib/actions/demo-pack"
 import { getNarrationStatus, recordTourNarration, type NarrationStatus } from "@/lib/actions/demo-voice"
+import { listDemoDigests, type DemoDigest } from "@/lib/actions/demo-digest"
+import { FormattedMarkdown } from "@/components/formatted-markdown"
 import { DEMO_PACK_SPACE_TYPES, type DemoPackSpaceType } from "@/lib/programme/domain"
 import { DOCUMENT_ROLES, type DocumentRole } from "@/lib/programme/domain"
 
@@ -595,6 +597,7 @@ export function PlatformDemoPacks() {
               )}
             </div>
           ) : null}
+          {draft.id ? <DemoDigestsRow packId={draft.id} /> : null}
           {draft.id ? <TourOptionsRow packId={draft.id} /> : null}
           {draft.id ? <TourNarrationRow packId={draft.id} /> : null}
         </div>
@@ -811,6 +814,59 @@ function TourOptionsRow({ packId }: { packId: string }) {
           </span>
         </label>
       ))}
+    </div>
+  )
+}
+
+/** Summaries of what the room asked, kept after a demo is ended. */
+function DemoDigestsRow({ packId }: { packId: string }) {
+  const { t } = useI18n()
+  const [digests, setDigests] = useState<DemoDigest[]>([])
+  const [openId, setOpenId] = useState<string | null>(null)
+  useEffect(() => {
+    void listDemoDigests(packId).then((result) => setDigests(result.data))
+  }, [packId])
+  if (digests.length === 0) return null
+  const download = (digest: DemoDigest) => {
+    const blob = new Blob([`# ${digest.demoName ?? ""}\n\n${digest.bodyMarkdown}\n`], { type: "text/markdown" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `demo-summary-${digest.createdAt.slice(0, 10)}.md`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold">{t("admin.platform.demoDigests", "What the room asked")}</h3>
+      <ul className="divide-y rounded-md border">
+        {digests.map((digest) => (
+          <li key={digest.id} className="space-y-2 px-3 py-2 text-sm">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium">{digest.demoName}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t("admin.platform.demoDigestLine", "{{when}} · from {{count}} questions and answers", {
+                    when: new Date(digest.createdAt).toLocaleString(),
+                    count: String(digest.entries),
+                  })}
+                </span>
+              </span>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setOpenId(openId === digest.id ? null : digest.id)}>
+                {openId === digest.id ? t("admin.platform.demoDigestHide", "Hide") : t("admin.platform.demoDigestView", "View")}
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => download(digest)}>
+                {t("admin.platform.demoDigestDownload", "Download")}
+              </Button>
+            </div>
+            {openId === digest.id ? (
+              <div className="rounded-md bg-muted/30 p-3 [&_h2]:mt-3 [&_h2]:font-semibold">
+                <FormattedMarkdown>{digest.bodyMarkdown}</FormattedMarkdown>
+              </div>
+            ) : null}
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

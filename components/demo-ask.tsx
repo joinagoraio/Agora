@@ -17,11 +17,14 @@ export function DemoAskControl({
   language,
   voice,
   stepTitle,
+  stepId,
 }: {
   workspaceId: string
   language: "nl" | "en"
   voice: "female" | "male"
   stepTitle: string
+  /** Kept with each question, so the summary at the end knows where in the demo it came up. */
+  stepId?: string
 }) {
   const { t } = useI18n()
   const [status, setStatus] = useState<Status>("off")
@@ -30,6 +33,9 @@ export function DemoAskControl({
   const mic = useRef<MediaStream | null>(null)
   const sender = useRef<RTCRtpSender | null>(null)
   const opening = useRef<Promise<void> | null>(null)
+  const exchange = useRef<{ question: string | null; answer: string | null }>({ question: null, answer: null })
+  const stepRef = useRef(stepId)
+  stepRef.current = stepId
   const speaker = useRef<HTMLAudioElement | null>(null)
 
   const send = (event: Record<string, unknown>) => {
@@ -76,7 +82,13 @@ export function DemoAskControl({
       const events = connection.createDataChannel("oai-events")
       channel.current = events
       events.onopen = () => {
-        send({ type: "session.update", session: { type: "realtime", audio: { input: { turn_detection: null } } } })
+        send({
+          type: "session.update",
+          session: {
+            type: "realtime",
+            audio: { input: { turn_detection: null, transcription: { model: "gpt-4o-mini-transcribe", language } } },
+          },
+        })
         setStatus("ready")
       }
       events.onmessage = (message) => {
@@ -84,6 +96,19 @@ export function DemoAskControl({
           type?: string
           error?: { message?: string }
           response?: { usage?: Record<string, unknown> }
+          transcript?: string
+        }
+        if (event.type === "conversation.item.input_audio_transcription.completed") exchange.current.question = event.transcript ?? null
+        if (event.type === "response.output_audio_transcript.done") exchange.current.answer = event.transcript ?? null
+        const { question, answer } = exchange.current
+        if (question?.trim() && answer?.trim()) {
+          exchange.current = { question: null, answer: null }
+          void fetch("/api/demo/feedback", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json", ...(token ? { "x-csrf-token": token } : {}) },
+            body: JSON.stringify({ workspaceId, question, answer, step: stepRef.current, language }),
+          })
         }
         if (event.type === "response.done" && event.response?.usage) {
           void fetch("/api/voice/usage", {
@@ -117,6 +142,7 @@ export function DemoAskControl({
     if (status === "answering") send({ type: "response.cancel" })
     send({ type: "output_audio_buffer.clear" })
     send({ type: "input_audio_buffer.clear" })
+    exchange.current = { question: null, answer: null }
     setStatus("listening")
     opening.current = (async () => {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
