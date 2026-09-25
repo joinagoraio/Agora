@@ -41,6 +41,8 @@ type Props = {
   onGuidanceSurfaces?: (surfaces: { sidebar: boolean; strip: boolean }) => void
   onGuidanceStrip?: (show: boolean) => void
   onStartWriting: (next?: ProgrammeBindings) => void | Promise<void>
+  /** Show the guidance choice before writing starts. */
+  offerGuidance?: boolean
 }
 
 const NONE = "none"
@@ -60,6 +62,7 @@ export function ProgrammeSetupWizard({
   onGuidanceSurfaces,
   onGuidanceStrip,
   onStartWriting,
+  offerGuidance = false,
 }: Props) {
   const { t } = useI18n()
   const { setIsChatOpen, setPanelTab } = useChatContext()
@@ -204,6 +207,7 @@ export function ProgrammeSetupWizard({
                 onClick={createBlankOutline}
               />
               <div
+                data-guidance-target="setup-template"
                 className={cn(
                   "flex flex-col rounded-xl border bg-card p-5 text-left shadow-sm",
                   (pending || !canEdit) && "opacity-60",
@@ -343,13 +347,24 @@ export function ProgrammeSetupWizard({
                   </Button>
                 }
               />
-              <Button
-                type="button"
-                disabled={pending || !canEdit || !requiredSourcesReady}
-                onClick={() => setShowGuidance(true)}
-              >
-                {t("workspace.programme.setupWizard.sourcesContinue")}
-              </Button>
+              {offerGuidance ? (
+                <Button
+                  type="button"
+                  disabled={pending || !canEdit || !requiredSourcesReady}
+                  onClick={() => setShowGuidance(true)}
+                >
+                  {t("workspace.programme.setupWizard.sourcesContinue")}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  data-guidance-target="start-writing"
+                  disabled={pending || !canEdit || !requiredSourcesReady}
+                  onClick={() => startTransition(async () => onStartWriting(bindings))}
+                >
+                  {t("workspace.programme.setupWizard.sourcesStart")}
+                </Button>
+              )}
             </div>
             {pending ? (
               <p className="text-sm text-muted-foreground">{t("workspace.programme.setupWizard.working")}</p>

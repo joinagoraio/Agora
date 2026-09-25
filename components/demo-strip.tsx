@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DemoTourOpenButton } from "@/components/demo-tour"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,11 +29,16 @@ export function DemoStrip({ demo }: { demo: LoadedDemo }) {
   const [confirm, setConfirm] = useState<"end" | "reset" | null>(null)
   const [typed, setTyped] = useState("")
   const [pending, startTransition] = useTransition()
+  const [loadedAt, setLoadedAt] = useState("")
   const confirmWord = t("demoStrip.confirmWord")
 
-  if (hidden) return null
+  useEffect(() => {
+    if (demo.loadedAt) {
+      setLoadedAt(new Date(demo.loadedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }))
+    }
+  }, [demo.loadedAt])
 
-  const loadedAt = demo.loadedAt ? new Date(demo.loadedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : ""
+  if (hidden) return null
 
   const run = () =>
     startTransition(async () => {
@@ -68,6 +74,7 @@ export function DemoStrip({ demo }: { demo: LoadedDemo }) {
         <span className="min-w-0 flex-1 truncate">
           {t("demoStrip.summary", undefined, { pack: demo.packName, loaded: loadedAt })}
         </span>
+        <DemoTourOpenButton className="h-7 text-xs" />
         <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" disabled={pending} onClick={() => setConfirm("reset")}>
           {t("demoStrip.reset")}
         </Button>

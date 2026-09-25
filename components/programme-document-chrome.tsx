@@ -120,6 +120,7 @@ export function ProgrammeDocumentChrome({
               size={buttonSize}
               aria-label={layout.showComments ? t("workspace.programme.hideComments") : t("workspace.programme.showComments")}
               onClick={() => onLayoutChange({ showComments: !layout.showComments })}
+              data-guidance-target="show-comments"
             >
               <MessageSquare className={iconClass} />
             </Button>
@@ -133,6 +134,7 @@ export function ProgrammeDocumentChrome({
                 aria-label={findCommonNotes.label}
                 disabled={findCommonNotes.disabled}
                 onClick={findCommonNotes.onClick}
+                data-guidance-target="find-common-notes"
               >
                 <Search className={iconClass} />
               </Button>

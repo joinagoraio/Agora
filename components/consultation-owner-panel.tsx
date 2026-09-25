@@ -111,6 +111,7 @@ export function ConsultationOwnerPanel({
         </label>
         <Button
           variant="outline"
+          data-guidance-target="open-consultation"
           disabled={pending || !canAdminister || !publicationId || queue.windowOpen}
           onClick={() =>
             startTransition(async () => {

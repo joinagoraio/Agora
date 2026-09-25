@@ -58,6 +58,11 @@ async function loadPlatformCredential(providerId: string): Promise<string | null
   return decryptSecret(data.encrypted_key)
 }
 
+/** The platform's own OpenAI key, for platform features such as demo narration. */
+export async function platformOpenAiKey(): Promise<string | null> {
+  return (await loadPlatformCredential("openai")) || process.env.OPENAI_API_KEY || null
+}
+
 async function loadTenantCredential(
   tenantId: string,
   providerId: string,

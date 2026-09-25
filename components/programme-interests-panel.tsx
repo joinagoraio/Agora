@@ -157,6 +157,7 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
           type="button"
           role="tab"
           aria-selected={view === option}
+          data-guidance-target={`interests-view-${option}`}
           className={cn(
             "-mb-px border-b-2 px-3 py-2 text-sm",
             view === option ? "border-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground",
@@ -193,11 +194,17 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
       </div>
       <div className={cn("min-h-0 flex-1 flex-col", view === "interests" ? "flex" : "hidden")}>
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
-        <Button type="button" disabled={!canEdit || busy} onClick={find}>
+        <Button type="button" disabled={!canEdit || busy} onClick={find} data-guidance-target="find-interests">
           {finding ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           {interests.length > 0 ? t("workspace.programme.interests.findAgain") : t("workspace.programme.interests.find")}
         </Button>
-        <Button type="button" variant="outline" disabled={!canEdit || busy || selected.length === 0} onClick={workUpSelected}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!canEdit || busy || selected.length === 0}
+          onClick={workUpSelected}
+          data-guidance-target="workup-chosen"
+        >
           {queue ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           {queue
             ? t("workspace.programme.interests.workingUp", undefined, { done: String(queue.done + 1), total: String(queue.total) })
@@ -260,7 +267,7 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       {interest.workupDocumentId ? (
-                        <Button type="button" size="sm" variant="outline" onClick={() => void open(interest)}>
+                        <Button type="button" size="sm" variant="outline" onClick={() => void open(interest)} data-guidance-target="open-workup">
                           {t("workspace.programme.interests.openWorkup")}
                         </Button>
                       ) : null}
@@ -271,6 +278,7 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
                           variant="outline"
                           disabled={!canEdit || working || busy}
                           onClick={() => void proposeMeasures(interest)}
+                          data-guidance-target="propose-measures"
                         >
                           {t("workspace.programme.interests.proposeMeasures")}
                         </Button>

@@ -8,6 +8,8 @@ import { WorkspaceChatWrapper } from "@/components/workspace-chat-wrapper"
 import { ProgrammeJobsProvider } from "@/components/programme-jobs-provider"
 import { DemoStrip } from "@/components/demo-strip"
 import { getLoadedDemo } from "@/lib/actions/demo-pack"
+import { getTourNarration } from "@/lib/programme/demo-narration"
+import { DemoTourProvider } from "@/components/demo-tour"
 import { parseDocumentOwnerId } from "@/lib/programme/ownership"
 import { isEnvironmentalProgrammeWorkspace, resolveWorkspaceKind } from "@/lib/programme/domain"
 import { canAccessProgramme, canManageProgrammeAccess, isAuthorityAdministrator } from "@/lib/programme/membership"
@@ -99,15 +101,16 @@ export default async function ProgrammeWorkbenchPage({
     workspaceMembership?.role === "member" ||
     isAuthorityAdministrator(spaceMembership?.role)
 
-  return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
-      <ProgrammeJobsProvider workspaceId={workspace.id}>
+  const tour = loadedDemo?.tour ?? null
+  const narration = tour && loadedDemo ? await getTourNarration(loadedDemo.packId, tour) : null
+
+  const content = (
       <WorkspaceChatWrapper
         workspaceId={workspace.id}
         workspaceName={workspace.name}
         canManage={canManage}
-        defaultOpen={guidanceMode === "guided" && guidanceSidebar}
-        defaultPanelTab={guidanceMode === "guided" && guidanceSidebar ? "guidance" : "ask"}
+        defaultOpen={Boolean(tour)}
+        defaultPanelTab={tour ? "guidance" : "ask"}
       >
       <ProgrammeWorkbench
         workspaceId={workspace.id}
@@ -136,6 +139,18 @@ export default async function ProgrammeWorkbenchPage({
         }
       />
       </WorkspaceChatWrapper>
+  )
+
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+      <ProgrammeJobsProvider workspaceId={workspace.id}>
+        {tour ? (
+          <DemoTourProvider tour={tour} workspaceId={workspace.id} narration={narration}>
+            {content}
+          </DemoTourProvider>
+        ) : (
+          content
+        )}
       </ProgrammeJobsProvider>
     </Suspense>
   )

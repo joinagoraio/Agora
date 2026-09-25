@@ -898,6 +898,7 @@ export function ChatSidebar({
       <div
         aria-hidden={!isOpen}
         inert={!isOpen || undefined}
+        data-chat-sidebar={isOpen ? "open" : "closed"}
         className={`fixed inset-y-0 right-0 z-50 flex h-screen flex-col ${isMobile ? "border-l" : ""} bg-card shadow-lg ${
           isResizing ? "" : "transition-[width,transform] duration-300 ease-out"
         } ${
@@ -929,7 +930,7 @@ export function ChatSidebar({
               <Tabs value={panelTab} onValueChange={(value) => onPanelTabChange?.(value as ChatPanelTab)}>
                 <TabsList>
                   <TabsTrigger value="ask">{t("guidance.chat.programmeAssistant")}</TabsTrigger>
-                  <TabsTrigger value="guidance">{t("guidance.coach.landmark")}</TabsTrigger>
+                  <TabsTrigger value="guidance">{guidance.tabLabel ?? t("guidance.coach.landmark")}</TabsTrigger>
                 </TabsList>
               </Tabs>
             ) : (
@@ -1011,7 +1012,7 @@ export function ChatSidebar({
       {guidance ? (
         <div className={cn("min-h-0 flex-1 overflow-hidden", panelTab !== "guidance" && "hidden")}>
           <ErrorBoundary resetKeys={[workspaceId || ""]}>
-          <GuidanceCoach
+          {guidance.panel ?? <GuidanceCoach
             variant="embedded"
             surface={guidance.surface}
             placeName={workspaceName}
@@ -1028,7 +1029,7 @@ export function ChatSidebar({
             reviewComplete={guidance.reviewComplete}
             expertPromptDismissed={guidance.expertPromptDismissed}
             setupInProgress={guidance.setupInProgress}
-          />
+          />}
           </ErrorBoundary>
         </div>
       ) : null}

@@ -48,6 +48,7 @@ import {
   type DemoPackChapter,
   type DemoPackFile,
 } from "@/lib/actions/demo-pack"
+import { getNarrationStatus, recordTourNarration, type NarrationStatus } from "@/lib/actions/demo-voice"
 import { DEMO_PACK_SPACE_TYPES, type DemoPackSpaceType } from "@/lib/programme/domain"
 import { DOCUMENT_ROLES, type DocumentRole } from "@/lib/programme/domain"
 
@@ -563,6 +564,7 @@ export function PlatformDemoPacks() {
               )}
             </div>
           ) : null}
+          {draft.id ? <TourNarrationRow packId={draft.id} /> : null}
         </div>
       ) : null}
 
@@ -640,6 +642,65 @@ export function PlatformDemoPacks() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function TourNarrationRow({ packId }: { packId: string }) {
+  const { t } = useI18n()
+  const [status, setStatus] = useState<NarrationStatus | null>(null)
+  const [recording, setRecording] = useState(false)
+  const [pending, startTransition] = useTransition()
+
+  const load = () => {
+    void getNarrationStatus(packId).then((result) => setStatus(result.data ?? null))
+  }
+  useEffect(load, [packId])
+
+  const complete = status ? status.recorded.nl === status.steps && status.recorded.en === status.steps : false
+  useEffect(() => {
+    if (!recording || complete) {
+      if (complete) setRecording(false)
+      return
+    }
+    const timer = window.setInterval(load, 5000)
+    return () => window.clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording, complete])
+
+  if (!status || status.steps === 0) return null
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold">{t("admin.platform.tourNarration", "Tour narration")}</h3>
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <span className="text-muted-foreground">
+          {t("admin.platform.tourNarrationStatus", "{{steps}} steps · Dutch {{nl}} recorded · English {{en}} recorded · voice {{voice}}", {
+            steps: String(status.steps),
+            nl: String(status.recorded.nl),
+            en: String(status.recorded.en),
+            voice: status.voice,
+          })}
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={pending || recording || complete}
+          onClick={() =>
+            startTransition(async () => {
+              const result = await recordTourNarration(packId)
+              if (result.error) {
+                notify(result.error, "error")
+                return
+              }
+              setRecording(true)
+              notify(t("admin.platform.tourNarrationStarted", "Recording {{count}} narration files. This takes a minute or two.", { count: String(result.data?.missing ?? 0) }))
+            })
+          }
+        >
+          {recording ? t("admin.platform.tourNarrationRecording", "Recording…") : t("admin.platform.tourNarrationRecord", "Record narration")}
+        </Button>
+      </div>
     </div>
   )
 }

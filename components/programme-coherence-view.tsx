@@ -113,7 +113,7 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
-        <Button type="button" disabled={!canEdit || running || selected.length < 2} onClick={run}>
+        <Button type="button" disabled={!canEdit || running || selected.length < 2} onClick={run} data-guidance-target="compare-interests">
           {running ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           {findings.length ? t("workspace.programme.coherence.runAgain") : t("workspace.programme.coherence.run")}
         </Button>
@@ -128,7 +128,7 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
 
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-4">
         {selected.length >= 2 ? (
-          <div className="space-y-2">
+          <div className="space-y-2" data-guidance-target="coherence-grid">
             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               {COHERENCE_KINDS.map((kind) => (
                 <span key={kind} className="flex items-center gap-1">
@@ -254,6 +254,7 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
                             size="sm"
                             variant={finding.decision === "keep" ? "default" : "outline"}
                             aria-pressed={finding.decision === "keep"}
+                            data-guidance-target="coherence-keep"
                             title={finding.decision === "keep" ? t("workspace.programme.coherence.undo") : undefined}
                             disabled={!canEdit || savingId === finding.id}
                             onClick={() => void decide(finding, finding.decision === "keep" ? null : "keep")}

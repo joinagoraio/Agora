@@ -143,6 +143,7 @@ import { ProgrammeDocumentChrome } from "@/components/programme-document-chrome"
 import { ProgrammeInterestsPanel } from "@/components/programme-interests-panel"
 import { MeasureDecisionControl } from "@/components/measure-decision-control"
 import { MeasureSummaryLines } from "@/components/measure-summary-lines"
+import { DemoTourPanel, DemoTourStrip, useDemoTour, useTourSheetInsets } from "@/components/demo-tour"
 import { listProgrammeInterests } from "@/lib/actions/interests"
 import type { ProgrammeInterest } from "@/lib/programme/interests"
 import { parseRoleCheck } from "@/lib/programme/role-check"
@@ -250,14 +251,37 @@ function downloadExportPayload(payload: {
   downloadBlob(payload.filename, new Blob([payload.content], { type: payload.mimeType }))
 }
 
-const NEXT_COPY: Record<string, string> = {
-  bind: "guidance.coach.nextBind",
-  analyse: "guidance.coach.nextAnalyse",
-  structure: "guidance.coach.nextStructure",
-  draft: "guidance.coach.nextDraft",
-  check: "guidance.coach.nextCheck",
-  review: "guidance.coach.nextReview",
-  export: "guidance.coach.nextExport",
+/** Seeding a reviewer and bulk approval are for local testing, never for a real sign-off. */
+const LOCAL_SHORTCUTS = process.env.NODE_ENV !== "production"
+
+const FINDING_TONE: Record<string, string> = {
+  adopt: "border-emerald-300 bg-emerald-50 text-emerald-800",
+  adapt: "border-amber-300 bg-amber-50 text-amber-800",
+  drop: "border-red-300 bg-red-50 text-red-800",
+  missing: "border-sky-300 bg-sky-50 text-sky-800",
+}
+
+const SOURCE_LINE = /^- (.+?) \[[0-9a-f-]{36}\](?: \(([a-z_]+)\))?$/
+
+/** The sources a run will read, as titles with their role instead of raw ids. */
+function SourcePreviewList({ preview, className }: { preview: string; className?: string }) {
+  const { t } = useI18n()
+  return (
+    <ul className={cn("space-y-1 text-sm", className)}>
+      {preview.split("\n").map((line, index) => {
+        const match = SOURCE_LINE.exec(line.trim())
+        if (!match) return line.trim() ? <li key={index} className="text-xs text-muted-foreground">{line.replace(/^- /, "")}</li> : null
+        return (
+          <li key={index} className="flex flex-wrap items-baseline gap-x-2">
+            <span>{match[1]}</span>
+            {match[2] ? (
+              <span className="text-xs text-muted-foreground">{t(`workspace.programme.documentRoles.${match[2]}`, match[2])}</span>
+            ) : null}
+          </li>
+        )
+      })}
+    </ul>
+  )
 }
 
 function openPrintPreview(html: string) {
@@ -313,7 +337,6 @@ export function ProgrammeWorkbench({
   workspaceJob = "author",
   guidanceMode = "guided",
   guidanceSidebar = false,
-  guidanceStrip = false,
   expertPromptDismissed = false,
   helpAiEnabled = false,
   canAccessSettings = false,
@@ -332,14 +355,10 @@ export function ProgrammeWorkbench({
   const searchParams = useSearchParams()
 
   const [liveGuidanceMode, setLiveGuidanceMode] = useState<GuidanceMode>(guidanceMode)
-  const [liveGuidanceStrip, setLiveGuidanceStrip] = useState(guidanceStrip)
-  const [previewStrip, setPreviewStrip] = useState(false)
+  const demoTour = useDemoTour()
   useEffect(() => {
     setLiveGuidanceMode(guidanceMode)
   }, [guidanceMode])
-  useEffect(() => {
-    setLiveGuidanceStrip(guidanceStrip)
-  }, [guidanceStrip])
   const [outlineNodeCount, setOutlineNodeCount] = useState(0)
   const [outlineChapters, setOutlineChapters] = useState<Array<{ id: string; title: string }>>([])
   const [programmeInterests, setProgrammeInterests] = useState<ProgrammeInterest[]>([])
@@ -386,6 +405,8 @@ export function ProgrammeWorkbench({
   const [documentLayout, setDocumentLayout] = useState<ProgrammeDocumentLayout>(DEFAULT_PROGRAMME_DOCUMENT_LAYOUT)
   const [writableChapters, setWritableChapters] = useState<Array<{ id: string; title: string }>>([])
   const sheetOpen = !isKnowledgeView && SHEET_SECTIONS.has(activeSection) && !sheetDismissed
+  const tourOpen = Boolean(demoTour?.open)
+  const tourSheetInsets = useTourSheetInsets(tourOpen && sheetOpen)
 
   useEffect(() => {
     setDocumentLayout({
@@ -805,12 +826,6 @@ export function ProgrammeWorkbench({
       ),
     [bindings, reports, measures, chapters, outlineNodeCount, observability, policies.effectsCheckedIds],
   )
-  const nextStripDetail =
-    pipeline.firstIncomplete === "draft" && pipeline.focusChapterTitle
-      ? t("guidance.coach.nextDraftNamed", undefined, { title: pipeline.focusChapterTitle })
-      : pipeline.firstIncomplete === "review" && pipeline.focusChapterTitle
-        ? t("guidance.coach.nextReviewNamed", undefined, { title: pipeline.focusChapterTitle })
-        : t(NEXT_COPY[pipeline.firstIncomplete ?? ""] ?? "guidance.coach.nothingRequired")
   const openPipelineStep = (stage: string | null, section: string, chapterId: string | null) => {
     if (stage === "draft" && chapterId) {
       replaceParams((params) => {
@@ -938,7 +953,13 @@ export function ProgrammeWorkbench({
   const coachSection = isKnowledgeView ? "knowledge" : showSetupWizard ? "setup" : activeSection
 
   useEffect(() => {
+    if (!demoTour) {
+      setGuidance(null)
+      return
+    }
     setGuidance({
+      panel: <DemoTourPanel />,
+      tabLabel: t("demoTour.tab", "Tour"),
       surface: "programme",
       job: chromeJob,
       guidanceMode: liveGuidanceMode,
@@ -971,6 +992,8 @@ export function ProgrammeWorkbench({
     chromeJob,
     coachSection,
     corpusDocs,
+    demoTour,
+    t,
     expertPromptDismissed,
     liveGuidanceMode,
     helpAiEnabled,
@@ -1099,31 +1122,7 @@ export function ProgrammeWorkbench({
         }
       />
       )}
-      {(previewStrip || (!showSetupWizard && liveGuidanceMode === "guided" && liveGuidanceStrip)) &&
-      pipeline.firstIncomplete &&
-      pipeline.firstIncomplete !== "orient" ? (
-        <div
-          data-guidance-next=""
-          className="flex shrink-0 items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2"
-        >
-          <div className="min-w-0">
-            <p className="text-sm font-medium">
-              {t("guidance.coach.next", undefined, {
-                action: t(`guidance.coach.stages.${pipeline.firstIncomplete}`),
-              })}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">{nextStripDetail}</p>
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            className="shrink-0"
-            onClick={() => openPipelineStep(pipeline.firstIncomplete, pipeline.firstIncompleteSection, pipeline.focusChapterId)}
-          >
-            {t("guidance.coach.goThere")}
-          </Button>
-        </div>
-      ) : null}
+      <DemoTourStrip />
       <ProgrammeAccessDialogs
         workspace={{
           id: workspaceId,
@@ -1173,8 +1172,6 @@ export function ProgrammeWorkbench({
                 onMessage={notify}
                 onRefresh={refresh}
                 onGuidanceMode={setLiveGuidanceMode}
-                onGuidanceSurfaces={(surfaces) => setLiveGuidanceStrip(surfaces.strip)}
-                onGuidanceStrip={setPreviewStrip}
                 onStartWriting={async (next) => {
                   const merged = { ...(next ?? bindings), setupComplete: true }
                   const result = await updateProgrammeBindings(workspaceId, merged)
@@ -1252,9 +1249,12 @@ export function ProgrammeWorkbench({
         )}
       </div>
 
-      <Dialog open={sheetOpen} onOpenChange={(open) => { if (!open) closeSheet() }}>
+      <Dialog open={sheetOpen} modal={!tourOpen} onOpenChange={(open) => { if (!open) closeSheet() }}>
         <DialogContent
           overlayClassName="z-[70]"
+          showOverlay={!tourOpen}
+          style={tourSheetInsets ?? undefined}
+          onInteractOutside={tourOpen ? (event) => event.preventDefault() : undefined}
           className="top-6 right-6 bottom-6 left-6 z-[80] flex h-auto w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
         >
         <ErrorBoundary resetKeys={[activeSection]}>
@@ -1779,7 +1779,7 @@ export function ProgrammeWorkbench({
                     <div className="border-b bg-muted px-4 py-3">
                       <h3 className="text-sm font-semibold">{t("workspace.programme.sourcePreviewTitle")}</h3>
                     </div>
-                    <pre className="whitespace-pre-wrap px-4 py-3 text-xs">{sourcePreview}</pre>
+                    <SourcePreviewList preview={sourcePreview} className="px-4 py-3" />
                   </section>
                 ) : null}
                 {compareFindings ? (
@@ -1792,19 +1792,34 @@ export function ProgrammeWorkbench({
                       <div className="space-y-1">
                         <p className="font-medium">{t("workspace.programme.compareOnlyA")}</p>
                         {compareFindings.onlyA.map((f) => (
-                          <p key={f.id}>[{f.disposition}] {f.summary}</p>
+                          <p key={f.id}>
+                            <Badge variant="outline" className={cn("mr-1.5 align-middle", FINDING_TONE[f.disposition ?? ""])}>
+                              {t(`workspace.programme.findingDisposition.${f.disposition}`, String(f.disposition))}
+                            </Badge>
+                            {f.summary}
+                          </p>
                         ))}
                       </div>
                       <div className="space-y-1">
                         <p className="font-medium">{t("workspace.programme.compareOnlyB")}</p>
                         {compareFindings.onlyB.map((f) => (
-                          <p key={f.id}>[{f.disposition}] {f.summary}</p>
+                          <p key={f.id}>
+                            <Badge variant="outline" className={cn("mr-1.5 align-middle", FINDING_TONE[f.disposition ?? ""])}>
+                              {t(`workspace.programme.findingDisposition.${f.disposition}`, String(f.disposition))}
+                            </Badge>
+                            {f.summary}
+                          </p>
                         ))}
                       </div>
                       <div className="space-y-1">
                         <p className="font-medium">{t("workspace.programme.compareShared")}</p>
                         {compareFindings.shared.map((f) => (
-                          <p key={f.id}>[{f.disposition}] {f.summary}</p>
+                          <p key={f.id}>
+                            <Badge variant="outline" className={cn("mr-1.5 align-middle", FINDING_TONE[f.disposition ?? ""])}>
+                              {t(`workspace.programme.findingDisposition.${f.disposition}`, String(f.disposition))}
+                            </Badge>
+                            {f.summary}
+                          </p>
                         ))}
                       </div>
                     </div>
@@ -1848,7 +1863,12 @@ export function ProgrammeWorkbench({
                       activeReport.findings.map((f: any) => (
                         <div key={f.id} className="space-y-1 rounded-md border p-3 text-sm">
                           <p>
-                            [{f.disposition}] {f.summary}
+                            {f.disposition ? (
+                              <Badge variant="outline" className={cn("mr-2 align-middle", FINDING_TONE[f.disposition as string])}>
+                                {t(`workspace.programme.findingDisposition.${f.disposition}`, String(f.disposition))}
+                              </Badge>
+                            ) : null}
+                            {f.summary}
                             {f.addressed ? ` · ${t("workspace.programme.qcAddressed")}` : ""}
                           </p>
                           {f.measureId ? (
@@ -1861,7 +1881,13 @@ export function ProgrammeWorkbench({
                             <p className="text-xs">{t("workspace.programme.findingInterest", undefined, { value: f.provincialInterest })}</p>
                           ) : null}
                           {f.conflictWithDocumentId ? (
-                            <p className="text-xs">{t("workspace.programme.findingConflict", undefined, { value: f.conflictWithDocumentId })}</p>
+                            <p className="text-xs">
+                              {t("workspace.programme.findingConflict", undefined, {
+                                value:
+                                  citationCatalog.documents.find((doc) => doc.id === f.conflictWithDocumentId)?.title ||
+                                  f.conflictWithDocumentId,
+                              })}
+                            </p>
                           ) : null}
                           {Array.isArray(f.citations) &&
                             f.citations.map((c: { documentId: string; sectionId?: string; quote?: string; pageNumber?: number }, index: number) => (
@@ -2048,7 +2074,7 @@ export function ProgrammeWorkbench({
               <div className="border-b bg-muted px-6 py-3">
                 <h3 className="text-sm font-semibold">{t("workspace.programme.sourcePreviewTitle")}</h3>
               </div>
-              <pre className="whitespace-pre-wrap px-6 py-3 text-xs">{sourcePreview}</pre>
+              <SourcePreviewList preview={sourcePreview} className="px-6 py-3" />
             </section>
           ) : null}
           {duplicates.length > 0 && (
@@ -2931,9 +2957,11 @@ export function ProgrammeWorkbench({
           ) : null}
           {reviewPane === "chapters" ? (
             <section className="overflow-hidden rounded-lg border">
-              <div className="border-b bg-muted px-4 py-3">
-                <p className="text-sm text-muted-foreground">{t("workspace.programme.reviewLocalHint")}</p>
-              </div>
+              {LOCAL_SHORTCUTS ? (
+                <div className="border-b bg-muted px-4 py-3">
+                  <p className="text-sm text-muted-foreground">{t("workspace.programme.reviewLocalHint")}</p>
+                </div>
+              ) : null}
               <div className="space-y-3 p-4">
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -2950,6 +2978,7 @@ export function ProgrammeWorkbench({
             />
             {t("workspace.programme.distinctReviewer")}
           </label>
+          {LOCAL_SHORTCUTS ? (
           <div className="flex flex-wrap gap-2">
           <Button
             size="sm"
@@ -3001,6 +3030,7 @@ export function ProgrammeWorkbench({
             {t("workspace.programme.approveAllLocally")}
           </Button>
           </div>
+          ) : null}
               </div>
             </section>
           ) : null}
@@ -3162,6 +3192,7 @@ export function ProgrammeWorkbench({
                           size="sm"
                           variant="outline"
                           disabled={pending}
+                          data-guidance-target="request-review"
                           onClick={() =>
                             startTransition(async () => {
                               await setChapterWorkflowStatus(workspaceId, chapter.documentId, "in_review")
@@ -3188,6 +3219,7 @@ export function ProgrammeWorkbench({
                       <Button
                         size="sm"
                         disabled={pending || chapter.workflowStatus === "generated"}
+                        data-guidance-target="approve-chapter"
                         onClick={() =>
                           startTransition(async () => {
                             const result = await setChapterWorkflowStatus(workspaceId, chapter.documentId, "approved")
@@ -3334,6 +3366,7 @@ export function ProgrammeWorkbench({
             <div className="flex flex-wrap gap-2">
               <Button
                 disabled={pending}
+                data-guidance-target="export-docx"
                 onClick={() =>
                   startTransition(async () => {
                     const result = await runMarkdownOrDocxExport({
@@ -3440,6 +3473,7 @@ export function ProgrammeWorkbench({
               <Button
                 disabled={pending || !canAdminister}
                 variant="outline"
+                data-guidance-target="audit-pack"
                 onClick={() =>
                   startTransition(async () => {
                     const pack = await buildAuditPackageJson(workspaceId)
@@ -3544,6 +3578,7 @@ export function ProgrammeWorkbench({
               <>
             <Button
               disabled={pending || chromeJob === "reviewer" || !policies.hasFreeze || !canAdminister}
+              data-guidance-target="publish-snapshot"
               onClick={() =>
                 startTransition(async () => {
                   const result = await publishProgrammeSnapshot({
@@ -3569,7 +3604,7 @@ export function ProgrammeWorkbench({
             </Button>
             {publication ? (
               <>
-                <Button variant="outline" asChild>
+                <Button variant="outline" asChild data-guidance-target="publish-open-room">
                   <Link href={`/published/${publication.id}`} target="_blank">
                     {t("workspace.programme.publishOpenRoom")}
                   </Link>

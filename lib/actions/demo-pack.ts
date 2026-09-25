@@ -23,6 +23,8 @@ import {
   type DocumentRole,
 } from "@/lib/programme/domain"
 import { parseWorkupHeadings, type WorkupHeading } from "@/lib/programme/interests"
+import { parseDemoTour, type DemoTour } from "@/lib/programme/demo-tour"
+import { FLEVOLAND_TOUR, FLEVOLAND_TOUR_VERSION } from "@/lib/programme/flevoland-tour"
 import { logger } from "@/lib/utils/logger"
 import { revalidatePath } from "next/cache"
 import { isAllowedForAgoraKeyOrgs, usesAgoraPlatformKeys } from "@/lib/llm/catalog"
@@ -53,6 +55,7 @@ export type LoadedDemo = {
   programmes: number
   measures: number
   documents: number
+  tour: DemoTour | null
 }
 
 export type DemoPackModelChoice = {
@@ -204,7 +207,7 @@ export async function ensureFlevolandDemoPack() {
   if (existing) {
     const { data: row } = await admin
       .from("platform_demo_packs")
-      .select("mission, chapters, space_type, default_model_id, workup_headings, focus_interests")
+      .select("mission, chapters, space_type, default_model_id, workup_headings, focus_interests, tour")
       .eq("id", existing.id)
       .maybeSingle()
     const patch: Record<string, unknown> = {}
@@ -214,6 +217,7 @@ export async function ensureFlevolandDemoPack() {
     if (!row?.space_type) patch.space_type = "regional"
     if (parseWorkupHeadings(row?.workup_headings).length === 0) patch.workup_headings = FLEVOLAND_WORKUP_HEADINGS
     if (!row?.focus_interests?.length) patch.focus_interests = FLEVOLAND_FOCUS_INTERESTS
+    if ((parseDemoTour(row?.tour)?.version ?? 0) < FLEVOLAND_TOUR_VERSION) patch.tour = FLEVOLAND_TOUR
     if (!row?.default_model_id) {
       const modelId = await catalogModelId(admin, FLEVOLAND_DEFAULT_MODEL_ID)
       if (modelId) patch.default_model_id = modelId
@@ -234,6 +238,7 @@ export async function ensureFlevolandDemoPack() {
     workup_headings: FLEVOLAND_WORKUP_HEADINGS,
     focus_interests: FLEVOLAND_FOCUS_INTERESTS,
     chapters: flevolandChapters(),
+    tour: FLEVOLAND_TOUR,
   })
 }
 
@@ -331,6 +336,7 @@ export async function getLoadedDemo(spaceId: string) {
   const { data: space } = await admin.from("spaces").select("id, name, metadata, created_at").eq("id", spaceId).maybeSingle()
   const metadata = ((space?.metadata as Record<string, unknown> | null) || {}) as Record<string, unknown>
   if (!space || metadata.demo !== true || typeof metadata.demoPackId !== "string") return { data: null }
+  await ensureFlevolandDemoPack()
   return { data: await describeLoadedDemo(admin, space) }
 }
 
@@ -346,7 +352,11 @@ async function describeLoadedDemo(
     const { count: total } = await admin.from(table).select("id", { count: "exact", head: true }).in("workspace_id", workspaceIds)
     return total ?? 0
   }
-  const [measures, documents] = await Promise.all([count("programme_measures"), count("documents")])
+  const [measures, documents, pack] = await Promise.all([
+    count("programme_measures"),
+    count("documents"),
+    admin.from("platform_demo_packs").select("tour").eq("id", String(metadata.demoPackId)).maybeSingle(),
+  ])
   return {
     spaceId: space.id,
     name: space.name,
@@ -356,6 +366,7 @@ async function describeLoadedDemo(
     programmes: workspaceIds.length,
     measures,
     documents,
+    tour: parseDemoTour(pack.data?.tour),
   }
 }
 

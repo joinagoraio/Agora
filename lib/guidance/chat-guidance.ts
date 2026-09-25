@@ -1,3 +1,5 @@
+import type { ReactNode } from "react"
+
 import type { GuidanceJob, GuidanceMode } from "@/lib/guidance/jobs"
 import type { GuidancePipelineSnapshot } from "@/lib/guidance/pipeline"
 
@@ -17,4 +19,7 @@ export type ChatGuidanceConfig = {
   reviewComplete?: boolean
   expertPromptDismissed?: boolean
   setupInProgress?: boolean
+  /** Replaces the guidance coach, for example with the demo tour. */
+  panel?: ReactNode
+  tabLabel?: string
 }

@@ -835,3 +835,20 @@
     transition: none;
   }
 }
+
+[data-tour-highlight] {
+  outline: 3px solid rgb(14 165 233);
+  outline-offset: 3px;
+  border-radius: 0.375rem;
+  animation: tour-highlight-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes tour-highlight-pulse {
+  0%,
+  100% {
+    outline-color: rgb(14 165 233);
+  }
+  50% {
+    outline-color: rgb(14 165 233 / 0.35);
+  }
+}

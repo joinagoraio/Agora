@@ -95,11 +95,23 @@ const nextConfig = {
       imageSources.push("http://localhost:54321", "http://127.0.0.1:54321", "http:")
     }
 
+    const mediaSources = [
+      "'self'",
+      "blob:",
+      "data:",
+      "https://*.supabase.co",
+      ...supabaseConnectSources().filter((source) => !source.startsWith("ws")),
+    ]
+    if (isDev) {
+      mediaSources.push("http://localhost:54321", "http://127.0.0.1:54321")
+    }
+
     const csp = [
       "default-src 'self'",
       `script-src ${scriptSources.join(" ")}`,
       `style-src ${styleSources.join(" ")}`,
       `img-src ${imageSources.join(" ")}`,
+      `media-src ${mediaSources.join(" ")}`,
       "font-src 'self' data:",
       `connect-src ${connectSources.join(" ")}`,
       "worker-src 'self' blob:",
