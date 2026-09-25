@@ -91,6 +91,7 @@ export const nlMessages = {
     jobDone: "Klaar. Het resultaat staat op het scherm.",
     jobFailed: "Deze run stopte met een fout. Probeer het nog eens, of ga verder.",
     jobIdle: "Nog niet gestart.",
+    voiceSwitch: "Overschakelen naar de stem: {{voice}}",
     voiceLabel: "Stem",
     voice: {
       female: "Vrouw",
@@ -1189,6 +1190,8 @@ export const nlMessages = {
       chapterCommentHint: "Collega-notities op het live concept. Beantwoord ze en groepeer gemeenschappelijke notities om deze tekst voor te bereiden op consultatie. Het zijn geen openbare consultatiereacties.",
       chapterCommentPlaceholder: "Opmerking bij deze alinea…",
       commentEmpty: "Selecteer een alinea om te reageren.",
+      commentsPanel: "Opmerkingen",
+      commentsCollapse: "Inklappen",
       commentResolve: "Afronden",
       commentReopen: "Heropenen",
       commentReply: "Beantwoorden",
@@ -3074,6 +3077,8 @@ export const nlMessages = {
       demoPackModelRequired: "Kies eerst een standaardmodel.",
       loadedDemos: "Geladen demo's",
       loadedDemosEmpty: "Er is geen demo uit dit pakket geladen.",
+      tourDefaultVoice: "Standaardstem",
+      tourDefaultVoiceHelp: "De presentator kan in de rondleiding wisselen.",
       tourOptions: "Onderdelen van de rondleiding",
       tourOption: {
         aiSetup: {

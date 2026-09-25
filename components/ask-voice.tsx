@@ -5,7 +5,7 @@ import { Loader2, Mic, Square, Volume2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { IconTooltip } from "@/components/icon-tooltip"
-import { useDemoTour } from "@/components/demo-tour"
+import { SPEECH_VOICE_KEY, useDemoTour } from "@/components/demo-tour"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { notify } from "@/lib/notify"
 import { fetchCsrfToken } from "@/lib/utils/csrf"
@@ -17,9 +17,18 @@ type Voice = "female" | "male"
 /** Dictation stops on its own after this long, so a forgotten microphone does not stay on. */
 const MAX_RECORDING_MS = 60000
 
-/** The demo tour's voice when there is one; otherwise the female voice. */
+/** The demo tour's voice when there is one; otherwise the last voice chosen in this browser, or female. */
 function useSpeechVoice(): Voice {
-  return useDemoTour()?.voice ?? "female"
+  const tourVoice = useDemoTour()?.voice
+  const [saved, setSaved] = useState<Voice>("female")
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(SPEECH_VOICE_KEY) === "male") setSaved("male")
+    } catch {
+      // Without storage, the female voice.
+    }
+  }, [])
+  return tourVoice ?? saved
 }
 
 /**

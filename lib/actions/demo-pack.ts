@@ -23,7 +23,7 @@ import {
   type DocumentRole,
 } from "@/lib/programme/domain"
 import { parseWorkupHeadings, type WorkupHeading } from "@/lib/programme/interests"
-import { parseDemoTour, type DemoTour, type TourOption } from "@/lib/programme/demo-tour"
+import { parseDemoTour, type DemoTour, type TourOption, type TourVoice } from "@/lib/programme/demo-tour"
 import { spaceCost } from "@/lib/llm/usage"
 import { FLEVOLAND_TOUR, FLEVOLAND_TOUR_VERSION } from "@/lib/programme/flevoland-tour"
 import { logger } from "@/lib/utils/logger"
@@ -225,7 +225,8 @@ export async function ensureFlevolandDemoPack() {
     if (parseWorkupHeadings(row?.workup_headings).length === 0) patch.workup_headings = FLEVOLAND_WORKUP_HEADINGS
     if (!row?.focus_interests?.length) patch.focus_interests = FLEVOLAND_FOCUS_INTERESTS
     if ((parseDemoTour(row?.tour, { allOptions: true })?.version ?? 0) < FLEVOLAND_TOUR_VERSION) {
-      patch.tour = { ...FLEVOLAND_TOUR, options: (row?.tour as { options?: unknown } | null)?.options ?? {} }
+      const stored = (row?.tour as { options?: unknown; defaultVoice?: unknown } | null) ?? null
+      patch.tour = { ...FLEVOLAND_TOUR, options: stored?.options ?? {}, defaultVoice: stored?.defaultVoice ?? "female" }
     }
     if (!row?.default_model_id) {
       const modelId = await catalogModelId(admin, FLEVOLAND_DEFAULT_MODEL_ID)
@@ -397,6 +398,22 @@ export async function setDemoTourOption(packId: string, option: TourOption, on: 
   return { data: { option, on } }
 }
 
+/** The voice a new presenter of this pack's tour starts with. */
+export async function setDemoTourDefaultVoice(packId: string, voice: TourVoice) {
+  const auth = await requireSuperAdmin()
+  if ("error" in auth) return { error: auth.error }
+  const admin = createAdminClient()
+  const { data: row } = await admin.from("platform_demo_packs").select("tour").eq("id", packId).maybeSingle()
+  const tour = (row?.tour as Record<string, unknown> | null) ?? null
+  if (!tour) return { error: "This pack has no tour." }
+  const { error } = await admin
+    .from("platform_demo_packs")
+    .update({ tour: { ...tour, defaultVoice: voice === "male" ? "male" : "female" } })
+    .eq("id", packId)
+  if (error) return { error: error.message }
+  return { data: { voice } }
+}
+
 /** The optional parts of a pack's tour and whether each is on. */
 export async function getDemoTourOptions(packId: string) {
   const auth = await requireSuperAdmin()
@@ -404,7 +421,15 @@ export async function getDemoTourOptions(packId: string) {
   const admin = createAdminClient()
   const { data: row } = await admin.from("platform_demo_packs").select("tour").eq("id", packId).maybeSingle()
   const tour = parseDemoTour(row?.tour, { allOptions: true })
-  return { data: tour ? { options: tour.options ?? {}, available: [...new Set(tour.steps.flatMap((step) => (step.option ? [step.option] : [])))] } : null }
+  return {
+    data: tour
+      ? {
+          options: tour.options ?? {},
+          available: [...new Set(tour.steps.flatMap((step) => (step.option ? [step.option] : [])))],
+          defaultVoice: tour.defaultVoice ?? "female",
+        }
+      : null,
+  }
 }
 
 /** Hide a loaded demo from the dashboard, or show it again. It stays reachable from the demo packs page. */

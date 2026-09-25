@@ -35,7 +35,7 @@ const MAX_SCALE = 2
 export const PROGRAMME_ZOOM_PRESETS = [0.75, 0.9, 1, 1.1, 1.25, 1.5] as const
 
 export type ProgrammeDocumentLayout = {
-  /** Always false now: the document has one reading width, plus the page view. */
+  /** Always true now: the document has one reading width, which adapts to the space available, plus the page view. */
   wide: boolean
   scale: number
   showComments: boolean
@@ -44,7 +44,7 @@ export type ProgrammeDocumentLayout = {
 }
 
 export const DEFAULT_PROGRAMME_DOCUMENT_LAYOUT: ProgrammeDocumentLayout = {
-  wide: false,
+  wide: true,
   scale: 1,
   showComments: false,
   paged: false,
@@ -78,7 +78,7 @@ export function readProgrammeDocumentLayout(): ProgrammeDocumentLayout {
     if (!raw) return DEFAULT_PROGRAMME_DOCUMENT_LAYOUT
     const parsed = JSON.parse(raw) as Partial<ProgrammeDocumentLayout>
     return {
-      wide: false,
+      wide: true,
       scale: clampScale(typeof parsed.scale === "number" ? parsed.scale : 1),
       showComments: parsed.showComments === true,
       paged: parsed.paged === true,
@@ -94,7 +94,7 @@ export function writeProgrammeDocumentLayout(layout: ProgrammeDocumentLayout) {
   window.localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
-      wide: false,
+      wide: true,
       scale: clampScale(layout.scale),
       showComments: layout.showComments !== false,
       paged: layout.paged === true,
@@ -102,6 +102,9 @@ export function writeProgrammeDocumentLayout(layout: ProgrammeDocumentLayout) {
     }),
   )
 }
+
+/** Wraps the document page so its layout follows the space available rather than the window. */
+export const PROGRAMME_DOCUMENT_CONTAINER_CLASS = "@container/doc w-full"
 
 export function programmeDocumentCanvasClass(layout: Pick<ProgrammeDocumentLayout, "paged">) {
   return layout.paged ? "bg-gray-100" : "bg-white"
@@ -112,9 +115,12 @@ export function programmeDocumentPageClass(
 ) {
   if (layout.paged) return "relative mx-auto w-full px-4 py-8"
   if (layout.wide) {
+    // Sized by the space the document actually has (the `doc` container), so an open side panel
+    // narrows the page instead of squeezing the text beside the comments.
     return [
-      "relative mx-auto w-full py-8 max-w-7xl px-8 md:px-14",
-      layout.showComments ? "md:pr-80" : "",
+      "relative mx-auto w-full max-w-7xl px-4 py-8 @min-[40rem]/doc:px-8 @min-[80rem]/doc:pl-14",
+      // Right padding is set on its own so the room kept for comments is never overridden by the margin.
+      layout.showComments ? "@min-[66rem]/doc:pr-80" : "@min-[80rem]/doc:pr-14",
     ]
       .filter(Boolean)
       .join(" ")
@@ -126,14 +132,15 @@ export function programmeDocumentPageClass(
 export function programmeDocumentColumnClass(
   layout: Pick<ProgrammeDocumentLayout, "wide" | "showComments" | "paged">,
 ) {
-  if (layout.paged) return "relative mx-auto w-[210mm]"
-  if (layout.wide || !layout.showComments) return "bg-white px-8 py-10"
+  // With comments on and too little room to centre the sheet, it moves left so the comments fit beside it.
+  if (layout.paged) return layout.showComments ? "relative w-[210mm] @min-[88rem]/doc:mx-auto" : "relative mx-auto w-[210mm]"
+  if (layout.wide || !layout.showComments) return "bg-white px-2 py-10 @min-[40rem]/doc:px-8"
   return "mx-auto w-full max-w-3xl bg-white px-8 py-10"
 }
 
 export function programmeCommentRailClass(layout: Pick<ProgrammeDocumentLayout, "wide" | "paged">) {
   if (layout.paged) {
-    return "pointer-events-none absolute inset-y-0 w-72 left-[min(calc(50%+105mm+0.75rem),calc(100%-18.75rem))] max-md:left-auto max-md:right-0"
+    return "pointer-events-none absolute inset-y-0 w-72 left-[calc(1rem+210mm+0.75rem)] @min-[88rem]/doc:left-[calc(50%+105mm+0.75rem)]"
   }
   if (layout.wide) return "pointer-events-none absolute inset-y-0 right-0 w-72"
   return "pointer-events-none absolute inset-y-0 w-72 left-[min(calc(50%+24rem+0.75rem),calc(100%-18.75rem))] max-md:left-auto max-md:right-0"

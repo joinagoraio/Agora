@@ -131,6 +131,8 @@ export type DemoTour = {
   steps: TourStep[]
   /** Optional parts the pack turns on. */
   options?: Partial<Record<TourOption, boolean>>
+  /** The voice a new presenter starts with; each browser can switch. */
+  defaultVoice?: TourVoice
 }
 
 export const TOUR_VOICES = ["female", "male"] as const
@@ -232,6 +234,7 @@ export function parseDemoTour(raw: unknown, { allOptions = false }: { allOptions
     blocks: blocks.filter((block) => usedBlocks.has(block.id)),
     steps: shown,
     options,
+    defaultVoice: (row as { defaultVoice?: unknown }).defaultVoice === "male" ? "male" : "female",
   }
 }
 

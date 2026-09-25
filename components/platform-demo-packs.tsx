@@ -46,6 +46,7 @@ import {
   setLoadedDemoHidden,
   getDemoTourOptions,
   setDemoTourOption,
+  setDemoTourDefaultVoice,
   type DemoPack,
   type DemoPackModelChoice,
   type DemoPackChapter,
@@ -746,15 +747,45 @@ function TourNarrationRow({ packId }: { packId: string }) {
 
 function TourOptionsRow({ packId }: { packId: string }) {
   const { t } = useI18n()
-  const [state, setState] = useState<{ options: Partial<Record<string, boolean>>; available: string[] } | null>(null)
+  const [state, setState] = useState<{
+    options: Partial<Record<string, boolean>>
+    available: string[]
+    defaultVoice: "female" | "male"
+  } | null>(null)
   const [pending, startTransition] = useTransition()
   useEffect(() => {
     void getDemoTourOptions(packId).then((result) => setState(result.data ?? null))
   }, [packId])
-  if (!state || state.available.length === 0) return null
+  if (!state) return null
   return (
     <div className="space-y-2">
       <h3 className="text-sm font-semibold">{t("admin.platform.tourOptions", "Tour parts")}</h3>
+      <div className="flex items-center gap-2 text-sm" role="group" aria-label={t("admin.platform.tourDefaultVoice", "Default voice")}>
+        <span>{t("admin.platform.tourDefaultVoice", "Default voice")}</span>
+        {(["female", "male"] as const).map((voice) => (
+          <Button
+            key={voice}
+            type="button"
+            size="sm"
+            variant={state.defaultVoice === voice ? "secondary" : "ghost"}
+            aria-pressed={state.defaultVoice === voice}
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                const result = await setDemoTourDefaultVoice(packId, voice)
+                if (result.error) {
+                  notify(result.error, "error")
+                  return
+                }
+                setState((current) => (current ? { ...current, defaultVoice: voice } : current))
+              })
+            }
+          >
+            {t(`demoTour.voice.${voice}`, voice)}
+          </Button>
+        ))}
+        <span className="text-xs text-muted-foreground">{t("admin.platform.tourDefaultVoiceHelp", "The presenter can switch in the tour.")}</span>
+      </div>
       {state.available.map((option) => (
         <label key={option} className="flex items-start gap-2 text-sm">
           <input

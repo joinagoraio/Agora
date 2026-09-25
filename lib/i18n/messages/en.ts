@@ -91,6 +91,7 @@ export const enMessages = {
     jobDone: "Done. The result is on screen.",
     jobFailed: "This run stopped with an error. Try once more, or move on.",
     jobIdle: "Not started yet.",
+    voiceSwitch: "Switch to the {{voice}} voice",
     voiceLabel: "Voice",
     voice: {
       female: "Female",
@@ -1189,6 +1190,8 @@ export const enMessages = {
       chapterCommentHint: "Colleague notes on the live draft. Reply and group common notes to prepare this text for consultation. They are not public consultation comments.",
       chapterCommentPlaceholder: "Comment on this paragraph…",
       commentEmpty: "Select a paragraph to comment.",
+      commentsPanel: "Comments",
+      commentsCollapse: "Collapse",
       commentResolve: "Resolve",
       commentReopen: "Reopen",
       commentReply: "Reply",
@@ -3073,6 +3076,8 @@ export const enMessages = {
       demoPackModelRequired: "Choose a default model first.",
       loadedDemos: "Loaded demos",
       loadedDemosEmpty: "No demo from this pack is loaded.",
+      tourDefaultVoice: "Default voice",
+      tourDefaultVoiceHelp: "The presenter can switch in the tour.",
       tourOptions: "Tour parts",
       tourOption: {
         aiSetup: {

@@ -70,6 +70,7 @@ import {
   programmeDocumentCanvasClass,
   programmeDocumentColumnClass,
   programmeDocumentPageClass,
+  PROGRAMME_DOCUMENT_CONTAINER_CLASS,
   programmeDocumentTypeStyle,
   programmeChapterProseClass,
   programmeChapterScrollTop,
@@ -1192,6 +1193,7 @@ export function ProgrammeChapterEditor({
               </Button>
             </div>
           </div>
+          <div className={PROGRAMME_DOCUMENT_CONTAINER_CLASS}>
           <div
             id="programme-document-page"
             className={programmeDocumentPageClass({ ...layout, paged: false })}
@@ -1212,6 +1214,7 @@ export function ProgrammeChapterEditor({
               </div>
             </div>
           </div>
+          </div>
         </>
       ) : !bindings.templateId ? (
         <div className="h-full min-h-0 flex-1" />
@@ -1230,6 +1233,7 @@ export function ProgrammeChapterEditor({
               {outlineJump}
             </div>
           </div>
+          <div className={PROGRAMME_DOCUMENT_CONTAINER_CLASS}>
           <div
             id="programme-document-page"
             className={programmeDocumentPageClass(layout)}
@@ -1464,6 +1468,9 @@ export function ProgrammeChapterEditor({
               deleteLabel={t("workspace.programme.commentDelete")}
               deleteConfirmLabel={t("workspace.programme.commentDeleteConfirm")}
               placeholder={t("workspace.programme.chapterCommentPlaceholder")}
+              panelLabel={t("workspace.programme.commentsPanel", "Comments")}
+              collapseLabel={t("workspace.programme.commentsCollapse", "Collapse")}
+              compactBelow={layout.paged ? 1130 : 1056}
               onDraftChange={setCommentDraft}
               onAdd={addParagraphComment}
               onReply={replyToComment}
@@ -1507,6 +1514,7 @@ export function ProgrammeChapterEditor({
                 })()
               }}
             />
+          </div>
           </div>
         </>
       )}

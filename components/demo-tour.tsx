@@ -65,6 +65,17 @@ type ContextValue = {
 
 const TourContext = createContext<ContextValue | null>(null)
 
+/** The last voice chosen in this browser; Ask's read-aloud uses it outside a demo too. */
+export const SPEECH_VOICE_KEY = "agora.speechVoice"
+
+function rememberSpeechVoice(voice: TourVoice) {
+  try {
+    window.localStorage.setItem(SPEECH_VOICE_KEY, voice)
+  } catch {
+    // Without storage the choice lasts for this page only.
+  }
+}
+
 const HIGHLIGHT = "data-tour-highlight"
 const FIND_MS = 8000
 const FACTS_MS = 8000
@@ -163,7 +174,7 @@ export function DemoTourProvider({
   const [index, setIndex] = useState(0)
   const [open, setOpenState] = useState(true)
   const [voiceOn, setVoiceOnState] = useState(false)
-  const [voice, setVoiceState] = useState<TourVoice>("female")
+  const [voice, setVoiceState] = useState<TourVoice>(tour.defaultVoice ?? "female")
   const [playing, setPlaying] = useState(false)
   const [visit, setVisit] = useState(0)
   const [facts, setFacts] = useState<TourFacts | null>(null)
@@ -526,7 +537,10 @@ export function DemoTourProvider({
         if (!on) stopAudio()
       },
       voice,
-      setVoice: setVoiceState,
+      setVoice: (next) => {
+        setVoiceState(next)
+        rememberSpeechVoice(next)
+      },
       facts,
       cost,
       autopilot,
@@ -591,6 +605,47 @@ function VoiceButton({ size = "icon-sm" }: { size?: "icon-sm" | "sm" }) {
       {tour.playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
       {size === "sm" ? <span>{label}</span> : null}
     </Button>
+  )
+}
+
+/** Switches the presenting voice between female and male; the choice sticks in this browser. */
+function VoiceToggle({ variant = "strip" }: { variant?: "strip" | "panel" }) {
+  const { t } = useI18n()
+  const tour = useDemoTour()
+  if (!tour) return null
+  if (variant === "strip") {
+    const other = tour.voice === "female" ? "male" : "female"
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2 text-xs"
+        data-guidance-target="tour-voice"
+        title={t("demoTour.voiceSwitch", "Switch to the {{voice}} voice", { voice: t(`demoTour.voice.${other}`, other).toLowerCase() })}
+        onClick={() => tour.setVoice(other)}
+      >
+        {t("demoTour.voiceLabel", "Voice")}: {t(`demoTour.voice.${tour.voice}`, tour.voice)}
+      </Button>
+    )
+  }
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground" role="group" aria-label={t("demoTour.voiceLabel", "Voice")}>
+      <span>{t("demoTour.voiceLabel", "Voice")}</span>
+      {TOUR_VOICES.map((option) => (
+        <Button
+          key={option}
+          type="button"
+          size="sm"
+          variant={tour.voice === option ? "secondary" : "ghost"}
+          aria-pressed={tour.voice === option}
+          className="h-7 px-2 text-xs"
+          onClick={() => tour.setVoice(option)}
+        >
+          {t(`demoTour.voice.${option}`, option)}
+        </Button>
+      ))}
+    </div>
   )
 }
 
@@ -661,6 +716,7 @@ export function DemoTourFloating() {
         <h2 className="font-semibold leading-snug">{text.title}</h2>
         <p>{text.action}</p>
         <p className="text-muted-foreground">{text.why}</p>
+        <VoiceToggle variant="panel" />
         {tour.autoNote ? (
           <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-950">
             {tour.autoNote.detail ? `${tour.autoNote.detail} ` : ""}
@@ -702,6 +758,7 @@ function TourBar() {
       <AutopilotButtons compact />
       <DemoAskControl workspaceId={tour.workspaceId} language={language} voice={tour.voice} stepTitle={text.title} />
       <VoiceButton />
+      <VoiceToggle />
       <Button
         type="button"
         variant="ghost"
@@ -859,24 +916,9 @@ export function DemoTourPanel() {
                 {tour.voiceOn ? t("demoTour.voiceOff", "Stop the voice presenting") : t("demoTour.voiceOn", "Let the voice present")}
               </Button>
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground" role="group" aria-label={t("demoTour.voiceLabel", "Voice")}>
-              <span>{t("demoTour.voiceLabel", "Voice")}</span>
-              {TOUR_VOICES.map((option) => (
-                <Button
-                  key={option}
-                  type="button"
-                  size="sm"
-                  variant={tour.voice === option ? "secondary" : "ghost"}
-                  aria-pressed={tour.voice === option}
-                  className="h-7 px-2 text-xs"
-                  onClick={() => tour.setVoice(option)}
-                >
-                  {t(`demoTour.voice.${option}`, option)}
-                </Button>
-              ))}
-            </div>
           </div>
         ) : null}
+        <VoiceToggle variant="panel" />
         {blockSteps.length > 1 ? (
           <div className="space-y-1 pt-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("demoTour.inThisBlock", "In this part")}</p>

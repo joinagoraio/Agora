@@ -18,14 +18,14 @@ describe("programme document layout", () => {
     window.localStorage.clear()
   })
 
-  it("reads an earlier wide choice as the one reading width", () => {
-    window.localStorage.setItem("agora:programme-document-layout", JSON.stringify({ wide: true, paged: false }))
-    expect(readProgrammeDocumentLayout().wide).toBe(false)
+  it("reads an earlier narrow choice as the one reading width", () => {
+    window.localStorage.setItem("agora:programme-document-layout", JSON.stringify({ wide: false, paged: false }))
+    expect(readProgrammeDocumentLayout().wide).toBe(true)
   })
 
   it("defaults to the one reading width, continuous at 100%", () => {
     expect(readProgrammeDocumentLayout()).toEqual({
-      wide: false,
+      wide: true,
       scale: 1,
       showComments: false,
       paged: false,
@@ -39,7 +39,7 @@ describe("programme document layout", () => {
       },
     })
     expect(DEFAULT_PROGRAMME_DOCUMENT_LAYOUT).toEqual({
-      wide: false,
+      wide: true,
       scale: 1,
       showComments: false,
       paged: false,
@@ -69,7 +69,7 @@ describe("programme document layout", () => {
       },
     })
     expect(readProgrammeDocumentLayout()).toEqual({
-      wide: false,
+      wide: true,
       scale: 1.25,
       showComments: false,
       paged: true,
@@ -99,9 +99,10 @@ describe("programme document layout", () => {
     })
   })
 
-  it("reserves comment space inside wide layout only", () => {
-    expect(programmeDocumentPageClass({ wide: true, scale: 1, showComments: true, paged: false })).toContain("md:pr-80")
-    expect(programmeDocumentPageClass({ wide: false, scale: 1, showComments: true, paged: false })).not.toContain("md:pr-80")
+  it("reserves comment space only when the document has room for it", () => {
+    expect(programmeDocumentPageClass({ wide: true, scale: 1, showComments: true, paged: false })).toContain("@min-[66rem]/doc:pr-80")
+    expect(programmeDocumentPageClass({ wide: true, scale: 1, showComments: false, paged: false })).not.toContain("pr-80")
+    expect(programmeDocumentPageClass({ wide: false, scale: 1, showComments: true, paged: false })).not.toContain("pr-80")
     expect(programmeDocumentColumnClass({ wide: false, scale: 1, showComments: true, paged: false })).toContain("max-w-3xl")
     expect(programmeCommentRailClass({ wide: false, paged: false })).toContain("min(calc(50%+24rem+0.75rem)")
     expect(programmeCommentRailClass({ wide: true, paged: false })).toContain("right-0")
@@ -120,7 +121,7 @@ describe("programme document layout", () => {
   })
 
   it("uses A4 sheets instead of wide or narrow when paginated", () => {
-    expect(programmeDocumentPageClass({ wide: true, scale: 1, showComments: true, paged: true })).not.toContain("md:pr-80")
+    expect(programmeDocumentPageClass({ wide: true, scale: 1, showComments: true, paged: true })).not.toContain("pr-80")
     expect(programmeDocumentPageClass({ wide: true, scale: 1, showComments: true, paged: true })).not.toContain("max-w-7xl")
     expect(programmeDocumentColumnClass({ wide: true, scale: 1, showComments: true, paged: true })).toContain("w-[210mm]")
     expect(programmeDocumentColumnClass({ wide: true, scale: 1, showComments: true, paged: false })).toContain("bg-white")

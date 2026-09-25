@@ -1,6 +1,6 @@
 "use client"
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { UserAvatar } from "@/components/user-avatar"
@@ -8,6 +8,9 @@ import { cn } from "@/lib/utils"
 import { nestColleagueComments } from "@/lib/programme/colleague-comments"
 import { groupProgrammeCommentThreads, offsetTopWithin, stackCommentAnchors } from "@/lib/programme/comment-layout"
 import type { AnchoredProgrammeComment } from "@/lib/programme/comment-anchor"
+
+/** Below this document width there is no room for comments beside the text; they go into a panel. */
+const COMPACT_BELOW_PX = 1056
 
 type Props = {
   rootId: string
@@ -27,6 +30,11 @@ type Props = {
   deleteLabel: string
   deleteConfirmLabel: string
   placeholder: string
+  /** Label of the comments panel shown when the document is too narrow for comments beside the text. */
+  panelLabel?: string
+  collapseLabel?: string
+  /** Width below which comments go into a panel; page view needs room for an A4 sheet. */
+  compactBelow?: number
   onDraftChange: (value: string) => void
   onAdd: () => void
   onReply: (parentId: string, body: string) => void
@@ -53,6 +61,9 @@ export function ProgrammeInlineComments({
   deleteLabel,
   deleteConfirmLabel,
   placeholder,
+  panelLabel = "Comments",
+  collapseLabel = "Collapse",
+  compactBelow = COMPACT_BELOW_PX,
   onDraftChange,
   onAdd,
   onReply,
@@ -80,6 +91,22 @@ export function ProgrammeInlineComments({
   const [replyDraft, setReplyDraft] = useState("")
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const [compact, setCompact] = useState(false)
+  // In the compact panel the comments would cover text, so they start folded away until asked for.
+  const [collapsed, setCollapsed] = useState(true)
+  useEffect(() => {
+    if (activeBlockId) setCollapsed(false)
+  }, [activeBlockId])
+
+  useEffect(() => {
+    const root = document.getElementById(rootId)
+    if (!root) return
+    const measure = () => setCompact(root.clientWidth < compactBelow)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(root)
+    return () => observer.disconnect()
+  }, [compactBelow, rootId])
 
   useLayoutEffect(() => {
     const root = document.getElementById(rootId)
@@ -120,9 +147,7 @@ export function ProgrammeInlineComments({
     setReplyTo(null)
   }
 
-  return (
-    <div className={railClassName ?? "pointer-events-none absolute inset-y-0 right-0 w-72"} data-programme-comments>
-      {stacked.map(({ id, top }) => {
+  const cards = stacked.map(({ id, top }) => {
         const thread = grouped.get(id) || []
         const isActive = id === activeBlockId
         return (
@@ -131,8 +156,8 @@ export function ProgrammeInlineComments({
             ref={(node) => {
               cardRefs.current[id] = node
             }}
-            className="pointer-events-auto absolute right-0 z-10 w-72"
-            style={{ top }}
+            className={compact ? "relative" : "pointer-events-auto absolute right-0 z-10 w-72"}
+            style={compact ? undefined : { top }}
           >
             <div
               className={cn(
@@ -281,7 +306,37 @@ export function ProgrammeInlineComments({
             </div>
           </div>
         )
-      })}
+      })
+
+  if (compact) {
+    return (
+      <div className="pointer-events-none absolute inset-y-0 right-2 z-20 w-72 max-w-[calc(100%-1rem)]" data-programme-comments="panel">
+        <div className="pointer-events-auto sticky top-16">
+          {collapsed ? (
+            <Button type="button" size="sm" variant="outline" className="ml-auto flex bg-white shadow" onClick={() => setCollapsed(false)}>
+              {panelLabel} ({grouped.size})
+            </Button>
+          ) : (
+            <div className="max-h-[calc(100vh-12rem)] space-y-2 overflow-y-auto rounded-lg border bg-white/95 p-2 shadow-lg">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {panelLabel} ({grouped.size})
+                </span>
+                <Button type="button" size="sm" variant="ghost" className="h-6 px-1 text-[11px]" onClick={() => setCollapsed(true)}>
+                  {collapseLabel}
+                </Button>
+              </div>
+              {cards}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={railClassName ?? "pointer-events-none absolute inset-y-0 right-0 w-72"} data-programme-comments>
+      {cards}
     </div>
   )
 }
