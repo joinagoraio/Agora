@@ -28,6 +28,8 @@ export function DemoAskControl({
   const peer = useRef<RTCPeerConnection | null>(null)
   const channel = useRef<RTCDataChannel | null>(null)
   const mic = useRef<MediaStream | null>(null)
+  const sender = useRef<RTCRtpSender | null>(null)
+  const opening = useRef<Promise<void> | null>(null)
   const speaker = useRef<HTMLAudioElement | null>(null)
 
   const send = (event: Record<string, unknown>) => {
@@ -41,6 +43,8 @@ export function DemoAskControl({
     peer.current = null
     channel.current = null
     mic.current = null
+    sender.current = null
+    opening.current = null
     setStatus("off")
   }, [])
 
@@ -66,11 +70,8 @@ export function DemoAskControl({
       connection.ontrack = (event) => {
         if (speaker.current) speaker.current.srcObject = event.streams[0]
       }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      mic.current = stream
-      const track = stream.getAudioTracks()[0]
-      track.enabled = false
-      connection.addTrack(track, stream)
+      // No microphone yet: it is switched on only while the button is held.
+      sender.current = connection.addTransceiver("audio", { direction: "sendrecv" }).sender
 
       const events = connection.createDataChannel("oai-events")
       channel.current = events
@@ -116,16 +117,34 @@ export function DemoAskControl({
     if (status === "answering") send({ type: "response.cancel" })
     send({ type: "output_audio_buffer.clear" })
     send({ type: "input_audio_buffer.clear" })
-    mic.current?.getAudioTracks().forEach((track) => (track.enabled = true))
     setStatus("listening")
+    opening.current = (async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mic.current = stream
+      await sender.current?.replaceTrack(stream.getAudioTracks()[0])
+    })().catch((error) => {
+      notify(error instanceof Error ? error.message : t("demoTour.askFailed", "The live voice could not start."), "error")
+    })
+  }
+
+  /** Releases the microphone completely, so the browser shows it is no longer in use. */
+  const releaseMic = async () => {
+    await opening.current
+    opening.current = null
+    await sender.current?.replaceTrack(null)
+    mic.current?.getTracks().forEach((track) => track.stop())
+    mic.current = null
   }
 
   const stopListening = () => {
     if (status !== "listening") return
-    mic.current?.getAudioTracks().forEach((track) => (track.enabled = false))
-    send({ type: "input_audio_buffer.commit" })
-    send({ type: "response.create" })
     setStatus("answering")
+    void (async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 300))
+      await releaseMic()
+      send({ type: "input_audio_buffer.commit" })
+      send({ type: "response.create" })
+    })()
   }
 
   const stopAnswer = () => {

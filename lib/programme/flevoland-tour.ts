@@ -1,7 +1,7 @@
 import type { DemoTour, TourAction, TourCondition, TourStep, TourText } from "@/lib/programme/demo-tour"
 
 /** Raise when the steps or texts change, so stored packs pick up the new tour. */
-export const FLEVOLAND_TOUR_VERSION = 6
+export const FLEVOLAND_TOUR_VERSION = 7
 
 type Place = TourStep["place"]
 
@@ -229,18 +229,18 @@ export const FLEVOLAND_TOUR: DemoTour = {
       {
         title: "Welkom: wat Agora is",
         action: "Laat het scherm staan terwijl de middag wordt ingeleid.",
-        why: "Het publiek moet eerst weten wat het ziet: een werkbank voor ambtenaren die een omgevingsprogramma schrijven, op basis van de eigen stukken van de provincie.",
+        why: "Het publiek moet eerst weten wat het ziet: een werkbank voor ambtenaren die een omgevingsprogramma schrijven, op basis van de eigen stukken van de provincie. En dat Agora niet meeluistert: de microfoon staat alleen aan zolang de knop Vragen is ingedrukt.",
         expect: "Het nieuwe programma van Flevoland, nog zonder tekst.",
         narration:
-          "Welkom. Vanmiddag laten we zien hoe Agora de provincie Flevoland helpt een omgevingsprogramma te schrijven. We beginnen bij de omgevingsvisie en het bestaande beleid, werken via de provinciale belangen naar concrete maatregelen, en eindigen met een programma dat klaar is voor inspraak. Alles wat u ziet draait op echte stukken: de ontwerp-omgevingsvisie Flevoland 2050 en vier stukken over wonen. Agora schrijft niet in plaats van de ambtenaar. Het leest, stelt voor en onderbouwt; de ambtenaar besluit. En elke bewering verwijst naar een bladzijde in een bron.",
+          "Welkom. Vanmiddag laten we zien hoe Agora de provincie Flevoland helpt een omgevingsprogramma te schrijven. We beginnen bij de omgevingsvisie en het bestaande beleid, werken via de provinciale belangen naar concrete maatregelen, en eindigen met een programma dat klaar is voor inspraak. Alles wat u ziet draait op echte stukken: de ontwerp-omgevingsvisie Flevoland 2050 en vier stukken over wonen. Agora schrijft niet in plaats van de ambtenaar. Het leest, stelt voor en onderbouwt; de ambtenaar besluit. En elke bewering verwijst naar een bladzijde in een bron. Nog één ding vooraf: Agora luistert niet mee. Wat u hoort is vooraf opgenomen. Alleen als we de knop Vragen ingedrukt houden, staat de microfoon aan en gaat die ene vraag naar de AI. Zodra we loslaten, is de microfoon weer uit.",
       },
       {
         title: "Welcome: what Agora is",
         action: "Leave the screen as it is while the afternoon is introduced.",
-        why: "The room first needs to know what it is looking at: a workbench for civil servants who write an environmental programme, built on the province's own documents.",
+        why: "The room first needs to know what it is looking at: a workbench for civil servants who write an environmental programme, built on the province's own documents. And that Agora is not listening: the microphone is on only while the Questions button is held down.",
         expect: "Flevoland's new programme, still without text.",
         narration:
-          "Welcome. This afternoon we show how Agora helps the province of Flevoland write an environmental programme. We start from the environmental vision and the policy that already exists, work through the provincial interests to concrete measures, and finish with a programme that is ready for public consultation. Everything you see runs on real documents: the draft Flevoland 2050 environmental vision and four documents on housing. Agora does not write instead of the civil servant. It reads, proposes and backs up; the civil servant decides. And every claim points to a page in a source.",
+          "Welcome. This afternoon we show how Agora helps the province of Flevoland write an environmental programme. We start from the environmental vision and the policy that already exists, work through the provincial interests to concrete measures, and finish with a programme that is ready for public consultation. Everything you see runs on real documents: the draft Flevoland 2050 environmental vision and four documents on housing. Agora does not write instead of the civil servant. It reads, proposes and backs up; the civil servant decides. And every claim points to a page in a source. One more thing before we start: Agora is not listening. What you hear was recorded in advance. Only while we hold down the Questions button is the microphone on, and only that one question goes to the AI. As soon as we let go, the microphone is off again.",
       },
     ),
     step(
@@ -1012,19 +1012,19 @@ export const FLEVOLAND_TOUR: DemoTour = {
       { estMinutes: 15 },
       {
         title: "Vragen",
-        action: "Open de vloer voor vragen.",
+        action: "Open de vloer voor vragen. Wilt u een vraag door Agora laten beantwoorden, klik dan 'Vragen' en houd de knop ingedrukt terwijl de vraag wordt gesteld.",
         why: "Laat de vragen de volgende stap bepalen: welk programma, welke bronnen, wie werkt ermee.",
         expect: "Het document.",
         narration:
-          "Dat was Agora, van visie tot inspraak. De ambtenaar besliste bij elke stap, en elke bewering is terug te voeren op een bladzijde in de eigen stukken van de provincie. We horen graag uw vragen.",
+          "Dat was Agora, van visie tot inspraak. De ambtenaar besliste bij elke stap, en elke bewering is terug te voeren op een bladzijde in de eigen stukken van de provincie. We horen graag uw vragen. Wilt u Agora zelf iets vragen? Dan houden we de knop Vragen ingedrukt terwijl u spreekt. Alleen dan staat de microfoon aan.",
       },
       {
         title: "Questions",
-        action: "Open the floor for questions.",
+        action: "Open the floor for questions. To let Agora answer one, click 'Questions' and hold the button down while the question is asked.",
         why: "Let the questions shape the next step: which programme, which sources, who works with it.",
         expect: "The document.",
         narration:
-          "That was Agora, from vision to consultation. The civil servant decided at every step, and every claim can be traced to a page in the province's own documents. We would be glad to take your questions.",
+          "That was Agora, from vision to consultation. The civil servant decided at every step, and every claim can be traced to a page in the province's own documents. We would be glad to take your questions. Would you like to ask Agora itself? Then we hold down the Questions button while you speak. Only then is the microphone on.",
       },
     ),
   ]),

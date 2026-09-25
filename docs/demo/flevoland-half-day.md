@@ -43,6 +43,7 @@ The chapters are written during part 8, so there is no waiting in front of the r
 - **Autopilot** (*Automatisch* on a Dutch screen; in the strip and the side panel) lets Agora present on its own: it plays the narration, goes to the right screen, presses the buttons, types the reasons for decisions, waits for the AI steps, and moves on. It pauses itself at the break. Press **Pause autopilot** at any moment, for example for a question; press **Continue** to go on from the current step.
 - **By hand and back.** While paused you can do anything by hand. Agora checks the programme itself (work-ups written, measures decided, chapters approved, a version fixed, and so on), so when you press **Continue** it skips what is already done. A green tick next to a step means its result exists.
 - **If Autopilot cannot go on**, it stops with a note in the side panel ("Do this step by hand, then press Continue"). Do that step, then press Continue.
+- **Agora does not listen in.** The narration is recorded in advance, and the AI steps read the programme's documents, not the room. The microphone is switched on only while someone holds down **Questions** (*Vragen*), and released as soon as they let go; the button says *microphone off* / *microfoon uit* the rest of the time. The welcome and the closing narration say this to the room.
 - The tour remembers its step per programme in this browser, so a reload does not lose your place.
 - Only platform admins in a loaded demo see the tour. Nobody else does.
 
@@ -105,9 +106,9 @@ Each step lists what to do in Dutch and English, what the room should see, and w
   Leave the screen as it is while the afternoon is introduced.
 - **De zaal ziet / The room sees:** Het nieuwe programma van Flevoland, nog zonder tekst.
 
-> **NL:** Welkom. Vanmiddag laten we zien hoe Agora de provincie Flevoland helpt een omgevingsprogramma te schrijven. We beginnen bij de omgevingsvisie en het bestaande beleid, werken via de provinciale belangen naar concrete maatregelen, en eindigen met een programma dat klaar is voor inspraak. Alles wat u ziet draait op echte stukken: de ontwerp-omgevingsvisie Flevoland 2050 en vier stukken over wonen. Agora schrijft niet in plaats van de ambtenaar. Het leest, stelt voor en onderbouwt; de ambtenaar besluit. En elke bewering verwijst naar een bladzijde in een bron.
+> **NL:** Welkom. Vanmiddag laten we zien hoe Agora de provincie Flevoland helpt een omgevingsprogramma te schrijven. We beginnen bij de omgevingsvisie en het bestaande beleid, werken via de provinciale belangen naar concrete maatregelen, en eindigen met een programma dat klaar is voor inspraak. Alles wat u ziet draait op echte stukken: de ontwerp-omgevingsvisie Flevoland 2050 en vier stukken over wonen. Agora schrijft niet in plaats van de ambtenaar. Het leest, stelt voor en onderbouwt; de ambtenaar besluit. En elke bewering verwijst naar een bladzijde in een bron. Nog één ding vooraf: Agora luistert niet mee. Wat u hoort is vooraf opgenomen. Alleen als we de knop Vragen ingedrukt houden, staat de microfoon aan en gaat die ene vraag naar de AI. Zodra we loslaten, is de microfoon weer uit.
 >
-> **EN:** Welcome. This afternoon we show how Agora helps the province of Flevoland write an environmental programme. We start from the environmental vision and the policy that already exists, work through the provincial interests to concrete measures, and finish with a programme that is ready for public consultation. Everything you see runs on real documents: the draft Flevoland 2050 environmental vision and four documents on housing. Agora does not write instead of the civil servant. It reads, proposes and backs up; the civil servant decides. And every claim points to a page in a source.
+> **EN:** Welcome. This afternoon we show how Agora helps the province of Flevoland write an environmental programme. We start from the environmental vision and the policy that already exists, work through the provincial interests to concrete measures, and finish with a programme that is ready for public consultation. Everything you see runs on real documents: the draft Flevoland 2050 environmental vision and four documents on housing. Agora does not write instead of the civil servant. It reads, proposes and backs up; the civil servant decides. And every claim points to a page in a source. One more thing before we start: Agora is not listening. What you hear was recorded in advance. Only while we hold down the Questions button is the microphone on, and only that one question goes to the AI. As soon as we let go, the microphone is off again.
 
 #### 2. Bronnen met een rol / Sources with a role · 3 min · 0:04
 
@@ -482,11 +483,11 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 
 #### 36. Vragen / Questions · 15 min · 3:30
 
-- **Doen / Do:** Open de vloer voor vragen.
-  Open the floor for questions.
+- **Doen / Do:** Open de vloer voor vragen. Wilt u een vraag door Agora laten beantwoorden, klik dan 'Vragen' en houd de knop ingedrukt terwijl de vraag wordt gesteld.
+  Open the floor for questions. To let Agora answer one, click 'Questions' and hold the button down while the question is asked.
 - **De zaal ziet / The room sees:** Het document.
 
-> **NL:** Dat was Agora, van visie tot inspraak. De ambtenaar besliste bij elke stap, en elke bewering is terug te voeren op een bladzijde in de eigen stukken van de provincie. We horen graag uw vragen.
+> **NL:** Dat was Agora, van visie tot inspraak. De ambtenaar besliste bij elke stap, en elke bewering is terug te voeren op een bladzijde in de eigen stukken van de provincie. We horen graag uw vragen. Wilt u Agora zelf iets vragen? Dan houden we de knop Vragen ingedrukt terwijl u spreekt. Alleen dan staat de microfoon aan.
 >
-> **EN:** That was Agora, from vision to consultation. The civil servant decided at every step, and every claim can be traced to a page in the province's own documents. We would be glad to take your questions.
+> **EN:** That was Agora, from vision to consultation. The civil servant decided at every step, and every claim can be traced to a page in the province's own documents. We would be glad to take your questions. Would you like to ask Agora itself? Then we hold down the Questions button while you speak. Only then is the microphone on.
 
