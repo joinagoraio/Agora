@@ -1,7 +1,7 @@
 import type { DemoTour, TourStep, TourText } from "@/lib/programme/demo-tour"
 
 /** Raise when the steps or texts change, so stored packs pick up the new tour. */
-export const FLEVOLAND_TOUR_VERSION = 1
+export const FLEVOLAND_TOUR_VERSION = 2
 
 type Place = TourStep["place"]
 
@@ -24,13 +24,13 @@ export const FLEVOLAND_TOUR: DemoTour = {
   version: FLEVOLAND_TOUR_VERSION,
   blocks: [
     { id: "setup", title: { nl: "Opzetten voor Flevoland", en: "Set up for Flevoland" }, minutes: 20 },
-    { id: "analysis", title: { nl: "Wat er al aan beleid is", en: "What policy already exists" }, minutes: 20 },
-    { id: "interests", title: { nl: "Belangen en uitwerkingen", en: "Interests and work-ups" }, minutes: 25 },
-    { id: "measures", title: { nl: "Maatregelen", en: "Measures" }, minutes: 35 },
+    { id: "analysis", title: { nl: "Wat er al aan beleid is", en: "What policy already exists" }, minutes: 17 },
+    { id: "interests", title: { nl: "Belangen en uitwerkingen", en: "Interests and work-ups" }, minutes: 20 },
+    { id: "measures", title: { nl: "Maatregelen", en: "Measures" }, minutes: 33 },
     { id: "break", title: { nl: "Pauze", en: "Break" }, minutes: 15 },
     { id: "coherence", title: { nl: "Samenhang tussen belangen", en: "Across interests" }, minutes: 20 },
     { id: "effects", title: { nl: "Effecten", en: "Effects" }, minutes: 10 },
-    { id: "write", title: { nl: "Het programma schrijven", en: "Write the programme" }, minutes: 10 },
+    { id: "write", title: { nl: "Het programma schrijven", en: "Write the programme" }, minutes: 5 },
     { id: "together", title: { nl: "Samenwerken", en: "Working together" }, minutes: 20 },
     { id: "read", title: { nl: "Het resultaat lezen", en: "Read the result" }, minutes: 10 },
     { id: "accountability", title: { nl: "Verantwoording", en: "Accountability" }, minutes: 20 },

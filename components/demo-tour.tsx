@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, Compass, Loader2, Pause, Play, Volume2, VolumeX,
 
 import { Button } from "@/components/ui/button"
 import { useProgrammeJobs } from "@/components/programme-jobs-provider"
+import { DemoAskControl } from "@/components/demo-ask"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { cn } from "@/lib/utils"
 import {
@@ -19,6 +20,7 @@ import {
 } from "@/lib/programme/demo-tour"
 
 type ContextValue = {
+  workspaceId: string
   tour: DemoTour
   language: TourLanguage
   index: number
@@ -185,6 +187,7 @@ export function DemoTourProvider({
 
   const value = useMemo<ContextValue>(
     () => ({
+      workspaceId,
       tour,
       language,
       index,
@@ -207,7 +210,7 @@ export function DemoTourProvider({
         if (!on) stopAudio()
       },
     }),
-    [goTo, index, language, narrationUrl, navigateTo, open, playAudio, playing, step, stopAudio, tour, voiceOn],
+    [goTo, index, language, narrationUrl, navigateTo, open, playAudio, playing, step, stopAudio, tour, voiceOn, workspaceId],
   )
 
   return <TourContext.Provider value={value}>{children}</TourContext.Provider>
@@ -287,6 +290,7 @@ export function DemoTourStrip() {
           </span>
         ) : null}
       </div>
+      <DemoAskControl workspaceId={tour.workspaceId} language={language} stepTitle={text.title} />
       <VoiceButton />
       <Button
         type="button"
