@@ -18,9 +18,14 @@ describe("programme document layout", () => {
     window.localStorage.clear()
   })
 
-  it("defaults to wide continuous at 100%", () => {
+  it("reads an earlier wide choice as the one reading width", () => {
+    window.localStorage.setItem("agora:programme-document-layout", JSON.stringify({ wide: true, paged: false }))
+    expect(readProgrammeDocumentLayout().wide).toBe(false)
+  })
+
+  it("defaults to the one reading width, continuous at 100%", () => {
     expect(readProgrammeDocumentLayout()).toEqual({
-      wide: true,
+      wide: false,
       scale: 1,
       showComments: false,
       paged: false,
@@ -34,7 +39,7 @@ describe("programme document layout", () => {
       },
     })
     expect(DEFAULT_PROGRAMME_DOCUMENT_LAYOUT).toEqual({
-      wide: true,
+      wide: false,
       scale: 1,
       showComments: false,
       paged: false,
@@ -49,7 +54,7 @@ describe("programme document layout", () => {
     })
   })
 
-  it("persists wide/narrow, pages, zoom, and page chrome", () => {
+  it("persists pages, zoom, and page chrome", () => {
     writeProgrammeDocumentLayout({
       ...DEFAULT_PROGRAMME_DOCUMENT_LAYOUT,
       wide: false,
@@ -86,7 +91,7 @@ describe("programme document layout", () => {
     expect(readProgrammeShowComments("programme-b")).toBe(false)
   })
 
-  it("treats missing wide as true and clamps scale", () => {
+  it("clamps scale", () => {
     window.localStorage.setItem("agora:programme-document-layout", JSON.stringify({ scale: 9 }))
     expect(readProgrammeDocumentLayout()).toEqual({
       ...DEFAULT_PROGRAMME_DOCUMENT_LAYOUT,

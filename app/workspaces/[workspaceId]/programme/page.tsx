@@ -145,7 +145,7 @@ export default async function ProgrammeWorkbenchPage({
     <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
       <ProgrammeJobsProvider workspaceId={workspace.id}>
         {tour ? (
-          <DemoTourProvider tour={tour} workspaceId={workspace.id} narration={narration}>
+          <DemoTourProvider tour={tour} workspaceId={workspace.id} spaceId={workspace.space_id} narration={narration}>
             {content}
           </DemoTourProvider>
         ) : (

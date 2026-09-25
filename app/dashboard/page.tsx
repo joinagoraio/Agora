@@ -10,6 +10,7 @@ import { UserMenu } from "@/components/user-menu"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { getUserSpaces } from "@/lib/actions/space"
+import { isHiddenDemoSpace } from "@/lib/demo/hidden"
 import { listDashboardPins } from "@/lib/actions/dashboard-pins"
 import { createClient } from "@/lib/supabase/server"
 import { WelcomeUserDialog } from "@/components/welcome-user-dialog"
@@ -35,8 +36,10 @@ export default async function DashboardPage() {
     redirect("/auth/login")
   }
 
-  const { data: spaces } = await getUserSpaces()
-  const authorities = (spaces ?? []) as Array<{
+  const { data: allSpaces } = await getUserSpaces()
+  const spaceRows = (allSpaces ?? []) as unknown as Array<{ id: string; metadata?: unknown }>
+  const hiddenSpaceIds = new Set(spaceRows.filter((space) => isHiddenDemoSpace(space.metadata)).map((space) => space.id))
+  const authorities = spaceRows.filter((space) => !hiddenSpaceIds.has(space.id)) as unknown as Array<{
     id: string
     name: string
     description?: string | null
@@ -51,6 +54,7 @@ export default async function DashboardPage() {
   
   const userSpaceIds = new Set(spaceMemberships?.map(sm => sm.space_id) ?? [])
   const adminSpaceIds = [...new Set((spaceMemberships ?? [])
+    .filter((row) => !hiddenSpaceIds.has(row.space_id))
     .filter((row) => row.role === "owner" || row.role === "admin")
     .map((row) => row.space_id))]
 
@@ -89,7 +93,13 @@ export default async function DashboardPage() {
   for (const membership of allWorkspaceMemberships ?? []) {
     const raw = (membership as { workspace?: unknown }).workspace
     const workspace = Array.isArray(raw) ? raw[0] : raw
-    if (workspace && typeof workspace === "object" && "id" in workspace && isEnvironmentalProgrammeWorkspace(workspace)) {
+    if (
+      workspace &&
+      typeof workspace === "object" &&
+      "id" in workspace &&
+      isEnvironmentalProgrammeWorkspace(workspace) &&
+      !hiddenSpaceIds.has(String((workspace as { space_id?: string }).space_id))
+    ) {
       programmeById.set(String((workspace as { id: string }).id), workspace as { id: string; name: string; description?: string | null; space_id: string; kind?: string | null; metadata?: unknown })
     }
   }

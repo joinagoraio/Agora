@@ -11,13 +11,17 @@ import { canManageProgrammeAccess } from "@/lib/programme/membership"
 import { listSpaceAgents } from "@/lib/actions/agent"
 import { getLoadedDemo } from "@/lib/actions/demo-pack"
 import { DemoStrip } from "@/components/demo-strip"
+import { DemoTourMount } from "@/components/demo-tour-mount"
 
 export default async function SpacePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ spaceId: string }>
+  searchParams: Promise<{ tourProgramme?: string }>
 }) {
   const { spaceId } = await params
+  const { tourProgramme } = await searchParams
   const supabase = await createClient()
 
   const {
@@ -105,6 +109,7 @@ export default async function SpacePage({
 
   return (
     <Suspense fallback={null}>
+      <DemoTourMount demo={loadedDemo} tourProgramme={tourProgramme}>
       <WorkspaceChatWrapper
         spaceId={spaceId}
         workspaceName={space.name}
@@ -135,6 +140,7 @@ export default async function SpacePage({
           spaceJob={membership.job ?? "none"}
         />
       </WorkspaceChatWrapper>
+      </DemoTourMount>
     </Suspense>
   )
 }

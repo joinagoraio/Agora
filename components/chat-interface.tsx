@@ -28,6 +28,7 @@ import {
 import { Send, Loader2, ExternalLink, FileText, X, Plus, CircleStop, Highlighter } from "lucide-react"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { FormattedMarkdown } from "@/components/formatted-markdown"
+import { DictationButton, ReadAloudButton, spokenQuestion } from "@/components/ask-voice"
 import Link from "next/link"
 import { compileAskAnswer } from "@/lib/chat/ask-format"
 import { buildDocumentUrlFromSource } from "@/lib/utils/document-linking"
@@ -207,6 +208,12 @@ export function ChatInterface({ workspaceId, spaceId, conversationId, initialMes
   const [excludedDocumentIds, setExcludedDocumentIds] = useState<Set<string>>(new Set())
   const [excludedNoteIds, setExcludedNoteIds] = useState<Set<string>>(new Set())
   const [excludedEvidenceIds, setExcludedEvidenceIds] = useState<Set<string>>(new Set())
+  /** Answers after this message index are read aloud, because their question was spoken. */
+  const [autoReadAfter, setAutoReadAfterState] = useState<number | null>(() => spokenQuestion.after)
+  const setAutoReadAfter = useCallback((after: number | null) => {
+    spokenQuestion.after = after
+    setAutoReadAfterState(after)
+  }, [])
   const { t } = useI18n()
 
   const readMessageContent = useCallback((message: unknown): string => {
@@ -713,6 +720,7 @@ export function ChatInterface({ workspaceId, spaceId, conversationId, initialMes
     setMessages,
     stop,
     setInput,
+    sendMessage,
     error: chatError,
   } = useChatWithInput({
     transport: chatTransport,
@@ -746,17 +754,19 @@ export function ChatInterface({ workspaceId, spaceId, conversationId, initialMes
       if (event.key === "Enter" && !event.altKey && !event.shiftKey) {
         if (isModifier) {
           event.preventDefault()
+          setAutoReadAfter(null)
           handleSubmit(event as any)
           return
         }
         if (!isModifier) {
           event.preventDefault()
+          setAutoReadAfter(null)
           handleSubmit(event as any)
           return
         }
       }
     },
-    [handleSubmit, redoInput, undoInput],
+    [handleSubmit, redoInput, setAutoReadAfter, undoInput],
   )
 
   const deriveHighlightId = useCallback(
@@ -1746,6 +1756,17 @@ export function ChatInterface({ workspaceId, spaceId, conversationId, initialMes
                   )}
                   </div>
 
+                  {isAssistant && !isStreamingAssistant && displayContent.trim() ? (
+                    <div className="flex items-center pt-0.5 opacity-60 transition-opacity group-hover:opacity-100">
+                      <ReadAloudButton
+                        id={`${conversationId}-${index}`}
+                        text={displayContent}
+                        workspaceId={workspaceId}
+                        autoPlay={autoReadAfter !== null && index > autoReadAfter}
+                      />
+                    </div>
+                  ) : null}
+
                   {isAssistant && canManage && !spaceId && (
                     <div className="flex flex-wrap items-center justify-end gap-2 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button
@@ -1800,14 +1821,29 @@ export function ChatInterface({ workspaceId, spaceId, conversationId, initialMes
             {t("workspace.chat.interface.input.failed")}
           </p>
         )}
-        <form onSubmit={handleSubmit} className="relative">
+        <form
+          onSubmit={(event) => {
+            setAutoReadAfter(null)
+            void handleSubmit(event)
+          }}
+          className="relative"
+        >
           <Textarea
             ref={inputRef}
             value={safeInput}
             onChange={handleInputChange}
             placeholder={inputPlaceholder}
-            className={cn("min-h-[60px] flex-1 resize-none shadow", isLoading ? "pr-20" : "pr-10")}
+            className={cn("min-h-[60px] flex-1 resize-none shadow", isLoading ? "pr-28" : "pr-20")}
             onKeyDown={handleTextareaKeyDown}
+          />
+          <DictationButton
+            workspaceId={workspaceId}
+            disabled={isLoading}
+            className={cn("absolute bottom-2", isLoading ? "right-[4.75rem]" : "right-11")}
+            onText={(text) => {
+              setAutoReadAfter(messages.length)
+              void sendMessage({ text })
+            }}
           />
           {isLoading && (
             <IconTooltip label={t("workspace.chat.interface.input.stop")} className="absolute bottom-2 right-11">

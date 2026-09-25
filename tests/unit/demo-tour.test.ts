@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 
-import { parseDemoTour, stepDone, tourStartMinutes, tourStepQuery, type TourAction } from "@/lib/programme/demo-tour"
+import { parseDemoTour, stepDone, tourStartMinutes, tourStepHref, tourStepQuery, type TourAction } from "@/lib/programme/demo-tour"
 import { FLEVOLAND_TOUR } from "@/lib/programme/flevoland-tour"
 
 const componentSource = readdirSync(join(process.cwd(), "components"))
@@ -12,9 +12,21 @@ const componentSource = readdirSync(join(process.cwd(), "components"))
 
 describe("Flevoland demo tour", () => {
   it("survives a round trip through storage", () => {
-    const parsed = parseDemoTour(JSON.parse(JSON.stringify(FLEVOLAND_TOUR)))
+    const parsed = parseDemoTour(JSON.parse(JSON.stringify(FLEVOLAND_TOUR)), { allOptions: true })
     expect(parsed?.steps).toHaveLength(FLEVOLAND_TOUR.steps.length)
     expect(parsed?.version).toBe(FLEVOLAND_TOUR.version)
+  })
+
+  it("shows the AI set-up part only when the pack turns it on", () => {
+    const optional = FLEVOLAND_TOUR.steps.filter((step) => step.option === "aiSetup")
+    expect(optional.length).toBe(3)
+    const off = parseDemoTour(JSON.parse(JSON.stringify(FLEVOLAND_TOUR)))
+    expect(off?.steps.some((step) => step.option)).toBe(false)
+    expect(off?.blocks.some((block) => block.id === "ai")).toBe(false)
+    const on = parseDemoTour({ ...JSON.parse(JSON.stringify(FLEVOLAND_TOUR)), options: { aiSetup: true } })
+    expect(on?.steps.filter((step) => step.option === "aiSetup").map((step) => step.place.page)).toEqual(["platform", "authority", "authority"])
+    expect(tourStepHref(optional[0], { workspaceId: "w", spaceId: "s" })).toBe("/admin/platform?tourProgramme=w")
+    expect(tourStepHref(optional[1], { workspaceId: "w", spaceId: "s" })).toBe("/spaces/s?tourProgramme=w")
   })
 
   it("has unique steps in known parts, with text in both languages", () => {
@@ -48,7 +60,10 @@ describe("Flevoland demo tour", () => {
     for (const action of all) {
       if (action.do === "click" || action.do === "type") {
         const literal = componentSource.includes(`data-guidance-target="${action.target}"`)
-        const templated = /^(decision|priority|tool-switch)-/.test(action.target) || action.target === "run-analysis"
+        const templated =
+          /^(decision|priority|tool-switch)-/.test(action.target) ||
+          action.target === "run-analysis" ||
+          componentSource.includes(`guidanceTarget="${action.target}"`)
         expect(literal || templated, action.target).toBe(true)
       }
     }

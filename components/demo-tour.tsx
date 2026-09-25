@@ -19,7 +19,7 @@ import {
   TOUR_VOICES,
   tourLanguage,
   tourStartMinutes,
-  tourStepQuery,
+  tourStepHref,
   type DemoTour,
   type TourAction,
   type TourFacts,
@@ -73,13 +73,19 @@ function storageKey(workspaceId: string) {
   return `agora.demoTour.${workspaceId}`
 }
 
-function readSaved(workspaceId: string) {
+type Saved = { index?: number; open?: boolean; voiceOn?: boolean; voice?: TourVoice; autopilot?: AutopilotState }
+
+function readSaved(workspaceId: string): Saved {
   try {
     const raw = window.localStorage.getItem(storageKey(workspaceId))
-    return raw ? (JSON.parse(raw) as { index?: number; open?: boolean; voiceOn?: boolean; voice?: TourVoice }) : {}
+    return raw ? (JSON.parse(raw) as Saved) : {}
   } catch {
     return {}
   }
+}
+
+function writeSaved(workspaceId: string, saved: Saved) {
+  window.localStorage.setItem(storageKey(workspaceId), JSON.stringify(saved))
 }
 
 function visible(el: HTMLElement) {
@@ -139,11 +145,13 @@ class NotFound extends Error {}
 export function DemoTourProvider({
   tour,
   workspaceId,
+  spaceId,
   narration,
   children,
 }: {
   tour: DemoTour
   workspaceId: string
+  spaceId: string
   narration?: TourNarration | null
   children: ReactNode
 }) {
@@ -163,6 +171,7 @@ export function DemoTourProvider({
   const [autopilot, setAutopilot] = useState<AutopilotState>("off")
   const [autoNote, setAutoNote] = useState<AutoNote | null>(null)
   const [restored, setRestored] = useState(false)
+  const [resumeAt, setResumeAt] = useState<number | null>(null)
   const audio = useRef<HTMLAudioElement | null>(null)
   const narrationEnd = useRef<Promise<void>>(Promise.resolve())
   const runToken = useRef(0)
@@ -176,13 +185,15 @@ export function DemoTourProvider({
     if (typeof saved.open === "boolean") setOpenState(saved.open)
     if (typeof saved.voiceOn === "boolean") setVoiceOnState(saved.voiceOn)
     if (saved.voice && TOUR_VOICES.includes(saved.voice)) setVoiceState(saved.voice)
+    if (saved.autopilot === "paused") setAutopilot("paused")
+    if (saved.autopilot === "running" && typeof saved.index === "number") setResumeAt(saved.index)
     setRestored(true)
   }, [tour.steps.length, workspaceId])
 
   useEffect(() => {
     if (!restored) return
-    window.localStorage.setItem(storageKey(workspaceId), JSON.stringify({ index, open, voiceOn, voice }))
-  }, [index, open, restored, voice, voiceOn, workspaceId])
+    writeSaved(workspaceId, { index, open, voiceOn, voice, autopilot })
+  }, [autopilot, index, open, restored, voice, voiceOn, workspaceId])
 
   const refreshFacts = useCallback(async () => {
     const result = await getTourFacts(workspaceId)
@@ -248,18 +259,30 @@ export function DemoTourProvider({
     return narrationEnd.current
   }, [])
 
-  useEffect(() => () => audio.current?.pause(), [])
+  useEffect(
+    () => () => {
+      runToken.current += 1
+      audio.current?.pause()
+    },
+    [],
+  )
 
+  /** Goes to where a step happens. Returns true when that is another page, which takes the tour over. */
   const navigateTo = useCallback(
     (target: TourStep) => {
-      const query = tourStepQuery(target)
-      const base = `/workspaces/${workspaceId}/programme`
-      if (pathname !== base || window.location.search.replace(/^\?/, "") !== query) {
-        router.replace(`${base}?${query}`, { scroll: false })
+      const href = tourStepHref(target, { workspaceId, spaceId })
+      const [path, query = ""] = href.split("?")
+      if (pathname !== path) {
+        router.push(href, { scroll: false })
+        return true
+      }
+      if (!target.place.page && window.location.search.replace(/^\?/, "") !== query) {
+        router.replace(href, { scroll: false })
       }
       setVisit((count) => count + 1)
+      return false
     },
-    [pathname, router, workspaceId],
+    [pathname, router, spaceId, workspaceId],
   )
 
   const pauseAutopilot = useCallback(() => {
@@ -283,10 +306,13 @@ export function DemoTourProvider({
       setIndex(bounded)
       setOpenState(true)
       const target = tour.steps[bounded]
-      navigateTo(target)
+      if (navigateTo(target)) {
+        writeSaved(workspaceId, { index: bounded, open: true, voiceOn, voice, autopilot: autopilot === "running" ? "paused" : autopilot })
+        return
+      }
       if (voiceOn) void playAudio(urlFor(target))
     },
-    [autopilot, navigateTo, pauseAutopilot, playAudio, stopAudio, tour.steps, urlFor, voiceOn],
+    [autopilot, navigateTo, pauseAutopilot, playAudio, stopAudio, tour.steps, urlFor, voice, voiceOn, workspaceId],
   )
 
   useEffect(() => {
@@ -327,6 +353,8 @@ export function DemoTourProvider({
         for (;;) {
           const el = findTarget(action.target, action.state, enabledOnly)
           if (el) return el
+          // An optional press whose button is there in another state is already done, so skip it at once.
+          if (action.optional && action.state && findTarget(action.target) && Date.now() - started > 800) throw new NotFound(action.target)
           if (Date.now() - started > limit) throw new NotFound(action.target)
           await sleep(300)
         }
@@ -431,7 +459,10 @@ export function DemoTourProvider({
           resumedHere = position === fromIndex
           setIndex(position)
           setOpenState(true)
-          navigateTo(current)
+          if (navigateTo(current)) {
+            writeSaved(workspaceId, { index: position, open: true, voiceOn, voice, autopilot: "running" })
+            return
+          }
           await sleep(1600)
           const narrated = playAudio(urlFor(current))
           const done = stepDone(current, await refreshFacts())
@@ -458,8 +489,14 @@ export function DemoTourProvider({
         )
       }
     },
-    [language, navigateTo, playAudio, refreshFacts, refreshJobs, stopAudio, t, tour.steps, urlFor],
+    [language, navigateTo, playAudio, refreshFacts, refreshJobs, stopAudio, t, tour.steps, urlFor, voice, voiceOn, workspaceId],
   )
+
+  useEffect(() => {
+    if (resumeAt === null) return
+    setResumeAt(null)
+    void runAutopilot(resumeAt)
+  }, [resumeAt, runAutopilot])
 
   const value = useMemo<ContextValue>(
     () => ({
@@ -590,11 +627,9 @@ function AutopilotButtons({ compact = false }: { compact?: boolean }) {
   )
 }
 
-/** The slim bar under the toolbar: where we are in the demo, with Back and Next. */
+/** The slim bar under the programme toolbar; keeps the Tour tab open while Agora presents. */
 export function DemoTourStrip() {
-  const { t } = useI18n()
   const tour = useDemoTour()
-  const job = useStepJob(tour?.step)
   const { setIsChatOpen, setPanelTab } = useChatContext()
   const running = tour?.autopilot === "running"
   const stepIndex = tour?.index
@@ -603,6 +638,44 @@ export function DemoTourStrip() {
     setIsChatOpen(true)
     setPanelTab("guidance")
   }, [running, stepIndex, setIsChatOpen, setPanelTab])
+  return <TourBar />
+}
+
+/**
+ * The tour on pages outside the programme, such as the authority page and the platform's AI settings:
+ * the bar at the top and a card with what to do and why.
+ */
+export function DemoTourFloating() {
+  const { t } = useI18n()
+  const tour = useDemoTour()
+  if (!tour || !tour.open) return <DemoTourOpenButton className="fixed right-4 bottom-4 z-50 bg-background shadow" />
+  const text = tour.step.text[tour.language]
+  return (
+    <>
+      <div className="fixed inset-x-0 top-0 z-50 shadow-sm">
+        <TourBar />
+      </div>
+      <div className="h-11" aria-hidden />
+      <aside className="fixed right-4 bottom-4 z-50 w-96 max-w-[calc(100vw-2rem)] space-y-2 rounded-lg border bg-background p-4 text-sm shadow-lg">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">{t("demoTour.beta", "Tour · beta")}</p>
+        <h2 className="font-semibold leading-snug">{text.title}</h2>
+        <p>{text.action}</p>
+        <p className="text-muted-foreground">{text.why}</p>
+        {tour.autoNote ? (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-950">
+            {tour.autoNote.detail ? `${tour.autoNote.detail} ` : ""}
+            {t(tour.autoNote.key, tour.autoNote.fallback)}
+          </p>
+        ) : null}
+      </aside>
+    </>
+  )
+}
+
+function TourBar() {
+  const { t } = useI18n()
+  const tour = useDemoTour()
+  const job = useStepJob(tour?.step)
   if (!tour || !tour.open) return null
   const { step, index, language } = tour
   const total = tour.tour.steps.length

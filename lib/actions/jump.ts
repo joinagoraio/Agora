@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { isEnvironmentalProgrammeWorkspace, workspaceHomeHref } from "@/lib/programme/domain"
+import { isHiddenDemoSpace } from "@/lib/demo/hidden"
 import { getUserSpaces } from "@/lib/actions/space"
 import { listDashboardPins } from "@/lib/actions/dashboard-pins"
 
@@ -24,7 +25,9 @@ export async function listJumpTargets(): Promise<{ data: JumpTarget[] } | { erro
   }
 
   const { data: spaces } = await getUserSpaces()
-  const spaceRows = (spaces ?? []) as Array<{ id: string; name: string; role?: string | null }>
+  const spaceRows = ((spaces ?? []) as unknown as Array<{ id: string; name: string; role?: string | null; metadata?: unknown }>).filter(
+    (space) => !isHiddenDemoSpace(space.metadata),
+  )
   const authorities: JumpTarget[] = spaceRows.map((space) => ({
     kind: "authority" as const,
     id: space.id,

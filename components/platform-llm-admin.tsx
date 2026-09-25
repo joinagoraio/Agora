@@ -437,7 +437,7 @@ export function PlatformLlmAdmin() {
           <TabsTrigger value="orgs">{t("admin.platform.tabOrgs")}</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="providers" className="space-y-4">
+        <TabsContent value="providers" className="space-y-4" data-guidance-target="platform-models">
           <div className="flex justify-end">
             <Button type="button" disabled={pending || addableProviders.length === 0} onClick={() => setAddOpen(true)}>
               {t("admin.platform.addProvider")}

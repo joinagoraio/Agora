@@ -1947,6 +1947,17 @@ export const enMessages = {
       },
     },
     chat: {
+      voice: {
+        read: "Read aloud",
+        stop: "Stop reading",
+        readFailed: "Could not read this answer aloud.",
+        dictate: "Ask by voice · microphone off",
+        dictateStop: "Microphone on · click to stop",
+        dictating: "Turning speech into text…",
+        heardNothing: "No words were heard. Try again.",
+        noMic: "Agora may not use the microphone. Allow it in the browser and try again.",
+        unsupported: "This browser cannot record speech.",
+      },
       header: "AI Assistant",
       toggle: {
         open: "Open chat",
@@ -2650,6 +2661,14 @@ export const enMessages = {
       platformKeysNote: "Agora platform keys are in use. Contact a platform administrator to allow a key of your own.",
       authorityKeyRequired: "This authority must store its own API key for the provider.",
       authorityKeyOptional: "Optional. Leave empty to keep using the shared or platform key.",
+      defaults: {
+        analysis: { name: "Policy analyst", role: "Existing-policy analysis" },
+        vision: { name: "Vision graph specialist", role: "Vision and coverage" },
+        measures: { name: "Measures author", role: "Measure generation" },
+        oer: { name: "Effects specialist", role: "Environmental effects alignment" },
+        qc: { name: "Quality controller", role: "Programme quality control" },
+        draft: { name: "Chapter drafter", role: "Structured chapter draft" },
+      },
       stages: {
         analysis: "Analysis",
         vision: "Vision",
@@ -3054,10 +3073,20 @@ export const enMessages = {
       demoPackModelRequired: "Choose a default model first.",
       loadedDemos: "Loaded demos",
       loadedDemosEmpty: "No demo from this pack is loaded.",
+      tourOptions: "Tour parts",
+      tourOption: {
+        aiSetup: {
+          label: "Show how the AI is set up",
+          help: "Adds about 8 minutes after the specialists: the platform's allowed models, this authority's models, and one specialist's instructions and versions. The organisations list is never shown.",
+        },
+      },
       tourNarration: "Tour narration",
       tourNarrationStatus: "{{voice}}: Dutch {{nl}} of {{steps}}, English {{en}} of {{steps}}",
       tourNarrationCost: "recording cost so far about US$ {{cost}}",
       loadedDemoCost: "AI cost about US$ {{cost}}",
+      loadedDemoHide: "Hide from dashboard",
+      loadedDemoShow: "Show on dashboard",
+      loadedDemoHidden: "Hidden",
       tourNarrationRecord: "Record narration",
       tourNarrationRecording: "Recording…",
       tourNarrationStarted: "Recording {{count}} narration files. This takes a minute or two.",

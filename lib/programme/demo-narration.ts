@@ -6,16 +6,14 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { TOUR_VOICES, type DemoTour, type TourLanguage, type TourNarration, type TourStep, type TourVoice } from "@/lib/programme/demo-tour"
 
 export const NARRATION_BUCKET = "demo-narration"
-export const NARRATION_MODEL = "gpt-4o-mini-tts"
+export { SPEECH_MODEL as NARRATION_MODEL } from "@/lib/speech/openai-speech"
+import { SPEECH_MODEL as NARRATION_MODEL } from "@/lib/speech/openai-speech"
 
 /** OpenAI voices: marin and cedar are its most natural female and male voices. */
 export const NARRATION_VOICES: Record<TourVoice, string> = {
   female: process.env.DEMO_NARRATION_VOICE_FEMALE || "marin",
   male: process.env.DEMO_NARRATION_VOICE_MALE || "cedar",
 }
-
-/** OpenAI's own estimate for gpt-4o-mini-tts, in US dollars per minute of speech. */
-export const NARRATION_USD_PER_MINUTE = 0.015
 
 export const NARRATION_INSTRUCTIONS: Record<TourLanguage, string> = {
   nl: "Spreek Nederlands met een natuurlijke Nederlandse uitspraak, zoals een rustige, heldere presentator op een bijeenkomst voor provinciale ambtenaren. Warm en zeker, niet te snel, met korte pauzes tussen zinnen.",

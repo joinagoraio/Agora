@@ -15,6 +15,7 @@ import { listSpaceAgents, seedDefaultSpaceAgents } from "@/lib/actions/agent"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { notify, notifyResult } from "@/lib/notify"
 import { hasAllDefaultSpaceAgents, type AgentRecord, type AgentVersionRecord } from "@/lib/programme/domain"
+import { agentDisplayName, agentDisplayRole } from "@/lib/programme/agent-labels"
 
 type AgentRow = AgentRecord & { latestVersion: AgentVersionRecord | null }
 
@@ -87,7 +88,7 @@ export function SpaceAgentsPanel({
   }
 
   const purposeOf = (agent: AgentRow) =>
-    agent.role?.trim() || agent.latestVersion?.instructions?.trim() || t("space.agents.purposeFallback")
+    agentDisplayRole(agent, t).trim() || agent.latestVersion?.instructions?.trim() || t("space.agents.purposeFallback")
 
   const modelOf = (agent: AgentRow) => agent.latestVersion?.model || t("space.agents.modelUnknown")
 
@@ -97,7 +98,7 @@ export function SpaceAgentsPanel({
         <div>
           <div className="flex items-center gap-1">
             {compact ? null : (
-              <SectionOpenToggle open={listOpen} onToggle={toggle} label={t("space.agents.sectionTitle")} />
+              <SectionOpenToggle open={listOpen} onToggle={toggle} label={t("space.agents.sectionTitle")} guidanceTarget="agents-toggle" />
             )}
             <div className="flex items-baseline gap-2">
               <h3 className="text-xl font-semibold text-foreground">{t("space.agents.sectionTitle")}</h3>
@@ -134,7 +135,7 @@ export function SpaceAgentsPanel({
             </Button>
           )}
           {compact ? null : (
-            <Button variant="outline" onClick={() => setModelsOpen(true)}>
+            <Button variant="outline" onClick={() => setModelsOpen(true)} data-guidance-target="space-models">
               <Settings className="mr-2 h-4 w-4" />
               {t("space.agents.modelsTitle")}
             </Button>
@@ -173,11 +174,12 @@ export function SpaceAgentsPanel({
               <Card key={agent.id} className="group flex h-full flex-col transition-shadow hover:shadow-md">
                 <CardHeader>
                   <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-lg font-semibold">{agent.name}</CardTitle>
+                    <CardTitle className="text-lg font-semibold">{agentDisplayName(agent, t)}</CardTitle>
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100"
+                      data-guidance-target="agent-edit"
                       onClick={() => openEdit(agent.id)}
                     >
                       <PencilLine className="h-4 w-4" />
@@ -209,9 +211,10 @@ export function SpaceAgentsPanel({
                   key={agent.id}
                   type="button"
                   className="grid w-full grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,2fr)] items-center gap-4 px-4 py-3 text-left text-sm transition-colors hover:bg-muted/50"
+                  data-guidance-target="agent-edit"
                   onClick={() => openEdit(agent.id)}
                 >
-                  <span className="truncate font-medium">{agent.name}</span>
+                  <span className="truncate font-medium">{agentDisplayName(agent, t)}</span>
                   <span className="truncate text-xs text-muted-foreground">{modelOf(agent)}</span>
                   <p className="line-clamp-2 text-xs text-muted-foreground">{purposeOf(agent)}</p>
                 </button>

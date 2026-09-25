@@ -55,7 +55,15 @@ export type TourStep = {
   id: string
   block: string
   /** Where to go: a workbench section, the document, or the knowledge view. */
-  place: { view: "document" | "knowledge"; section?: ProgrammeWorkbenchSection; mode?: "read" | "edit" }
+  place: {
+    view: "document" | "knowledge"
+    section?: ProgrammeWorkbenchSection
+    mode?: "read" | "edit"
+    /** Steps outside the programme: the authority page, or the platform's AI settings. */
+    page?: TourPage
+  }
+  /** A step that belongs to an optional part of the tour, shown only when the pack turns it on. */
+  option?: TourOption
   /** The `data-guidance-target` of the button to highlight. */
   target?: string
   /** The `data-guidance-target` of a tab or opener to click on arrival, for sub-views and modals. */
@@ -111,13 +119,33 @@ function asActions(raw: unknown): TourAction[] {
 
 export type TourBlock = { id: string; title: Record<TourLanguage, string>; minutes: number }
 
-export type DemoTour = { version: number; blocks: TourBlock[]; steps: TourStep[] }
+export const TOUR_PAGES = ["programme", "authority", "platform"] as const
+export type TourPage = (typeof TOUR_PAGES)[number]
+
+export const TOUR_OPTIONS = ["aiSetup"] as const
+export type TourOption = (typeof TOUR_OPTIONS)[number]
+
+export type DemoTour = {
+  version: number
+  blocks: TourBlock[]
+  steps: TourStep[]
+  /** Optional parts the pack turns on. */
+  options?: Partial<Record<TourOption, boolean>>
+}
 
 export const TOUR_VOICES = ["female", "male"] as const
 export type TourVoice = (typeof TOUR_VOICES)[number]
 
 /** Stored narration: public audio URL per voice, language and step id. */
 export type TourNarration = Record<TourVoice, Record<TourLanguage, Record<string, string>>>
+
+/** Where a step happens: the programme workbench, the authority page, or the platform's AI settings. */
+export function tourStepHref(step: TourStep, ids: { workspaceId: string; spaceId: string }) {
+  const back = `tourProgramme=${encodeURIComponent(ids.workspaceId)}`
+  if (step.place.page === "authority") return `/spaces/${ids.spaceId}?${back}`
+  if (step.place.page === "platform") return `/admin/platform?${back}`
+  return `/workspaces/${ids.workspaceId}/programme?${tourStepQuery(step)}`
+}
 
 /** The query string that puts the workbench where a step happens. */
 export function tourStepQuery(step: TourStep) {
@@ -148,8 +176,11 @@ function asText(raw: unknown): TourText | null {
   }
 }
 
-/** Reads a stored tour, dropping steps that are incomplete. */
-export function parseDemoTour(raw: unknown): DemoTour | null {
+/**
+ * Reads a stored tour, dropping steps that are incomplete, and steps of optional parts the pack has not
+ * turned on unless `allOptions` is set (for recording narration ahead of time).
+ */
+export function parseDemoTour(raw: unknown, { allOptions = false }: { allOptions?: boolean } = {}): DemoTour | null {
   if (!raw || typeof raw !== "object") return null
   const row = raw as { blocks?: unknown; steps?: unknown }
   const blocks = (Array.isArray(row.blocks) ? row.blocks : []).flatMap((item) => {
@@ -176,7 +207,9 @@ export function parseDemoTour(raw: unknown): DemoTour | null {
           view,
           section,
           mode: place.mode === "read" || place.mode === "edit" ? place.mode : undefined,
+          page: TOUR_PAGES.find((page) => page === place.page && page !== "programme"),
         },
+        option: TOUR_OPTIONS.find((option) => option === step.option),
         target: typeof step.target === "string" ? step.target : undefined,
         click: typeof step.click === "string" ? step.click : undefined,
         waitForJob: job,
@@ -189,8 +222,17 @@ export function parseDemoTour(raw: unknown): DemoTour | null {
       } satisfies TourStep,
     ]
   })
-  if (steps.length === 0) return null
-  return { version: typeof (row as { version?: unknown }).version === "number" ? (row as { version: number }).version : 0, blocks, steps }
+  const rawOptions = ((row as { options?: unknown }).options ?? {}) as Record<string, unknown>
+  const options = Object.fromEntries(TOUR_OPTIONS.map((option) => [option, rawOptions[option] === true])) as Record<TourOption, boolean>
+  const shown = allOptions ? steps : steps.filter((step) => !step.option || options[step.option])
+  if (shown.length === 0) return null
+  const usedBlocks = new Set(shown.map((step) => step.block))
+  return {
+    version: typeof (row as { version?: unknown }).version === "number" ? (row as { version: number }).version : 0,
+    blocks: blocks.filter((block) => usedBlocks.has(block.id)),
+    steps: shown,
+    options,
+  }
 }
 
 export function tourLanguage(locale: string | null | undefined): TourLanguage {

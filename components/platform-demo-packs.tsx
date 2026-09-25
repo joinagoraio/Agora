@@ -43,6 +43,9 @@ import {
   loadDemoPack,
   removeLoadedDemos,
   saveDemoPack,
+  setLoadedDemoHidden,
+  getDemoTourOptions,
+  setDemoTourOption,
   type DemoPack,
   type DemoPackModelChoice,
   type DemoPackChapter,
@@ -533,7 +536,14 @@ export function PlatformDemoPacks() {
                   {loadedDemos.map((demo) => (
                     <li key={demo.spaceId} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
                       <span className="min-w-0 flex-1">
-                        <span className="block font-medium">{demo.name}</span>
+                        <span className="block font-medium">
+                          {demo.name}
+                          {demo.hidden ? (
+                            <span className="ml-2 rounded border px-1.5 py-0.5 text-[10px] font-normal uppercase text-muted-foreground">
+                              {t("admin.platform.loadedDemoHidden", "Hidden")}
+                            </span>
+                          ) : null}
+                        </span>
                         <span className="text-xs text-muted-foreground">
                           {t("admin.platform.loadedDemoSummary", undefined, {
                             loaded: demo.loadedAt ? new Date(demo.loadedAt).toLocaleString() : "",
@@ -546,6 +556,24 @@ export function PlatformDemoPacks() {
                       </span>
                       <Button type="button" size="sm" variant="outline" onClick={() => router.push(`/spaces/${demo.spaceId}`)}>
                         {t("admin.platform.loadedDemoOpen")}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={pending}
+                        onClick={() =>
+                          startTransition(async () => {
+                            const result = await setLoadedDemoHidden(demo.spaceId, !demo.hidden)
+                            if (result.error) {
+                              notify(result.error, "error")
+                              return
+                            }
+                            refreshLoaded(draft.id)
+                          })
+                        }
+                      >
+                        {demo.hidden ? t("admin.platform.loadedDemoShow", "Show on dashboard") : t("admin.platform.loadedDemoHide", "Hide from dashboard")}
                       </Button>
                       <Button
                         type="button"
@@ -566,6 +594,7 @@ export function PlatformDemoPacks() {
               )}
             </div>
           ) : null}
+          {draft.id ? <TourOptionsRow packId={draft.id} /> : null}
           {draft.id ? <TourNarrationRow packId={draft.id} /> : null}
         </div>
       ) : null}
@@ -711,6 +740,46 @@ function TourNarrationRow({ packId }: { packId: string }) {
           {recording ? t("admin.platform.tourNarrationRecording", "Recording…") : t("admin.platform.tourNarrationRecord", "Record narration")}
         </Button>
       </div>
+    </div>
+  )
+}
+
+function TourOptionsRow({ packId }: { packId: string }) {
+  const { t } = useI18n()
+  const [state, setState] = useState<{ options: Partial<Record<string, boolean>>; available: string[] } | null>(null)
+  const [pending, startTransition] = useTransition()
+  useEffect(() => {
+    void getDemoTourOptions(packId).then((result) => setState(result.data ?? null))
+  }, [packId])
+  if (!state || state.available.length === 0) return null
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold">{t("admin.platform.tourOptions", "Tour parts")}</h3>
+      {state.available.map((option) => (
+        <label key={option} className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={state.options[option] === true}
+            disabled={pending}
+            onChange={(event) => {
+              const on = event.target.checked
+              startTransition(async () => {
+                const result = await setDemoTourOption(packId, option as "aiSetup", on)
+                if (result.error) {
+                  notify(result.error, "error")
+                  return
+                }
+                setState((current) => (current ? { ...current, options: { ...current.options, [option]: on } } : current))
+              })
+            }}
+          />
+          <span>
+            <span className="font-medium">{t(`admin.platform.tourOption.${option}.label`, option)}</span>
+            <span className="block text-xs text-muted-foreground">{t(`admin.platform.tourOption.${option}.help`, "")}</span>
+          </span>
+        </label>
+      ))}
     </div>
   )
 }

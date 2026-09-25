@@ -35,6 +35,7 @@ const MAX_SCALE = 2
 export const PROGRAMME_ZOOM_PRESETS = [0.75, 0.9, 1, 1.1, 1.25, 1.5] as const
 
 export type ProgrammeDocumentLayout = {
+  /** Always false now: the document has one reading width, plus the page view. */
   wide: boolean
   scale: number
   showComments: boolean
@@ -43,7 +44,7 @@ export type ProgrammeDocumentLayout = {
 }
 
 export const DEFAULT_PROGRAMME_DOCUMENT_LAYOUT: ProgrammeDocumentLayout = {
-  wide: true,
+  wide: false,
   scale: 1,
   showComments: false,
   paged: false,
@@ -77,7 +78,7 @@ export function readProgrammeDocumentLayout(): ProgrammeDocumentLayout {
     if (!raw) return DEFAULT_PROGRAMME_DOCUMENT_LAYOUT
     const parsed = JSON.parse(raw) as Partial<ProgrammeDocumentLayout>
     return {
-      wide: parsed.wide !== false,
+      wide: false,
       scale: clampScale(typeof parsed.scale === "number" ? parsed.scale : 1),
       showComments: parsed.showComments === true,
       paged: parsed.paged === true,
@@ -93,7 +94,7 @@ export function writeProgrammeDocumentLayout(layout: ProgrammeDocumentLayout) {
   window.localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
-      wide: layout.wide,
+      wide: false,
       scale: clampScale(layout.scale),
       showComments: layout.showComments !== false,
       paged: layout.paged === true,

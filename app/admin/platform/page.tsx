@@ -8,8 +8,12 @@ import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/server"
 import { isSuperAdmin } from "@/lib/llm/resolve"
 import { getServerTranslator } from "@/lib/i18n/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { getLoadedDemo } from "@/lib/actions/demo-pack"
+import { DemoTourMount } from "@/components/demo-tour-mount"
 
-export default async function PlatformAdminPage() {
+export default async function PlatformAdminPage({ searchParams }: { searchParams: Promise<{ tourProgramme?: string }> }) {
+  const { tourProgramme } = await searchParams
   const { t } = await getServerTranslator()
   const supabase = await createClient()
   const {
@@ -18,7 +22,14 @@ export default async function PlatformAdminPage() {
   if (!user) redirect("/auth/login")
   if (!(await isSuperAdmin(user.id))) redirect("/dashboard")
 
+  const admin = createAdminClient()
+  const { data: tourWorkspace } = tourProgramme
+    ? await admin.from("workspaces").select("space_id").eq("id", tourProgramme).maybeSingle()
+    : { data: null }
+  const { data: loadedDemo } = tourWorkspace?.space_id ? await getLoadedDemo(tourWorkspace.space_id as string) : { data: null }
+
   return (
+    <DemoTourMount demo={loadedDemo} tourProgramme={tourProgramme}>
     <div className="flex min-h-screen flex-col">
       <header className="bg-card">
         <div className="flex h-16 items-center justify-between px-4">
@@ -37,5 +48,6 @@ export default async function PlatformAdminPage() {
         </div>
       </main>
     </div>
+    </DemoTourMount>
   )
 }

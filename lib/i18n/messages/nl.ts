@@ -1949,6 +1949,17 @@ export const nlMessages = {
       },
     },
     chat: {
+      voice: {
+        read: "Voorlezen",
+        stop: "Stoppen met voorlezen",
+        readFailed: "Dit antwoord kon niet worden voorgelezen.",
+        dictate: "Vraag met je stem · microfoon uit",
+        dictateStop: "Microfoon aan · klik om te stoppen",
+        dictating: "Spraak wordt tekst…",
+        heardNothing: "Er zijn geen woorden gehoord. Probeer het opnieuw.",
+        noMic: "Agora mag de microfoon niet gebruiken. Sta het toe in de browser en probeer het opnieuw.",
+        unsupported: "Deze browser kan geen spraak opnemen.",
+      },
       header: "AI-assistent",
       toggle: {
         open: "Chat openen",
@@ -2650,6 +2661,14 @@ export const nlMessages = {
       platformKeysNote: "Agora-platformsleutels zijn in gebruik. Neem contact op met een platformbeheerder om een eigen sleutel toe te staan.",
       authorityKeyRequired: "Dit bevoegd gezag moet een eigen API-sleutel voor de provider opslaan.",
       authorityKeyOptional: "Optioneel. Laat leeg om de gedeelde of platformsleutel te blijven gebruiken.",
+      defaults: {
+        analysis: { name: "Beleidsanalist", role: "Analyse van bestaand beleid" },
+        vision: { name: "Visiespecialist", role: "Visie en dekking" },
+        measures: { name: "Maatregelenschrijver", role: "Maatregelen opstellen" },
+        oer: { name: "Effectenspecialist", role: "Afstemming met het omgevingseffectrapport" },
+        qc: { name: "Kwaliteitscontroleur", role: "Kwaliteitscontrole van het programma" },
+        draft: { name: "Hoofdstukschrijver", role: "Hoofdstukken schrijven in de vaste structuur" },
+      },
       stages: {
         analysis: "Analyse",
         vision: "Visie",
@@ -3055,10 +3074,20 @@ export const nlMessages = {
       demoPackModelRequired: "Kies eerst een standaardmodel.",
       loadedDemos: "Geladen demo's",
       loadedDemosEmpty: "Er is geen demo uit dit pakket geladen.",
+      tourOptions: "Onderdelen van de rondleiding",
+      tourOption: {
+        aiSetup: {
+          label: "Laat zien hoe de AI is ingericht",
+          help: "Voegt ongeveer 8 minuten toe na de specialisten: de toegestane modellen van het platform, de modellen van dit bevoegd gezag, en de instructies en versies van één specialist. De lijst met organisaties wordt nooit getoond.",
+        },
+      },
       tourNarration: "Vertelling bij de rondleiding",
       tourNarrationStatus: "{{voice}}: Nederlands {{nl}} van {{steps}}, Engels {{en}} van {{steps}}",
       tourNarrationCost: "opnamekosten tot nu toe ongeveer US$ {{cost}}",
       loadedDemoCost: "AI-kosten ongeveer US$ {{cost}}",
+      loadedDemoHide: "Verbergen op het dashboard",
+      loadedDemoShow: "Tonen op het dashboard",
+      loadedDemoHidden: "Verborgen",
       tourNarrationRecord: "Vertelling opnemen",
       tourNarrationRecording: "Bezig met opnemen…",
       tourNarrationStarted: "{{count}} vertelbestanden worden opgenomen. Dat duurt een minuut of twee.",

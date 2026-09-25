@@ -1,6 +1,6 @@
 "use client"
 
-import { AlignJustify, BookOpen, ChevronDown, ChevronsLeftRight, Eye, FileText, Focus, GalleryVertical, MessageSquare, PanelTop, PencilLine, Redo, Search, Undo, ZoomIn, ZoomOut } from "lucide-react"
+import { BookOpen, ChevronDown, Eye, FileText, Focus, GalleryVertical, MessageSquare, PanelTop, PencilLine, Redo, Search, Undo, ZoomIn, ZoomOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -143,30 +143,6 @@ export function ProgrammeDocumentChrome({
           ) : null}
           <Divider />
           <div className="flex items-center" role="group" aria-label={t("workspace.programme.layoutAria")}>
-            <IconTooltip label={t("workspace.programme.layoutWide")}>
-              <Button
-                type="button"
-                variant={!layout.paged && layout.wide ? "secondary" : "ghost"}
-                size={buttonSize}
-                aria-label={t("workspace.programme.layoutWide")}
-                aria-pressed={!layout.paged && layout.wide}
-                onClick={() => onLayoutChange({ paged: false, wide: true })}
-              >
-                <ChevronsLeftRight className={iconClass} />
-              </Button>
-            </IconTooltip>
-            <IconTooltip label={t("workspace.programme.layoutNarrow")}>
-              <Button
-                type="button"
-                variant={!layout.paged && !layout.wide ? "secondary" : "ghost"}
-                size={buttonSize}
-                aria-label={t("workspace.programme.layoutNarrow")}
-                aria-pressed={!layout.paged && !layout.wide}
-                onClick={() => onLayoutChange({ paged: false, wide: false })}
-              >
-                <AlignJustify className={iconClass} />
-              </Button>
-            </IconTooltip>
             <IconTooltip label={t("workspace.programme.layoutPages")}>
               <Button
                 type="button"
@@ -174,7 +150,7 @@ export function ProgrammeDocumentChrome({
                 size={buttonSize}
                 aria-label={t("workspace.programme.layoutPages")}
                 aria-pressed={layout.paged}
-                onClick={() => onLayoutChange({ paged: true })}
+                onClick={() => onLayoutChange({ paged: !layout.paged })}
               >
                 <GalleryVertical className={iconClass} />
               </Button>

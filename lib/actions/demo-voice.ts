@@ -11,12 +11,12 @@ import {
   NARRATION_BUCKET,
   NARRATION_INSTRUCTIONS,
   NARRATION_MODEL,
-  NARRATION_USD_PER_MINUTE,
   NARRATION_VOICES,
   narrationPath,
 } from "@/lib/programme/demo-narration"
 import { ensureFlevolandDemoPack } from "@/lib/actions/demo-pack"
 import { recordLlmUsage } from "@/lib/llm/usage"
+import { speechCostUsd, synthesizeSpeech } from "@/lib/speech/openai-speech"
 import { logger } from "@/lib/utils/logger"
 
 export type NarrationStatus = {
@@ -25,9 +25,6 @@ export type NarrationStatus = {
   voices: Record<TourVoice, string>
   costUsd: number
 }
-
-/** The recorded mp3 files are 128 kbit/s, 16 000 bytes per second. */
-const MP3_BYTES_PER_SECOND = 16000
 
 async function requireSuperAdmin() {
   const supabase = await createClient()
@@ -41,7 +38,7 @@ async function loadTour(packId: string) {
   await ensureFlevolandDemoPack()
   const admin = createAdminClient()
   const { data } = await admin.from("platform_demo_packs").select("tour").eq("id", packId).maybeSingle()
-  return parseDemoTour(data?.tour)
+  return parseDemoTour(data?.tour, { allOptions: true })
 }
 
 /** How much of a pack's tour has narration for the current text, per voice and language. */
@@ -60,22 +57,6 @@ export async function getNarrationStatus(packId: string): Promise<{ error?: stri
     }
   }
   return { data: { steps: tour.steps.length, recorded, voices: NARRATION_VOICES, costUsd } }
-}
-
-async function speak(apiKey: string, voice: TourVoice, language: TourLanguage, text: string) {
-  const response = await fetch("https://api.openai.com/v1/audio/speech", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: NARRATION_MODEL,
-      voice: NARRATION_VOICES[voice],
-      input: text,
-      instructions: NARRATION_INSTRUCTIONS[language],
-      response_format: "mp3",
-    }),
-  })
-  if (!response.ok) throw new Error(`Speech failed (${response.status}): ${(await response.text()).slice(0, 200)}`)
-  return Buffer.from(await response.arrayBuffer())
 }
 
 /** Records narration for every voice, language and step whose current text has none yet. Runs after the response. */
@@ -103,7 +84,11 @@ export async function recordTourNarration(packId: string): Promise<{ error?: str
     const worker = async () => {
       for (let item = queue.shift(); item; item = queue.shift()) {
         try {
-          const audio = await speak(apiKey, item.voice, item.language, item.text)
+          const audio = await synthesizeSpeech(apiKey, {
+            voice: NARRATION_VOICES[item.voice],
+            instructions: NARRATION_INSTRUCTIONS[item.language],
+            text: item.text,
+          })
           const { error } = await admin.storage.from(NARRATION_BUCKET).upload(item.path, audio, { contentType: "audio/mpeg", upsert: true })
           if (error) throw new Error(error.message)
           await recordLlmUsage({
@@ -112,7 +97,7 @@ export async function recordTourNarration(packId: string): Promise<{ error?: str
             model: NARRATION_MODEL,
             inputTokens: 0,
             outputTokens: 0,
-            costUsd: (audio.length / MP3_BYTES_PER_SECOND / 60) * NARRATION_USD_PER_MINUTE,
+            costUsd: speechCostUsd(audio.length),
           })
         } catch (error) {
           logger.error("[DemoVoice] Narration failed", error, { path: item.path })

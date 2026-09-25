@@ -36,10 +36,13 @@ export function SectionOpenToggle({
   open,
   onToggle,
   label,
+  guidanceTarget,
 }: {
   open: boolean
   onToggle: () => void
   label: string
+  /** A `data-guidance-target` so the demo tour can open the section. */
+  guidanceTarget?: string
 }) {
   const { t } = useI18n()
   const action = open ? t("common.actions.collapse") : t("common.actions.expand")
@@ -52,6 +55,8 @@ export function SectionOpenToggle({
         className="h-8 w-8 shrink-0"
         aria-expanded={open}
         aria-label={`${action} ${label}`}
+        data-guidance-target={guidanceTarget}
+        data-guidance-state={open ? "open" : "closed"}
         onClick={onToggle}
       >
         <ChevronDown className={cn("h-4 w-4 transition-transform", !open && "-rotate-90")} />

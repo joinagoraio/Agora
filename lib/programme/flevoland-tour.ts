@@ -1,7 +1,7 @@
 import type { DemoTour, TourAction, TourCondition, TourStep, TourText } from "@/lib/programme/demo-tour"
 
 /** Raise when the steps or texts change, so stored packs pick up the new tour. */
-export const FLEVOLAND_TOUR_VERSION = 7
+export const FLEVOLAND_TOUR_VERSION = 8
 
 type Place = TourStep["place"]
 
@@ -29,6 +29,23 @@ const AUTOPILOT: Record<string, Pick<TourStep, "auto" | "doneWhen">> = {
   sources: {
     doneWhen: [at("setup")],
     auto: [click("start-writing"), { do: "waitFor", condition: at("setup"), timeoutMs: 60000 }, wait(2000)],
+  },
+  "platform-ai": { auto: [{ do: "waitNarration" }] },
+  "authority-models": {
+    auto: [
+      click("agents-toggle", { state: "closed", optional: true }),
+      click("space-models"),
+      { do: "waitNarration" },
+      { do: "key", key: "Escape" },
+    ],
+  },
+  "authority-agent": {
+    auto: [
+      click("agents-toggle", { state: "closed", optional: true }),
+      click("agent-edit"),
+      { do: "waitNarration" },
+      { do: "key", key: "Escape" },
+    ],
   },
   "run-analysis": {
     doneWhen: [at("analysis")],
@@ -207,6 +224,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
   version: FLEVOLAND_TOUR_VERSION,
   blocks: [
     { id: "setup", title: { nl: "Opzetten voor Flevoland", en: "Set up for Flevoland" }, minutes: 20 },
+    { id: "ai", title: { nl: "Hoe de AI is ingericht", en: "How the AI is set up" }, minutes: 8 },
     { id: "analysis", title: { nl: "Wat er al aan beleid is", en: "What policy already exists" }, minutes: 17 },
     { id: "interests", title: { nl: "Belangen en uitwerkingen", en: "Interests and work-ups" }, minutes: 20 },
     { id: "measures", title: { nl: "Maatregelen", en: "Measures" }, minutes: 33 },
@@ -353,6 +371,81 @@ export const FLEVOLAND_TOUR: DemoTour = {
           "Behind each step is a specialist: one analyses existing policy, one proposes measures, one writes, one checks effects and one checks quality. Each has its own instructions, its own sources and its own language model. The province can change them, and every version is kept. So you can always trace which instructions produced a text.",
       },
     ),
+    {
+      ...step(
+        "platform-ai",
+        "ai",
+        { view: "document", page: "platform" },
+        { target: "platform-models", estMinutes: 3 },
+        {
+          title: "Welke AI, en via wiens account",
+          action: "Laat de aanbieders en modellen zien die het platform toestaat. Open het tabblad met organisaties niet.",
+          why: "Het platform bepaalt welke taalmodellen zijn toegestaan. Per organisatie ligt vast of Agora de sleutels van het platform gebruikt of die van de organisatie zelf.",
+          expect: "De toegestane aanbieders en modellen, met bij elke aanbieder of er een sleutel is.",
+          narration:
+            "Welke AI gebruikt Agora, en via wiens account? Dit zijn de instellingen van het platform: welke aanbieders en welke taalmodellen zijn toegestaan. Per organisatie ligt vast of Agora werkt met de sleutels van het platform, of met die van de organisatie zelf. De sleutels zelf zijn nooit zichtbaar; er staat alleen dat er een sleutel is.",
+        },
+        {
+          title: "Which AI, and on whose account",
+          action: "Show the providers and models the platform allows. Do not open the organisations tab.",
+          why: "The platform decides which language models are allowed. For each organisation it is recorded whether Agora uses the platform's keys or the organisation's own.",
+          expect: "The allowed providers and models, each showing whether a key is on file.",
+          narration:
+            "Which AI does Agora use, and on whose account? These are the platform settings: which providers and which language models are allowed. For each organisation it is recorded whether Agora works with the platform's keys or with the organisation's own. The keys themselves are never shown; it only says that a key is on file.",
+        },
+      ),
+      option: "aiSetup",
+    },
+    {
+      ...step(
+        "authority-models",
+        "ai",
+        { view: "document", page: "authority" },
+        { target: "space-models", estMinutes: 2 },
+        {
+          title: "De modellen van dit bevoegd gezag",
+          action: "Klik bij Agenten op 'Modellen' en laat zien welke modellen dit bevoegd gezag gebruikt.",
+          why: "Binnen wat het platform toestaat, kiest het bevoegd gezag zelf welke modellen zijn medewerkers gebruiken.",
+          expect: "De modellen die voor dit bevoegd gezag aan staan.",
+          narration:
+            "Binnen wat het platform toestaat, kiest de provincie zelf welke modellen haar medewerkers gebruiken. Dat staat hier, op het niveau van het bevoegd gezag. Zo kan een organisatie bijvoorbeeld alleen modellen toestaan die aan haar eigen eisen voldoen.",
+        },
+        {
+          title: "This authority's models",
+          action: "Under Agents, click 'Models' and show which models this authority uses.",
+          why: "Within what the platform allows, the authority itself chooses which models its staff use.",
+          expect: "The models switched on for this authority.",
+          narration:
+            "Within what the platform allows, the province itself chooses which models its staff use. That is set here, at the level of the authority. So an organisation can, for example, allow only models that meet its own requirements.",
+        },
+      ),
+      option: "aiSetup",
+    },
+    {
+      ...step(
+        "authority-agent",
+        "ai",
+        { view: "document", page: "authority" },
+        { target: "agent-edit", estMinutes: 3 },
+        {
+          title: "Eén specialist van dichtbij",
+          action: "Open één specialist bij Agenten: laat de instructies, het model en de eerdere versies zien.",
+          why: "Elke specialist is vastgelegd met instructies, bronnen en model. Elke wijziging wordt een nieuwe versie met een toelichting, zodat later na te gaan is met welke instructies een tekst is gemaakt.",
+          expect: "De instellingen van de specialist en zijn versies.",
+          narration:
+            "Dit is één specialist van dichtbij. U ziet de instructies waarmee hij werkt, welke bronnen hij mag lezen en welk model hij gebruikt. Elke wijziging wordt een nieuwe versie, met een toelichting. Bij elke tekst in het programma is zo later terug te vinden met welke versie hij is gemaakt. Daarna gaan we terug naar het programma.",
+        },
+        {
+          title: "One specialist up close",
+          action: "Open one specialist under Agents: show its instructions, model and earlier versions.",
+          why: "Each specialist is recorded with instructions, sources and model. Every change becomes a new version with a note, so you can trace later which instructions produced a text.",
+          expect: "The specialist's settings and its versions.",
+          narration:
+            "This is one specialist up close. You see the instructions it works with, which sources it may read and which model it uses. Every change becomes a new version, with a note. So for every text in the programme you can find out later which version produced it. Then we go back to the programme.",
+        },
+      ),
+      option: "aiSetup",
+    },
     step(
       "run-analysis",
       "analysis",

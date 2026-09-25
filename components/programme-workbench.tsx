@@ -145,6 +145,7 @@ import { MeasureDecisionControl } from "@/components/measure-decision-control"
 import { MeasureSummaryLines } from "@/components/measure-summary-lines"
 import { DemoTourPanel, DemoTourStrip, useDemoTour, useTourSheetInsets } from "@/components/demo-tour"
 import { ENOUGH_MEASURES_PER_INTEREST } from "@/lib/programme/demo-tour"
+import { agentDisplayName } from "@/lib/programme/agent-labels"
 import { listProgrammeInterests } from "@/lib/actions/interests"
 import type { ProgrammeInterest } from "@/lib/programme/interests"
 import { parseRoleCheck } from "@/lib/programme/role-check"
@@ -1532,7 +1533,7 @@ export function ProgrammeWorkbench({
                             <SelectContent>
                               {options.map((agent) => (
                                 <SelectItem key={agent.id} value={agent.id}>
-                                  {agent.name}
+                                  {agentDisplayName(agent, t)}
                                 </SelectItem>
                               ))}
                             </SelectContent>
