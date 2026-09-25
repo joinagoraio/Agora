@@ -18,6 +18,8 @@ type Props = {
   spaceId: string
   templateId: string | null
   chapters: Chapter[]
+  /** Until the chapters have loaded, every chapter would look empty. */
+  chaptersLoaded: boolean
   canAdminister: boolean
   onMessage: (message: string | null, kind?: NotifyKind) => void
   /** A chapter finished, or the whole run did: reload the chapters. */
@@ -30,6 +32,7 @@ export function ProgrammeWriteChaptersBar({
   spaceId,
   templateId,
   chapters,
+  chaptersLoaded,
   canAdminister,
   onMessage,
   onChaptersWritten,
@@ -60,7 +63,7 @@ export function ProgrammeWriteChaptersBar({
     lastDone.current = progress.done
   }, [running, progress, onChaptersWritten])
 
-  if (!canAdminister) return null
+  if (!canAdminister || (!running && !chaptersLoaded)) return null
   const writtenIds = new Set(chapters.filter((chapter) => chapter.drafted).map((chapter) => chapter.outlineNodeId))
   const empty = required.filter((id) => !writtenIds.has(id)).length
   if (!running && empty === 0) return null

@@ -28,7 +28,7 @@ The chapters are written during part 8, so there is no waiting in front of the r
 
 1. **Credits.** Check the OpenAI balance. A full run (analysis, three work-ups, three measure proposals, role check, comparison, eight chapters, one redraft) costs a few euros; keep at least 20 euros of headroom.
 2. **Narration.** Platform admin → Demo packs → Flevoland demo → *Tour narration*. It should read 36 of 36 for both Dutch and English. If not, press **Record narration** and wait about a minute.
-3. **Fresh demo.** On the same page, press **Load demo**. This creates a new authority with the files, the nine-part structure and interests 14, 15 and 16 chosen. Open the programme; the setup wizard shows. This is where part 1 starts.
+3. **Fresh demo.** On the same page, press **Load demo** (or **Reset** in the amber demo strip of an earlier demo). This creates a new authority with the files, the nine-part structure and interests 14, 15 and 16 chosen. Open the programme; the setup wizard opens on the sources. This is where part 1 starts.
 4. **Backup programme.** Load a second demo and run it up to and including part 7 (chapters written). If an AI step fails or runs slow on the day, switch to the backup at the same step. Keep it in a second browser tab.
 5. **Language.** The tour and the voice follow the screen language. Set Agora to Nederlands (user menu) for a Dutch room.
 6. **Sound.** Connect the laptop audio to the room. Play step 1's narration once to set the volume.
@@ -85,25 +85,25 @@ Each step lists what to do in Dutch and English, what the room should see, and w
 >
 > **EN:** Welcome. This afternoon we show how Agora helps the province of Flevoland write an environmental programme. We start from the environmental vision and the policy that already exists, work through the provincial interests to concrete measures, and finish with a programme that is ready for public consultation. Everything you see runs on real documents: the draft Flevoland 2050 environmental vision and four documents on housing. Agora does not write instead of the civil servant. It reads, proposes and backs up; the civil servant decides. And every claim points to a page in a source.
 
-#### 2. De structuur van de provincie / The province's structure · 3 min · 0:04
-
-- **Doen / Do:** Kies onder 'Gebruik een hoofdstukstructuur' de structuur 'Flevoland demo'.
-  Under 'Use a chapter structure', choose 'Flevoland demo'.
-- **De zaal ziet / The room sees:** Het scherm gaat door naar de bronnen.
-
-> **NL:** Eerst de structuur. Flevoland heeft een vaste opbouw voor omgevingsprogramma's: negen delen, van positionering en context tot de formele aspecten. Die structuur kiezen we hier. Agora schrijft daarbinnen, en elk deel weet wat erin hoort en uit welke bronnen het put.
->
-> **EN:** First, the structure. Flevoland has a fixed layout for environmental programmes: nine parts, from positioning and context to the formal aspects. That is what we choose here. Agora writes inside it, and each part knows what belongs in it and which sources it draws on.
-
-#### 3. Bronnen met een rol / Sources with a role · 3 min · 0:07
+#### 2. Bronnen met een rol / Sources with a role · 3 min · 0:04
 
 - **Doen / Do:** Controleer dat de omgevingsvisie en het bestaande beleid gekozen zijn, en klik 'Begin met schrijven'.
   Check that the environmental vision and the existing policy are chosen, then click 'Start writing'.
 - **De zaal ziet / The room sees:** Het document opent met de negen delen, nog leeg.
 
-> **NL:** Dan de bronnen. Elke bron krijgt een rol. De omgevingsvisie geeft de koers. De stukken over wonen zijn bestaand beleid: dat gaan we zo toetsen. Agora gebruikt alleen wat hier gekoppeld is. Er komt niets van internet bij, en niets wat de provincie niet zelf heeft aangeleverd.
+> **NL:** Eerst de bronnen. Elke bron krijgt een rol. De omgevingsvisie geeft de koers. De stukken over wonen zijn bestaand beleid: dat gaan we zo toetsen. Agora gebruikt alleen wat hier gekoppeld is. Er komt niets van internet bij, en niets wat de provincie niet zelf heeft aangeleverd.
 >
-> **EN:** Next, the sources. Each source gets a role. The environmental vision sets the direction. The housing documents are existing policy, which we will test in a moment. Agora only uses what is linked here. Nothing comes in from the internet, and nothing the province did not supply itself.
+> **EN:** First, the sources. Each source gets a role. The environmental vision sets the direction. The housing documents are existing policy, which we will test in a moment. Agora only uses what is linked here. Nothing comes in from the internet, and nothing the province did not supply itself.
+
+#### 3. De structuur van de provincie / The province's structure · 3 min · 0:07
+
+- **Doen / Do:** Laat de negen delen in de structuur zien. Beweeg over een kop om te lezen wat erin hoort.
+  Show the nine parts in the structure. Hover a heading to read what belongs in it.
+- **De zaal ziet / The room sees:** De negen delen van het programma, elk met een beschrijving.
+
+> **NL:** Dan de structuur. Flevoland heeft een vaste opbouw voor omgevingsprogramma's: negen delen, van positionering en context tot de formele aspecten. Die structuur staat hier klaar. Agora schrijft daarbinnen, en elk deel weet wat erin hoort en uit welke bronnen het put.
+>
+> **EN:** Next, the structure. Flevoland has a fixed layout for environmental programmes: nine parts, from positioning and context to the formal aspects. That structure is set up here. Agora writes inside it, and each part knows what belongs in it and which sources it draws on.
 
 #### 4. De bibliotheek van het programma / The programme's library · 3 min · 0:10
 

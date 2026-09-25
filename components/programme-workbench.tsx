@@ -1204,6 +1204,7 @@ export function ProgrammeWorkbench({
                     spaceId={spaceId}
                     templateId={bindings.templateId ?? null}
                     chapters={chapters}
+                    chaptersLoaded={snapshotLoaded}
                     canAdminister={canAdminister}
                     onMessage={notify}
                     onChaptersWritten={chaptersWritten}

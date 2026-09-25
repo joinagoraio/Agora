@@ -1,7 +1,7 @@
 import type { DemoTour, TourStep, TourText } from "@/lib/programme/demo-tour"
 
 /** Raise when the steps or texts change, so stored packs pick up the new tour. */
-export const FLEVOLAND_TOUR_VERSION = 2
+export const FLEVOLAND_TOUR_VERSION = 3
 
 type Place = TourStep["place"]
 
@@ -61,28 +61,6 @@ export const FLEVOLAND_TOUR: DemoTour = {
       },
     ),
     step(
-      "structure",
-      "setup",
-      DOC,
-      { target: "setup-template", estMinutes: 3 },
-      {
-        title: "De structuur van de provincie",
-        action: "Kies onder 'Gebruik een hoofdstukstructuur' de structuur 'Flevoland demo'.",
-        why: "De structuur komt van de provincie zelf: negen delen, van positionering en context tot de formele aspecten. Agora schrijft binnen die structuur, niet in een eigen format.",
-        expect: "Het scherm gaat door naar de bronnen.",
-        narration:
-          "Eerst de structuur. Flevoland heeft een vaste opbouw voor omgevingsprogramma's: negen delen, van positionering en context tot de formele aspecten. Die structuur kiezen we hier. Agora schrijft daarbinnen, en elk deel weet wat erin hoort en uit welke bronnen het put.",
-      },
-      {
-        title: "The province's structure",
-        action: "Under 'Use a chapter structure', choose 'Flevoland demo'.",
-        why: "The structure comes from the province itself: nine parts, from positioning and context to the formal aspects. Agora writes inside that structure, not in a format of its own.",
-        expect: "The screen moves on to the sources.",
-        narration:
-          "First, the structure. Flevoland has a fixed layout for environmental programmes: nine parts, from positioning and context to the formal aspects. That is what we choose here. Agora writes inside it, and each part knows what belongs in it and which sources it draws on.",
-      },
-    ),
-    step(
       "sources",
       "setup",
       DOC,
@@ -93,7 +71,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
         why: "Elke bron krijgt een rol. Die rol bepaalt wat Agora ermee doet: de visie geeft de koers, het bestaande beleid wordt getoetst.",
         expect: "Het document opent met de negen delen, nog leeg.",
         narration:
-          "Dan de bronnen. Elke bron krijgt een rol. De omgevingsvisie geeft de koers. De stukken over wonen zijn bestaand beleid: dat gaan we zo toetsen. Agora gebruikt alleen wat hier gekoppeld is. Er komt niets van internet bij, en niets wat de provincie niet zelf heeft aangeleverd.",
+          "Eerst de bronnen. Elke bron krijgt een rol. De omgevingsvisie geeft de koers. De stukken over wonen zijn bestaand beleid: dat gaan we zo toetsen. Agora gebruikt alleen wat hier gekoppeld is. Er komt niets van internet bij, en niets wat de provincie niet zelf heeft aangeleverd.",
       },
       {
         title: "Sources with a role",
@@ -101,7 +79,29 @@ export const FLEVOLAND_TOUR: DemoTour = {
         why: "Each source gets a role. The role decides what Agora does with it: the vision sets the direction, existing policy gets tested.",
         expect: "The document opens with its nine parts, still empty.",
         narration:
-          "Next, the sources. Each source gets a role. The environmental vision sets the direction. The housing documents are existing policy, which we will test in a moment. Agora only uses what is linked here. Nothing comes in from the internet, and nothing the province did not supply itself.",
+          "First, the sources. Each source gets a role. The environmental vision sets the direction. The housing documents are existing policy, which we will test in a moment. Agora only uses what is linked here. Nothing comes in from the internet, and nothing the province did not supply itself.",
+      },
+    ),
+    step(
+      "structure",
+      "setup",
+      section("outline"),
+      { estMinutes: 3 },
+      {
+        title: "De structuur van de provincie",
+        action: "Laat de negen delen in de structuur zien. Beweeg over een kop om te lezen wat erin hoort.",
+        why: "De structuur komt van de provincie zelf: negen delen, van positionering en context tot de formele aspecten. Agora schrijft binnen die structuur, niet in een eigen format.",
+        expect: "De negen delen van het programma, elk met een beschrijving.",
+        narration:
+          "Dan de structuur. Flevoland heeft een vaste opbouw voor omgevingsprogramma's: negen delen, van positionering en context tot de formele aspecten. Die structuur staat hier klaar. Agora schrijft daarbinnen, en elk deel weet wat erin hoort en uit welke bronnen het put.",
+      },
+      {
+        title: "The province's structure",
+        action: "Show the nine parts in the structure. Hover a heading to read what belongs in it.",
+        why: "The structure comes from the province itself: nine parts, from positioning and context to the formal aspects. Agora writes inside that structure, not in a format of its own.",
+        expect: "The programme's nine parts, each with a description.",
+        narration:
+          "Next, the structure. Flevoland has a fixed layout for environmental programmes: nine parts, from positioning and context to the formal aspects. That structure is set up here. Agora writes inside it, and each part knows what belongs in it and which sources it draws on.",
       },
     ),
     step(
