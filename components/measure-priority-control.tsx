@@ -37,9 +37,10 @@ export function MeasurePriorityControl({ workspaceId, measureId, priority, reaso
     })
 
   return (
-    <div className="space-y-2 rounded-md border p-3">
+    <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-muted-foreground">{t("workspace.programme.priority.title")}</span>
+        <span className="w-20 shrink-0 text-xs font-medium text-muted-foreground">{t("workspace.programme.priority.title")}</span>
+        <div className="flex flex-wrap gap-1">
         {MEASURE_PRIORITIES.map((option) => (
           <Button
             key={option}
@@ -63,6 +64,7 @@ export function MeasurePriorityControl({ workspaceId, measureId, priority, reaso
             </Button>
           </>
         ) : null}
+        </div>
       </div>
       {draftReason !== null && priority ? (
         <div className="flex flex-wrap items-center gap-2">
@@ -80,12 +82,10 @@ export function MeasurePriorityControl({ workspaceId, measureId, priority, reaso
             {t("workspace.programme.decision.cancel")}
           </Button>
         </div>
+      ) : priority ? (
+        reason ? <p className="pl-[5.5rem] text-xs text-muted-foreground">{reason}</p> : null
       ) : (
-        <p className="text-xs text-muted-foreground">
-          {priority
-            ? `${t(`workspace.programme.priority.level.${priority}`)}${reason ? `: ${reason}` : ""}`
-            : t("workspace.programme.priority.none")}
-        </p>
+        <p className="text-xs text-muted-foreground">{t("workspace.programme.priority.none")}</p>
       )}
     </div>
   )

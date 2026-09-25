@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, useTransition, type MouseEvent } from "react"
+import { useEffect, useMemo, useRef, useState, useTransition, type MouseEvent, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -32,7 +32,6 @@ import {
   getChapterDocument,
   assessDocumentGroundedness,
   setChapterWorkflowStatus,
-  regenerateProgrammeChapter,
   listProgrammeChapters,
   assignChapterOwner,
   bindWorkspaceChapterAgent,
@@ -84,6 +83,8 @@ import {
 } from "@/lib/programme/document-mode"
 import { renderProgrammeCitationHtml, type ProgrammeCitationSource } from "@/lib/programme/citation-display"
 import { ProgrammeCitationTooltip } from "@/components/programme-citation-tooltip"
+import { useBackgroundJob } from "@/components/programme-jobs-provider"
+import { startChapterRegeneration } from "@/lib/actions/programme-jobs"
 import { BLOCK_ID_ATTR, ensureBlockIdsInHtml, quoteFromBlock } from "@/lib/programme/block-id"
 import { stripDuplicateChapterHeading } from "@/lib/programme/chapter-heading"
 import {
@@ -92,7 +93,7 @@ import {
   toAnchoredComment,
   type AnchoredProgrammeComment,
 } from "@/lib/programme/comment-anchor"
-import { AlertCircle, List, Lock, MoreVertical, PencilLine, X } from "lucide-react"
+import { AlertCircle, List, Loader2, Lock, MoreVertical, PencilLine, X } from "lucide-react"
 import type { NotifyKind } from "@/lib/notify"
 
 type ChapterBody = {
@@ -126,6 +127,10 @@ type Props = {
   onChapterOwnerChange?: () => void
   layout: ProgrammeDocumentLayout
   commentRefreshKey?: number
+  /** Change to reload every chapter's text, for example after chapters were written in the background. */
+  contentRefreshKey?: number
+  /** Shown above the chapters, for example progress of writing them. */
+  topSlot?: ReactNode
   workspaceName?: string
   citationSources?: ProgrammeCitationSource[]
 }
@@ -154,6 +159,8 @@ export function ProgrammeChapterEditor({
   onChapterOwnerChange,
   layout,
   commentRefreshKey = 0,
+  contentRefreshKey = 0,
+  topSlot = null,
   workspaceName = "",
   citationSources = [],
 }: Props) {
@@ -313,7 +320,7 @@ export function ProgrammeChapterEditor({
       setOutlineLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bindings.templateId, workspaceId])
+  }, [bindings.templateId, workspaceId, contentRefreshKey])
 
   useEffect(() => {
     void listProgrammeMeasures(workspaceId).then((listed) => {
@@ -608,11 +615,58 @@ export function ProgrammeChapterEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, nodes, bodies, commentRefreshKey])
 
+  const chapterJob = useBackgroundJob("chapter", (job) => {
+    if (job.status !== "done") {
+      onMessage(job.error || t("workspace.programme.editorLoadError"), "error")
+      return
+    }
+    const nodeId = job.progress.targetId
+    const docId = nodeId ? bodies[nodeId]?.documentId || bindings.chapterDocuments?.[nodeId] : null
+    if (nodeId && docId) {
+      void (async () => {
+        const reloaded = await getChapterDocument(workspaceId, docId)
+        if (!reloaded.data) return
+        const nextContent = reloaded.data.content
+        if (selectedId === nodeId) {
+          textHistory.recordImmediate(nodeId, content, nextContent)
+          setContent(nextContent)
+          clearChapterDirty(nodeId)
+          setWorkflowStatus("generated")
+        }
+        setBodies((prev) => ({
+          ...prev,
+          [nodeId]: {
+            documentId: docId,
+            content: nextContent,
+            workflowStatus: "generated",
+            chapterOwnerId: prev[nodeId]?.chapterOwnerId ?? null,
+          },
+        }))
+      })()
+    }
+    const result = job.progress.result
+    const summary = result
+      ? { found: Number(result.found ?? 0), total: Number(result.total ?? 0), uncited: Number(result.uncited ?? 0) }
+      : null
+    setGroundedness(summary)
+    onMessage(
+      summary
+        ? t("workspace.programme.editorRegenDone", undefined, {
+            found: String(summary.found),
+            total: String(summary.total),
+            uncited: String(summary.uncited),
+          })
+        : t("workspace.programme.editorRegenDoneNoCheck"),
+    )
+  })
+  const writingNodeId = chapterJob.running ? chapterJob.job?.progress.targetId ?? null : null
+
   const regenerateChapter = () => {
-    if (!selected || !documentId || pending) return
+    if (!selected || !documentId || pending || chapterJob.running) return
     startTransition(async () => {
-      const result = await regenerateProgrammeChapter(workspaceId, selected.id, {
+      const result = await startChapterRegeneration(workspaceId, selected.id, {
         documentId,
+        title: selected.title,
         instructions:
           draftInstructions.trim() ||
           selected.instructions ||
@@ -622,38 +676,8 @@ export function ProgrammeChapterEditor({
         onMessage(result.error || t("workspace.programme.editorLoadError"), "error")
         return
       }
-      const nextContent = result.data.content || ""
-      textHistory.recordImmediate(selected.id, content, nextContent)
-      setContent(nextContent)
-      clearChapterDirty(selected.id)
-      setWorkflowStatus("generated")
-      setBodies((prev) => ({
-        ...prev,
-        [selected.id]: {
-          documentId,
-          content: nextContent,
-          workflowStatus: "generated",
-          chapterOwnerId,
-        },
-      }))
-      const report = result.data.groundedness
-      const summary = report
-        ? {
-            found: report.verifiedCount ?? 0,
-            total: report.citationCount ?? 0,
-            uncited: (report.issues || []).filter((issue: { reason: string }) => issue.reason === "missing_citation").length,
-          }
-        : null
-      setGroundedness(summary)
-      onMessage(
-        summary
-          ? t("workspace.programme.editorRegenDone", undefined, {
-              found: String(summary.found),
-              total: String(summary.total),
-              uncited: String(summary.uncited),
-            })
-          : t("workspace.programme.editorRegenDoneNoCheck"),
-      )
+      chapterJob.watch(result.data)
+      onMessage(t("workspace.programme.editorRegenStarted", undefined, { title: selected.title }), "info")
     })
   }
 
@@ -1220,6 +1244,7 @@ export function ProgrammeChapterEditor({
               />
             ) : null}
             <div data-programme-document-type className="relative z-[1]" style={programmeDocumentTypeStyle(layout.scale)}>
+            {topSlot}
             {displayNodes.map((node) => {
               const body = bodies[node.id]
               const hasDoc = Boolean(body?.documentId || bindings.chapterDocuments?.[node.id])
@@ -1335,6 +1360,12 @@ export function ProgrammeChapterEditor({
                       </IconTooltip>
                     ) : null}
                   </div>
+                  {writingNodeId === node.id ? (
+                    <p className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm" role="status">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {t("workspace.programme.editorRegenRunning")}
+                    </p>
+                  ) : null}
                   {showEditor ? (
                     hasDoc ? (
                         <RichTextEditor

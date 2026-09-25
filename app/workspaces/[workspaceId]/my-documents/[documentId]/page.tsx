@@ -57,6 +57,19 @@ export default async function WorkspaceDocumentEditorPage({ params }: WorkspaceD
 
   const metadata = (document.metadata as Record<string, any> | null) ?? null
   const instructions = (metadata?.instructions as string | undefined) ?? ""
+  const isWorkup = metadata?.origin === "programme_interest_workup"
+  const backHref = isWorkup ? `/workspaces/${workspaceId}/programme?view=document&section=interests` : `/workspaces/${workspaceId}`
+  const { data: sourceRows } = await supabase
+    .from("documents")
+    .select("id, title, metadata")
+    .eq("workspace_id", workspaceId)
+    .neq("id", documentId)
+    .neq("status", "deleted")
+  const citationSources = (sourceRows || []).map((row) => ({
+    id: row.id as string,
+    title: (row.title as string) || "",
+    documentRole: ((row.metadata as Record<string, unknown> | null)?.documentRole as string | undefined) ?? null,
+  }))
   const lastEditedAt = (metadata?.lastEditedAt as string | undefined) ?? (document.updated_at as string | undefined)
   const { t } = await getServerTranslator()
 
@@ -67,7 +80,7 @@ export default async function WorkspaceDocumentEditorPage({ params }: WorkspaceD
           <div className="flex h-16 items-center justify-between px-4">
             <div className="flex items-center gap-4">
               <Button variant="ghost" asChild>
-                <Link href={`/workspaces/${workspaceId}`}>
+                <Link href={backHref}>
                   <ArrowLeft className="mr-2 h-3 w-3" />
                   <span className="text-xs font-normal">
                     {t("workspace.navigation.backToWorkspace", undefined, { name: workspace.name })}
@@ -89,6 +102,7 @@ export default async function WorkspaceDocumentEditorPage({ params }: WorkspaceD
               classification={(document.classification as "public" | "internal" | "confidential" | null) ?? null}
               initialInstructions={instructions}
               lastEditedAt={lastEditedAt ?? null}
+              citationSources={citationSources}
             />
           </div>
         </main>

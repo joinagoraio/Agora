@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { setMeasureDecision } from "@/lib/actions/measures"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import type { NotifyKind } from "@/lib/notify"
+import { cn } from "@/lib/utils"
 
 type Decision = "keep" | "adapt" | "drop"
 
@@ -16,12 +17,30 @@ type Props = {
   decision: Decision | null
   reason: string | null
   decidedAt: string | null
+  decidedByName?: string | null
   disabled?: boolean
   onMessage: (message: string | null, kind?: NotifyKind) => void
   onSaved: () => void
 }
 
-export function MeasureDecisionControl({ workspaceId, measureId, decision, reason, decidedAt, disabled, onMessage, onSaved }: Props) {
+export const DECISION_NOTE_TONE: Record<Decision, string> = {
+  keep: "border-l-muted-foreground/50 bg-muted/40",
+  adapt: "border-l-amber-500 bg-amber-50 text-amber-950",
+  drop: "border-l-red-500 bg-red-50 text-red-950",
+}
+
+/** Keep, adapt, or drop, with the reason shown as a note that is easy to spot. */
+export function MeasureDecisionControl({
+  workspaceId,
+  measureId,
+  decision,
+  reason,
+  decidedAt,
+  decidedByName,
+  disabled,
+  onMessage,
+  onSaved,
+}: Props) {
   const { t } = useI18n()
   const [pending, startTransition] = useTransition()
   const [choice, setChoice] = useState<Decision | null>(null)
@@ -50,27 +69,29 @@ export function MeasureDecisionControl({ workspaceId, measureId, decision, reaso
   }
 
   return (
-    <div className="space-y-2 rounded-md border p-3">
+    <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-muted-foreground">{t("workspace.programme.decision.title")}</span>
-        {(["keep", "adapt", "drop"] as const).map((option) => (
-          <Button
-            key={option}
-            type="button"
-            size="sm"
-            variant={decision === option ? "default" : "outline"}
-            aria-pressed={decision === option}
-            disabled={disabled || pending}
-            onClick={() => pick(option)}
-          >
-            {t(`workspace.programme.decision.${option}`)}
-          </Button>
-        ))}
-        {decision ? (
-          <Button type="button" size="sm" variant="ghost" disabled={disabled || pending} onClick={() => save(null, "")}>
-            {t("workspace.programme.decision.clear")}
-          </Button>
-        ) : null}
+        <span className="w-20 shrink-0 text-xs font-medium text-muted-foreground">{t("workspace.programme.decision.title")}</span>
+        <div className="flex flex-wrap gap-1">
+          {(["keep", "adapt", "drop"] as const).map((option) => (
+            <Button
+              key={option}
+              type="button"
+              size="sm"
+              variant={decision === option ? "default" : "outline"}
+              aria-pressed={decision === option}
+              disabled={disabled || pending}
+              onClick={() => pick(option)}
+            >
+              {t(`workspace.programme.decision.${option}`)}
+            </Button>
+          ))}
+          {decision ? (
+            <Button type="button" size="sm" variant="ghost" disabled={disabled || pending} onClick={() => save(null, "")}>
+              {t("workspace.programme.decision.clear")}
+            </Button>
+          ) : null}
+        </div>
       </div>
       {choice ? (
         <div className="flex flex-wrap items-center gap-2">
@@ -89,11 +110,20 @@ export function MeasureDecisionControl({ workspaceId, measureId, decision, reaso
           </Button>
         </div>
       ) : decision ? (
-        <p className="text-xs text-muted-foreground">
-          {t(`workspace.programme.decision.status.${decision}`)}
-          {reason ? `: ${reason}` : ""}
-          {decidedAt ? ` · ${new Date(decidedAt).toLocaleString()}` : ""}
-        </p>
+        <div className={cn("rounded-r-md border-l-4 px-3 py-2 text-sm", DECISION_NOTE_TONE[decision])}>
+          <p className="font-medium">{t(`workspace.programme.decision.status.${decision}`)}</p>
+          {reason ? <p className="mt-0.5">{reason}</p> : null}
+          {decidedAt ? (
+            <p className="mt-1 text-xs opacity-75">
+              {decidedByName
+                ? t("workspace.programme.decision.decidedBy", undefined, {
+                    name: decidedByName,
+                    when: new Date(decidedAt).toLocaleString(),
+                  })
+                : new Date(decidedAt).toLocaleString()}
+            </p>
+          ) : null}
+        </div>
       ) : (
         <p className="text-xs text-muted-foreground">{t("workspace.programme.decision.none")}</p>
       )}

@@ -12,6 +12,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -25,6 +35,9 @@ import { useI18n } from "@/lib/i18n/use-i18n"
 import { notify } from "@/lib/notify"
 import {
   deleteDemoPack,
+  endLoadedDemo,
+  listLoadedDemos,
+  type LoadedDemo,
   listDemoPacks,
   listDemoPackModels,
   loadDemoPack,
@@ -65,6 +78,16 @@ export function PlatformDemoPacks() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [viewing, setViewing] = useState<DemoPackFile | null>(null)
+  const [loadedDemos, setLoadedDemos] = useState<LoadedDemo[]>([])
+  const [confirmDemo, setConfirmDemo] = useState<LoadedDemo | "all" | null>(null)
+  const [typedWord, setTypedWord] = useState("")
+  const refreshLoaded = (packId: string) => {
+    void listLoadedDemos(packId).then((result) => setLoadedDemos(result.data || []))
+  }
+  useEffect(() => {
+    if (draft.id) refreshLoaded(draft.id)
+    else setLoadedDemos([])
+  }, [draft.id])
   const [headingsText, setHeadingsText] = useState("")
   const [focusText, setFocusText] = useState("")
 
@@ -471,13 +494,11 @@ export function PlatformDemoPacks() {
             <Button
               type="button"
               variant="outline"
-              disabled={pending || !draft.id}
-              onClick={() =>
-                startTransition(async () => {
-                  const result = await removeLoadedDemos(draft.id)
-                  notify(result.error || t("admin.platform.demoPackRemoved"), result.error ? "error" : "success")
-                })
-              }
+              disabled={pending || !draft.id || loadedDemos.length === 0}
+              onClick={() => {
+                setTypedWord("")
+                setConfirmDemo("all")
+              }}
             >
               {t("admin.platform.demoPackRemove")}
             </Button>
@@ -500,8 +521,111 @@ export function PlatformDemoPacks() {
               {t("admin.platform.demoPackDelete")}
             </Button>
           </div>
+
+          {draft.id ? (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold">{t("admin.platform.loadedDemos")}</h3>
+              {loadedDemos.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("admin.platform.loadedDemosEmpty")}</p>
+              ) : (
+                <ul className="divide-y rounded-md border">
+                  {loadedDemos.map((demo) => (
+                    <li key={demo.spaceId} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-medium">{demo.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {t("admin.platform.loadedDemoSummary", undefined, {
+                            loaded: demo.loadedAt ? new Date(demo.loadedAt).toLocaleString() : "",
+                            measures: String(demo.measures),
+                            documents: String(demo.documents),
+                          })}
+                        </span>
+                      </span>
+                      <Button type="button" size="sm" variant="outline" onClick={() => router.push(`/spaces/${demo.spaceId}`)}>
+                        {t("admin.platform.loadedDemoOpen")}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-800"
+                        disabled={pending}
+                        onClick={() => {
+                          setTypedWord("")
+                          setConfirmDemo(demo)
+                        }}
+                      >
+                        {t("demoStrip.end")}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
         </div>
       ) : null}
+
+      <AlertDialog open={confirmDemo !== null} onOpenChange={(open) => (open ? null : setConfirmDemo(null))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmDemo === "all" ? t("admin.platform.removeAllTitle") : t("demoStrip.endTitle")}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                {confirmDemo === "all" ? (
+                  <>
+                    <p>{t("admin.platform.removeAllBody", undefined, { count: String(loadedDemos.length) })}</p>
+                    <ul className="list-disc pl-5">
+                      {loadedDemos.map((demo) => (
+                        <li key={demo.spaceId}>{demo.name}</li>
+                      ))}
+                    </ul>
+                  </>
+                ) : confirmDemo ? (
+                  <p>
+                    {t("demoStrip.endBody", undefined, {
+                      name: confirmDemo.name,
+                      programmes: String(confirmDemo.programmes),
+                      measures: String(confirmDemo.measures),
+                      documents: String(confirmDemo.documents),
+                    })}
+                  </p>
+                ) : null}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1">
+            <p className="text-sm">{t("demoStrip.typeToConfirm", undefined, { word: t("demoStrip.confirmWord") })}</p>
+            <Input value={typedWord} autoFocus onChange={(event) => setTypedWord(event.target.value)} />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>{t("demoStrip.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-700 hover:bg-red-800"
+              disabled={pending || typedWord.trim().toLowerCase() !== t("demoStrip.confirmWord").toLowerCase()}
+              onClick={(event) => {
+                event.preventDefault()
+                const target = confirmDemo
+                startTransition(async () => {
+                  const result =
+                    target === "all" ? await removeLoadedDemos(draft.id) : target ? await endLoadedDemo(target.spaceId) : null
+                  if (result?.error) {
+                    notify(result.error, "error")
+                    return
+                  }
+                  notify(target === "all" ? t("admin.platform.demoPackRemoved") : t("demoStrip.ended"), "success")
+                  setConfirmDemo(null)
+                  refreshLoaded(draft.id)
+                })
+              }}
+            >
+              {confirmDemo === "all" ? t("admin.platform.demoPackRemove") : t("demoStrip.endConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={viewing != null} onOpenChange={(open) => !open && setViewing(null)}>
         <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl">

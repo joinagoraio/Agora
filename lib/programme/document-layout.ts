@@ -138,6 +138,10 @@ export function programmeCommentRailClass(layout: Pick<ProgrammeDocumentLayout, 
   return "pointer-events-none absolute inset-y-0 w-72 left-[min(calc(50%+24rem+0.75rem),calc(100%-18.75rem))] max-md:left-auto max-md:right-0"
 }
 
+/** For reading a longer generated text in a panel: clear headings and space between paragraphs. */
+export const programmeReadingProseClass =
+  "text-sm leading-6 text-foreground [&_p]:my-3 [&_h1]:mt-6 [&_h1]:mb-2 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:mt-7 [&_h2]:mb-2 [&_h2]:border-b [&_h2]:pb-1 [&_h2]:text-base [&_h2]:font-semibold [&_h2:first-child]:mt-0 [&_h3]:mt-5 [&_h3]:mb-1 [&_h3]:font-semibold [&_ul]:my-3 [&_ul]:ml-6 [&_ul]:list-disc [&_ol]:my-3 [&_ol]:ml-6 [&_ol]:list-decimal [&_li]:my-1 [&_strong]:font-semibold [&_.programme-citation]:text-xs [&_.programme-citation]:text-muted-foreground [&_.programme-citation]:underline [&_.programme-citation]:decoration-dotted [&_.programme-citation]:underline-offset-2 [&_.programme-citation:hover]:text-foreground"
+
 export const programmeChapterProseClass =
   "text-sm text-foreground [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_ul]:my-2 [&_ul]:ml-6 [&_ul]:list-disc [&_ol]:my-2 [&_ol]:ml-6 [&_ol]:list-decimal [&_li]:my-1"
 

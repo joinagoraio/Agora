@@ -900,6 +900,25 @@ export async function getChapterDocument(workspaceId: string, documentId: string
   }
 }
 
+/** Written by the AI or by staff, as opposed to an empty chapter stub (a heading and its purpose). */
+function chapterIsDrafted(metadata: Record<string, unknown>, content: string | null | undefined) {
+  if (typeof metadata.lastGeneratedAt === "string") return true
+  return (content || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().length > 600
+}
+
+async function draftedChapterNodeIds(workspaceId: string, chapterDocuments: Record<string, string>) {
+  const ids = Object.values(chapterDocuments)
+  if (ids.length === 0) return new Set<string>()
+  const supabase = await createClient()
+  const { data } = await supabase.from("documents").select("id, content, metadata").eq("workspace_id", workspaceId).in("id", ids)
+  const draftedDocs = new Set(
+    (data || [])
+      .filter((row) => chapterIsDrafted((row.metadata as Record<string, unknown> | null) || {}, row.content as string | null))
+      .map((row) => row.id as string),
+  )
+  return new Set(Object.entries(chapterDocuments).filter(([, docId]) => draftedDocs.has(docId)).map(([nodeId]) => nodeId))
+}
+
 export async function listProgrammeChapters(workspaceId: string) {
   const bindings = await getProgrammeBindings(workspaceId)
   const ids = Object.values(bindings.data.chapterDocuments || {})
@@ -935,6 +954,7 @@ export async function listProgrammeChapters(workspaceId: string) {
           outlineNodeId,
           content: typeof row.content === "string" ? row.content : "",
           hasBody: Boolean(typeof row.content === "string" && row.content.replace(/<[^>]+>/g, "").trim()),
+          drafted: chapterIsDrafted(metadata, typeof row.content === "string" ? row.content : ""),
         }
       }),
   }
@@ -1227,10 +1247,17 @@ export async function fillProgrammeChapters(
   }
   const nodes = await listProgrammeOutlineNodes(bindings.templateId)
   const required = nodes.data.filter((n) => n.required)
-  const alreadyOk = reusableProgress.length > 0
+  const fromEarlierFills = reusableProgress.length > 0
     ? reusableProgress
     : previous?.progress.filter((item) => item.status === "ok") || []
-  const todo = options?.retry || alreadyOk.length > 0 ? remainingFillNodes(required, alreadyOk) : required
+  const written = await draftedChapterNodeIds(workspaceId, bindings.chapterDocuments || {})
+  const alreadyOk = [
+    ...fromEarlierFills.filter((item) => written.has(item.nodeId)),
+    ...required
+      .filter((node) => written.has(node.id) && !fromEarlierFills.some((item) => item.nodeId === node.id))
+      .map((node) => ({ nodeId: node.id, title: node.title, status: "ok" as const })),
+  ]
+  const todo = remainingFillNodes(required, alreadyOk)
   if (todo.length === 0) {
     job = { ...job, status: "done", updatedAt: new Date().toISOString(), progress: alreadyOk }
     await persistFillJob(workspaceId, job, user?.id)

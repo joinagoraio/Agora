@@ -1,12 +1,14 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { IconTooltip } from "@/components/icon-tooltip"
@@ -58,14 +60,10 @@ import {
   bindWorkspaceAgents,
   bindWorkspaceTemplate,
   ensureDefaultAgentsBound,
-  cancelFillProgramme,
-  fillProgrammeChapters,
-  getFillProgrammeJob,
   getProgrammeBindings,
   getProgrammePolicies,
   listProgrammeReviewers,
   previewBoundAgentSources,
-  retryFillProgramme,
   seedLocalProgrammeReviewer,
   approveAllProgrammeLocally,
   listProgrammeChapters,
@@ -79,8 +77,6 @@ import { getWorkspaceDocuments } from "@/lib/actions/document"
 import { getWorkspaceNotes } from "@/lib/actions/workspace-notes"
 import {
   listProgrammeMeasures,
-  generateProgrammeMeasuresFromContext,
-  checkMeasureRoles,
   approveProgrammeMeasure,
   importMeasureCandidatesFromJson,
   setMeasureWorkflowStatus,
@@ -100,7 +96,6 @@ import {
 import { listArtefactVersions, restoreArtefactVersion, compareArtefactVersions } from "@/lib/actions/collaboration"
 import { listGenerationRuns, getProgrammeObservabilityMetrics, listWorkspaceCitationCatalog } from "@/lib/actions/generation-run"
 import { formatCitationLabel } from "@/lib/programme/citation-labels"
-import { estimateJobEta, formatEtaMs } from "@/lib/programme/job-eta"
 import { runMarkdownOrDocxExport, buildAuditPackageJson } from "@/lib/actions/export"
 import {
   getActiveProgrammePublication,
@@ -152,6 +147,13 @@ import { listProgrammeInterests } from "@/lib/actions/interests"
 import type { ProgrammeInterest } from "@/lib/programme/interests"
 import { parseRoleCheck } from "@/lib/programme/role-check"
 import { parseMeasurePriority } from "@/lib/programme/measure-priority"
+import {
+  MEASURE_FILTERS,
+  MEASURE_SORTS,
+  sortAndFilterMeasures,
+  type MeasureFilter,
+  type MeasureSort,
+} from "@/lib/programme/measure-order"
 import { MeasurePriorityControl } from "@/components/measure-priority-control"
 import { Badge } from "@/components/ui/badge"
 import { OverflowTitle } from "@/components/overflow-title"
@@ -172,7 +174,10 @@ import { UserAvatar } from "@/components/user-avatar"
 import { UserMenu } from "@/components/user-menu"
 import { WorkspaceNotesPanel, type WorkspaceNote } from "@/components/workspace-notes-panel"
 import { getDocumentFileExtension } from "@/lib/utils/document-files"
-import { ArrowLeft, MoreVertical } from "lucide-react"
+import { ArrowLeft, Loader2, MoreVertical } from "lucide-react"
+import { useBackgroundJob } from "@/components/programme-jobs-provider"
+import { ProgrammeWriteChaptersBar } from "@/components/programme-write-chapters-bar"
+import { startFillChapters, startMeasureGeneration, startRoleCheck } from "@/lib/actions/programme-jobs"
 import {
   ProgrammeToolExtra,
   ProgrammeToolPage,
@@ -292,6 +297,8 @@ type Props = {
   currentUserId?: string | null
   accessRole?: string | null
   initialDocumentOwnerId?: string | null
+  /** Shown above everything, for example the demo strip. */
+  topBanner?: ReactNode
 }
 
 export function ProgrammeWorkbench({
@@ -314,6 +321,7 @@ export function ProgrammeWorkbench({
   accessRole: accessRoleProp = null,
   initialDocumentOwnerId = null,
   metadata,
+  topBanner = null,
 }: Props) {
   const workspaceSummary = workspaceSummaryProp ?? ""
   const workspaceDescription = workspaceDescriptionProp ?? ""
@@ -541,6 +549,36 @@ export function ProgrammeWorkbench({
   const [measureInstructions, setMeasureInstructions] = useState("")
   const [measureImportJson, setMeasureImportJson] = useState("")
   const [pending, startTransition] = useTransition()
+  const measuresJob = useBackgroundJob("measures", (job) => {
+    refresh()
+    if (job.status !== "done") {
+      notify(job.error || t("workspace.programme.exportFailed"), "error")
+      return
+    }
+    const errCount = Number(job.progress.result?.errors ?? 0)
+    notify(
+      t("workspace.programme.measuresGenerated", undefined, {
+        count: String(job.progress.result?.saved ?? 0),
+        errors: String(errCount),
+      }),
+      errCount > 0 ? "warning" : "success",
+    )
+  })
+  const fillJob = useBackgroundJob("fill")
+  const rolesJob = useBackgroundJob("roles", (job) => {
+    refresh()
+    if (job.status !== "done") {
+      notify(job.error || t("workspace.programme.exportFailed"), "error")
+      return
+    }
+    notify(
+      t("workspace.programme.roleCheck.done", undefined, {
+        count: String(job.progress.result?.checked ?? 0),
+        total: String(job.progress.result?.total ?? 0),
+      }),
+      "success",
+    )
+  })
   const [commentRefreshKey, setCommentRefreshKey] = useState(0)
   const [templates, setTemplates] = useState<ProgrammeTemplateSummary[]>([])
   const [agents, setAgents] = useState<
@@ -553,9 +591,11 @@ export function ProgrammeWorkbench({
   const [notes, setNotes] = useState<WorkspaceNote[]>([])
   const [graph, setGraph] = useState<{ nodes: any[]; edges: any[] }>({ nodes: [], edges: [] })
   const [duplicates, setDuplicates] = useState<Array<Array<{ id: string; title: string; score?: number; reason?: string }>>>([])
-  const [fillProgress, setFillProgress] = useState<Array<{ title: string; status: string; error?: string }>>([])
-  const [fillStartedAt, setFillStartedAt] = useState<string | null>(null)
-  const [filling, setFilling] = useState(false)
+  const [chapterContentKey, setChapterContentKey] = useState(0)
+  const chaptersWritten = useCallback(() => {
+    setChapterContentKey((key) => key + 1)
+    void listProgrammeChapters(workspaceId).then((result) => setChapters(result.data || []))
+  }, [workspaceId])
   const [citationCatalog, setCitationCatalog] = useState<{
     documents: Array<{ id: string; title: string; documentRole?: string | null }>
     sections: Array<{ id: string; documentId: string; title: string; pageNumber?: number }>
@@ -600,6 +640,8 @@ export function ProgrammeWorkbench({
   } | null>(null)
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
   const [selectedMeasureId, setSelectedMeasureId] = useState<string | null>(null)
+  const [measureSort, setMeasureSort] = useState<MeasureSort>("priority")
+  const [measureFilter, setMeasureFilter] = useState<MeasureFilter>("all")
   const [reviewPane, setReviewPane] = useState<"chapters" | "measures" | "notes">("chapters")
   const [analysisView, setAnalysisView] = useState<"findings" | "vision">("findings")
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
@@ -619,6 +661,7 @@ export function ProgrammeWorkbench({
       chapterOwnerId: string | null
       outlineNodeId: string | null
       hasBody?: boolean
+      drafted?: boolean
     }>
   >([])
   const [compareVersionA, setCompareVersionA] = useState("")
@@ -667,10 +710,6 @@ export function ProgrammeWorkbench({
         })
         if (policyResult.data.documentOwnerId) setDocumentOwnerId(policyResult.data.documentOwnerId)
         if (policyResult.data.accessRole) setAccessRole(policyResult.data.accessRole)
-        if (policyResult.data.fillJob?.progress?.length) {
-          setFillProgress(policyResult.data.fillJob.progress)
-          setFillStartedAt(policyResult.data.fillJob.startedAt || null)
-        }
       }
       setPublication(publicationResult.data || null)
       setCitablePublications(citableResult.data || [])
@@ -747,20 +786,6 @@ export function ProgrammeWorkbench({
     refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId])
-
-  useEffect(() => {
-    if (!filling) return
-    const timer = window.setInterval(() => {
-      void getFillProgrammeJob(workspaceId).then((result) => {
-        if (result.data?.progress) setFillProgress(result.data.progress)
-        if (result.data?.startedAt) setFillStartedAt(result.data.startedAt)
-        if (result.data?.status && result.data.status !== "running") {
-          setFilling(false)
-        }
-      })
-    }, 2000)
-    return () => window.clearInterval(timer)
-  }, [filling, workspaceId])
 
   const pipeline = useMemo(
     () =>
@@ -871,7 +896,15 @@ export function ProgrammeWorkbench({
   ]
   const pendingMeasures = measures.filter((m) => m.workflow_status !== "approved")
   const activeReport = reports.find((report) => report.id === selectedReportId) ?? reports[0] ?? null
-  const activeMeasure = measures.find((measure) => measure.id === selectedMeasureId) ?? measures[0] ?? null
+  const shownMeasures = sortAndFilterMeasures(measures, {
+    sort: measureSort,
+    filter: measureFilter,
+    chapterOrder: outlineChapters.map((chapter) => chapter.id),
+  })
+  const activeMeasure =
+    shownMeasures.find((measure) => measure.id === selectedMeasureId) ?? shownMeasures[0] ?? null
+  const chapterTitle = (id: string | null | undefined) => outlineChapters.find((chapter) => chapter.id === id)?.title ?? null
+  const personName = (id: string | null | undefined) => (id ? reviewers.find((person) => person.id === id)?.name ?? null : null)
   const pendingChapters = chapters.filter((chapter) => chapter.workflowStatus !== "approved")
   const reviewHasPending = pendingMeasures.length + pendingChapters.length > 0
   const reviewHasArtefacts = measures.length + chapters.length > 0
@@ -952,6 +985,7 @@ export function ProgrammeWorkbench({
     <ProgrammeTextHistoryProvider>
     <>
     <div className="relative flex h-dvh flex-col overflow-hidden bg-white">
+      {topBanner}
       <header
         className={cn(
           "shrink-0 border-b bg-card",
@@ -1003,8 +1037,30 @@ export function ProgrammeWorkbench({
                   </Button>
                 </DropdownMenuTrigger>
               </IconTooltip>
-              <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuContent align="end" className="w-52">
                 <ProgrammeAccessMenuItems onPick={(panel) => setAccessPanel(panel)} />
+                {canAdminister ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      disabled={fillJob.running}
+                      onSelect={() =>
+                        startTransition(async () => {
+                          const result = await startFillChapters(workspaceId, spaceId)
+                          if (result.error) {
+                            notify(result.error, "error")
+                            return
+                          }
+                          fillJob.watch()
+                          closeStructure()
+                          notify(t("workspace.programme.writeChapters.started"), "info")
+                        })
+                      }
+                    >
+                      {t("workspace.programme.writeChapters.action")}
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
           ) : undefined
@@ -1143,6 +1199,20 @@ export function ProgrammeWorkbench({
             <ProgrammeChapterEditor
               workspaceId={workspaceId}
               spaceId={spaceId}
+              contentRefreshKey={chapterContentKey}
+              topSlot={
+                !isKnowledgeView ? (
+                  <ProgrammeWriteChaptersBar
+                    workspaceId={workspaceId}
+                    spaceId={spaceId}
+                    templateId={bindings.templateId ?? null}
+                    chapters={chapters}
+                    canAdminister={canAdminister}
+                    onMessage={notify}
+                    onChaptersWritten={chaptersWritten}
+                  />
+                ) : null
+              }
               bindings={bindings}
               onBindingsChange={setBindings}
               onMessage={notify}
@@ -1859,57 +1929,41 @@ export function ProgrammeWorkbench({
               <>
           <div className="flex flex-wrap gap-2">
             <Button
-              disabled={pending}
+              disabled={pending || measuresJob.running || accessRole === "viewer"}
               data-guidance-target="generate-measures"
               onClick={() =>
                 startTransition(async () => {
-                  try {
-                  const result = await generateProgrammeMeasuresFromContext(workspaceId, {
+                  const result = await startMeasureGeneration(workspaceId, {
                     instructions: measureInstructions || undefined,
                     count: 5,
                   })
-                  if (result.error) {
-                    notify(result.error, "error")
+                  if (result.error || !result.data) {
+                    notify(result.error || t("workspace.programme.exportFailed"), "error")
                     return
                   }
-                  const errCount = result.data?.errors?.length ?? 0
-                  notify(
-                    t("workspace.programme.measuresGenerated", undefined, {
-                      count: String(result.data?.saved ?? 0),
-                      errors: String(errCount),
-                    }),
-                    errCount > 0 ? "warning" : "success",
-                  )
-                  refresh()
-                  } catch (error) {
-                    notify(error instanceof Error ? error.message : t("workspace.programme.exportFailed"), "error")
-                  }
+                  measuresJob.watch(result.data)
                 })
               }
             >
+              {measuresJob.running ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {t("workspace.programme.generateMeasures")}
             </Button>
             <Button
               variant="outline"
-              disabled={pending || measures.length === 0 || accessRole === "viewer"}
+              disabled={pending || rolesJob.running || measures.length === 0 || accessRole === "viewer"}
+              data-guidance-target="check-roles"
               onClick={() =>
                 startTransition(async () => {
-                  const result = await checkMeasureRoles(workspaceId)
-                  if (result.error) {
-                    notify(result.error, "error")
+                  const result = await startRoleCheck(workspaceId)
+                  if (result.error || !result.data) {
+                    notify(result.error || t("workspace.programme.exportFailed"), "error")
                     return
                   }
-                  notify(
-                    t("workspace.programme.roleCheck.done", undefined, {
-                      count: String(result.data?.checked ?? 0),
-                      total: String(result.data?.total ?? 0),
-                    }),
-                    "success",
-                  )
-                  refresh()
+                  rolesJob.watch(result.data)
                 })
               }
             >
+              {rolesJob.running ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {t("workspace.programme.roleCheck.run")}
             </Button>
             <Button
@@ -2043,20 +2097,56 @@ export function ProgrammeWorkbench({
           <ProgrammeToolSplit
             list={
               <div className="flex h-full min-h-0 flex-col">
-                <div className="shrink-0 border-b bg-muted px-4 py-3">
+                <div className="shrink-0 space-y-2 border-b bg-muted px-4 py-3">
                   <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                     {t("workspace.programme.measuresListTitle")}
                   </h3>
-                  <p className="mt-1 text-xs text-foreground">{t("workspace.programme.measuresListHint")}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select value={measureSort} onValueChange={(value) => setMeasureSort(value as MeasureSort)}>
+                      <SelectTrigger className="h-8 w-auto gap-1 bg-background text-xs" aria-label={t("workspace.programme.measureOrder.sortLabel")}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MEASURE_SORTS.map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {t(`workspace.programme.measureOrder.sort.${option}`)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={measureFilter} onValueChange={(value) => setMeasureFilter(value as MeasureFilter)}>
+                      <SelectTrigger className="h-8 w-auto gap-1 bg-background text-xs" aria-label={t("workspace.programme.measureOrder.filterLabel")}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MEASURE_FILTERS.map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {t(`workspace.programme.measureOrder.filter.${option}`)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span className="text-xs text-muted-foreground">
+                      {t("workspace.programme.measureOrder.count", undefined, {
+                        shown: String(shownMeasures.length),
+                        total: String(measures.length),
+                      })}
+                    </span>
+                  </div>
                 </div>
               <ul className="min-h-0 flex-1 overflow-y-auto bg-background text-sm">
                 {measures.length === 0 ? (
                   <li className="px-4 py-6 text-muted-foreground">
                     {t("workspace.programme.noMeasures")} {t("workspace.programme.emptyNext.measures")}
                   </li>
+                ) : shownMeasures.length === 0 ? (
+                  <li className="px-4 py-6 text-muted-foreground">{t("workspace.programme.measureOrder.noneShown")}</li>
                 ) : null}
-                {measures.map((item) => {
+                {shownMeasures.map((item) => {
                   const selected = activeMeasure?.id === item.id
+                  const dropped = item.decision === "drop"
+                  const roleCheck = parseRoleCheck(item.role_check)
+                  const priority = dropped ? null : parseMeasurePriority(item.priority)
                   return (
                     <li key={item.id} className="border-b">
                       <button
@@ -2068,32 +2158,39 @@ export function ProgrammeWorkbench({
                           if (editingMeasureId && editingMeasureId !== item.id) setEditingMeasureId(null)
                         }}
                       >
-                        <span className={`block font-medium ${item.decision === "drop" ? "text-muted-foreground line-through" : ""}`}>
+                        <span className={`block font-medium ${dropped ? "text-muted-foreground line-through" : ""}`}>
                           {item.title}
                         </span>
-                        <span className="text-xs text-muted-foreground">
-                          {t(`workspace.programme.chapterListStatus.${item.workflow_status}`, item.workflow_status)}
-                          {item.decision ? ` · ${t(`workspace.programme.decision.status.${item.decision}`)}` : ""}
+                        {dropped && item.decision_reason ? (
+                          <span className="mt-1 block border-l-2 border-l-red-400 pl-2 text-xs text-muted-foreground">
+                            {item.decision_reason}
+                          </span>
+                        ) : null}
+                        <span className="mt-1.5 flex flex-wrap gap-1">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "font-normal",
+                              !item.decision && "border-dashed text-muted-foreground",
+                              item.decision === "adapt" && "border-amber-400 text-amber-900",
+                              item.decision === "drop" && "border-red-300 text-red-900",
+                            )}
+                          >
+                            {item.decision
+                              ? t(`workspace.programme.decision.status.${item.decision}`)
+                              : t("workspace.programme.decision.undecided")}
+                          </Badge>
+                          {priority ? (
+                            <Badge variant={priority === "high" ? "default" : "secondary"} className="font-normal">
+                              {t(`workspace.programme.priority.badge.${priority}`)}
+                            </Badge>
+                          ) : null}
+                          {roleCheck ? (
+                            <Badge variant="outline" className="font-normal text-muted-foreground" title={roleCheck.reason}>
+                              {t(`workspace.programme.roleCheck.actor.${roleCheck.actor}`)}
+                            </Badge>
+                          ) : null}
                         </span>
-                        {(() => {
-                          const roleCheck = parseRoleCheck(item.role_check)
-                          const priority = item.decision === "drop" ? null : parseMeasurePriority(item.priority)
-                          if (!roleCheck && !priority) return null
-                          return (
-                            <span className="mt-1 flex flex-wrap gap-1">
-                              {priority ? (
-                                <Badge variant={priority === "high" ? "default" : "secondary"} className="font-normal">
-                                  {t(`workspace.programme.priority.badge.${priority}`)}
-                                </Badge>
-                              ) : null}
-                              {roleCheck ? (
-                                <Badge variant="outline" className="font-normal" title={roleCheck.reason}>
-                                  {t(`workspace.programme.roleCheck.actor.${roleCheck.actor}`)}
-                                </Badge>
-                              ) : null}
-                            </span>
-                          )
-                        })()}
                       </button>
                     </li>
                   )
@@ -2104,25 +2201,20 @@ export function ProgrammeWorkbench({
             detail={
               <div className="space-y-3 p-6 text-sm">
             {(activeMeasure ? [activeMeasure] : []).map((m) => (
-              <div key={m.id} className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span>
-                    <span className="block font-medium">{m.title}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {t(`workspace.programme.measureType.${m.measure_type}`, m.measure_type)}
-                      {" · "}
-                      {t(`workspace.programme.chapterListStatus.${m.workflow_status}`, m.workflow_status)}
-                    </span>
-                    {Array.isArray(m.citations) && m.citations.length ? (
-                      <span className="mt-1 block text-xs text-muted-foreground">
-                        {m.citations
-                          .map((citation: { documentId: string; sectionId?: string; pageNumber?: number }) =>
-                            formatCitationLabel(citation, citationCatalog.documents, citationCatalog.sections),
-                          )
-                          .join("; ")}
-                      </span>
-                    ) : null}
-                  </span>
+              <div key={m.id} className="space-y-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <h3 className={cn("text-base font-semibold", m.decision === "drop" && "text-muted-foreground line-through")}>
+                      {m.title}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {[
+                        chapterTitle(m.outline_node_id) || t("workspace.programme.measureField.chapterNone"),
+                        t(`workspace.programme.measureType.${m.measure_type}`, m.measure_type),
+                        t(`workspace.programme.chapterListStatus.${m.workflow_status}`, m.workflow_status),
+                      ].join(" · ")}
+                    </p>
+                  </div>
                   <div className="flex flex-wrap gap-1">
                     <Button
                       size="sm"
@@ -2207,32 +2299,41 @@ export function ProgrammeWorkbench({
                     )}
                   </div>
                 </div>
-                <MeasureDecisionControl
-                  workspaceId={workspaceId}
-                  measureId={m.id}
-                  decision={m.decision ?? null}
-                  reason={m.decision_reason ?? null}
-                  decidedAt={m.decided_at ?? null}
-                  disabled={pending || accessRole === "viewer"}
-                  onMessage={notify}
-                  onSaved={refresh}
-                />
-                {m.decision !== "drop" ? (
-                  <MeasurePriorityControl
+                <section className="space-y-3 rounded-lg border bg-muted/20 p-4" data-guidance-target="measure-staff">
+                  <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    {t("workspace.programme.measureStaffTitle")}
+                  </h4>
+                  <MeasureDecisionControl
                     workspaceId={workspaceId}
                     measureId={m.id}
-                    priority={parseMeasurePriority(m.priority)}
-                    reason={m.priority_reason ?? null}
+                    decision={m.decision ?? null}
+                    reason={m.decision_reason ?? null}
+                    decidedAt={m.decided_at ?? null}
+                    decidedByName={personName(m.decided_by)}
                     disabled={pending || accessRole === "viewer"}
                     onMessage={notify}
                     onSaved={refresh}
                   />
-                ) : null}
+                  {m.decision !== "drop" ? (
+                    <MeasurePriorityControl
+                      workspaceId={workspaceId}
+                      measureId={m.id}
+                      priority={parseMeasurePriority(m.priority)}
+                      reason={m.priority_reason ?? null}
+                      disabled={pending || accessRole === "viewer"}
+                      onMessage={notify}
+                      onSaved={refresh}
+                    />
+                  ) : null}
+                </section>
                 <MeasureSummaryLines
                   measure={m}
                   interests={programmeInterests}
                   sourceLabel={(documentId, pageNumber) =>
                     formatCitationLabel({ documentId, pageNumber }, citationCatalog.documents, citationCatalog.sections)
+                  }
+                  citationLabel={(citation) =>
+                    formatCitationLabel(citation, citationCatalog.documents, citationCatalog.sections)
                   }
                 />
                 {editingMeasureId === m.id && (
@@ -3337,74 +3438,6 @@ export function ProgrammeWorkbench({
                 {t("workspace.programme.exportJson")}
               </Button>
               <Button
-                disabled={pending || filling || !canAdminister}
-                variant="outline"
-                onClick={() => {
-                  setFilling(true)
-                  setFillProgress([])
-                  setFillStartedAt(new Date().toISOString())
-                  startTransition(async () => {
-                    const result = await fillProgrammeChapters(workspaceId, spaceId)
-                    setFillProgress(result.data?.progress || [])
-                    setFilling(false)
-                    if (result.error) {
-                      notify(result.error, "error")
-                    } else if (result.data?.cancelled) {
-                      notify(t("workspace.programme.fillCancelled"), "warning")
-                    } else {
-                      notify(
-                        t("workspace.programme.fillDone", undefined, {
-                          count: String(result.data?.progress.filter((p) => p.status === "ok").length ?? 0),
-                        }),
-                      )
-                    }
-                    refresh()
-                  })
-                }}
-              >
-                {t("workspace.programme.fillProgramme")}
-              </Button>
-              <Button
-                disabled={!filling}
-                variant="outline"
-                onClick={() => {
-                  notify(t("workspace.programme.fillCancelRequested"), "info")
-                  void cancelFillProgramme(workspaceId).then((result) => {
-                    if (result.error) notify(result.error, "error")
-                  })
-                }}
-              >
-                {t("workspace.programme.fillCancel")}
-              </Button>
-              <Button
-                disabled={pending || filling || !canAdminister}
-                variant="outline"
-                onClick={() => {
-                  setFilling(true)
-                  startTransition(async () => {
-                    const result = await retryFillProgramme(workspaceId, spaceId)
-                    setFillProgress(result.data?.progress || [])
-                    setFilling(false)
-                    if (result.error) {
-                      notify(result.error, "error")
-                    } else if (result.data?.cancelled) {
-                      notify(t("workspace.programme.fillCancelled"), "warning")
-                    } else if (result.data?.skipped) {
-                      notify(t("workspace.programme.fillNothingToRetry"), "info")
-                    } else {
-                      notify(
-                        t("workspace.programme.fillDone", undefined, {
-                          count: String(result.data?.progress.filter((p) => p.status === "ok").length ?? 0),
-                        }),
-                      )
-                    }
-                    refresh()
-                  })
-                }}
-              >
-                {t("workspace.programme.fillRetry")}
-              </Button>
-              <Button
                 disabled={pending || !canAdminister}
                 variant="outline"
                 onClick={() =>
@@ -3500,30 +3533,6 @@ export function ProgrammeWorkbench({
               placeholder={t("workspace.programme.exportOverridePlaceholder")}
             />
           </ProgrammeToolExtra>
-          {fillProgress.length > 0 && (
-            <ul className="text-sm">
-              {(() => {
-                const eta = estimateJobEta({ startedAt: fillStartedAt, progress: fillProgress })
-                return (
-                  <li className="text-muted-foreground">
-                    {t("workspace.programme.fillEta", undefined, {
-                      eta: formatEtaMs(eta.remainingMs),
-                      done: String(eta.doneCount),
-                      total: String(fillProgress.length),
-                    })}
-                  </li>
-                )
-              })()}
-              {fillProgress.map((item, index) => (
-                <li key={`${item.title}-${index}`}>
-                  {t("workspace.programme.fillProgress", undefined, {
-                    title: item.title,
-                    status: item.error || item.status,
-                  })}
-                </li>
-              ))}
-            </ul>
-          )}
           </ProgrammeToolPage>
         </TabsContent>
 

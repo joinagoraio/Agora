@@ -5,6 +5,9 @@ import { redirect, notFound } from "next/navigation"
 export const dynamic = "force-dynamic"
 import { ProgrammeWorkbench } from "@/components/programme-workbench"
 import { WorkspaceChatWrapper } from "@/components/workspace-chat-wrapper"
+import { ProgrammeJobsProvider } from "@/components/programme-jobs-provider"
+import { DemoStrip } from "@/components/demo-strip"
+import { getLoadedDemo } from "@/lib/actions/demo-pack"
 import { parseDocumentOwnerId } from "@/lib/programme/ownership"
 import { isEnvironmentalProgrammeWorkspace, resolveWorkspaceKind } from "@/lib/programme/domain"
 import { canAccessProgramme, canManageProgrammeAccess, isAuthorityAdministrator } from "@/lib/programme/membership"
@@ -90,6 +93,7 @@ export default async function ProgrammeWorkbenchPage({
       : spaceMembership?.role === "owner" || spaceMembership?.role === "admin"
         ? spaceMembership.role
         : workspaceMembership?.role || "viewer"
+  const { data: loadedDemo } = await getLoadedDemo(workspace.space_id)
   const canManage =
     canAccessSettings ||
     workspaceMembership?.role === "member" ||
@@ -97,6 +101,7 @@ export default async function ProgrammeWorkbenchPage({
 
   return (
     <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+      <ProgrammeJobsProvider workspaceId={workspace.id}>
       <WorkspaceChatWrapper
         workspaceId={workspace.id}
         workspaceName={workspace.name}
@@ -123,6 +128,7 @@ export default async function ProgrammeWorkbenchPage({
           spaceHelpAiDisabled: isSpaceHelpAiDisabled(space?.metadata),
         })}
         canAccessSettings={canAccessSettings}
+        topBanner={loadedDemo ? <DemoStrip demo={loadedDemo} /> : null}
         currentUserId={user.id}
         accessRole={accessRole}
         initialDocumentOwnerId={
@@ -130,6 +136,7 @@ export default async function ProgrammeWorkbenchPage({
         }
       />
       </WorkspaceChatWrapper>
+      </ProgrammeJobsProvider>
     </Suspense>
   )
 }

@@ -8,13 +8,11 @@ import {
   PROGRAMME_A4_WIDTH,
   applyProgrammePageExtras,
   collectProgrammePaginationUnits,
-  naturalPaginationOffsets,
   programmeA4SheetTops,
   programmePagePushOffsets,
   programmePaginationChapterMeta,
   programmePaginationIsChapterTitle,
   programmePaginationKeepWithNext,
-  readProgrammePageExtra,
   relativeOffsetTop,
   resetProgrammePagination,
 } from "@/lib/programme/document-pagination"
@@ -90,6 +88,7 @@ export function useProgrammeA4Pagination(enabled: boolean, layoutKey: string) {
 
     let frame = 0
     let idle = 0
+    let expectedHeight = -1
     let resizeObserver: ResizeObserver
     let mutationObserver: MutationObserver
 
@@ -98,15 +97,15 @@ export function useProgrammeA4Pagination(enabled: boolean, layoutKey: string) {
         schedule("idle")
         return
       }
-      resizeObserver.disconnect()
       mutationObserver.disconnect()
+      // Measure the natural flow, then push blocks to the next page in the same task, so nothing paints in between.
+      // Estimating the natural flow from applied margins drifts when margins collapse, which made pages jump.
+      resetProgrammePagination(type)
+      type.style.paddingBottom = ""
       const units = collectProgrammePaginationUnits(type)
       const metrics = measureA4Metrics(page)
-      const applied = units.map((unit) => readProgrammePageExtra(unit))
-      const measuredTops = units.map((unit) => Math.max(0, relativeOffsetTop(unit, type) - metrics.padY))
-      const naturalTops = naturalPaginationOffsets(measuredTops, applied)
-      const measured = units.map((unit, index) => ({
-        offsetTop: naturalTops[index] ?? 0,
+      const measured = units.map((unit) => ({
+        offsetTop: Math.max(0, relativeOffsetTop(unit, type) - metrics.padY),
         height: unit.getBoundingClientRect().height,
         keepWithNext: programmePaginationKeepWithNext(unit),
       }))
@@ -131,7 +130,7 @@ export function useProgrammeA4Pagination(enabled: boolean, layoutKey: string) {
       const nextStarts = programmePageStartsFromUnits(placed, nextCount, metrics.pageHeight, metrics.padY, metrics.gap)
       setPageCount((current) => (current === nextCount ? current : nextCount))
       setPageStarts((current) => (samePageStarts(current, nextStarts) ? current : nextStarts))
-      resizeObserver.observe(type)
+      expectedHeight = type.getBoundingClientRect().height
       mutationObserver.observe(type, { childList: true, subtree: true, characterData: true })
     }
 
@@ -159,9 +158,13 @@ export function useProgrammeA4Pagination(enabled: boolean, layoutKey: string) {
       })
     }
 
-    resizeObserver = new ResizeObserver(() => schedule("idle"))
+    resizeObserver = new ResizeObserver(() => {
+      if (Math.abs(type.getBoundingClientRect().height - expectedHeight) < 1) return
+      schedule("idle")
+    })
     mutationObserver = new MutationObserver(() => schedule("idle"))
     apply()
+    resizeObserver.observe(type)
     return () => {
       if (frame) window.cancelAnimationFrame(frame)
       if (idle) window.clearTimeout(idle)

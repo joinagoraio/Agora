@@ -1,11 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Check, Loader2 } from "lucide-react"
+import { Check, Loader2, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { listCoherenceFindings, runCoherenceAnalysis, setCoherenceDecision } from "@/lib/actions/coherence"
+import { listCoherenceFindings, setCoherenceDecision } from "@/lib/actions/coherence"
+import { startCoherenceRun } from "@/lib/actions/programme-jobs"
+import { useBackgroundJob } from "@/components/programme-jobs-provider"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import {
   COHERENCE_KINDS,
@@ -38,7 +40,6 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
   const { t } = useI18n()
   const [findings, setFindings] = useState<CoherenceFinding[]>([])
   const [loaded, setLoaded] = useState(false)
-  const [running, setRunning] = useState(false)
   const [pair, setPair] = useState<string | null>(null)
   const [dropping, setDropping] = useState<{ id: string; reason: string } | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
@@ -64,17 +65,24 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
       })
     : findings
 
+  const compareJob = useBackgroundJob("coherence", (job) => {
+    void refresh()
+    setPair(null)
+    if (job.status === "done") {
+      onMessage(t("workspace.programme.coherence.done", undefined, { count: String(job.progress.result?.total ?? 0) }))
+    } else {
+      onMessage(job.error || t("workspace.programme.coherence.error"), "error")
+    }
+  })
+  const running = compareJob.running
+
   const run = async () => {
-    setRunning(true)
-    const result = await runCoherenceAnalysis(workspaceId)
-    setRunning(false)
-    if (!("data" in result) || result.error) {
+    const result = await startCoherenceRun(workspaceId)
+    if (result.error || !result.data) {
       onMessage(result.error || t("workspace.programme.coherence.error"), "error")
       return
     }
-    setFindings(result.data)
-    setPair(null)
-    onMessage(t("workspace.programme.coherence.done", undefined, { count: String(result.data.length) }))
+    compareJob.watch(result.data)
   }
 
   const decide = async (finding: CoherenceFinding, decision: "keep" | "drop" | null, reason?: string) => {
@@ -110,9 +118,11 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
           {findings.length ? t("workspace.programme.coherence.runAgain") : t("workspace.programme.coherence.run")}
         </Button>
         <p className="text-sm text-muted-foreground">
-          {selected.length < 2
-            ? t("workspace.programme.coherence.needTwo")
-            : t("workspace.programme.coherence.scope", undefined, { count: String(selected.length) })}
+          {running
+            ? t("workspace.programme.coherence.running")
+            : selected.length < 2
+              ? t("workspace.programme.coherence.needTwo")
+              : t("workspace.programme.coherence.scope", undefined, { count: String(selected.length) })}
         </p>
       </div>
 
@@ -148,27 +158,31 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
                         {name(row)}
                       </th>
                       {selected.map((column) => {
-                        if (column.id === row.id) return <td key={column.id} className="h-9 w-16 rounded bg-muted/40" />
+                        if (column.id === row.id) return <td key={column.id} className="h-10 min-w-[8.5rem] rounded bg-muted/40" />
                         const key = pairKey(row.id, column.id)
                         const cell = counts.get(key)
                         const total = cell ? cell.reinforces + cell.shared_measure + cell.dilemma : 0
                         return (
-                          <td key={column.id} className="h-9 w-16">
+                          <td key={column.id} className="h-10 min-w-[8.5rem]">
                             <button
                               type="button"
                               disabled={total === 0}
                               aria-pressed={pair === key}
                               aria-label={`${name(row)} × ${name(column)}`}
+                              title={t("workspace.programme.coherence.cellHint")}
                               className={cn(
-                                "flex h-9 w-16 items-center justify-center gap-0.5 rounded border",
-                                pair === key ? "border-foreground" : "border-border",
+                                "flex h-10 w-full flex-nowrap items-center justify-center gap-1 rounded border px-2 transition-colors",
+                                pair === key ? "border-foreground bg-muted ring-1 ring-foreground" : "border-border hover:bg-muted/50",
                                 total === 0 && "text-muted-foreground",
                               )}
                               onClick={() => setPair(pair === key ? null : key)}
                             >
-                              {cell
+                              {cell && total > 0
                                 ? COHERENCE_KINDS.filter((kind) => cell[kind] > 0).map((kind) => (
-                                    <span key={kind} className={cn("rounded border px-1 font-semibold", KIND_TONE[kind])}>
+                                    <span
+                                      key={kind}
+                                      className={cn("whitespace-nowrap rounded border px-1.5 py-0.5 font-semibold leading-none", KIND_TONE[kind])}
+                                    >
                                       {KIND_MARK[kind]}
                                       {cell[kind]}
                                     </span>
@@ -184,10 +198,21 @@ export function ProgrammeCoherenceView({ workspaceId, interests, canEdit, citati
               </table>
             </div>
             {pair ? (
-              <Button type="button" size="sm" variant="ghost" onClick={() => setPair(null)}>
-                {t("workspace.programme.coherence.showAll")}
-              </Button>
-            ) : null}
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-foreground/30 bg-muted/50 px-3 py-2 text-sm" role="status">
+                <span className="min-w-0 flex-1">
+                  {t("workspace.programme.coherence.showingPair", undefined, {
+                    a: pair.split("|").map((id) => byId.get(id)).filter(Boolean).map((interest) => name(interest!))[0] || "",
+                    b: pair.split("|").map((id) => byId.get(id)).filter(Boolean).map((interest) => name(interest!))[1] || "",
+                  })}
+                </span>
+                <Button type="button" size="sm" variant="outline" onClick={() => setPair(null)}>
+                  <X className="h-4 w-4" />
+                  {t("workspace.programme.coherence.showAll")}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">{t("workspace.programme.coherence.cellHint")}</p>
+            )}
           </div>
         ) : null}
 

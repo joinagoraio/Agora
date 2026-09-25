@@ -28,6 +28,8 @@ import {
 import { deleteDocument, generateWorkspaceDocumentDraft, updateWorkspaceDocument } from "@/lib/actions/document"
 import { CircleStop, Loader2, MoreVertical, Save, Sparkles, Trash2 } from "lucide-react"
 import { RichTextEditor } from "@/components/rich-text-editor"
+import { ProgrammeCitationTooltip } from "@/components/programme-citation-tooltip"
+import type { ProgrammeCitationSource } from "@/lib/programme/citation-display"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { toast } from "sonner"
 import { useI18n } from "@/lib/i18n/use-i18n"
@@ -40,6 +42,7 @@ interface MyDocumentEditorProps {
   classification?: "public" | "internal" | "confidential" | null
   initialInstructions?: string | null
   lastEditedAt?: string | null
+  citationSources?: ProgrammeCitationSource[]
 }
 
 export function MyDocumentEditor({
@@ -50,6 +53,7 @@ export function MyDocumentEditor({
   classification,
   initialInstructions,
   lastEditedAt,
+  citationSources = [],
 }: MyDocumentEditorProps) {
   const router = useRouter()
   const { t } = useI18n()
@@ -352,8 +356,11 @@ export function MyDocumentEditor({
           </div>
 
           <div className="grid gap-2">
+            {citationSources.length ? <ProgrammeCitationTooltip /> : null}
             <Label htmlFor="document-content">{t("workspace.documents.editor.contentLabel")}</Label>
             <RichTextEditor
+              workspaceId={workspaceId}
+              citationSources={citationSources}
               content={content}
               onChange={setContent}
               placeholder={t("workspace.documents.editor.contentPlaceholder")}

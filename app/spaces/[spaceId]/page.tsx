@@ -9,6 +9,8 @@ import { SpacePageClient } from "@/components/space-page-client"
 import { WorkspaceChatWrapper } from "@/components/workspace-chat-wrapper"
 import { canManageProgrammeAccess } from "@/lib/programme/membership"
 import { listSpaceAgents } from "@/lib/actions/agent"
+import { getLoadedDemo } from "@/lib/actions/demo-pack"
+import { DemoStrip } from "@/components/demo-strip"
 
 export default async function SpacePage({
   params,
@@ -99,6 +101,8 @@ export default async function SpacePage({
     ? await listSpaceAgents(spaceId)
     : { data: [] as Awaited<ReturnType<typeof listSpaceAgents>>["data"] }
 
+  const { data: loadedDemo } = await getLoadedDemo(spaceId)
+
   return (
     <Suspense fallback={null}>
       <WorkspaceChatWrapper
@@ -106,6 +110,7 @@ export default async function SpacePage({
         workspaceName={space.name}
         canManage={canManage}
       >
+        {loadedDemo ? <DemoStrip demo={loadedDemo} /> : null}
         <SpacePageClient
           spaceId={spaceId}
           tenantId={space.tenant_id}

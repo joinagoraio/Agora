@@ -8,18 +8,18 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ProgrammeCitationTooltip } from "@/components/programme-citation-tooltip"
 import { ProgrammeCoherenceView } from "@/components/programme-coherence-view"
-import { generateProgrammeMeasuresFromContext } from "@/lib/actions/measures"
+import { startInterestWorkups, startMeasureGeneration } from "@/lib/actions/programme-jobs"
+import { useBackgroundJob } from "@/components/programme-jobs-provider"
 import {
   findProgrammeInterests,
   getProgrammeInterestWorkup,
   getProgrammeWorkupHeadings,
   listProgrammeInterests,
   setProgrammeInterestSelected,
-  workUpProgrammeInterest,
 } from "@/lib/actions/interests"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { renderProgrammeCitationHtml, type ProgrammeCitationSource } from "@/lib/programme/citation-display"
-import { programmeChapterProseClass } from "@/lib/programme/document-layout"
+import { programmeReadingProseClass } from "@/lib/programme/document-layout"
 import type { ProgrammeInterest, WorkupHeading } from "@/lib/programme/interests"
 import type { NotifyKind } from "@/lib/notify"
 import { cn } from "@/lib/utils"
@@ -38,8 +38,6 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
   const [headings, setHeadings] = useState<WorkupHeading[]>([])
   const [loaded, setLoaded] = useState(false)
   const [finding, setFinding] = useState(false)
-  const [workingIds, setWorkingIds] = useState<string[]>([])
-  const [queue, setQueue] = useState<{ done: number; total: number } | null>(null)
   const [selectedOnly, setSelectedOnly] = useState(false)
   const [view, setView] = useState<"interests" | "coherence">("interests")
   const [viewing, setViewing] = useState<{ interest: ProgrammeInterest; title: string; content: string; documentId: string } | null>(null)
@@ -79,49 +77,61 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
     }
   }
 
-  const workUp = async (interest: ProgrammeInterest) => {
-    setWorkingIds((current) => [...current, interest.id])
-    const result = await workUpProgrammeInterest(workspaceId, interest.id)
-    setWorkingIds((current) => current.filter((id) => id !== interest.id))
-    if (result.error || !result.data) {
-      onMessage(result.error || t("workspace.programme.interests.workupError"), "error")
-      return false
-    }
-    setInterests((current) =>
-      current.map((row) => (row.id === interest.id ? { ...row, workupDocumentId: result.data!.documentId } : row)),
-    )
+  const workupJob = useBackgroundJob("workup", (job) => {
+    void refresh()
     onChanged?.()
-    return true
-  }
+    if (job.status === "done") {
+      onMessage(t("workspace.programme.interests.workedUp", undefined, { count: String(job.progress.result?.done ?? job.progress.total) }))
+    } else {
+      onMessage(job.error || t("workspace.programme.interests.workupError"), "error")
+    }
+  })
+  const measuresJob = useBackgroundJob("measures", (job) => {
+    onChanged?.()
+    if (job.status === "done") {
+      onMessage(
+        t("workspace.programme.interests.measuresProposed", undefined, {
+          count: String(job.progress.result?.saved ?? 0),
+          interest: job.progress.current || "",
+        }),
+      )
+    } else {
+      onMessage(job.error || t("workspace.programme.interests.workupError"), "error")
+    }
+  })
 
-  const proposeMeasures = async (interest: ProgrammeInterest) => {
-    setWorkingIds((current) => [...current, interest.id])
-    const result = await generateProgrammeMeasuresFromContext(workspaceId, { interestId: interest.id, count: 4 })
-    setWorkingIds((current) => current.filter((id) => id !== interest.id))
+  const startWorkups = async (ids: string[]) => {
+    const result = await startInterestWorkups(workspaceId, ids)
     if (result.error || !result.data) {
       onMessage(result.error || t("workspace.programme.interests.workupError"), "error")
       return
     }
-    onMessage(
-      t("workspace.programme.interests.measuresProposed", undefined, {
-        count: String(result.data.saved),
-        interest: [interest.reference, interest.label].filter(Boolean).join(" "),
-      }),
-    )
-    onChanged?.()
+    workupJob.watch(result.data)
   }
 
-  const workUpSelected = async () => {
+  const proposeMeasures = async (interest: ProgrammeInterest) => {
+    const result = await startMeasureGeneration(workspaceId, { interestId: interest.id, count: 4 })
+    if (result.error || !result.data) {
+      onMessage(result.error || t("workspace.programme.interests.workupError"), "error")
+      return
+    }
+    measuresJob.watch(result.data)
+  }
+
+  const workUpSelected = () => {
     const targets = selected.filter((interest) => !interest.workupDocumentId)
     const list = targets.length > 0 ? targets : selected
-    setQueue({ done: 0, total: list.length })
-    for (const [index, interest] of list.entries()) {
-      await workUp(interest)
-      setQueue({ done: index + 1, total: list.length })
-    }
-    setQueue(null)
-    onMessage(t("workspace.programme.interests.workedUp", undefined, { count: String(list.length) }))
+    void startWorkups(list.map((interest) => interest.id))
   }
+  const workUp = (interest: ProgrammeInterest) => void startWorkups([interest.id])
+
+  const workupRunning = workupJob.running ? workupJob.job : null
+  const measuresRunning = measuresJob.running ? measuresJob.job : null
+  const queue = workupRunning && workupRunning.progress.total > 1 ? workupRunning.progress : null
+  const workingIds = [
+    ...(workupRunning?.progress.targetId ? [workupRunning.progress.targetId] : []),
+    ...(measuresRunning?.progress.targetId ? [measuresRunning.progress.targetId] : []),
+  ]
 
   const open = async (interest: ProgrammeInterest) => {
     const result = await getProgrammeInterestWorkup(workspaceId, interest.id)
@@ -137,7 +147,7 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
     [viewing, workspaceId, citationSources],
   )
 
-  const busy = finding || queue !== null || workingIds.length > 0
+  const busy = finding || Boolean(workupRunning) || Boolean(measuresRunning)
 
   const viewSwitch = (
     <div className="flex shrink-0 gap-1 border-b px-6 pt-3" role="tablist">
@@ -159,10 +169,20 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
     </div>
   )
 
-  if (view === "coherence") {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col">
-        {viewSwitch}
+  const runningLine = workupRunning
+    ? t("workspace.programme.interests.workingLine", undefined, {
+        done: String(Math.min(workupRunning.progress.done + 1, workupRunning.progress.total)),
+        total: String(workupRunning.progress.total),
+        interest: workupRunning.progress.current || "",
+      })
+    : measuresRunning
+      ? t("workspace.programme.interests.proposingLine", undefined, { interest: measuresRunning.progress.current || "" })
+      : null
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {viewSwitch}
+      <div className={cn("min-h-0 flex-1 flex-col", view === "coherence" ? "flex" : "hidden")}>
         <ProgrammeCoherenceView
           workspaceId={workspaceId}
           interests={interests}
@@ -171,12 +191,7 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
           onMessage={onMessage}
         />
       </div>
-    )
-  }
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {viewSwitch}
+      <div className={cn("min-h-0 flex-1 flex-col", view === "interests" ? "flex" : "hidden")}>
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
         <Button type="button" disabled={!canEdit || busy} onClick={find}>
           {finding ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -195,6 +210,13 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
           </label>
         ) : null}
       </div>
+      {runningLine ? (
+        <div className="flex shrink-0 items-center gap-2 border-b bg-muted/40 px-6 py-2 text-sm" role="status">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>{runningLine}</span>
+          <span className="text-muted-foreground">{t("workspace.programme.interests.keepsRunning")}</span>
+        </div>
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
         {!loaded ? (
@@ -275,17 +297,29 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
           </div>
         )}
       </div>
+      </div>
 
       <Dialog open={viewing !== null} onOpenChange={(value) => (value ? null : setViewing(null))}>
-        <DialogContent overlayClassName="z-[90]" className="z-[100] max-h-[88vh] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{viewing?.title}</DialogTitle>
+        <DialogContent
+          overlayClassName="z-[90]"
+          className="z-[100] flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+        >
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              {t("workspace.programme.interests.workupEyebrow")}
+              {viewing?.interest.citations[0]?.pageNumber
+                ? ` · ${t("workspace.programme.interests.page", undefined, { page: String(viewing.interest.citations[0].pageNumber) })}`
+                : ""}
+            </p>
+            <DialogTitle className="text-lg">{viewing?.title}</DialogTitle>
             <DialogDescription>{t("workspace.programme.interests.workupHint")}</DialogDescription>
           </DialogHeader>
           <ProgrammeCitationTooltip />
-          <div className={programmeChapterProseClass} dangerouslySetInnerHTML={{ __html: renderedWorkup }} />
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            <div className={programmeReadingProseClass} dangerouslySetInnerHTML={{ __html: renderedWorkup }} />
+          </div>
           {viewing ? (
-            <div className="flex justify-end">
+            <div className="flex shrink-0 justify-end border-t px-6 py-3">
               <Button asChild variant="outline" size="sm">
                 <Link href={`/workspaces/${workspaceId}/my-documents/${viewing.documentId}`}>
                   {t("workspace.programme.interests.editWorkup")}

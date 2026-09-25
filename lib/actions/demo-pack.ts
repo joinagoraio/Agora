@@ -44,6 +44,17 @@ export type DemoPackFile = {
   role: DocumentRole
 }
 
+export type LoadedDemo = {
+  spaceId: string
+  name: string
+  packId: string
+  packName: string
+  loadedAt: string
+  programmes: number
+  measures: number
+  documents: number
+}
+
 export type DemoPackModelChoice = {
   id: string
   label: string
@@ -293,6 +304,93 @@ export async function removeLoadedDemos(packId: string) {
   return { data: { removed: matches.length } }
 }
 
+/** Every authority loaded from a pack, with what ending it would delete. */
+export async function listLoadedDemos(packId?: string) {
+  const auth = await requireSuperAdmin()
+  if ("error" in auth) return { error: auth.error, data: [] as LoadedDemo[] }
+  const admin = createAdminClient()
+  const { data: spaces, error } = await admin.from("spaces").select("id, name, metadata, created_at")
+  if (error) return { error: error.message, data: [] as LoadedDemo[] }
+  const demos = (spaces || []).filter((space) => {
+    const metadata = (space.metadata || {}) as Record<string, unknown>
+    return metadata.demo === true && typeof metadata.demoPackId === "string" && (!packId || metadata.demoPackId === packId)
+  })
+  const result: LoadedDemo[] = []
+  for (const space of demos) result.push(await describeLoadedDemo(admin, space))
+  return { data: result.sort((a, b) => b.loadedAt.localeCompare(a.loadedAt)) }
+}
+
+/** The demo this authority was loaded from, for platform admins only; null otherwise. */
+export async function getLoadedDemo(spaceId: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user || !(await isSuperAdmin(user.id))) return { data: null }
+  const admin = createAdminClient()
+  const { data: space } = await admin.from("spaces").select("id, name, metadata, created_at").eq("id", spaceId).maybeSingle()
+  const metadata = ((space?.metadata as Record<string, unknown> | null) || {}) as Record<string, unknown>
+  if (!space || metadata.demo !== true || typeof metadata.demoPackId !== "string") return { data: null }
+  return { data: await describeLoadedDemo(admin, space) }
+}
+
+async function describeLoadedDemo(
+  admin: ReturnType<typeof createAdminClient>,
+  space: { id: string; name: string; metadata: unknown; created_at?: string | null },
+): Promise<LoadedDemo> {
+  const metadata = ((space.metadata as Record<string, unknown> | null) || {}) as Record<string, unknown>
+  const { data: workspaces } = await admin.from("workspaces").select("id").eq("space_id", space.id)
+  const workspaceIds = (workspaces || []).map((row) => row.id as string)
+  const count = async (table: string) => {
+    if (workspaceIds.length === 0) return 0
+    const { count: total } = await admin.from(table).select("id", { count: "exact", head: true }).in("workspace_id", workspaceIds)
+    return total ?? 0
+  }
+  const [measures, documents] = await Promise.all([count("programme_measures"), count("documents")])
+  return {
+    spaceId: space.id,
+    name: space.name,
+    packId: String(metadata.demoPackId),
+    packName: typeof metadata.demoPackName === "string" ? metadata.demoPackName : space.name,
+    loadedAt: typeof metadata.demoLoadedAt === "string" ? metadata.demoLoadedAt : space.created_at || "",
+    programmes: workspaceIds.length,
+    measures,
+    documents,
+  }
+}
+
+/** Delete one loaded demo authority and everything in it. Other demos stay. */
+export async function endLoadedDemo(spaceId: string) {
+  const auth = await requireSuperAdmin()
+  if ("error" in auth) return { error: auth.error }
+  const admin = createAdminClient()
+  const { data: space } = await admin.from("spaces").select("metadata").eq("id", spaceId).maybeSingle()
+  const metadata = ((space?.metadata as Record<string, unknown> | null) || {}) as Record<string, unknown>
+  if (!space || metadata.demo !== true || typeof metadata.demoPackId !== "string") {
+    return { error: "This authority was not loaded from a demo pack, so it cannot be ended here." }
+  }
+  const deleted = await deleteSpace(spaceId)
+  if (deleted.error) return { error: deleted.error }
+  revalidatePath("/dashboard")
+  revalidatePath("/admin/demo-packs")
+  return { data: { spaceId } }
+}
+
+/** End this demo and load the same pack fresh; returns the new programme. */
+export async function resetLoadedDemo(spaceId: string) {
+  const auth = await requireSuperAdmin()
+  if ("error" in auth) return { error: auth.error }
+  const admin = createAdminClient()
+  const { data: space } = await admin.from("spaces").select("metadata").eq("id", spaceId).maybeSingle()
+  const packId = ((space?.metadata as Record<string, unknown> | null) || {}).demoPackId
+  if (typeof packId !== "string") return { error: "This authority was not loaded from a demo pack." }
+  const loaded = await loadDemoPack(packId)
+  if (loaded.error || !loaded.data) return { error: loaded.error || "Could not load a fresh demo" }
+  const ended = await endLoadedDemo(spaceId)
+  if (ended.error) return { error: ended.error, data: loaded.data }
+  return { data: loaded.data }
+}
+
 export async function listDemoPackModels() {
   const auth = await requireSuperAdmin()
   if ("error" in auth) return { error: auth.error, data: [] as DemoPackModelChoice[] }
@@ -396,6 +494,8 @@ async function buildLoadedPack(pack: DemoPack, spaceId: string): Promise<{ error
     ...((space?.metadata as Record<string, unknown>) || {}),
     demo: true,
     demoPackId: pack.id,
+    demoPackName: pack.name,
+    demoLoadedAt: new Date().toISOString(),
     setupWizard: {
       completed: true,
       dismissed: true,
