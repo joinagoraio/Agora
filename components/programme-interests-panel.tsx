@@ -277,7 +277,7 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
       </div>
 
       <Dialog open={viewing !== null} onOpenChange={(value) => (value ? null : setViewing(null))}>
-        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent overlayClassName="z-[90]" className="z-[100] max-h-[88vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{viewing?.title}</DialogTitle>
             <DialogDescription>{t("workspace.programme.interests.workupHint")}</DialogDescription>

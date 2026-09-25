@@ -49,7 +49,7 @@ export function ProgrammeCitationTooltip() {
   return createPortal(
     <div
       role="tooltip"
-      className="pointer-events-none fixed z-[90] w-80 max-w-[calc(100vw-1.5rem)] rounded-md border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
+      className="pointer-events-none fixed z-[110] w-80 max-w-[calc(100vw-1.5rem)] rounded-md border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
       style={{ left: tip.x, top: tip.y }}
     >
       {tip.title ? <p className="font-medium">{tip.title}</p> : null}
