@@ -1,7 +1,7 @@
 import type { DemoTour, TourAction, TourCondition, TourStep, TourText } from "@/lib/programme/demo-tour"
 
 /** Raise when the steps or texts change, so stored packs pick up the new tour. */
-export const FLEVOLAND_TOUR_VERSION = 5
+export const FLEVOLAND_TOUR_VERSION = 6
 
 type Place = TourStep["place"]
 
@@ -35,6 +35,7 @@ const AUTOPILOT: Record<string, Pick<TourStep, "auto" | "doneWhen">> = {
     auto: [click("run-analysis"), { do: "waitFor", condition: at("analysis"), timeoutMs: 420000 }],
   },
   "vision-view": { auto: [click("tool-switch-vision"), { do: "waitNarration" }, click("tool-switch-findings")] },
+  "interests-list": { auto: [click("interests-selected-only", { state: "off", optional: true })] },
   workup: {
     doneWhen: [{ fact: "workups", min: 1, atLeastFact: "chosen" }],
     auto: [click("workup-chosen"), { do: "waitJob", kind: "workup" }, wait(2000)],

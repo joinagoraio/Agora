@@ -206,13 +206,22 @@ export function DemoTourProvider({
   )
   const narrationUrl = urlFor(step)
 
+  const endNarration = useRef<(() => void) | null>(null)
+
   const stopAudio = useCallback(() => {
     audio.current?.pause()
+    endNarration.current?.()
+    endNarration.current = null
     setPlaying(false)
   }, [])
 
-  /** Plays one narration; the returned promise settles when it ends, is paused, or fails. */
+  /**
+   * Plays one narration; the returned promise settles when it ends, fails, or is stopped.
+   * A pause event is ignored: stopping the previous recording fires one a moment later.
+   */
   const playAudio = useCallback((url: string | null) => {
+    endNarration.current?.()
+    endNarration.current = null
     if (!url) {
       narrationEnd.current = Promise.resolve()
       return narrationEnd.current
@@ -225,17 +234,17 @@ export function DemoTourProvider({
     narrationEnd.current = new Promise<void>((resolve) => {
       const done = () => {
         player.removeEventListener("ended", done)
-        player.removeEventListener("pause", done)
         player.removeEventListener("error", done)
+        if (endNarration.current === done) endNarration.current = null
         setPlaying(false)
         resolve()
       }
+      endNarration.current = done
       player.addEventListener("ended", done)
-      player.addEventListener("pause", done)
       player.addEventListener("error", done)
     })
     setPlaying(true)
-    void player.play().catch(() => setPlaying(false))
+    void player.play().catch(() => endNarration.current?.())
     return narrationEnd.current
   }, [])
 

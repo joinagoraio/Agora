@@ -214,7 +214,13 @@ export function ProgrammeInterestsPanel({ workspaceId, canEdit, citationSources,
         </Button>
         {interests.length > 0 ? (
           <label className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
-            <input type="checkbox" checked={selectedOnly} onChange={(event) => setSelectedOnly(event.target.checked)} />
+            <input
+              type="checkbox"
+              checked={selectedOnly}
+              data-guidance-target="interests-selected-only"
+              data-guidance-state={selectedOnly ? "on" : "off"}
+              onChange={(event) => setSelectedOnly(event.target.checked)}
+            />
             {t("workspace.programme.interests.selectedOnly")}
           </label>
         ) : null}
