@@ -1,6 +1,8 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { isTourAskQuestion } from "@/lib/programme/flevoland-tour"
 import { listProgrammeChapters } from "@/lib/actions/programme"
 import { spaceCost, type SpaceCost } from "@/lib/llm/usage"
 import { isSuperAdmin } from "@/lib/llm/resolve"
@@ -50,6 +52,20 @@ export async function getTourFacts(workspaceId: string): Promise<{ data: TourFac
       .eq("role", "assistant")
     return total ?? 0
   }
+  /** Questions from the room, typed in Ask or spoken with Questions; not the autopilot's own. */
+  const roomQuestions = async () => {
+    const { data: asked } = conversationIds.length
+      ? await supabase.from("messages").select("content").in("conversation_id", conversationIds).eq("role", "user")
+      : { data: [] as Array<{ content: string | null }> }
+    const typed = (asked || []).filter((row) => row.content?.trim() && !isTourAskQuestion(row.content)).length
+    if (!workspace.space_id || !(await isSuperAdmin(user.id))) return typed
+    const { count: spoken } = await createAdminClient()
+      .from("demo_feedback_log")
+      .select("id", { count: "exact", head: true })
+      .eq("space_id", workspace.space_id as string)
+      .eq("source", "questions")
+    return typed + (spoken ?? 0)
+  }
 
   const [
     analysis,
@@ -75,6 +91,7 @@ export async function getTourFacts(workspaceId: string): Promise<{ data: TourFac
     digests,
     members,
     answers,
+    questions,
   ] = await Promise.all([
     count("analysis_reports", (query) => query.eq("report_type", "existing_policy")),
     count("programme_coherence_findings"),
@@ -99,6 +116,7 @@ export async function getTourFacts(workspaceId: string): Promise<{ data: TourFac
     count("demo_digests"),
     count("workspace_members"),
     askAnswers(),
+    roomQuestions(),
   ])
 
   const facts: TourFacts = {
@@ -141,6 +159,7 @@ export async function getTourFacts(workspaceId: string): Promise<{ data: TourFac
     digests,
     members,
     askAnswers: answers,
+    roomQuestions: questions,
   }
   const cost = (await isSuperAdmin(user.id)) && workspace.space_id ? await spaceCost(workspace.space_id as string) : null
   return { data: facts, cost }

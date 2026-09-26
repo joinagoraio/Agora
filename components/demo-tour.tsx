@@ -22,6 +22,7 @@ import {
   tourLanguage,
   tourStartMinutes,
   tourStepHref,
+  tourStepQuery,
   onTourStepPage,
   type DemoTour,
   type TourAction,
@@ -491,6 +492,11 @@ export function DemoTourProvider({
             return
           }
           await sleep(1600)
+          // A refresh still in flight from the previous step can put the old address back.
+          for (let attempt = 0; attempt < 3 && !current.place.page && window.location.search.replace(/^\?/, "") !== tourStepQuery(current); attempt += 1) {
+            navigateTo(current)
+            await sleep(1500)
+          }
           const narrated = playAudio(urlFor(current))
           const done = stepDone(current, await refreshFacts())
           ensure()

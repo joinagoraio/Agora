@@ -25,6 +25,7 @@ import {
   canSubmitConsultationAppeal,
   fallbackClusterDraft,
   nearestClusterId,
+  normalizeConsultationQuote,
   parseClusterDraft,
   proposeConsultationClusters,
   type ClusterableComment,
@@ -32,6 +33,7 @@ import {
   type ProposedCluster,
 } from "@/lib/programme/consultation-cluster"
 import { groupByMeaning, workspaceWritingLanguage } from "@/lib/programme/meaning-groups-llm"
+import { joinGroupsSharing } from "@/lib/programme/meaning-groups"
 import { canAdministerProgramme, parseDocumentOwnerId } from "@/lib/programme/ownership"
 import {
   canRevealPublicationBody,
@@ -1149,12 +1151,16 @@ export async function runConsultationClusterJob(workspaceId: string) {
         locked: locked.has(String(row.id)),
       }))
       const fresh = locked.size === 0 && clusterable.every((comment) => !comment.clusterId)
+      const quoteOf = new Map(clusterable.map((comment) => [comment.id, normalizeConsultationQuote(comment.quoteText)]))
       const byMeaning =
         fresh && clusterable.length >= 3
-          ? await groupByMeaning(
-              "responses",
-              clusterable.map((comment) => ({ id: comment.id, body: comment.body, quote: comment.quoteText })),
-              { workspaceId, minSize: 1 },
+          ? joinGroupsSharing(
+              await groupByMeaning(
+                "responses",
+                clusterable.map((comment) => ({ id: comment.id, body: comment.body, quote: comment.quoteText })),
+                { workspaceId, minSize: 1 },
+              ),
+              (id) => quoteOf.get(id) || null,
             )
           : []
       const grouped = new Set(byMeaning.flatMap((group) => group.memberIds))

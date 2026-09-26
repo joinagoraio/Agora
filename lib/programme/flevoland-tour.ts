@@ -1,7 +1,7 @@
 import type { DemoTour, TourAction, TourCondition, TourStep, TourText } from "@/lib/programme/demo-tour"
 
 /** Raise when the steps or texts change, so stored packs pick up the new tour. */
-export const FLEVOLAND_TOUR_VERSION = 10
+export const FLEVOLAND_TOUR_VERSION = 11
 
 type Place = TourStep["place"]
 
@@ -34,6 +34,11 @@ const write = (target: string, nl: string, en: string, extra: Partial<Extract<To
 export const TOUR_ASK_QUESTION = {
   nl: "Welke rol geeft de omgevingsvisie de provincie bij betaalbaar wonen, en wat doet de provincie daar nu al aan?",
   en: "What role does the environmental vision give the province in affordable housing, and what does the province already do about it?",
+}
+
+export function isTourAskQuestion(text: string) {
+  const question = text.trim()
+  return question === TOUR_ASK_QUESTION.nl || question === TOUR_ASK_QUESTION.en
 }
 
 /** What the autopilot does on each step, and when a step counts as done. */
@@ -154,11 +159,17 @@ const AUTOPILOT: Record<string, Pick<TourStep, "auto" | "doneWhen">> = {
   },
   digest: {
     auto: [
-      click("make-digest"),
-      { do: "waitFor", condition: at("digests"), timeoutMs: 180000 },
-      { do: "waitNarration" },
-      wait(1000),
-      click("read-digest", { optional: true }),
+      {
+        do: "group",
+        onlyIf: at("roomQuestions"),
+        actions: [
+          click("make-digest"),
+          { do: "waitFor", condition: at("digests"), timeoutMs: 180000 },
+          { do: "waitNarration" },
+          wait(1000),
+          click("read-digest", { optional: true }),
+        ],
+      },
     ],
   },
   "platform-ai": { auto: [{ do: "waitNarration" }] },
@@ -386,7 +397,7 @@ const AUTOPILOT: Record<string, Pick<TourStep, "auto" | "doneWhen">> = {
       click("cluster-responses", { unless: at("clusters") }),
       { do: "waitFor", condition: at("clusters"), timeoutMs: 240000 },
       wait(2500),
-      ...[1, 2, 3, 4, 5, 6].map(() => ({
+      ...[1, 2, 3, 4, 5, 6, 7, 8].map(() => ({
         do: "group" as const,
         optional: true,
         unless: { fact: "clustersDecided", min: 1, atLeastFact: "clusters" },

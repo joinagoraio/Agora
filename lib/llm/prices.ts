@@ -18,6 +18,8 @@ const PRICES: Array<{ match: RegExp; price: Price }> = [
   { match: /^gpt-4o-mini-tts/, price: { input: 0.6, output: 12 } },
   { match: /^gpt-4o-mini/, price: { input: 0.15, output: 0.6 } },
   { match: /^gpt-4o/, price: { input: 2.5, output: 10 } },
+  { match: /^o4-mini/, price: { input: 1.1, output: 4.4 } },
+  { match: /^o3-mini/, price: { input: 1.1, output: 4.4 } },
   /** Realtime voice, priced as audio. */
   { match: /^gpt-realtime.*mini/, price: { input: 10, output: 20 } },
   { match: /^gpt-realtime/, price: { input: 32, output: 64 } },

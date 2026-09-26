@@ -1,10 +1,7 @@
 import "server-only"
 
 import { createAdminClient } from "@/lib/supabase/admin"
-import { TOUR_ASK_QUESTION } from "@/lib/programme/flevoland-tour"
-
-/** Questions the autopilot asks itself; they are not the room's. */
-const SCRIPTED_QUESTIONS = new Set(Object.values(TOUR_ASK_QUESTION).map((question) => question.trim()))
+import { isTourAskQuestion } from "@/lib/programme/flevoland-tour"
 
 export type DemoContext = { spaceId: string; workspaceIds: string[]; packId: string | null; demoName: string; loadedAt: string }
 
@@ -52,7 +49,8 @@ export async function collectDemoFeedback(context: DemoContext): Promise<Feedbac
     }
     for (const list of byConversation.values()) {
       list.forEach((message, index) => {
-        if (message.role !== "user" || !message.content.trim() || SCRIPTED_QUESTIONS.has(message.content.trim())) return
+        // The autopilot's own question is not the room's.
+        if (message.role !== "user" || !message.content.trim() || isTourAskQuestion(message.content)) return
         const answer = list.slice(index + 1).find((next) => next.role === "assistant")
         rows.push({
           pack_id: context.packId,

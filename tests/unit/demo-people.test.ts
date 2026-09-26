@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { colleagueNotesMessages, parseDemoNotes, parseDemoResponses, publishedPassages, residentResponsesMessages } from "@/lib/demo/people-prompts"
-import { meaningGroupsMessages, parseMeaningGroups } from "@/lib/programme/meaning-groups"
+import { joinGroupsSharing, meaningGroupsMessages, parseMeaningGroups } from "@/lib/programme/meaning-groups"
 import { buildPublicTopicSummaryDraft } from "@/lib/programme/consultation-cluster"
 
 describe("demo colleague notes", () => {
@@ -97,6 +97,16 @@ describe("grouping by meaning", () => {
     ])
     expect(parseMeaningGroups(raw, ["a", "b", "c", "d"], { minSize: 1 }).map((group) => group.memberIds)).toEqual([["a", "c"], ["d"], ["b"]])
     expect(parseMeaningGroups("no json", ["a"])).toEqual([])
+  })
+
+  it("joins groups whose items quote the same passage, keeping the first group's text", () => {
+    const group = (label: string, memberIds: string[]) => ({ memberIds, label, summary: "", reply: "", status: null })
+    const quotes: Record<string, string> = { a: "passage one", b: "passage one", c: "passage two", d: "passage one" }
+    const joined = joinGroupsSharing([group("A", ["a"]), group("C", ["c"]), group("B", ["b", "d"])], (id) => quotes[id] ?? null)
+    expect(joined.map((item) => [item.label, item.memberIds])).toEqual([
+      ["A", ["a", "b", "d"]],
+      ["C", ["c"]],
+    ])
   })
 
   it("asks for a proposed decision only for consultation responses", () => {
