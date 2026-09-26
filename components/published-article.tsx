@@ -33,14 +33,23 @@ export function PublishedArticle({ bodyMarkdown, quotable }: { bodyMarkdown: str
       <article className="prose prose-neutral max-w-none">
         <ReactMarkdown
           components={{
-            p: ({ node: _node, ...props }) => (
-              <p
-                {...props}
-                data-guidance-target={quotable ? "published-passage" : undefined}
-                className={quotable ? "cursor-pointer rounded-sm hover:bg-amber-50" : undefined}
-                onClick={(event) => quote(event.currentTarget)}
-              />
-            ),
+            p: ({ node: _node, ...props }) =>
+              quotable ? (
+                <p
+                  {...props}
+                  data-guidance-target="published-passage"
+                  tabIndex={0}
+                  className="cursor-pointer rounded-sm hover:bg-amber-50 focus-visible:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                  onClick={(event) => quote(event.currentTarget)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return
+                    event.preventDefault()
+                    quote(event.currentTarget)
+                  }}
+                />
+              ) : (
+                <p {...props} />
+              ),
           }}
         >
           {bodyMarkdown}

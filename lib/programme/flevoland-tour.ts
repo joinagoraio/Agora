@@ -1,7 +1,7 @@
 import type { DemoTour, TourAction, TourCondition, TourStep, TourText } from "@/lib/programme/demo-tour"
 
 /** Raise when the steps or texts change, so stored packs pick up the new tour. */
-export const FLEVOLAND_TOUR_VERSION = 11
+export const FLEVOLAND_TOUR_VERSION = 12
 
 type Place = TourStep["place"]
 
@@ -382,7 +382,17 @@ const AUTOPILOT: Record<string, Pick<TourStep, "auto" | "doneWhen">> = {
       { do: "waitFor", condition: at("freezes"), timeoutMs: 60000 },
     ],
   },
-  word: { auto: [click("export-docx"), wait(3000)] },
+  "bound-sources": { auto: [{ do: "waitForTarget", target: "bound-sources", timeoutMs: 15000 }] },
+  word: {
+    doneWhen: [at("wordExports"), at("pdfExports")],
+    auto: [
+      click("export-docx", { unless: at("wordExports") }),
+      { do: "waitFor", condition: at("wordExports"), timeoutMs: 60000 },
+      wait(1500),
+      click("export-pdf", { unless: at("pdfExports") }),
+      { do: "waitFor", condition: at("pdfExports"), timeoutMs: 90000 },
+    ],
+  },
   publish: {
     doneWhen: [at("publications")],
     auto: [click("publish-snapshot"), { do: "waitFor", condition: at("publications"), timeoutMs: 60000 }],
@@ -582,7 +592,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       "knowledge",
       "setup",
       { view: "knowledge" },
-      { estMinutes: 3 },
+      { estMinutes: 2 },
       {
         title: "De bibliotheek van het programma",
         action: "Laat de bestanden zien en wijs op de rol bij elk bestand.",
@@ -601,10 +611,32 @@ export const FLEVOLAND_TOUR: DemoTour = {
       },
     ),
     step(
+      "bound-sources",
+      "setup",
+      section("corpus"),
+      { target: "bound-sources", estMinutes: 2 },
+      {
+        title: "Welke bronnen het programma gebruikt",
+        action: "Laat onder 'Gekoppelde bronnen' zien welke bestanden het programma gebruikt, en wijs op de rol achter elk bestand.",
+        why: "Hier legt de ambtenaar vast welke bestanden dit programma gebruikt en met welke rol. Alleen deze bestanden gaan naar de AI; de rol bepaalt wat ermee gebeurt.",
+        expect: "De gekoppelde bronnen, elk met een rol: omgevingsvisie of bestaand beleid.",
+        narration:
+          "Uit die bibliotheek kiest het programma zijn bronnen. Onder Gekoppelde bronnen staat welke bestanden dit programma gebruikt, en met welke rol. De omgevingsvisie geeft de koers, de stukken over wonen zijn bestaand beleid. Alleen deze bestanden gaan naar de AI. Komt er later iets bij, bijvoorbeeld een nieuwe voortgangsrapportage, dan koppelt de ambtenaar die hier, of geeft een bestand een andere rol. Elke volgende stap werkt dan met de nieuwe set.",
+      },
+      {
+        title: "Which sources the programme uses",
+        action: "Under 'Bound sources', show which files the programme uses, and point at the role behind each one.",
+        why: "This is where the civil servant records which files this programme uses, and in which role. Only these files go to the AI; the role decides what happens to each one.",
+        expect: "The bound sources, each with a role: environmental vision or existing policy.",
+        narration:
+          "From that library, the programme picks its sources. Bound sources shows which files this programme uses, and in which role. The environmental vision sets the direction; the housing documents are existing policy. Only these files go to the AI. If something is added later, say a new progress report, the civil servant binds it here, or gives a file a different role. Every step after that works with the new set.",
+      },
+    ),
+    step(
       "configuration",
       "setup",
       section("setup"),
-      { estMinutes: 3 },
+      { estMinutes: 2 },
       {
         title: "Wie is eigenaar, wat is verplicht",
         action: "Laat de documenteigenaar en het reviewbeleid zien.",
@@ -1383,20 +1415,20 @@ export const FLEVOLAND_TOUR: DemoTour = {
       section("export"),
       { target: "export-docx", estMinutes: 4 },
       {
-        title: "Naar Word",
-        action: "Klik 'Word' en open het bestand.",
-        why: "De provincie werkt met Word-bestanden voor de Staten en de huisstijl. Agora levert een net document met de bronverwijzingen.",
-        expect: "Een Word-document met de hoofdstukken en maatregelen.",
+        title: "Naar Word en pdf",
+        action: "Klik 'Word' en daarna 'Afdrukken / PDF', en open de bestanden.",
+        why: "De provincie werkt met Word-bestanden voor de Staten en de huisstijl, en met pdf voor het archief en om rond te sturen. Agora levert beide, met de bronverwijzingen.",
+        expect: "Een Word-document en een pdf met de hoofdstukken en maatregelen.",
         narration:
-          "De provincie werkt voor de Staten en de huisstijl met Word. Met één klik komt het programma als Word-document eruit, met de hoofdstukken, de maatregelen op volgorde van prioriteit, en de bronverwijzingen.",
+          "De provincie werkt voor de Staten en de huisstijl met Word. Met één klik komt het programma als Word-document eruit, met de hoofdstukken, de maatregelen op volgorde van prioriteit, en de bronverwijzingen. Met de tweede klik komt het als pdf, op A4 zoals in de paginaweergave, voor het archief of om rond te sturen.",
       },
       {
-        title: "To Word",
-        action: "Click 'Word' and open the file.",
-        why: "The province uses Word files for the council and its house style. Agora produces a clean document with the source references.",
-        expect: "A Word document with the chapters and measures.",
+        title: "To Word and PDF",
+        action: "Click 'Word', then 'Print / PDF', and open the files.",
+        why: "The province uses Word files for the council and its house style, and PDF for the archive and for sending around. Agora produces both, with the source references.",
+        expect: "A Word document and a PDF with the chapters and measures.",
         narration:
-          "For the council and its house style, the province works in Word. One click and the programme comes out as a Word document, with the chapters, the measures in priority order, and the source references.",
+          "For the council and its house style, the province works in Word. One click and the programme comes out as a Word document, with the chapters, the measures in priority order, and the source references. A second click gives a PDF, on A4 as in page view, for the archive or for sending around.",
       },
     ),
     step(

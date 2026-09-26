@@ -39,10 +39,15 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# Must match the playwright version in package.json, or the PDF export looks for a browser build that is not there.
+ARG PLAYWRIGHT_VERSION=1.56.1
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends libcairo2 libpango-1.0-0 libjpeg62-turbo libgif7 librsvg2-2 \
-  && rm -rf /var/lib/apt/lists/* \
+  && npx -y "playwright@${PLAYWRIGHT_VERSION}" install --with-deps --only-shell chromium \
+  && rm -rf /var/lib/apt/lists/* /root/.npm \
   && addgroup --system --gid 1001 agora \
   && adduser --system --uid 1001 --ingroup agora agora
 

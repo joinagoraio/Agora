@@ -1280,7 +1280,7 @@ export const nlMessages = {
       consultationAppealSent: "Bezwaar verstuurd naar de documenteigenaar",
       consultationAppealPending: "Bezwaar wacht op de documenteigenaar",
       consultationTopicsPublic: "Hoe reacties zijn behandeld",
-      consultationClickToQuote: "De inspraaktermijn is open. Klik op een passage om die in je reactie te citeren.",
+      consultationClickToQuote: "De inspraaktermijn is open. Klik op een passage, of druk er op Enter, om die in je reactie te citeren.",
     },
     navigation: {
       backToSpace: "Terug naar",

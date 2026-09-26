@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 
-import { onTourStepPage, parseDemoTour, stepDone, tourStartMinutes, tourStepHref, tourStepQuery, type TourAction } from "@/lib/programme/demo-tour"
+import { atTourStepPlace, onTourStepPage, parseDemoTour, stepDone, tourStartMinutes, tourStepHref, tourStepQuery, type TourAction } from "@/lib/programme/demo-tour"
 import { FLEVOLAND_TOUR } from "@/lib/programme/flevoland-tour"
 
 const componentSource = readdirSync(join(process.cwd(), "components"))
@@ -114,9 +114,11 @@ describe("Flevoland demo tour", () => {
 
   it("covers the whole application, from the dashboard to the end of consultation", () => {
     const ids = FLEVOLAND_TOUR.steps.map((step) => step.id)
-    for (const id of ["dashboard", "authority", "team", "ask", "comments", "common-notes", "answer-once", "pages", "public-page", "responses", "consultation-handle", "topic-summary", "public-summary", "appeal"]) {
+    for (const id of ["dashboard", "authority", "bound-sources", "team", "ask", "comments", "common-notes", "answer-once", "pages", "word", "public-page", "responses", "consultation-handle", "topic-summary", "public-summary", "appeal"]) {
       expect(ids, id).toContain(id)
     }
+    const word = FLEVOLAND_TOUR.steps.find((step) => step.id === "word")!
+    expect(word.auto?.some((action) => action.do === "click" && action.target === "export-pdf")).toBe(true)
     const narratedOnly = FLEVOLAND_TOUR.steps.filter((step) => !step.auto?.length).map((step) => step.id)
     expect(narratedOnly).toEqual(["welcome", "different-kind", "structure", "knowledge", "configuration", "agents", "read-findings", "status", "questions"])
   })
@@ -126,5 +128,21 @@ describe("Flevoland demo tour", () => {
     expect(tourStepQuery({ ...FLEVOLAND_TOUR.steps[0], place: { view: "document", section: "measures" } })).toBe("view=document&section=measures")
     expect(tourStepQuery({ ...FLEVOLAND_TOUR.steps[0], place: { view: "document", mode: "read" } })).toBe("view=document&mode=read")
     expect(tourStartMinutes(FLEVOLAND_TOUR)[1]).toBe(FLEVOLAND_TOUR.steps[0].estMinutes)
+  })
+
+  it("knows it is at a step's place whatever else the workbench adds to the address", () => {
+    const measures = { ...FLEVOLAND_TOUR.steps[0], place: { view: "document" as const, section: "measures" as const } }
+    expect(atTourStepPlace(measures, "?section=measures&view=document")).toBe(true)
+    expect(atTourStepPlace(measures, "?view=document&section=measures&chapter=abc&mode=edit")).toBe(true)
+    expect(atTourStepPlace(measures, "?view=document&section=interests")).toBe(false)
+    const document = { ...FLEVOLAND_TOUR.steps[0], place: { view: "document" as const } }
+    expect(atTourStepPlace(document, "?view=document&focus=a")).toBe(true)
+    expect(atTourStepPlace(document, "?view=document&section=measures")).toBe(false)
+    const read = { ...FLEVOLAND_TOUR.steps[0], place: { view: "document" as const, mode: "read" as const } }
+    expect(atTourStepPlace(read, "?view=document&mode=read")).toBe(true)
+    expect(atTourStepPlace(read, "?view=document&mode=edit")).toBe(false)
+    const outline = { ...FLEVOLAND_TOUR.steps[0], place: { view: "document" as const, section: "outline" as const } }
+    expect(atTourStepPlace(outline, "?view=document&structure=1")).toBe(true)
+    expect(atTourStepPlace({ ...FLEVOLAND_TOUR.steps[0], place: { view: "knowledge" } }, "?view=knowledge")).toBe(true)
   })
 })

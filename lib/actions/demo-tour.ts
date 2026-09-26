@@ -92,6 +92,8 @@ export async function getTourFacts(workspaceId: string): Promise<{ data: TourFac
     members,
     answers,
     questions,
+    wordExports,
+    pdfExports,
   ] = await Promise.all([
     count("analysis_reports", (query) => query.eq("report_type", "existing_policy")),
     count("programme_coherence_findings"),
@@ -117,6 +119,9 @@ export async function getTourFacts(workspaceId: string): Promise<{ data: TourFac
     count("workspace_members"),
     askAnswers(),
     roomQuestions(),
+    count("export_jobs", (query) => query.eq("format", "docx").eq("status", "completed")),
+    // A PDF made by the server; without a browser on the server the export falls back to a print page.
+    count("export_jobs", (query) => query.eq("format", "pdf").like("result_path", "inline:application/pdf:%")),
   ])
 
   const facts: TourFacts = {
@@ -160,6 +165,8 @@ export async function getTourFacts(workspaceId: string): Promise<{ data: TourFac
     members,
     askAnswers: answers,
     roomQuestions: questions,
+    wordExports,
+    pdfExports,
   }
   const cost = (await isSuperAdmin(user.id)) && workspace.space_id ? await spaceCost(workspace.space_id as string) : null
   return { data: facts, cost }

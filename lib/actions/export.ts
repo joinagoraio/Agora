@@ -226,7 +226,7 @@ export async function runMarkdownOrDocxExport(input: {
       .from("export_jobs")
       .update({
         status: "completed",
-        result_path: `inline:${input.format}:${resultPayload.length}`,
+        result_path: `inline:${mimeType.split(";")[0]}:${resultPayload.length}`,
         completed_at: new Date().toISOString(),
         error: blocked?.length ? `Excluded ${blocked.length} higher-classification docs from package context` : null,
       })

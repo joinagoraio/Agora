@@ -309,18 +309,19 @@ export async function clusterColleagueComments(workspaceId: string) {
     locked: typeof row.theme_id === "string" && addressed.has(row.theme_id),
   }))
   const open = clusterable.filter((comment) => !comment.locked)
-  const byMeaning =
-    open.length === clusterable.length && open.length >= 3
-      ? await groupByMeaning("notes", open, { workspaceId })
-      : []
+  const byMeaning = open.length >= 3 ? await groupByMeaning("notes", open, { workspaceId }) : []
   const proposed: Array<ProposedColleagueTheme & { draft?: ColleagueThemeDraft }> = byMeaning.length
-    ? byMeaning.map((group) => ({
-        memberIds: group.memberIds,
-        reuseThemeId: null,
-        label: group.label,
-        confidence: 1,
-        draft: { label: group.label, summary: group.summary || group.label, suggestedReply: group.reply },
-      }))
+    ? [
+        // Notes reopened inside a theme that was already answered stay in that theme.
+        ...proposeColleagueCommentThemes(clusterable.filter((comment) => comment.locked)),
+        ...byMeaning.map((group) => ({
+          memberIds: group.memberIds,
+          reuseThemeId: null,
+          label: group.label,
+          confidence: 1,
+          draft: { label: group.label, summary: group.summary || group.label, suggestedReply: group.reply },
+        })),
+      ]
     : proposeColleagueCommentThemes(clusterable)
   if (!proposed.length) {
     return { data: { themes: 0 } }

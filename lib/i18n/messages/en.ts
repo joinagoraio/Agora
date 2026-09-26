@@ -1280,7 +1280,7 @@ export const enMessages = {
       consultationAppealSent: "Appeal sent to the document owner",
       consultationAppealPending: "Appeal waiting for the document owner",
       consultationTopicsPublic: "How comments were addressed",
-      consultationClickToQuote: "The comment period is open. Click a passage to quote it in your comment.",
+      consultationClickToQuote: "The comment period is open. Click a passage, or press Enter on it, to quote it in your comment.",
     },
     navigation: {
       backToSpace: "Back to",

@@ -61,7 +61,7 @@ export function ProgrammeDocumentRoles({
 
   return (
     <div className="space-y-4">
-      <div className="overflow-hidden rounded-lg border">
+      <div className="overflow-hidden rounded-lg border" data-guidance-target="bound-sources">
         <div className="border-b bg-muted px-4 py-3">
           <p className="text-sm text-muted-foreground">{t("workspace.programme.corpusHint")}</p>
         </div>

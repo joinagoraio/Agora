@@ -187,6 +187,17 @@ export function tourStepQuery(step: TourStep) {
   return params.toString()
 }
 
+/**
+ * Whether the address already shows where a step happens. Only the parameters the tour sets count; others the
+ * workbench adds, such as the open chapter, do not. The mode counts only when the step sets one.
+ */
+export function atTourStepPlace(step: TourStep, search: string) {
+  const wanted = new URLSearchParams(tourStepQuery(step))
+  const current = new URLSearchParams(search)
+  const keys = step.place.mode ? ["view", "section", "structure", "mode"] : ["view", "section", "structure"]
+  return keys.every((key) => current.get(key) === wanted.get(key))
+}
+
 function asText(raw: unknown): TourText | null {
   if (!raw || typeof raw !== "object") return null
   const row = raw as Record<string, unknown>
