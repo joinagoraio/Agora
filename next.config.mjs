@@ -45,6 +45,8 @@ function supabaseConnectSources() {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  agentRules: false,
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   typescript: {
     ignoreBuildErrors: process.env.DOCKER_BUILD === "1",
   },

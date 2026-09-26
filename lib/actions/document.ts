@@ -988,6 +988,7 @@ export async function addDocumentsFromSource(
                 // pdf-parse is a CommonJS module, use require for better compatibility
                 let pdfParse: any
                 try {
+                  // eslint-disable-next-line @typescript-eslint/no-require-imports
                   pdfParse = require("pdf-parse")
                 } catch (requireError) {
                   // Fallback to ES module import

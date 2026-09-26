@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Mail, Users, Calendar, Loader2, AlertCircle } from "lucide-react"
 import Image from "next/image"
+import Link from "next/link"
 import { getBaseUrl } from "@/lib/utils/get-base-url"
 
 interface InvitePageClientProps {
@@ -34,6 +35,19 @@ export default function InvitePageClient({ token, invitation, user, error: fetch
   const [awaitingVerification, setAwaitingVerification] = useState(false)
   const router = useRouter()
 
+  const isExpired = invitation ? new Date(invitation.expires_at) < new Date() : false
+  const isRevoked = invitation?.status === "declined"
+  const isAlreadyUsed = invitation ? !isPendingInvitation(invitation) : false
+  const usable = !fetchError && Boolean(invitation) && !isExpired && !isAlreadyUsed
+
+  // If user is already logged in, check email match first
+  useEffect(() => {
+    if (usable && user && !isAccepting) {
+      checkEmailAndAccept()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
   // If invitation is invalid or expired
   if (fetchError || !invitation) {
     return (
@@ -50,18 +64,13 @@ export default function InvitePageClient({ token, invitation, user, error: fetch
           </CardHeader>
           <CardContent>
             <Button asChild className="w-full">
-              <a href="/">Go to Home</a>
+              <Link href="/">Go to Home</Link>
             </Button>
           </CardContent>
         </Card>
       </div>
     )
   }
-
-  // Check if expired or already used
-  const isExpired = new Date(invitation.expires_at) < new Date()
-  const isRevoked = invitation.status === "declined"
-  const isAlreadyUsed = !isPendingInvitation(invitation)
 
   if (isExpired || isAlreadyUsed) {
     return (
@@ -84,21 +93,13 @@ export default function InvitePageClient({ token, invitation, user, error: fetch
           </CardHeader>
           <CardContent>
             <Button asChild className="w-full">
-              <a href="/">Go to Home</a>
+              <Link href="/">Go to Home</Link>
             </Button>
           </CardContent>
         </Card>
       </div>
     )
   }
-
-  // If user is already logged in, check email match first
-  useEffect(() => {
-    if (user && !isAccepting) {
-      checkEmailAndAccept()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user])
 
   const checkEmailAndAccept = async () => {
     setIsAccepting(true)
@@ -310,7 +311,7 @@ export default function InvitePageClient({ token, invitation, user, error: fetch
             <div className="text-center space-y-2">
               <h1 className="text-2xl font-bold">Check Your Email</h1>
               <p className="text-muted-foreground">
-                We've sent a verification link to <strong>{email}</strong>
+                We&apos;ve sent a verification link to <strong>{email}</strong>
               </p>
             </div>
           </div>
@@ -322,12 +323,12 @@ export default function InvitePageClient({ token, invitation, user, error: fetch
                 <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
                   <li>Check your email inbox for a message from Agora</li>
                   <li>Click the verification link in the email</li>
-                  <li>You'll be brought back here and automatically added to the space</li>
+                  <li>You&apos;ll be brought back here and automatically added to the space</li>
                 </ol>
               </div>
 
               <div className="text-center text-sm text-muted-foreground">
-                <p>Didn't receive the email? Check your spam folder or contact support.</p>
+                <p>Didn&apos;t receive the email? Check your spam folder or contact support.</p>
               </div>
 
               <Button 

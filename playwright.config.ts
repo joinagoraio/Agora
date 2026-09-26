@@ -1,7 +1,9 @@
 import { defineConfig, devices } from "@playwright/test"
 
 const PORT = process.env.PORT ?? "3000"
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${PORT}`
+// Tests against a deployed environment need no local server.
+const externalBaseURL = process.env.E2E_BASE_URL || process.env.PLAYWRIGHT_BASE_URL
+const baseURL = externalBaseURL ?? `http://127.0.0.1:${PORT}`
 
 export default defineConfig({
   testDir: "tests/e2e",
@@ -15,14 +17,16 @@ export default defineConfig({
     video: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  webServer: {
-    command:
-      process.env.PLAYWRIGHT_WEB_SERVER_COMMAND ??
-      `PORT=${PORT} npm run dev -- --hostname 0.0.0.0 --port ${PORT}`,
-    url: baseURL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  webServer: externalBaseURL
+    ? undefined
+    : {
+        command:
+          process.env.PLAYWRIGHT_WEB_SERVER_COMMAND ??
+          `PORT=${PORT} npm run dev -- --hostname 0.0.0.0 --port ${PORT}`,
+        url: baseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120 * 1000,
+      },
   projects: [
     {
       name: "chromium",

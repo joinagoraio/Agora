@@ -6,6 +6,7 @@
 if (typeof globalThis.DOMMatrix === "undefined") {
   try {
     // Use node-dommatrix polyfill for proper DOMMatrix support in Node.js
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const dommatrix = require("node-dommatrix")
     globalThis.DOMMatrix = dommatrix.DOMMatrix
     globalThis.DOMMatrixReadOnly = dommatrix.DOMMatrixReadOnly || dommatrix.DOMMatrix

@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Mail, FolderKanban, Calendar, Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
 import Image from "next/image"
+import Link from "next/link"
 
 interface WorkspaceInvitePageClientProps {
   token: string
@@ -36,6 +37,18 @@ export default function WorkspaceInvitePageClient({
   const [isAccepting, setIsAccepting] = useState(false)
   const router = useRouter()
 
+  const isExpired = invitation ? new Date(invitation.expires_at) < new Date() : false
+  const isAlreadyUsed = invitation ? invitation.status !== "pending" : false
+  const usable = !fetchError && Boolean(invitation) && !isExpired && !isAlreadyUsed
+
+  // If user is already logged in, check email match first
+  useEffect(() => {
+    if (usable && user && !isAccepting) {
+      checkEmailAndAccept()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
   // If invitation is invalid or expired
   if (fetchError || !invitation) {
     return (
@@ -54,7 +67,7 @@ export default function WorkspaceInvitePageClient({
                 This invitation link is invalid, has expired, or has already been used.
               </p>
               <Button asChild className="w-full">
-                <a href="/">Go to Home</a>
+                <Link href="/">Go to Home</Link>
               </Button>
             </CardContent>
           </Card>
@@ -62,10 +75,6 @@ export default function WorkspaceInvitePageClient({
       </div>
     )
   }
-
-  // Check if expired or already used
-  const isExpired = new Date(invitation.expires_at) < new Date()
-  const isAlreadyUsed = invitation.status !== "pending"
 
   if (isExpired || isAlreadyUsed) {
     return (
@@ -88,7 +97,7 @@ export default function WorkspaceInvitePageClient({
                   : "This invitation has already been accepted."}
               </p>
               <Button asChild className="w-full">
-                <a href="/">Go to Home</a>
+                <Link href="/">Go to Home</Link>
               </Button>
             </CardContent>
           </Card>
@@ -96,14 +105,6 @@ export default function WorkspaceInvitePageClient({
       </div>
     )
   }
-
-  // If user is already logged in, check email match first
-  useEffect(() => {
-    if (user && !isAccepting) {
-      checkEmailAndAccept()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user])
 
   const checkEmailAndAccept = async () => {
     setIsAccepting(true)

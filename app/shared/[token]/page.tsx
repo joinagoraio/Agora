@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Building2, ExternalLink } from "lucide-react"
 import ReactMarkdown from "react-markdown"
+import Link from "next/link"
 
 export default async function SharedConversationPage({
   params,
@@ -112,9 +113,9 @@ export default async function SharedConversationPage({
           <div className="mt-8 rounded-lg border bg-muted/50 p-4 text-center">
             <p className="text-sm text-muted-foreground">
               This is a read-only shared conversation. To start your own conversation,{" "}
-              <a href="/" className="font-medium text-primary underline-offset-4 hover:underline">
+              <Link href="/" className="font-medium text-primary underline-offset-4 hover:underline">
                 sign up for AGORA
-              </a>
+              </Link>
             </p>
           </div>
         </div>

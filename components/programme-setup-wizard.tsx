@@ -143,7 +143,7 @@ export function ProgrammeSetupWizard({
     })
   }
 
-  const useTemplate = (templateId: string) => {
+  const applyTemplate = (templateId: string) => {
     startTransition(async () => {
       const result = await bindWorkspaceTemplate(workspaceId, templateId)
       if (result.error) {
@@ -223,7 +223,7 @@ export function ProgrammeSetupWizard({
                 ) : (
                   <Select
                     value={NONE}
-                    onValueChange={(value) => value !== NONE && useTemplate(value)}
+                    onValueChange={(value) => value !== NONE && applyTemplate(value)}
                     disabled={pending || !canEdit}
                   >
                     <SelectTrigger className="mt-4 w-full" aria-label={t("workspace.programme.setupWizard.structureTemplateTitle")}>

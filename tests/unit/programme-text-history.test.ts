@@ -25,7 +25,7 @@ describe("programme text history", () => {
   })
 
   it("redoes a text edit after undo", () => {
-    let state = recordTextRevision(EMPTY_PROGRAMME_TEXT_HISTORY, edit("a", "old", "new"))
+    const state = recordTextRevision(EMPTY_PROGRAMME_TEXT_HISTORY, edit("a", "old", "new"))
     const undone = undoTextRevision(state)
     const redone = redoTextRevision(undone!.state)
     expect(redone?.revision).toEqual(edit("a", "old", "new"))

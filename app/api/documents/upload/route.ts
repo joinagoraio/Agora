@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
     // For now, let's import the necessary functions or inline the logic
     // Extract text content from file
     let content = ""
-    let pdfPages: any[] = []
+    const pdfPages: any[] = []
     let isMarkdownFile = false
     
     // Check if file is markdown (by extension or MIME type)

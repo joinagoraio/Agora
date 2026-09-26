@@ -1504,7 +1504,7 @@ export function MultiFormatViewer({
                      </TooltipTrigger>
                      <TooltipContent side="top" className="max-w-md">
                        <p className="text-sm font-medium mb-1">Quoted text:</p>
-                       <p className="text-xs text-muted-foreground">"{quote}"</p>
+                       <p className="text-xs text-muted-foreground">&ldquo;{quote}&rdquo;</p>
                        {isApproximate && (
                          <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
                            ⚠️ Approximate match - text position may be slightly off

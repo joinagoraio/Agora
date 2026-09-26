@@ -89,8 +89,6 @@ export function useProgrammeA4Pagination(enabled: boolean, layoutKey: string) {
     let frame = 0
     let idle = 0
     let expectedHeight = -1
-    let resizeObserver: ResizeObserver
-    let mutationObserver: MutationObserver
 
     const apply = () => {
       if (programmePaginationEditorsComposing()) {
@@ -158,11 +156,11 @@ export function useProgrammeA4Pagination(enabled: boolean, layoutKey: string) {
       })
     }
 
-    resizeObserver = new ResizeObserver(() => {
+    const resizeObserver = new ResizeObserver(() => {
       if (Math.abs(type.getBoundingClientRect().height - expectedHeight) < 1) return
       schedule("idle")
     })
-    mutationObserver = new MutationObserver(() => schedule("idle"))
+    const mutationObserver = new MutationObserver(() => schedule("idle"))
     apply()
     resizeObserver.observe(type)
     return () => {

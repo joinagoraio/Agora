@@ -112,32 +112,42 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    env:
+      E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
+      E2E_TEST_EMAIL: ${{ secrets.E2E_TEST_EMAIL }}
+      E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
+      E2E_WORKSPACE_PATH: ${{ secrets.E2E_WORKSPACE_PATH }}
     steps:
+      - name: No test environment configured
+        if: env.E2E_BASE_URL == ''
+        run: echo "The end-to-end tests run against a deployed environment. Set the E2E_* secrets to run them; skipping."
+
       - name: Checkout code
+        if: env.E2E_BASE_URL != ''
         uses: actions/checkout@v4
 
       - name: Install pnpm
+        if: env.E2E_BASE_URL != ''
         uses: pnpm/action-setup@v4
         with:
           version: 10.21.0
 
       - name: Setup Node.js
+        if: env.E2E_BASE_URL != ''
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
 
       - name: Install dependencies
+        if: env.E2E_BASE_URL != ''
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
+        if: env.E2E_BASE_URL != ''
         run: pnpm exec playwright install --with-deps
 
       - name: Run E2E tests
+        if: env.E2E_BASE_URL != ''
         run: pnpm exec playwright test
-        env:
-          E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
-          E2E_TEST_EMAIL: ${{ secrets.E2E_TEST_EMAIL }}
-          E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
-          E2E_WORKSPACE_PATH: ${{ secrets.E2E_WORKSPACE_PATH }}
 

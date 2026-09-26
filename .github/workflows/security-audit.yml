@@ -37,12 +37,8 @@ jobs:
         run: pnpm audit --audit-level=moderate
         continue-on-error: true
 
-      - name: Check for known vulnerabilities
-        run: |
-          if pnpm audit --audit-level=high; then
-            echo "High or critical vulnerabilities found!"
-            exit 1
-          fi
+      - name: Fail on high or critical vulnerabilities
+        run: pnpm audit --audit-level=high
 
       - name: Run Snyk security scan (if token provided)
         if: env.SNYK_TOKEN != ''

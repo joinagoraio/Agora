@@ -358,7 +358,7 @@ export function ChatSidebar({
         return
       }
 
-      let targetConversationId = conversationIdParam
+      const targetConversationId = conversationIdParam
       const hasTargetConversation = targetConversationId
         ? data.some((conversation) => conversation.id === targetConversationId)
         : false
