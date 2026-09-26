@@ -14,4 +14,10 @@ describe("server PDF renderer", () => {
     expect(dockerfile).toContain(`ARG PLAYWRIGHT_VERSION=${version}`)
     expect(dockerfile).toContain("install --with-deps --only-shell chromium")
   })
+
+  it("ships all of playwright with the server build, not just its entry file", () => {
+    const config = readFileSync(join(process.cwd(), "next.config.mjs"), "utf8")
+    expect(config).toContain("playwright@*/node_modules/playwright/**/*")
+    expect(config).toContain("playwright-core@*/node_modules/playwright-core/**/*")
+  })
 })

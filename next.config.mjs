@@ -51,6 +51,13 @@ const nextConfig = {
     ignoreBuildErrors: process.env.DOCKER_BUILD === "1",
   },
   serverExternalPackages: ["pdfjs-dist"],
+  // The file tracer copies only playwright's ESM entry, which loads the rest at runtime; without it the PDF export falls back to a print page.
+  outputFileTracingIncludes: {
+    "/*": [
+      "./node_modules/.pnpm/playwright@*/node_modules/playwright/**/*",
+      "./node_modules/.pnpm/playwright-core@*/node_modules/playwright-core/**/*",
+    ],
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: "200mb",
