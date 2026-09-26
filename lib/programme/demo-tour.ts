@@ -39,14 +39,25 @@ type ActionGuards = {
 /** What the autopilot does on a step, in order. Targets are `data-guidance-target` values. */
 export type TourAction = ActionGuards &
   (
-    | { do: "click"; target: string; state?: string }
+    | {
+        do: "click"
+        target: string
+        state?: string
+        /** Prefer an element whose text contains this, such as a passage on a topic; falls back to any match. */
+        contains?: string
+        /** Press the last match instead of the first, such as the newest answer. */
+        pick?: "last"
+      }
     | { do: "type"; target: string; text: Record<TourLanguage, string> }
     | { do: "wait"; ms: number }
     | { do: "waitJob"; kind: BackgroundJobKind }
     | { do: "waitFor"; condition: TourCondition; timeoutMs?: number }
+    /** Waits until an element shows, such as an answer finishing. */
+    | { do: "waitForTarget"; target: string; state?: string; timeoutMs?: number }
     | { do: "waitNarration" }
     | { do: "key"; key: string }
-    | { do: "scrollTo"; text: string }
+    /** Scrolls to the heading with this text, or to the element with this target. */
+    | { do: "scrollTo"; text?: string; target?: string }
     | { do: "pause" }
     | { do: "group"; actions: TourAction[] }
   )
@@ -59,7 +70,7 @@ export type TourStep = {
     view: "document" | "knowledge"
     section?: ProgrammeWorkbenchSection
     mode?: "read" | "edit"
-    /** Steps outside the programme: the authority page, or the platform's AI settings. */
+    /** Steps outside the programme: the dashboard, the authority page, the platform's AI settings, or the public page. */
     page?: TourPage
   }
   /** A step that belongs to an optional part of the tour, shown only when the pack turns it on. */
@@ -92,7 +103,7 @@ export function stepDone(step: TourStep, facts: TourFacts | null) {
   return step.doneWhen.every((condition) => conditionHolds(condition, facts))
 }
 
-const ACTIONS = new Set(["click", "type", "wait", "waitJob", "waitFor", "waitNarration", "key", "scrollTo", "pause", "group"])
+const ACTIONS = new Set(["click", "type", "wait", "waitJob", "waitFor", "waitForTarget", "waitNarration", "key", "scrollTo", "pause", "group"])
 
 function asCondition(raw: unknown): TourCondition | undefined {
   const row = raw as Record<string, unknown> | null
@@ -121,7 +132,7 @@ function asActions(raw: unknown): TourAction[] {
 
 export type TourBlock = { id: string; title: Record<TourLanguage, string>; minutes: number }
 
-export const TOUR_PAGES = ["programme", "authority", "platform"] as const
+export const TOUR_PAGES = ["programme", "authority", "platform", "dashboard", "published"] as const
 export type TourPage = (typeof TOUR_PAGES)[number]
 
 export const TOUR_PANELS = ["digest"] as const
@@ -146,12 +157,20 @@ export type TourVoice = (typeof TOUR_VOICES)[number]
 /** Stored narration: public audio URL per voice, language and step id. */
 export type TourNarration = Record<TourVoice, Record<TourLanguage, Record<string, string>>>
 
-/** Where a step happens: the programme workbench, the authority page, or the platform's AI settings. */
+/** Where a step happens: the programme workbench, or one of the pages outside it. */
 export function tourStepHref(step: TourStep, ids: { workspaceId: string; spaceId: string }) {
   const back = `tourProgramme=${encodeURIComponent(ids.workspaceId)}`
   if (step.place.page === "authority") return `/spaces/${ids.spaceId}?${back}`
   if (step.place.page === "platform") return `/admin/platform?${back}`
+  if (step.place.page === "dashboard") return `/dashboard?${back}`
+  if (step.place.page === "published") return `/workspaces/${ids.workspaceId}/programme/published?${back}`
   return `/workspaces/${ids.workspaceId}/programme?${tourStepQuery(step)}`
+}
+
+/** Whether the browser is already where a step happens. The public page's address is only known after a redirect. */
+export function onTourStepPage(step: TourStep, pathname: string, ids: { workspaceId: string; spaceId: string }) {
+  if (step.place.page === "published") return pathname.startsWith("/published/")
+  return pathname === tourStepHref(step, ids).split("?")[0]
 }
 
 /** The query string that puts the workbench where a step happens. */

@@ -22,10 +22,13 @@ import { getPrimaryTenantForUser } from "@/lib/actions/tenant"
 import { listMyPendingProgrammeInvites } from "@/lib/actions/workspace-invitation"
 import { isPlaceholderProfileName } from "@/lib/profile/display-name"
 import { DashboardGreeting } from "@/components/dashboard-greeting"
+import { DemoTourMount } from "@/components/demo-tour-mount"
+import { getLoadedDemo } from "@/lib/actions/demo-pack"
 import { canManageWorkspaces, type Role } from "@/lib/rbac/permissions"
 import { isTenantAdminRole } from "@/lib/tenant/domain"
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ tourProgramme?: string }> }) {
+  const { tourProgramme } = await searchParams
   const { t } = await getServerTranslator()
   const supabase = await createClient()
   const {
@@ -148,7 +151,11 @@ export default async function DashboardPage() {
   const welcomeCopy =
     hasProgrammes || hasSpaces ? t("dashboard.welcome.prompt") : t("dashboard.welcome.empty")
 
+  const tourSpaceId = tourProgramme ? (myProgrammes.find((workspace) => workspace.id === tourProgramme)?.space_id ?? null) : null
+  const { data: loadedDemo } = tourSpaceId ? await getLoadedDemo(tourSpaceId) : { data: null }
+
   return (
+    <DemoTourMount demo={loadedDemo} tourProgramme={tourProgramme}>
     <div className="flex h-dvh flex-col overflow-hidden">
       {!showProfileSetup && (
         <WelcomeUserDialog userId={user.id} userName={displayName} hasSpaces={hasSpaces} hasWorkspaces={hasProgrammes} />
@@ -247,5 +254,6 @@ export default async function DashboardPage() {
         </div>
       </main>
     </div>
+    </DemoTourMount>
   )
 }

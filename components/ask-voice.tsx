@@ -177,6 +177,7 @@ export function ReadAloudButton({
         className="h-7 px-2 text-xs"
         aria-label={label}
         data-guidance-target={guidanceTarget}
+        data-guidance-state={playing ? "playing" : "idle"}
         disabled={loading}
         onClick={() => (playing ? stopCurrent() : void play())}
       >

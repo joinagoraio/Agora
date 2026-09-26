@@ -282,7 +282,17 @@ export function fallbackClusterDraft(input: { label: string; comments: Clusterab
   }
 }
 
+const DUTCH_DECISIONS: Record<string, string> = {
+  accepted: "overgenomen",
+  accepted_with_modification: "overgenomen met een aanpassing",
+  rejected: "niet overgenomen",
+  merged: "samengevoegd met een andere reactie",
+  out_of_scope: "valt buiten dit programma",
+  in_discussion: "nog in behandeling",
+}
+
 export function buildPublicTopicSummaryDraft(input: {
+  language?: "nl" | "en"
   commentCount: number
   clusters: Array<{
     label: string
@@ -292,23 +302,43 @@ export function buildPublicTopicSummaryDraft(input: {
     appliedStatus: string | null
   }>
 }): string {
-  const commentsWord = input.commentCount === 1 ? "comment" : "comments"
-  const topicsWord = input.clusters.length === 1 ? "topic" : "topics"
-  const lines = [
-    `# Consultation topics`,
-    ``,
-    `${input.commentCount} ${commentsWord} received across ${input.clusters.length} ${topicsWord}.`,
-    ``,
-  ]
+  const dutch = input.language === "nl"
+  const lines = dutch
+    ? [
+        `# Wat we met de reacties hebben gedaan`,
+        ``,
+        `${input.commentCount} ${input.commentCount === 1 ? "reactie" : "reacties"} ontvangen, over ${input.clusters.length} ${input.clusters.length === 1 ? "onderwerp" : "onderwerpen"}.`,
+        ``,
+      ]
+    : [
+        `# Consultation topics`,
+        ``,
+        `${input.commentCount} ${input.commentCount === 1 ? "comment" : "comments"} received across ${input.clusters.length} ${input.clusters.length === 1 ? "topic" : "topics"}.`,
+        ``,
+      ]
   for (const cluster of input.clusters) {
-    const decision = cluster.appliedStatus ? `Decision: ${cluster.appliedStatus.replaceAll("_", " ")}.` : "Awaiting a decision."
-    const memberWord = cluster.memberCount === 1 ? "comment" : "comments"
+    const decision = dutch
+      ? cluster.appliedStatus
+        ? `Besluit: ${DUTCH_DECISIONS[cluster.appliedStatus] ?? cluster.appliedStatus.replaceAll("_", " ")}.`
+        : "Nog geen besluit."
+      : cluster.appliedStatus
+        ? `Decision: ${cluster.appliedStatus.replaceAll("_", " ")}.`
+        : "Awaiting a decision."
+    const count = dutch
+      ? `${cluster.memberCount} ${cluster.memberCount === 1 ? "reactie" : "reacties"}.`
+      : `${cluster.memberCount} ${cluster.memberCount === 1 ? "comment" : "comments"}.`
     lines.push(`## ${cluster.label}`)
     lines.push(``)
-    lines.push(`${cluster.memberCount} ${memberWord}. ${decision}`)
+    lines.push(`${count} ${decision}`)
     lines.push(``)
-    lines.push(cluster.ownerSummary || cluster.summary || "")
-    lines.push(``)
+    if (cluster.summary) {
+      lines.push(cluster.summary)
+      lines.push(``)
+    }
+    if (cluster.ownerSummary && cluster.ownerSummary !== cluster.summary) {
+      lines.push(`${dutch ? "Toelichting van de provincie" : "The province's reasoning"}: ${cluster.ownerSummary}`)
+      lines.push(``)
+    }
   }
   return lines.join("\n").trim() + "\n"
 }

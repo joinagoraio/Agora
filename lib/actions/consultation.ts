@@ -28,7 +28,10 @@ import {
   parseClusterDraft,
   proposeConsultationClusters,
   type ClusterableComment,
+  type ClusterDraft,
+  type ProposedCluster,
 } from "@/lib/programme/consultation-cluster"
+import { groupByMeaning, workspaceWritingLanguage } from "@/lib/programme/meaning-groups-llm"
 import { canAdministerProgramme, parseDocumentOwnerId } from "@/lib/programme/ownership"
 import {
   canRevealPublicationBody,
@@ -969,6 +972,7 @@ export async function applyConsultationClusterResolution(input: {
       .update({
         applied_at: new Date().toISOString(),
         applied_status: input.toStatus,
+        owner_summary: input.reason.trim(),
         updated_at: new Date().toISOString(),
       })
       .eq("id", input.clusterId)
@@ -1144,13 +1148,39 @@ export async function runConsultationClusterJob(workspaceId: string) {
         clusterId: typeof row.cluster_id === "string" ? row.cluster_id : null,
         locked: locked.has(String(row.id)),
       }))
-      const proposed = proposeConsultationClusters(clusterable)
+      const fresh = locked.size === 0 && clusterable.every((comment) => !comment.clusterId)
+      const byMeaning =
+        fresh && clusterable.length >= 3
+          ? await groupByMeaning(
+              "responses",
+              clusterable.map((comment) => ({ id: comment.id, body: comment.body, quote: comment.quoteText })),
+              { workspaceId, minSize: 1 },
+            )
+          : []
+      const grouped = new Set(byMeaning.flatMap((group) => group.memberIds))
+      const proposed: Array<ProposedCluster & { draft?: ClusterDraft }> = byMeaning.length
+        ? [
+            ...byMeaning.map((group) => ({
+              memberIds: group.memberIds,
+              reuseClusterId: null,
+              label: group.label,
+              confidence: 1,
+              draft: {
+                label: group.label,
+                summary: group.summary || group.label,
+                suggestedResponse: group.reply,
+                suggestedStatus: isConsultationCommentStatus(group.status) && group.status !== "open" ? group.status : ("in_discussion" as const),
+              },
+            })),
+            ...proposeConsultationClusters(clusterable.filter((comment) => !grouped.has(comment.id))),
+          ]
+        : proposeConsultationClusters(clusterable)
       clusterCount = proposed.length
       const byId = new Map(clusterable.map((comment) => [comment.id, comment]))
 
       for (const group of proposed) {
         const members = group.memberIds.map((id) => byId.get(id)).filter((item): item is ClusterableComment => Boolean(item))
-        const draft = await draftClusterWithLlm({ label: group.label, comments: members })
+        const draft = group.draft ?? (await draftClusterWithLlm({ label: group.label, comments: members }))
         let clusterId = group.reuseClusterId
         if (clusterId) {
           await admin
@@ -1291,6 +1321,7 @@ export async function draftConsultationTopicSummary(workspaceId: string) {
         .order("member_count", { ascending: false }),
     ])
     const bodyMarkdown = buildPublicTopicSummaryDraft({
+      language: await workspaceWritingLanguage(workspaceId),
       commentCount: count || 0,
       clusters: (clusters || []).map((row) => ({
         label: String(row.label || "Topic"),

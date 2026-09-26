@@ -1,11 +1,12 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import ReactMarkdown from "react-markdown"
 
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { QUOTE_EVENT } from "@/components/published-article"
 import {
   addConsultationReply,
   submitConsultationAppeal,
@@ -62,6 +63,18 @@ export function PublishedConsultationPanel({
   const [appealBodies, setAppealBodies] = useState<Record<string, string>>({})
   const [replyBodies, setReplyBodies] = useState<Record<string, string>>({})
   const [localAppeals, setLocalAppeals] = useState(appeals)
+  const formRef = useRef<HTMLFormElement>(null)
+
+  useEffect(() => {
+    const onQuote = (event: Event) => {
+      const quote = (event as CustomEvent<string>).detail
+      if (!quote) return
+      setQuoteText(quote)
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+    }
+    window.addEventListener(QUOTE_EVENT, onQuote)
+    return () => window.removeEventListener(QUOTE_EVENT, onQuote)
+  }, [])
 
   const statusLabel = (status: ConsultationCommentStatus) =>
     t(`workspace.programme.${STATUS_KEYS[status]}`)
@@ -86,7 +99,7 @@ export function PublishedConsultationPanel({
   return (
     <section className="space-y-6 border-t pt-8">
       {topicSummary?.publishedAt ? (
-        <div className="space-y-2">
+        <div className="space-y-2" data-guidance-target="published-topic-summary">
           <h2 className="text-xl font-semibold tracking-tight">{t("workspace.published.consultationTopicsPublic")}</h2>
           <article className="prose prose-neutral max-w-none text-sm">
             <ReactMarkdown>{topicSummary.bodyMarkdown}</ReactMarkdown>
@@ -106,6 +119,7 @@ export function PublishedConsultationPanel({
           </div>
         ) : canComment ? (
           <form
+            ref={formRef}
             className="space-y-3"
             onSubmit={(event) => {
               event.preventDefault()
@@ -134,13 +148,20 @@ export function PublishedConsultationPanel({
                 rows={3}
                 placeholder={t("workspace.published.consultationQuoteHint")}
                 required
+                data-guidance-target="published-quote"
               />
             </label>
             <label className="block space-y-1 text-sm">
               <span className="text-muted-foreground">{t("workspace.published.consultationComment")}</span>
-              <Textarea value={body} onChange={(event) => setBody(event.target.value)} rows={4} required />
+              <Textarea
+                value={body}
+                onChange={(event) => setBody(event.target.value)}
+                rows={4}
+                required
+                data-guidance-target="published-comment"
+              />
             </label>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending} data-guidance-target="published-submit">
               {t("workspace.published.consultationSubmit")}
             </Button>
           </form>
@@ -148,7 +169,7 @@ export function PublishedConsultationPanel({
       </div>
 
       {mine.length > 0 ? (
-        <div className="space-y-3">
+        <div className="space-y-3" data-guidance-target="published-mine">
           <h3 className="text-sm font-medium">{t("workspace.published.consultationYours")}</h3>
           <ul className="space-y-3">
             {mine.map((comment) => {
@@ -229,11 +250,13 @@ export function PublishedConsultationPanel({
                         }
                         rows={2}
                         placeholder={t("workspace.published.consultationAppealPlaceholder")}
+                        data-guidance-target="published-appeal-input"
                       />
                       <Button
                         size="sm"
                         variant="outline"
                         disabled={pending}
+                        data-guidance-target="published-appeal-submit"
                         onClick={() =>
                           startTransition(async () => {
                             const result = await submitConsultationAppeal({

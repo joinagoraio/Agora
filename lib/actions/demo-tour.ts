@@ -39,20 +39,67 @@ export async function getTourFacts(workspaceId: string): Promise<{ data: TourFac
   }
   const chapterRows = chapters.data || []
 
-  const [analysis, coherence, coherenceDecided, comments, themes, freezes, publications, consultations, responses, redrafts, digests] =
-    await Promise.all([
-      count("analysis_reports", (query) => query.eq("report_type", "existing_policy")),
-      count("programme_coherence_findings"),
-      count("programme_coherence_findings", (query) => query.not("decision", "is", null)),
-      count("programme_comments"),
-      count("programme_comment_themes"),
-      count("programme_freezes"),
-      count("programme_publications", (query) => query.is("revoked_at", null)),
-      count("programme_consultations"),
-      count("consultation_comments"),
-      count("programme_jobs", (query) => query.eq("kind", "chapter").eq("status", "done")),
-      count("demo_digests"),
-    ])
+  const { data: conversations } = await supabase.from("conversations").select("id").eq("workspace_id", workspaceId)
+  const conversationIds = (conversations || []).map((row) => row.id as string)
+  const askAnswers = async () => {
+    if (conversationIds.length === 0) return 0
+    const { count: total } = await supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .in("conversation_id", conversationIds)
+      .eq("role", "assistant")
+    return total ?? 0
+  }
+
+  const [
+    analysis,
+    coherence,
+    coherenceDecided,
+    comments,
+    notes,
+    noteReplies,
+    themes,
+    themesAddressed,
+    freezes,
+    publications,
+    consultations,
+    consultationsClosed,
+    responses,
+    clusters,
+    clustersDecided,
+    responseReplies,
+    topicSummaries,
+    appeals,
+    appealsReviewed,
+    redrafts,
+    digests,
+    members,
+    answers,
+  ] = await Promise.all([
+    count("analysis_reports", (query) => query.eq("report_type", "existing_policy")),
+    count("programme_coherence_findings"),
+    count("programme_coherence_findings", (query) => query.not("decision", "is", null)),
+    count("programme_comments"),
+    count("programme_comments", (query) => query.is("parent_id", null)),
+    count("programme_comments", (query) => query.not("parent_id", "is", null)),
+    count("programme_comment_themes"),
+    count("programme_comment_themes", (query) => query.eq("addressed", true)),
+    count("programme_freezes"),
+    count("programme_publications", (query) => query.is("revoked_at", null)),
+    count("programme_consultations"),
+    count("programme_consultations", (query) => query.not("closed_at", "is", null)),
+    count("consultation_comments"),
+    count("consultation_clusters"),
+    count("consultation_clusters", (query) => query.not("applied_at", "is", null)),
+    count("consultation_replies"),
+    count("consultation_topic_summaries", (query) => query.not("published_at", "is", null)),
+    count("consultation_appeals"),
+    count("consultation_appeals", (query) => query.not("reviewed_at", "is", null)),
+    count("programme_jobs", (query) => query.eq("kind", "chapter").eq("status", "done")),
+    count("demo_digests"),
+    count("workspace_members"),
+    askAnswers(),
+  ])
 
   const facts: TourFacts = {
     setup: bindings.setupComplete ? 1 : 0,
@@ -76,12 +123,24 @@ export async function getTourFacts(workspaceId: string): Promise<{ data: TourFac
     allApproved: chapterRows.length > 0 && chapterRows.every((chapter) => chapter.workflowStatus === "approved") ? 1 : 0,
     redrafts,
     comments,
+    notes,
+    noteReplies,
     themes,
+    themesAddressed,
     freezes,
     publications,
     consultations,
+    consultationsClosed,
     responses,
+    clusters,
+    clustersDecided,
+    responseReplies,
+    topicSummaries,
+    appeals,
+    appealsReviewed,
     digests,
+    members,
+    askAnswers: answers,
   }
   const cost = (await isSuperAdmin(user.id)) && workspace.space_id ? await spaceCost(workspace.space_id as string) : null
   return { data: facts, cost }

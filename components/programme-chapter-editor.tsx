@@ -1355,6 +1355,11 @@ export function ProgrammeChapterEditor({
                           size="icon-sm"
                           aria-label={t("workspace.programme.focusEdit")}
                           data-guidance-target="chapter-edit"
+                          data-guidance-state={
+                            chapterDocumentId && railComments.some((comment) => comment.documentId === chapterDocumentId)
+                              ? "noted"
+                              : "clean"
+                          }
                           onClick={(event) => {
                             event.stopPropagation()
                             selectChapter(node.id)

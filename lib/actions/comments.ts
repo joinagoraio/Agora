@@ -11,7 +11,9 @@ import {
   type ClusterableColleagueComment,
   type ColleagueCommentThemeRecord,
   type ColleagueThemeDraft,
+  type ProposedColleagueTheme,
 } from "@/lib/programme/colleague-comments"
+import { groupByMeaning } from "@/lib/programme/meaning-groups-llm"
 
 const COMMENT_SELECT =
   "id, artefact_type, artefact_id, body, resolved, created_at, created_by, parent_id, theme_id, programme_comment_themes ( id, label, addressed )"
@@ -306,7 +308,20 @@ export async function clusterColleagueComments(workspaceId: string) {
     themeId: typeof row.theme_id === "string" ? row.theme_id : null,
     locked: typeof row.theme_id === "string" && addressed.has(row.theme_id),
   }))
-  const proposed = proposeColleagueCommentThemes(clusterable)
+  const open = clusterable.filter((comment) => !comment.locked)
+  const byMeaning =
+    open.length === clusterable.length && open.length >= 3
+      ? await groupByMeaning("notes", open, { workspaceId })
+      : []
+  const proposed: Array<ProposedColleagueTheme & { draft?: ColleagueThemeDraft }> = byMeaning.length
+    ? byMeaning.map((group) => ({
+        memberIds: group.memberIds,
+        reuseThemeId: null,
+        label: group.label,
+        confidence: 1,
+        draft: { label: group.label, summary: group.summary || group.label, suggestedReply: group.reply },
+      }))
+    : proposeColleagueCommentThemes(clusterable)
   if (!proposed.length) {
     return { data: { themes: 0 } }
   }
@@ -322,7 +337,7 @@ export async function clusterColleagueComments(workspaceId: string) {
   let created = 0
   for (const group of proposed) {
     const members = clusterable.filter((comment) => group.memberIds.includes(comment.id))
-    const draft = await draftColleagueTheme({ label: group.label, comments: members })
+    const draft = group.draft ?? (await draftColleagueTheme({ label: group.label, comments: members }))
     let themeId = group.reuseThemeId
     if (themeId && addressed.has(themeId)) {
       await supabase
@@ -359,6 +374,44 @@ export async function clusterColleagueComments(workspaceId: string) {
 
   revalidatePath(`/workspaces/${workspaceId}/programme`)
   return { data: { themes: created || proposed.length } }
+}
+
+/** Answers every note in a theme at once: the reply goes under each note, and the notes are marked handled. */
+export async function replyToColleagueTheme(workspaceId: string, themeId: string, body: string) {
+  try {
+    await requireAuthAndPermission("workspace:update", { workspaceId })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Unauthorized" }
+  }
+  const text = body.trim()
+  if (!text) return { error: "Write the reply first" }
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const { data: members, error } = await supabase
+    .from("programme_comments")
+    .select("id, artefact_type, artefact_id")
+    .eq("workspace_id", workspaceId)
+    .eq("theme_id", themeId)
+    .is("parent_id", null)
+  if (error) return { error: error.message }
+  if (!members?.length) return { error: "This theme has no notes" }
+  const { error: insertError } = await supabase.from("programme_comments").insert(
+    members.map((member) => ({
+      workspace_id: workspaceId,
+      artefact_type: member.artefact_type,
+      artefact_id: member.artefact_id,
+      body: text,
+      parent_id: member.id,
+      theme_id: themeId,
+      created_by: user?.id ?? null,
+    })),
+  )
+  if (insertError) return { error: insertError.message }
+  const handled = await setProgrammeCommentThemeAddressed(workspaceId, themeId, true)
+  if (handled.error) return { error: handled.error }
+  return { data: { replied: members.length } }
 }
 
 export async function setProgrammeCommentThemeAddressed(

@@ -22,6 +22,7 @@ import {
   tourLanguage,
   tourStartMinutes,
   tourStepHref,
+  onTourStepPage,
   type DemoTour,
   type TourAction,
   type TourFacts,
@@ -103,19 +104,25 @@ function visible(el: HTMLElement) {
   return el.offsetParent !== null || el.getClientRects().length > 0
 }
 
-function findTarget(target: string, state?: string, enabledOnly = false) {
+function findTarget(
+  target: string,
+  state?: string,
+  enabledOnly = false,
+  options: { contains?: string; pick?: "last" } = {},
+) {
   const wanted = state?.split(/\s+/).filter(Boolean) ?? []
-  const matches = [...document.querySelectorAll<HTMLElement>(`[data-guidance-target="${target}"]`)]
-  return (
-    matches.find((el) => {
-      if (!visible(el)) return false
-      if (enabledOnly && (el as HTMLButtonElement).disabled) return false
-      if (enabledOnly && el.getAttribute("aria-disabled") === "true") return false
-      if (enabledOnly && el.hasAttribute("data-disabled")) return false
-      const tokens = (el.dataset.guidanceState ?? "").split(/\s+/)
-      return wanted.every((token) => tokens.includes(token))
-    }) ?? null
-  )
+  const matches = [...document.querySelectorAll<HTMLElement>(`[data-guidance-target="${target}"]`)].filter((el) => {
+    if (!visible(el)) return false
+    if (enabledOnly && (el as HTMLButtonElement).disabled) return false
+    if (enabledOnly && el.getAttribute("aria-disabled") === "true") return false
+    if (enabledOnly && el.hasAttribute("data-disabled")) return false
+    const tokens = (el.dataset.guidanceState ?? "").split(/\s+/)
+    return wanted.every((token) => tokens.includes(token))
+  })
+  const phrase = options.contains?.toLowerCase()
+  const preferred = phrase ? matches.filter((el) => el.textContent?.toLowerCase().includes(phrase)) : []
+  const pool = preferred.length ? preferred : matches
+  return (options.pick === "last" ? pool[pool.length - 1] : pool[0]) ?? null
 }
 
 /** Waits for an element to appear, since sheets and modals render after navigation. */
@@ -282,8 +289,8 @@ export function DemoTourProvider({
   const navigateTo = useCallback(
     (target: TourStep) => {
       const href = tourStepHref(target, { workspaceId, spaceId })
-      const [path, query = ""] = href.split("?")
-      if (pathname !== path) {
+      const query = href.split("?")[1] ?? ""
+      if (!onTourStepPage(target, pathname, { workspaceId, spaceId })) {
         router.push(href, { scroll: false })
         return true
       }
@@ -358,11 +365,14 @@ export function DemoTourProvider({
         await new Promise((resolve) => window.setTimeout(resolve, ms))
         ensure()
       }
-      const waitForElement = async (action: { target: string; state?: string; optional?: boolean }, enabledOnly: boolean) => {
+      const waitForElement = async (
+        action: { target: string; state?: string; optional?: boolean; contains?: string; pick?: "last"; timeoutMs?: number },
+        enabledOnly: boolean,
+      ) => {
         const started = Date.now()
-        const limit = action.optional ? 10000 : 30000
+        const limit = action.timeoutMs ?? (action.optional ? 10000 : 30000)
         for (;;) {
-          const el = findTarget(action.target, action.state, enabledOnly)
+          const el = findTarget(action.target, action.state, enabledOnly, action)
           if (el) return el
           // An optional press whose button is there in another state is already done, so skip it at once.
           if (action.optional && action.state && findTarget(action.target) && Date.now() - started > 800) throw new NotFound(action.target)
@@ -428,6 +438,9 @@ export function DemoTourProvider({
                 }
                 break
               }
+              case "waitForTarget":
+                await waitForElement(action, false)
+                break
               case "waitNarration":
                 await narrationEnd.current
                 ensure()
@@ -437,9 +450,12 @@ export function DemoTourProvider({
                 await sleep(500)
                 break
               case "scrollTo": {
-                const heading = [...document.querySelectorAll<HTMLElement>("h1, h2, h3")].find((el) =>
-                  el.textContent?.toLowerCase().includes(action.text.toLowerCase()),
-                )
+                const text = action.text?.toLowerCase()
+                const heading = action.target
+                  ? findTarget(action.target)
+                  : text
+                    ? [...document.querySelectorAll<HTMLElement>("h1, h2, h3")].find((el) => el.textContent?.toLowerCase().includes(text))
+                    : null
                 heading?.scrollIntoView({ block: "start", behavior: "smooth" })
                 await sleep(900)
                 break
@@ -685,14 +701,17 @@ function AutopilotButtons({ compact = false }: { compact?: boolean }) {
 /** The slim bar under the programme toolbar; keeps the Tour tab open while Agora presents. */
 export function DemoTourStrip() {
   const tour = useDemoTour()
-  const { setIsChatOpen, setPanelTab } = useChatContext()
+  const chat = useChatContext()
+  const chatRef = useRef(chat)
+  chatRef.current = chat
   const running = tour?.autopilot === "running"
   const stepIndex = tour?.index
+  // Only on a new step: a step such as Ask switches the tab itself, and the chat's setters change every render.
   useEffect(() => {
     if (!running) return
-    setIsChatOpen(true)
-    setPanelTab("guidance")
-  }, [running, stepIndex, setIsChatOpen, setPanelTab])
+    chatRef.current.setIsChatOpen(true)
+    chatRef.current.setPanelTab("guidance")
+  }, [running, stepIndex])
   return <TourBar />
 }
 

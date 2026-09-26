@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState, useTransition } from "react"
+import { Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,10 +26,12 @@ import {
   unclusterConsultationComment,
   type ConsultationQueue,
 } from "@/lib/actions/consultation"
+import { seedDemoConsultationResponses } from "@/lib/actions/demo-people"
 import type { ConsultationCommentStatus } from "@/lib/programme/consultation"
 import { CONSULTATION_COMMENT_STATUSES } from "@/lib/programme/consultation"
 import { notify } from "@/lib/notify"
 import { useI18n } from "@/lib/i18n/use-i18n"
+import { cn } from "@/lib/utils"
 
 const STATUS_KEYS: Record<ConsultationCommentStatus, string> = {
   open: "consultationStatusOpen",
@@ -55,12 +58,15 @@ export function ConsultationOwnerPanel({
   canAdminister,
   queue,
   onChanged,
+  demo = false,
 }: {
   workspaceId: string
   publicationId: string | null
   canAdminister: boolean
   queue: ConsultationQueue
   onChanged: () => void
+  /** A loaded demo: residents can be made to respond. */
+  demo?: boolean
 }) {
   const { t } = useI18n()
   const [pending, startTransition] = useTransition()
@@ -139,6 +145,7 @@ export function ConsultationOwnerPanel({
         {queue.consultation && queue.consultation.window !== "closed" ? (
           <Button
             variant="outline"
+            data-guidance-target="close-consultation"
             disabled={pending || !canAdminister}
             onClick={() =>
               startTransition(async () => {
@@ -157,11 +164,39 @@ export function ConsultationOwnerPanel({
         ) : null}
       </div>
 
+      {demo && queue.windowOpen ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="min-w-0 flex-1">{t("workspace.programme.demoResponsesHint")}</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={pending}
+            data-guidance-target="demo-responses"
+            onClick={() =>
+              startTransition(async () => {
+                const result = await seedDemoConsultationResponses(workspaceId)
+                if (result.error || !result.data) {
+                  notify(result.error || t("workspace.programme.demoResponsesFailed"), "error")
+                  return
+                }
+                notify(t("workspace.programme.demoResponsesDone", undefined, { count: String(result.data.responses) }))
+                onChanged()
+              })
+            }
+          >
+            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            {t("workspace.programme.demoResponsesAction")}
+          </Button>
+        </div>
+      ) : null}
+
       <div className="space-y-2">
         <h4 className="text-sm font-medium">{t("workspace.programme.consultationClusterTitle")}</h4>
         <p className="text-sm text-muted-foreground">{t("workspace.programme.consultationClusterBody")}</p>
         <Button
           variant="outline"
+          data-guidance-target="cluster-responses"
           disabled={pending || !canAdminister || queue.comments.length === 0}
           onClick={() =>
             startTransition(async () => {
@@ -182,12 +217,18 @@ export function ConsultationOwnerPanel({
           <p className="text-sm text-muted-foreground">{t("workspace.programme.consultationClusterEmpty")}</p>
         ) : (
           <ul className="space-y-3">
-            {queue.clusters.map((cluster) => (
-              <li key={cluster.id} className="space-y-2 rounded-md border p-3">
+            {queue.clusters.map((cluster) => {
+              const decided = Boolean(cluster.appliedAt)
+              const state = decided ? "decided" : "undecided"
+              return (
+              <li key={cluster.id} className={cn("space-y-2 rounded-md border p-3", decided && "border-foreground/40")}>
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-medium">{cluster.label}</p>
                   <span className="text-xs text-muted-foreground">{t("workspace.programme.consultationAiDraft")}</span>
                   <span className="text-xs text-muted-foreground">{cluster.memberCount}</span>
+                  {decided && cluster.appliedStatus ? (
+                    <span className="rounded border px-1.5 py-0.5 text-[11px]">{statusLabel(cluster.appliedStatus)}</span>
+                  ) : null}
                 </div>
                 {cluster.summary ? <p className="text-sm">{cluster.summary}</p> : null}
                 {cluster.suggestedResponse ? (
@@ -195,7 +236,30 @@ export function ConsultationOwnerPanel({
                     {t("workspace.programme.consultationSuggested")}: {cluster.suggestedResponse}
                   </p>
                 ) : null}
+                {decided && cluster.ownerSummary ? (
+                  <p className="text-sm">
+                    {t("workspace.programme.consultationReason")}: {cluster.ownerSummary}
+                  </p>
+                ) : null}
                 <div className="flex flex-wrap items-end gap-2">
+                  {!decided && (cluster.suggestedResponse || cluster.summary) ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={pending || !canAdminister}
+                      data-guidance-target="cluster-use-suggestion"
+                      data-guidance-state={state}
+                      onClick={() => {
+                        setReasons((prev) => ({ ...prev, [cluster.id]: cluster.suggestedResponse || cluster.summary || "" }))
+                        if (cluster.suggestedStatus && cluster.suggestedStatus !== "open") {
+                          setNextStatus((prev) => ({ ...prev, [cluster.id]: cluster.suggestedStatus as ConsultationCommentStatus }))
+                        }
+                      }}
+                    >
+                      {t("workspace.programme.consultationUseSuggestion")}
+                    </Button>
+                  ) : null}
                   <Select
                     value={nextStatus[cluster.id] || cluster.suggestedStatus || "in_discussion"}
                     onValueChange={(value) =>
@@ -218,10 +282,14 @@ export function ConsultationOwnerPanel({
                     value={reasons[cluster.id] || ""}
                     onChange={(event) => setReasons((prev) => ({ ...prev, [cluster.id]: event.target.value }))}
                     placeholder={t("workspace.programme.consultationReasonPlaceholder")}
+                    data-guidance-target="cluster-reason"
+                    data-guidance-state={state}
                   />
                   <Button
                     size="sm"
                     disabled={pending || !canAdminister}
+                    data-guidance-target="cluster-apply"
+                    data-guidance-state={state}
                     onClick={() =>
                       startTransition(async () => {
                         const result = await applyConsultationClusterResolution({
@@ -243,7 +311,8 @@ export function ConsultationOwnerPanel({
                   </Button>
                 </div>
               </li>
-            ))}
+              )
+            })}
           </ul>
         )}
       </div>
@@ -255,6 +324,7 @@ export function ConsultationOwnerPanel({
           <Button
             variant="outline"
             disabled={pending || !canAdminister}
+            data-guidance-target="draft-topic-summary"
             onClick={() =>
               startTransition(async () => {
                 const result = await draftConsultationTopicSummary(workspaceId)
@@ -272,6 +342,7 @@ export function ConsultationOwnerPanel({
           </Button>
           <Button
             disabled={pending || !canAdminister || !summaryDraft.trim()}
+            data-guidance-target="publish-topic-summary"
             onClick={() =>
               startTransition(async () => {
                 const result = await publishConsultationTopicSummary({
@@ -305,11 +376,13 @@ export function ConsultationOwnerPanel({
                   value={reasons[appeal.id] || ""}
                   onChange={(event) => setReasons((prev) => ({ ...prev, [appeal.id]: event.target.value }))}
                   placeholder={t("workspace.programme.consultationReasonPlaceholder")}
+                  data-guidance-target="appeal-reason"
                 />
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
                     disabled={pending || !canAdminister}
+                    data-guidance-target="appeal-reopen"
                     onClick={() =>
                       startTransition(async () => {
                         const result = await reviewConsultationAppeal({
@@ -333,6 +406,7 @@ export function ConsultationOwnerPanel({
                     size="sm"
                     variant="outline"
                     disabled={pending || !canAdminister}
+                    data-guidance-target="appeal-uphold"
                     onClick={() =>
                       startTransition(async () => {
                         const result = await reviewConsultationAppeal({
@@ -461,11 +535,13 @@ export function ConsultationOwnerPanel({
                     value={replies[comment.id] || ""}
                     onChange={(event) => setReplies((prev) => ({ ...prev, [comment.id]: event.target.value }))}
                     placeholder={t("workspace.programme.consultationReplyPlaceholder")}
+                    data-guidance-target="response-reply-input"
                   />
                   <Button
                     size="sm"
                     variant="outline"
                     disabled={pending || !canAdminister}
+                    data-guidance-target="response-reply-send"
                     onClick={() =>
                       startTransition(async () => {
                         const result = await addConsultationReply({

@@ -56,7 +56,11 @@ export type LoadedDemo = {
   programmes: number
   measures: number
   documents: number
+  /** The tour, or null when the pack has none or it is switched off for this demo. */
   tour: DemoTour | null
+  /** The pack has a tour, whether or not it is on for this demo. */
+  hasTour: boolean
+  tourOn: boolean
   /** AI cost so far, in US dollars. */
   costUsd: number
   /** Hidden from the dashboard, for example a backup kept out of sight of the room. */
@@ -368,6 +372,8 @@ async function describeLoadedDemo(
     admin.from("platform_demo_packs").select("tour").eq("id", String(metadata.demoPackId)).maybeSingle(),
     spaceCost(space.id),
   ])
+  const packTour = parseDemoTour(pack.data?.tour)
+  const tourOn = metadata.demoTour !== false
   return {
     spaceId: space.id,
     name: space.name,
@@ -377,7 +383,9 @@ async function describeLoadedDemo(
     programmes: workspaceIds.length,
     measures,
     documents,
-    tour: parseDemoTour(pack.data?.tour),
+    tour: tourOn ? packTour : null,
+    hasTour: Boolean(packTour),
+    tourOn,
     costUsd: cost.totalUsd,
     hidden: metadata.demoHidden === true,
     programmeId: workspaceIds[0] ?? null,
@@ -449,6 +457,23 @@ export async function setLoadedDemoHidden(spaceId: string, hidden: boolean) {
   return { data: { spaceId, hidden } }
 }
 
+/** Turn the guided tour on or off for one loaded demo. Off leaves a plain demo to explore by hand. */
+export async function setLoadedDemoTour(spaceId: string, on: boolean) {
+  const auth = await requireSuperAdmin()
+  if ("error" in auth) return { error: auth.error }
+  const admin = createAdminClient()
+  const { data: space } = await admin.from("spaces").select("metadata").eq("id", spaceId).maybeSingle()
+  const metadata = ((space?.metadata as Record<string, unknown> | null) || {}) as Record<string, unknown>
+  if (!space || metadata.demo !== true) return { error: "This is not a loaded demo." }
+  const { error } = await admin
+    .from("spaces")
+    .update({ metadata: { ...metadata, demoTour: on } })
+    .eq("id", spaceId)
+  if (error) return { error: error.message }
+  revalidatePath("/admin/demo-packs")
+  return { data: { spaceId, on } }
+}
+
 /** Delete one loaded demo authority and everything in it. Other demos stay. */
 export async function endLoadedDemo(spaceId: string) {
   const auth = await requireSuperAdmin()
@@ -472,9 +497,10 @@ export async function resetLoadedDemo(spaceId: string) {
   if ("error" in auth) return { error: auth.error }
   const admin = createAdminClient()
   const { data: space } = await admin.from("spaces").select("metadata").eq("id", spaceId).maybeSingle()
-  const packId = ((space?.metadata as Record<string, unknown> | null) || {}).demoPackId
+  const metadata = (space?.metadata as Record<string, unknown> | null) || {}
+  const packId = metadata.demoPackId
   if (typeof packId !== "string") return { error: "This authority was not loaded from a demo pack." }
-  const loaded = await loadDemoPack(packId)
+  const loaded = await loadDemoPack(packId, { tour: metadata.demoTour !== false })
   if (loaded.error || !loaded.data) return { error: loaded.error || "Could not load a fresh demo" }
   const ended = await endLoadedDemo(spaceId)
   if (ended.error) return { error: ended.error, data: loaded.data }
@@ -555,7 +581,7 @@ async function enablePackModel(spaceId: string, modelId: string) {
   return { data: { id: model.id as string } }
 }
 
-export async function loadDemoPack(packId: string) {
+export async function loadDemoPack(packId: string, options: { tour?: boolean } = {}) {
   const auth = await requireSuperAdmin()
   if ("error" in auth) return { error: auth.error }
   const admin = createAdminClient()
@@ -567,7 +593,7 @@ export async function loadDemoPack(packId: string) {
   const created = await createSpace(`${pack.name} ${stamp}`, { spaceType: pack.spaceType })
   if (created.error || !created.data) return { error: created.error || "Could not create the authority" }
   const spaceId = created.data.id as string
-  const built = await buildLoadedPack(pack, spaceId)
+  const built = await buildLoadedPack(pack, spaceId, options.tour !== false)
   if (built.error) {
     await deleteSpace(spaceId).catch(() => undefined)
     return { error: built.error }
@@ -577,7 +603,7 @@ export async function loadDemoPack(packId: string) {
   return { data: { spaceId, workspaceId: built.workspaceId as string } }
 }
 
-async function buildLoadedPack(pack: DemoPack, spaceId: string): Promise<{ error?: string; workspaceId?: string }> {
+async function buildLoadedPack(pack: DemoPack, spaceId: string, tour: boolean): Promise<{ error?: string; workspaceId?: string }> {
   const admin = createAdminClient()
   const { data: space } = await admin.from("spaces").select("metadata").eq("id", spaceId).maybeSingle()
   const metadata = {
@@ -586,6 +612,7 @@ async function buildLoadedPack(pack: DemoPack, spaceId: string): Promise<{ error
     demoPackId: pack.id,
     demoPackName: pack.name,
     demoLoadedAt: new Date().toISOString(),
+    demoTour: tour,
     setupWizard: {
       completed: true,
       dismissed: true,
@@ -662,6 +689,13 @@ async function buildLoadedPack(pack: DemoPack, spaceId: string): Promise<{ error
     const { bindProgrammeDocumentRole } = await import("@/lib/actions/programme")
     const bound = await bindProgrammeDocumentRole(workspace.data.id, match.id, file.role)
     if (bound.error) return { error: bound.error }
+  }
+
+  try {
+    const { addDemoColleagues } = await import("@/lib/demo/people")
+    await addDemoColleagues(workspace.data.id as string, spaceId)
+  } catch (error) {
+    logger.warn("[DemoPack] Demo colleagues not added on load", { error: error instanceof Error ? error.message : String(error) })
   }
 
   const { findProgrammeInterests, selectProgrammeInterestsByReference } = await import("@/lib/actions/interests")

@@ -65,7 +65,7 @@ export function ProgrammeAccessMenuItems({
         {t("space.workspaces.menuRename")}
       </DropdownMenuItem>
       <DropdownMenuSeparator />
-      <DropdownMenuItem onSelect={() => onPick("members")}>
+      <DropdownMenuItem onSelect={() => onPick("members")} data-guidance-target="programme-members">
         <Users className="h-4 w-4" />
         {t("space.workspaces.menuMembers")}
       </DropdownMenuItem>

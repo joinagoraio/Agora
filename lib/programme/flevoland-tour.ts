@@ -1,7 +1,7 @@
 import type { DemoTour, TourAction, TourCondition, TourStep, TourText } from "@/lib/programme/demo-tour"
 
 /** Raise when the steps or texts change, so stored packs pick up the new tour. */
-export const FLEVOLAND_TOUR_VERSION = 9
+export const FLEVOLAND_TOUR_VERSION = 10
 
 type Place = TourStep["place"]
 
@@ -23,9 +23,131 @@ const section = (name: NonNullable<Place["section"]>): Place => ({ view: "docume
 const click = (target: string, extra: Partial<Extract<TourAction, { do: "click" }>> = {}): TourAction => ({ do: "click", target, ...extra })
 const wait = (ms: number): TourAction => ({ do: "wait", ms })
 const at = (fact: string, min = 1): TourCondition => ({ fact, min })
+const write = (target: string, nl: string, en: string, extra: Partial<Extract<TourAction, { do: "type" }>> = {}): TourAction => ({
+  do: "type",
+  target,
+  text: { nl, en },
+  ...extra,
+})
+
+/** The question the autopilot asks in Ask; kept out of the summary of what the room asked. */
+export const TOUR_ASK_QUESTION = {
+  nl: "Welke rol geeft de omgevingsvisie de provincie bij betaalbaar wonen, en wat doet de provincie daar nu al aan?",
+  en: "What role does the environmental vision give the province in affordable housing, and what does the province already do about it?",
+}
 
 /** What the autopilot does on each step, and when a step counts as done. */
 const AUTOPILOT: Record<string, Pick<TourStep, "auto" | "doneWhen">> = {
+  dashboard: { auto: [{ do: "waitNarration" }] },
+  authority: { auto: [{ do: "waitNarration" }] },
+  team: {
+    auto: [click("programme-menu"), click("programme-members"), { do: "waitNarration" }, { do: "key", key: "Escape" }],
+  },
+  ask: {
+    doneWhen: [at("askAnswers")],
+    auto: [
+      click("panel-tab-ask"),
+      wait(800),
+      click("ask-new-chat", { optional: true }),
+      { do: "waitForTarget", target: "ask-input", timeoutMs: 20000 },
+      wait(800),
+      write("ask-input", TOUR_ASK_QUESTION.nl, TOUR_ASK_QUESTION.en),
+      click("ask-send"),
+      { do: "waitFor", condition: at("askAnswers"), timeoutMs: 180000 },
+      { do: "waitForTarget", target: "read-aloud", timeoutMs: 30000, optional: true },
+      { do: "waitNarration" },
+      click("read-aloud", { pick: "last", optional: true }),
+      wait(20000),
+      click("read-aloud", { state: "playing", optional: true }),
+      click("panel-tab-guidance", { optional: true }),
+    ],
+  },
+  "answer-once": {
+    doneWhen: [at("themesAddressed", 2)],
+    auto: [1, 2].map((n) => ({
+      do: "group" as const,
+      optional: true,
+      unless: at("themesAddressed", n),
+      actions: [click("theme-reply-all", { state: "open" }), wait(3000)],
+    })),
+  },
+  pages: {
+    auto: [click("pages-view", { state: "off" }), wait(9000), { do: "waitNarration" }, click("pages-view", { state: "on", optional: true })],
+  },
+  provenance: { auto: [click("provenance-run", { state: "draft", optional: true }), { do: "waitNarration" }] },
+  "public-page": {
+    doneWhen: [at("responses")],
+    auto: [
+      click("published-passage", { contains: "betaalba" }),
+      wait(1200),
+      write(
+        "published-comment",
+        "Als starter in Almere vind ik het goed dat de provincie hierop stuurt. Maar hoe zorgt u ervoor dat die woningen ook echt betaalbaar blijven voor jonge mensen uit de regio?",
+        "As a first-time buyer in Almere I welcome the province steering on this. But how will you make sure these homes stay affordable for young people from the region?",
+      ),
+      click("published-submit"),
+      { do: "waitFor", condition: at("responses"), timeoutMs: 30000 },
+      wait(1500),
+    ],
+  },
+  responses: {
+    doneWhen: [at("responses", 8)],
+    auto: [click("demo-responses"), { do: "waitFor", condition: at("responses", 8), timeoutMs: 240000 }, wait(1500)],
+  },
+  "topic-summary": {
+    doneWhen: [at("topicSummaries")],
+    auto: [
+      click("draft-topic-summary"),
+      wait(3000),
+      click("publish-topic-summary"),
+      { do: "waitFor", condition: at("topicSummaries"), timeoutMs: 30000 },
+    ],
+  },
+  "public-summary": {
+    auto: [
+      { do: "scrollTo", target: "published-topic-summary" },
+      wait(8000),
+      { do: "scrollTo", target: "published-mine" },
+      { do: "waitNarration" },
+      {
+        do: "group",
+        optional: true,
+        unless: at("appeals"),
+        actions: [
+          write(
+            "published-appeal-input",
+            "Ik begrijp de keuze, maar het antwoord gaat niet in op starters met een middeninkomen. Wilt u dit opnieuw bekijken?",
+            "I understand the choice, but the answer does not address first-time buyers on a middle income. Would you look at this again?",
+          ),
+          click("published-appeal-submit"),
+          wait(2500),
+        ],
+      },
+    ],
+  },
+  appeal: {
+    doneWhen: [at("consultationsClosed")],
+    auto: [
+      {
+        do: "group",
+        optional: true,
+        onlyIf: at("appeals"),
+        unless: at("appealsReviewed"),
+        actions: [
+          write(
+            "appeal-reason",
+            "We handhaven het besluit. Starters met een middeninkomen vallen onder de maatregel voor betaalbare koop; dat lichten we toe in de definitieve versie.",
+            "We uphold the decision. First-time buyers on a middle income fall under the measure for affordable purchase; we explain this in the final version.",
+          ),
+          click("appeal-uphold"),
+          { do: "waitFor", condition: at("appealsReviewed"), timeoutMs: 30000 },
+        ],
+      },
+      { do: "waitNarration" },
+      click("close-consultation", { unless: at("consultationsClosed") }),
+      { do: "waitFor", condition: at("consultationsClosed"), timeoutMs: 30000 },
+    ],
+  },
   sources: {
     doneWhen: [at("setup")],
     auto: [click("start-writing"), { do: "waitFor", condition: at("setup"), timeoutMs: 60000 }, wait(2000)],
@@ -173,8 +295,43 @@ const AUTOPILOT: Record<string, Pick<TourStep, "auto" | "doneWhen">> = {
     doneWhen: [{ fact: "chaptersWritten", min: 1, atLeastFact: "chapters" }],
     auto: [click("write-chapters"), wait(3000)],
   },
-  comments: { auto: [click("show-comments", { state: "off", optional: true })] },
-  "common-notes": { auto: [click("find-common-notes", { optional: true, onlyIf: at("comments", 2) })] },
+  comments: {
+    doneWhen: [at("notes", 6)],
+    auto: [
+      { do: "waitFor", condition: at("chaptersWritten", 3), timeoutMs: 600000 },
+      wait(1500),
+      click("demo-colleague-notes", { unless: at("notes", 6) }),
+      { do: "waitFor", condition: at("notes", 6), timeoutMs: 180000 },
+      click("show-comments", { state: "off", optional: true }),
+      wait(2000),
+      click("comments-panel-open", { optional: true }),
+      {
+        do: "group",
+        optional: true,
+        actions: [
+          click("comment-open", { state: "open" }),
+          wait(1200),
+          click("comment-reply"),
+          write(
+            "comment-reply-input",
+            "Goed punt. Ik neem dit mee in de volgende versie van dit hoofdstuk.",
+            "Good point. I will take this into the next version of this chapter.",
+          ),
+          click("comment-reply-send"),
+          wait(2000),
+        ],
+      },
+    ],
+  },
+  "common-notes": {
+    doneWhen: [at("themes")],
+    auto: [
+      click("show-comments", { state: "off", optional: true }),
+      click("find-common-notes", { onlyIf: at("notes", 2) }),
+      { do: "waitFor", condition: at("themes"), timeoutMs: 120000 },
+      wait(2000),
+    ],
+  },
   review: {
     doneWhen: [at("approved")],
     auto: [
@@ -195,7 +352,7 @@ const AUTOPILOT: Record<string, Pick<TourStep, "auto" | "doneWhen">> = {
   redraft: {
     doneWhen: [at("redrafts")],
     auto: [
-      click("chapter-edit"),
+      click("chapter-edit", { state: "clean" }),
       wait(1500),
       click("chapter-tools"),
       wait(800),
@@ -223,6 +380,34 @@ const AUTOPILOT: Record<string, Pick<TourStep, "auto" | "doneWhen">> = {
     doneWhen: [at("consultations")],
     auto: [click("open-consultation"), { do: "waitFor", condition: at("consultations"), timeoutMs: 60000 }],
   },
+  "consultation-handle": {
+    doneWhen: [{ fact: "clustersDecided", min: 1, atLeastFact: "clusters" }],
+    auto: [
+      click("cluster-responses", { unless: at("clusters") }),
+      { do: "waitFor", condition: at("clusters"), timeoutMs: 240000 },
+      wait(2500),
+      ...[1, 2, 3, 4, 5, 6].map(() => ({
+        do: "group" as const,
+        optional: true,
+        unless: { fact: "clustersDecided", min: 1, atLeastFact: "clusters" },
+        actions: [click("cluster-use-suggestion", { state: "undecided" }), wait(900), click("cluster-apply", { state: "undecided" }), wait(3500)],
+      })),
+      {
+        do: "group",
+        optional: true,
+        unless: at("responseReplies"),
+        actions: [
+          write(
+            "response-reply-input",
+            "Dank voor uw reactie. We nemen uw punt mee bij de uitwerking van deze maatregel, en laten in de definitieve versie zien wat we ermee hebben gedaan.",
+            "Thank you for your response. We will take your point into account when working out this measure, and show in the final version what we did with it.",
+          ),
+          click("response-reply-send"),
+          wait(2000),
+        ],
+      },
+    ],
+  },
 }
 
 function withAutopilot(steps: TourStep[]): TourStep[] {
@@ -232,19 +417,20 @@ function withAutopilot(steps: TourStep[]): TourStep[] {
 export const FLEVOLAND_TOUR: DemoTour = {
   version: FLEVOLAND_TOUR_VERSION,
   blocks: [
-    { id: "setup", title: { nl: "Opzetten voor Flevoland", en: "Set up for Flevoland" }, minutes: 20 },
+    { id: "setup", title: { nl: "Opzetten voor Flevoland", en: "Set up for Flevoland" }, minutes: 30 },
     { id: "ai", title: { nl: "Hoe de AI is ingericht", en: "How the AI is set up" }, minutes: 8 },
-    { id: "analysis", title: { nl: "Wat er al aan beleid is", en: "What policy already exists" }, minutes: 17 },
-    { id: "interests", title: { nl: "Belangen en uitwerkingen", en: "Interests and work-ups" }, minutes: 20 },
-    { id: "measures", title: { nl: "Maatregelen", en: "Measures" }, minutes: 33 },
+    { id: "analysis", title: { nl: "Wat er al aan beleid is", en: "What policy already exists" }, minutes: 15 },
+    { id: "interests", title: { nl: "Belangen en uitwerkingen", en: "Interests and work-ups" }, minutes: 18 },
+    { id: "measures", title: { nl: "Maatregelen", en: "Measures" }, minutes: 28 },
     { id: "break", title: { nl: "Pauze", en: "Break" }, minutes: 15 },
     { id: "coherence", title: { nl: "Samenhang tussen belangen", en: "Across interests" }, minutes: 20 },
-    { id: "effects", title: { nl: "Effecten", en: "Effects" }, minutes: 10 },
+    { id: "effects", title: { nl: "Effecten", en: "Effects" }, minutes: 7 },
     { id: "write", title: { nl: "Het programma schrijven", en: "Write the programme" }, minutes: 5 },
-    { id: "together", title: { nl: "Samenwerken", en: "Working together" }, minutes: 20 },
-    { id: "read", title: { nl: "Het resultaat lezen", en: "Read the result" }, minutes: 10 },
-    { id: "accountability", title: { nl: "Verantwoording", en: "Accountability" }, minutes: 20 },
-    { id: "publish", title: { nl: "Publiceren en inspraak", en: "Publish and consult" }, minutes: 20 },
+    { id: "ask", title: { nl: "Vragen aan de stukken", en: "Asking the documents" }, minutes: 4 },
+    { id: "together", title: { nl: "Samenwerken", en: "Working together" }, minutes: 23 },
+    { id: "read", title: { nl: "Het resultaat lezen", en: "Read the result" }, minutes: 9 },
+    { id: "accountability", title: { nl: "Verantwoording", en: "Accountability" }, minutes: 16 },
+    { id: "publish", title: { nl: "Publiceren en inspraak", en: "Publish and consult" }, minutes: 34 },
     { id: "questions", title: { nl: "Vragen", en: "Questions" }, minutes: 15 },
     { id: "heard", title: { nl: "Wat we hebben gehoord", en: "What we heard" }, minutes: 5 },
   ],
@@ -291,6 +477,50 @@ export const FLEVOLAND_TOUR: DemoTour = {
         expect: "Flevoland's programme, still without text.",
         narration:
           "Agora is a different kind of application. It was developed by people and AI together, from a shared understanding of what civil servants need. So it is not a fixed product: it grows with the way you work with it. What you ask today, with the Questions button or in the Ask window, helps us make Agora better. Only those questions and answers are kept, for a summary at the end of the afternoon. This tour itself is still in beta: an internal feature for demonstrations, which could later help new users get started, or help experienced users get more out of Agora.",
+      },
+    ),
+    step(
+      "dashboard",
+      "setup",
+      { view: "document", page: "dashboard" },
+      { estMinutes: 2 },
+      {
+        title: "Waar u begint",
+        action: "Laat het overzicht zien: de bevoegde gezagen en de programma's waar u aan werkt.",
+        why: "Agora begint bij het overzicht. Een ambtenaar ziet in één scherm de organisaties en programma's waar hij bij hoort, en gaat van daaruit verder.",
+        expect: "Het overzicht, met de demo-provincie en haar programma.",
+        narration:
+          "Zo begint een werkdag in Agora. Op het overzicht staan de bevoegde gezagen waar u bij hoort, en de programma's waar u aan werkt. Een provincie kan hier meerdere programma's naast elkaar hebben: wonen, mobiliteit, natuur. Vandaag kijken we naar één programma: wonen in Flevoland.",
+      },
+      {
+        title: "Where you start",
+        action: "Show the overview: the authorities and programmes you work on.",
+        why: "Agora starts from the overview. A civil servant sees the organisations and programmes they belong to on one screen, and goes on from there.",
+        expect: "The overview, with the demo province and its programme.",
+        narration:
+          "This is how a working day in Agora starts. The overview shows the authorities you belong to and the programmes you work on. A province can run several programmes side by side here: housing, mobility, nature. Today we look at one programme: housing in Flevoland.",
+      },
+    ),
+    step(
+      "authority",
+      "setup",
+      { view: "document", page: "authority" },
+      { estMinutes: 3 },
+      {
+        title: "Het bevoegd gezag",
+        action: "Laat de pagina van de provincie zien: de programma's, de gedeelde bibliotheek en de specialisten.",
+        why: "Wat voor de hele provincie geldt, staat op het niveau van het bevoegd gezag: de bibliotheek met vastgesteld beleid, de specialisten en wie erbij hoort. Elk programma bouwt daarop.",
+        expect: "De pagina van de demo-provincie.",
+        narration:
+          "Dit is de pagina van de provincie zelf. Hier staat wat voor alle programma's geldt: de gedeelde bibliotheek met de omgevingsvisie en het vastgestelde beleid, de specialisten die de provincie heeft ingericht, en de collega's die erbij horen. Een nieuw programma begint dus niet bij nul. Het erft de bronnen en de afspraken van de provincie.",
+      },
+      {
+        title: "The authority",
+        action: "Show the province's page: its programmes, the shared library and the specialists.",
+        why: "What applies to the whole province sits at the level of the authority: the library of adopted policy, the specialists and who belongs. Every programme builds on it.",
+        expect: "The demo province's page.",
+        narration:
+          "This is the province's own page. It holds what applies to every programme: the shared library with the environmental vision and adopted policy, the specialists the province has set up, and the colleagues who belong to it. So a new programme does not start from nothing. It inherits the province's sources and agreements.",
       },
     ),
     step(
@@ -379,6 +609,28 @@ export const FLEVOLAND_TOUR: DemoTour = {
         expect: "This programme's settings.",
         narration:
           "In the configuration the province records who owns the programme and how approval works. For example: may the writer approve their own chapter, or must a second civil servant sign off? Those are choices for the organisation, not for the software.",
+      },
+    ),
+    step(
+      "team",
+      "setup",
+      DOC,
+      { target: "programme-menu", estMinutes: 3 },
+      {
+        title: "Wie werkt eraan",
+        action: "Open het menu met de drie puntjes en kies 'Leden'. Laat zien wie schrijft en wie beoordeelt.",
+        why: "Een programma is teamwerk. Per collega ligt vast of die schrijft of beoordeelt; dat bepaalt wat die ziet en mag.",
+        expect: "Vijf collega's, elk als schrijver of beoordelaar.",
+        narration:
+          "Een programma schrijf je niet alleen. Aan dit programma werken vijf collega's: een beleidsadviseur wonen, een jurist, een adviseur financiën, een accountmanager gemeenten en een adviseur natuur en landschap. Per collega ligt vast of die schrijft of beoordeelt. Straks lezen zij mee en plaatsen ze notities.",
+      },
+      {
+        title: "Who works on it",
+        action: "Open the menu with the three dots and choose 'Members'. Show who writes and who reviews.",
+        why: "A programme is teamwork. For each colleague it is recorded whether they write or review; that decides what they see and may do.",
+        expect: "Five colleagues, each as writer or reviewer.",
+        narration:
+          "Nobody writes a programme alone. Five colleagues work on this one: a housing policy adviser, a lawyer, a finance adviser, a municipal liaison and a nature and landscape adviser. For each of them it is recorded whether they write or review. Later on they will read along and leave notes.",
       },
     ),
     step(
@@ -506,7 +758,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       "read-findings",
       "analysis",
       section("analysis"),
-      { estMinutes: 8 },
+      { estMinutes: 6 },
       {
         title: "Bevindingen met bron",
         action: "Lees een bevinding met 'Aanpassen' voor, en wijs op het visiedoel, het belang en de bronnen eronder.",
@@ -596,7 +848,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       "open-workup",
       "interests",
       section("interests"),
-      { target: "open-workup", estMinutes: 7 },
+      { target: "open-workup", estMinutes: 5 },
       {
         title: "Een uitwerking lezen",
         action: "Klik 'Uitwerking openen' bij belang 14, scroll door de koppen en beweeg over een bronverwijzing.",
@@ -618,7 +870,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       "propose",
       "measures",
       section("interests"),
-      { target: "propose-measures", waitForJob: "measures", estMinutes: 8 },
+      { target: "propose-measures", waitForJob: "measures", estMinutes: 7 },
       {
         title: "Maatregelen voorstellen",
         action: "Klik 'Maatregelen voorstellen' bij belang 14. Als dat klaar is, doe hetzelfde bij 15 en 16, één tegelijk.",
@@ -642,7 +894,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       "register",
       "measures",
       section("measures"),
-      { estMinutes: 7 },
+      { estMinutes: 5 },
       {
         title: "Het register",
         action: "Loop één maatregel door: belangen, doel, opgave, actie, rol, tijdpad, indicator, wie handelt en bronnen.",
@@ -664,7 +916,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       "decide",
       "measures",
       section("measures"),
-      { target: "measure-staff", estMinutes: 8 },
+      { target: "measure-staff", estMinutes: 6 },
       {
         title: "De ambtenaar besluit",
         action: "Kies bij één maatregel 'Behouden', bij een andere 'Aanpassen' met wat er moet veranderen, en laat er één vallen met een reden.",
@@ -822,7 +1074,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       "effects",
       "effects",
       section("effects"),
-      { target: "record-effects", estMinutes: 10 },
+      { target: "record-effects", estMinutes: 7 },
       {
         title: "Effecten per maatregel",
         action: "Kies bij een maatregel de richting (positief, negatief, neutraal) en klik 'Effecten opslaan'.",
@@ -852,7 +1104,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
         happening: "Agora schrijft de acht verplichte delen een voor een. Elk hoofdstuk verschijnt zodra het klaar is. Dit loopt op de server door, ook als u ergens anders heen gaat.",
         expect: "Een voortgangsbalk bovenaan het document; hoofdstukken vullen zich een voor een.",
         narration:
-          "Nu laten we Agora het programma schrijven. Elk deel weet wat erin hoort en waar het uit put: de uitwerkingen, de verbanden die de ambtenaar heeft gehouden, en de maatregelen, op volgorde van prioriteit. Dit duurt ongeveer acht minuten. We wachten niet: intussen laten we zien hoe collega's samenwerken.",
+          "Nu laten we Agora het programma schrijven. Elk deel weet wat erin hoort en waar het uit put: de uitwerkingen, de verbanden die de ambtenaar heeft gehouden, en de maatregelen, op volgorde van prioriteit. Dit duurt ongeveer acht minuten. We wachten niet: intussen stellen we een vraag aan de stukken, en laten we zien hoe collega's samenwerken.",
       },
       {
         title: "Let Agora write the programme",
@@ -861,58 +1113,108 @@ export const FLEVOLAND_TOUR: DemoTour = {
         happening: "Agora writes the eight required parts one at a time. Each chapter appears as soon as it is done. This keeps running on the server even if you go elsewhere.",
         expect: "A progress bar at the top of the document; chapters fill in one by one.",
         narration:
-          "Now we let Agora write the programme. Each part knows what belongs in it and what it draws on: the work-ups, the links the civil servant kept, and the measures in priority order. This takes about eight minutes. We won't wait: meanwhile we show how colleagues work together.",
+          "Now we let Agora write the programme. Each part knows what belongs in it and what it draws on: the work-ups, the links the civil servant kept, and the measures in priority order. This takes about eight minutes. We won't wait: meanwhile we ask the documents a question, and show how colleagues work together.",
+      },
+    ),
+    step(
+      "ask",
+      "ask",
+      DOC,
+      { click: "panel-tab-ask", target: "ask-input", estMinutes: 4 },
+      {
+        title: "Een vraag aan de stukken",
+        action: "Open het tabblad Vraag in het zijpaneel en stel een vraag over het beleid, bijvoorbeeld over de rol van de provincie bij betaalbaar wonen.",
+        why: "Terwijl Agora schrijft, kan de ambtenaar zelf vragen stellen aan de stukken. Het antwoord komt uit de bronnen van dit programma, met verwijzingen, en kan worden voorgelezen.",
+        happening: "Agora zoekt in de bronnen van het programma de passages die bij de vraag horen, en schrijft een antwoord met bronverwijzingen.",
+        expect: "Een antwoord met bronverwijzingen in het zijpaneel.",
+        narration:
+          "Terwijl Agora schrijft, stellen we zelf een vraag aan de stukken. In het venster Vraag kan elke ambtenaar vragen wat die wil weten, getypt of ingesproken. Agora antwoordt alleen uit de bronnen van dit programma, en zegt erbij waar het staat. Het antwoord kan ook worden voorgelezen.",
+      },
+      {
+        title: "A question for the documents",
+        action: "Open the Ask tab in the side panel and ask a question about the policy, for example about the province's role in affordable housing.",
+        why: "While Agora writes, the civil servant can ask the documents questions. The answer comes from this programme's sources, with references, and can be read aloud.",
+        happening: "Agora looks up the passages in the programme's sources that fit the question, and writes an answer with source references.",
+        expect: "An answer with source references in the side panel.",
+        narration:
+          "While Agora writes, we ask the documents a question ourselves. In the Ask window, any civil servant can ask what they want to know, typed or spoken. Agora answers only from this programme's sources, and says where it found it. The answer can also be read aloud.",
       },
     ),
     step(
       "comments",
       "together",
       READ,
-      { target: "show-comments", estMinutes: 6 },
+      { target: "demo-colleague-notes", estMinutes: 6 },
       {
-        title: "Notities van collega's",
-        action: "Zet 'Toon commentaar' aan, selecteer een zin in een klaar hoofdstuk en plaats een notitie.",
-        why: "Collega's lezen mee en plaatsen notities op het concept, zoals in een Word-document, maar dan bij het levende programma.",
-        expect: "De notitie verschijnt naast de tekst.",
+        title: "Collega's lezen mee",
+        action: "Klik 'Demo: collega's lezen mee' zodra er een paar hoofdstukken klaar zijn. Zet 'Toon commentaar' aan, open een notitie en beantwoord die.",
+        why: "Collega's lezen mee en plaatsen notities bij een zin, zoals in Word, maar dan bij het levende programma. De schrijver kan elke notitie direct beantwoorden.",
+        happening: "De vijf demo-collega's lezen de hoofdstukken die al klaar zijn en plaatsen notities, elk vanuit hun eigen vak.",
+        expect: "Notities van vijf collega's naast de tekst, en een antwoord onder de eerste.",
         narration:
-          "Terwijl Agora schrijft, lezen collega's mee. Zij plaatsen notities bij een zin, zoals ze dat in Word gewend zijn. Het verschil: de notities zitten aan het levende programma vast, en niet aan een kopie die per mail rondgaat.",
+          "Terwijl Agora schrijft, lezen de collega's mee. Voor deze demo laten we vijf collega's de eerste hoofdstukken lezen: de jurist, de adviseur financiën, de accountmanager gemeenten en de anderen. Ze plaatsen notities bij de zin waar het om gaat, zoals ze dat in Word gewend zijn. Het verschil: de notities zitten aan het levende programma vast, niet aan een kopie die per mail rondgaat. De schrijver kan een notitie meteen beantwoorden.",
       },
       {
-        title: "Colleagues' notes",
-        action: "Turn on 'Show comments', select a sentence in a finished chapter and add a note.",
-        why: "Colleagues read along and leave notes on the draft, as in a Word document, but on the live programme.",
-        expect: "The note appears next to the text.",
+        title: "Colleagues read along",
+        action: "Click 'Demo: colleagues read along' once a few chapters are done. Turn on 'Show comments', open a note and answer it.",
+        why: "Colleagues read along and leave notes on a sentence, as in Word, but on the live programme. The writer can answer each note straight away.",
+        happening: "The five demo colleagues read the chapters that are finished and leave notes, each from their own field.",
+        expect: "Notes from five colleagues beside the text, and an answer under the first one.",
         narration:
-          "While Agora writes, colleagues read along. They leave notes on a sentence, as they are used to in Word. The difference: the notes are attached to the live programme, not to a copy that goes round by email.",
+          "While Agora writes, colleagues read along. For this demo we let five colleagues read the first chapters: the lawyer, the finance adviser, the municipal liaison and the others. They leave notes on the sentence that matters, as they are used to in Word. The difference: the notes are attached to the live programme, not to a copy that goes round by email. The writer can answer a note right away.",
       },
     ),
     step(
       "common-notes",
       "together",
       READ,
-      { target: "find-common-notes", estMinutes: 5 },
+      { target: "find-common-notes", estMinutes: 4 },
       {
         title: "Notities die hetzelfde zeggen",
         action: "Klik 'Zoek gemeenschappelijke notities'.",
-        why: "Bij veel notities zeggen er vaak meerdere hetzelfde. Agora groepeert ze, zodat de schrijver één keer antwoordt.",
+        why: "Bij veel notities maken er vaak meerdere hetzelfde punt, elk in eigen woorden. Agora zet ze bij elkaar, zodat de schrijver één keer antwoordt.",
+        happening: "Agora leest de notities en zet de notities die hetzelfde punt maken bij elkaar, met een samenvatting en een voorstel voor het antwoord.",
         expect: "De review opent op de gegroepeerde notities.",
         narration:
-          "Als tien collega's meelezen, zeggen er vaak drie hetzelfde. Agora groepeert notities die over hetzelfde gaan, zodat de schrijver één keer kan antwoorden en ze in één keer als verwerkt kan markeren.",
+          "Als vijf collega's meelezen, maken er vaak drie hetzelfde punt, elk in eigen woorden en bij een andere zin. Agora leest de notities en zet de notities die hetzelfde zeggen bij elkaar, met een korte samenvatting en een voorstel voor het antwoord.",
       },
       {
         title: "Notes that say the same",
         action: "Click 'Find common notes'.",
-        why: "With many notes, several often say the same thing. Agora groups them so the writer answers once.",
+        why: "With many notes, several often make the same point, each in their own words. Agora puts them together so the writer answers once.",
+        happening: "Agora reads the notes and puts together those that make the same point, with a summary and a draft answer.",
         expect: "Review opens on the grouped notes.",
         narration:
-          "When ten colleagues read along, three of them often say the same thing. Agora groups notes on the same point, so the writer can answer once and mark them handled in one go.",
+          "When five colleagues read along, three of them often make the same point, each in their own words and on a different sentence. Agora reads the notes and puts together those that say the same thing, with a short summary and a draft answer.",
+      },
+    ),
+    step(
+      "answer-once",
+      "together",
+      section("review"),
+      { click: "tool-switch-notes", target: "theme-reply-all", estMinutes: 4 },
+      {
+        title: "Eén keer antwoorden",
+        action: "Pas bij een groep zo nodig het voorgestelde antwoord aan en klik 'Antwoord aan iedereen'. Doe dat voor twee groepen.",
+        why: "In plaats van drie keer hetzelfde te antwoorden, antwoordt de schrijver één keer. Het antwoord komt onder elke notitie in de groep, en de notities staan meteen als verwerkt.",
+        expect: "De groepen staan op verwerkt; onder elke notitie staat hetzelfde antwoord.",
+        narration:
+          "Nu antwoordt de schrijver. Niet drie keer hetzelfde, maar één keer per groep. Agora stelt een antwoord voor; de schrijver past het aan waar nodig en stuurt het. Het antwoord komt onder elke notitie in de groep, en die notities staan meteen als verwerkt. Zo houdt de schrijver overzicht, ook als er tientallen notities binnenkomen.",
+      },
+      {
+        title: "Answer once",
+        action: "In a group, adjust the draft answer if needed and click 'Answer everyone'. Do this for two groups.",
+        why: "Instead of answering the same thing three times, the writer answers once. The answer goes under every note in the group, and the notes are marked handled at once.",
+        expect: "The groups show as handled; each note in them has the same answer.",
+        narration:
+          "Now the writer answers. Not three times the same thing, but once per group. Agora proposes an answer; the writer adjusts it where needed and sends it. The answer goes under every note in the group, and those notes are marked handled straight away. That way the writer keeps track, even when dozens of notes come in.",
       },
     ),
     step(
       "review",
       "together",
       section("review"),
-      { target: "request-review", estMinutes: 5 },
+      { click: "tool-switch-chapters", target: "request-review", estMinutes: 5 },
       {
         title: "Review en goedkeuring",
         action: "Klik 'Review vragen' bij het eerste hoofdstuk, en daarna 'Keur hoofdstuk goed'.",
@@ -956,7 +1258,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       "read-programme",
       "read",
       READ,
-      { estMinutes: 10 },
+      { estMinutes: 7 },
       {
         title: "Het geschreven programma",
         action: "Open 'Hoofdstukken' en ga naar het deel over samenhang en daarna het deel met de maatregelen. Wijs op de volgorde en op de gevallen maatregel die ontbreekt.",
@@ -975,10 +1277,32 @@ export const FLEVOLAND_TOUR: DemoTour = {
       },
     ),
     step(
+      "pages",
+      "read",
+      READ,
+      { target: "pages-view", estMinutes: 2 },
+      {
+        title: "Zoals het op papier komt",
+        action: "Klik op 'Pagina's' in de werkbalk om het programma te zien zoals het in Word of als pdf wordt. Klik nog eens om terug te gaan.",
+        why: "De provincie werkt met documenten op papierformaat. De paginaweergave laat zien hoe het programma er in Word of als pdf uitziet, met kop- en voettekst en paginanummers.",
+        expect: "Het programma op A4-pagina's.",
+        narration:
+          "Een programma moet uiteindelijk ook op papier kloppen, voor de Staten en voor het archief. In de paginaweergave ziet u het programma zoals het in Word of als pdf wordt: op A4, met kop- en voettekst en paginanummers. Eén klik, en we zijn weer terug in de leesweergave.",
+      },
+      {
+        title: "As it will look on paper",
+        action: "Click 'Pages' in the toolbar to see the programme as it will be in Word or as a PDF. Click again to go back.",
+        why: "The province works with documents in paper sizes. Page view shows how the programme looks in Word or as a PDF, with header, footer and page numbers.",
+        expect: "The programme on A4 pages.",
+        narration:
+          "In the end a programme has to work on paper too, for the council and for the archive. Page view shows the programme as it will be in Word or as a PDF: on A4, with header, footer and page numbers. One click, and we are back in the reading view.",
+      },
+    ),
+    step(
       "redraft",
       "accountability",
       DOC,
-      { waitForJob: "chapter", estMinutes: 6 },
+      { waitForJob: "chapter", estMinutes: 5 },
       {
         title: "Eén hoofdstuk opnieuw, streng op bronnen",
         action: "Klik het potlood bij een hoofdstuk, open het menu van dat hoofdstuk en kies 'Opnieuw genereren met strikte citaties'.",
@@ -1002,7 +1326,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       "provenance",
       "accountability",
       section("provenance"),
-      { estMinutes: 8 },
+      { estMinutes: 6 },
       {
         title: "Herleidbaarheid",
         action: "Open een hoofdstuk-run: laat de score zien, de beweringen die gecontroleerd moeten worden, en de ongebruikte bronnen.",
@@ -1024,7 +1348,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       "audit",
       "accountability",
       section("export"),
-      { target: "audit-pack", estMinutes: 6 },
+      { target: "audit-pack", estMinutes: 5 },
       {
         title: "Het auditpakket",
         action: "Keur voor de demo eerst de overige hoofdstukken in één keer goed ('Demo: keur de rest goed'), en klik dan 'Auditpakket maken'.",
@@ -1071,7 +1395,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       { target: "publish-snapshot", estMinutes: 5 },
       {
         title: "Publiceren voor inspraak",
-        action: "Kies wie de versie mag lezen en klik 'Publiceer deze versie'. Open daarna de publieke pagina.",
+        action: "Kies wie de versie mag lezen en klik 'Publiceer deze versie'.",
         why: "De vastgelegde versie wordt leesbaar voor inwoners en partners. Het levende concept blijft intern.",
         expect: "Een publieke pagina met het programma en een vaste bronvermelding.",
         narration:
@@ -1079,7 +1403,7 @@ export const FLEVOLAND_TOUR: DemoTour = {
       },
       {
         title: "Publish for consultation",
-        action: "Choose who may read the version and click 'Publish this version'. Then open the public page.",
+        action: "Choose who may read the version and click 'Publish this version'.",
         why: "The fixed version becomes readable for residents and partners. The live draft stays internal.",
         expect: "A public page with the programme and a fixed citation.",
         narration:
@@ -1090,44 +1414,158 @@ export const FLEVOLAND_TOUR: DemoTour = {
       "consultation",
       "publish",
       section("consultation"),
-      { target: "open-consultation", estMinutes: 6 },
+      { target: "open-consultation", estMinutes: 3 },
       {
         title: "De inspraakperiode",
-        action: "Kies de data en klik 'Open consultatie'. Plaats op de publieke pagina een reactie als inwoner.",
+        action: "Kies de data en klik 'Open consultatie'.",
         why: "Reacties komen binnen op de gepubliceerde versie, niet op het concept. Zo weet iedereen waarop gereageerd is.",
-        expect: "De reactie verschijnt in de consultatie.",
+        expect: "De inspraakperiode staat open, met de data.",
         narration:
-          "We openen de inspraakperiode. Een inwoner reageert op de gepubliceerde versie, en die reactie komt hier binnen. Reacties gaan over precies de tekst die gepubliceerd is, niet over een concept dat intussen is veranderd.",
+          "We openen de inspraakperiode. Vanaf nu kan iedereen die de versie mag lezen, erop reageren. Reacties gaan over precies de tekst die gepubliceerd is, niet over een concept dat intussen is veranderd.",
       },
       {
         title: "The consultation period",
-        action: "Pick the dates and click 'Open consultation'. On the public page, leave a comment as a resident.",
+        action: "Pick the dates and click 'Open consultation'.",
         why: "Comments arrive on the published version, not on the draft. Everyone knows what was commented on.",
-        expect: "The comment appears in Consultation.",
+        expect: "The consultation period is open, with its dates.",
         narration:
-          "We open the consultation period. A resident responds to the published version, and the response arrives here. Comments are about exactly the text that was published, not a draft that has changed since.",
+          "We open the consultation period. From now on, anyone who may read the version can respond to it. Responses are about exactly the text that was published, not a draft that has changed since.",
+      },
+    ),
+    step(
+      "public-page",
+      "publish",
+      { view: "document", page: "published" },
+      { target: "published-passage", estMinutes: 4 },
+      {
+        title: "Wat inwoners zien",
+        action: "Klik op de publieke pagina op een passage om die te citeren, schrijf een reactie en klik 'Verstuur reactie'.",
+        why: "Inwoners, gemeenten en partners lezen de vastgelegde versie en reageren op een concrete passage. Zo weet iedereen precies waar een reactie over gaat.",
+        expect: "De reactie staat onder 'Jouw reacties', met de status open.",
+        narration:
+          "Zo ziet een inwoner het programma. Dit is de publieke pagina: de vastgelegde versie, met een vaste bronvermelding. Wie wil reageren, klikt op de passage waar het over gaat. Agora zet die passage als citaat in het formulier, en de inwoner schrijft een reactie. We doen dat nu zelf, als inwoner.",
+      },
+      {
+        title: "What residents see",
+        action: "On the public page, click a passage to quote it, write a response and click 'Submit comment'.",
+        why: "Residents, municipalities and partners read the fixed version and respond to a specific passage. So everyone knows exactly what a response is about.",
+        expect: "The response appears under 'Your comments', with the status open.",
+        narration:
+          "This is how a resident sees the programme. It is the public page: the fixed version, with a fixed citation. To respond, you click the passage it is about. Agora puts that passage in the form as a quote, and the resident writes a response. We do that now ourselves, as a resident.",
+      },
+    ),
+    step(
+      "responses",
+      "publish",
+      section("consultation"),
+      { target: "demo-responses", estMinutes: 3 },
+      {
+        title: "De reacties komen binnen",
+        action: "Klik 'Demo: reacties komen binnen'.",
+        why: "In een echte inspraakperiode komen tientallen of honderden reacties binnen. Voor de demo laten we een groep inwoners en partners reageren op de gepubliceerde versie.",
+        happening: "De demo-insprekers lezen de gepubliceerde versie en reageren, elk vanuit hun eigen situatie, vaak op dezelfde passage.",
+        expect: "Een lijst reacties, elk met het citaat waar ze over gaat.",
+        narration:
+          "In een echte inspraakperiode komen tientallen, soms honderden reacties binnen. Voor deze demo laten we een groep inwoners en partners reageren: een starter uit Almere, een gepensioneerde uit Lelystad, een gemeente, een woningcorporatie, een natuurorganisatie. Elke reactie hangt aan de passage waar ze over gaat, in precies de versie die gepubliceerd is.",
+      },
+      {
+        title: "The responses come in",
+        action: "Click 'Demo: responses come in'.",
+        why: "In a real consultation period dozens or hundreds of responses come in. For the demo we let a group of residents and partners respond to the published version.",
+        happening: "The demo respondents read the published version and respond, each from their own situation, often to the same passage.",
+        expect: "A list of responses, each with the quote it is about.",
+        narration:
+          "In a real consultation period, dozens and sometimes hundreds of responses come in. For this demo we let a group of residents and partners respond: a first-time buyer from Almere, a retiree from Lelystad, a municipality, a housing association, a nature organisation. Each response is attached to the passage it is about, in exactly the version that was published.",
       },
     ),
     step(
       "consultation-handle",
       "publish",
       section("consultation"),
-      { estMinutes: 5 },
+      { target: "cluster-responses", estMinutes: 6 },
       {
-        title: "Reacties verwerken",
-        action: "Groepeer de reacties op onderwerp, beantwoord er één en leg het besluit vast.",
-        why: "De Omgevingswet vraagt dat de provincie laat zien wat zij met reacties heeft gedaan. Dat wordt hier per reactie vastgelegd.",
-        expect: "De reactie heeft een antwoord en een besluit.",
+        title: "Reacties per onderwerp",
+        action: "Klik 'Groepeer reacties'. Neem per onderwerp het voorstel over of pas het aan, en klik 'Pas toe op onderwerp'. Beantwoord daarna één reactie persoonlijk.",
+        why: "De Omgevingswet vraagt dat de provincie laat zien wat zij met reacties heeft gedaan. Door reacties per onderwerp te behandelen, gaat dat sneller en blijven de antwoorden consequent.",
+        happening: "Agora zet reacties die over hetzelfde gaan bij elkaar en stelt per onderwerp een antwoord en een besluit voor. De ambtenaar beslist.",
+        expect: "Onderwerpen met een besluit en een toelichting, en één reactie met een persoonlijk antwoord.",
         narration:
-          "De provincie moet laten zien wat zij met reacties heeft gedaan. Agora groepeert reacties op onderwerp, de ambtenaar beantwoordt ze en legt per reactie vast wat ermee gebeurt. Dat overzicht gaat mee in de verantwoording.",
+          "Nu verwerkt de provincie de reacties. Agora zet de reacties die over hetzelfde gaan bij elkaar, en stelt per onderwerp een antwoord en een besluit voor. De ambtenaar neemt dat over of past het aan, en legt het besluit met één klik vast voor alle reacties in het onderwerp. Elke reactie houdt haar eigen geschiedenis: wie besliste, wanneer en waarom. En waar het nodig is, krijgt een inspreker ook een persoonlijk antwoord.",
       },
       {
-        title: "Handle the responses",
-        action: "Group the responses by topic, answer one and record the decision.",
-        why: "The Environment and Planning Act asks the province to show what it did with responses. That is recorded here per response.",
-        expect: "The response has an answer and a decision.",
+        title: "Responses by topic",
+        action: "Click 'Cluster comments'. For each topic, take the proposal or adjust it, and click 'Apply to topic'. Then answer one response personally.",
+        why: "The Environment and Planning Act asks the province to show what it did with responses. Handling them by topic is faster and keeps the answers consistent.",
+        happening: "Agora puts responses about the same thing together and proposes an answer and a decision for each topic. The civil servant decides.",
+        expect: "Topics with a decision and a reason, and one response with a personal answer.",
         narration:
-          "The province must show what it did with the responses. Agora groups them by topic, the civil servant answers them and records what happens with each one. That overview becomes part of the accountability record.",
+          "Now the province handles the responses. Agora puts responses about the same thing together, and proposes an answer and a decision for each topic. The civil servant takes that over or adjusts it, and records the decision for every response in the topic with one click. Each response keeps its own history: who decided, when and why. And where needed, a respondent also gets a personal answer.",
+      },
+    ),
+    step(
+      "topic-summary",
+      "publish",
+      section("consultation"),
+      { target: "draft-topic-summary", estMinutes: 3 },
+      {
+        title: "Wat we met de reacties deden",
+        action: "Klik 'Conceptsamenvatting', lees de tekst na en klik 'Publiceer onderwerpsamenvatting'.",
+        why: "Inwoners willen weten wat er met hun reactie is gebeurd. De samenvatting per onderwerp komt op de publieke pagina, naast het programma.",
+        expect: "Een samenvatting per onderwerp, met het besluit en de toelichting.",
+        narration:
+          "Inwoners willen weten wat er met hun reactie is gebeurd. Agora stelt een samenvatting op: per onderwerp hoeveel reacties er waren, wat de provincie besloot, en waarom. De ambtenaar leest die na, past aan waar nodig, en publiceert hem. Dan staat hij op de publieke pagina, naast het programma.",
+      },
+      {
+        title: "What we did with the responses",
+        action: "Click 'Draft summary', read it through and click 'Publish topic summary'.",
+        why: "Residents want to know what happened to their response. The summary per topic goes on the public page, next to the programme.",
+        expect: "A summary per topic, with the decision and the reasoning.",
+        narration:
+          "Residents want to know what happened to their response. Agora drafts a summary: for each topic, how many responses there were, what the province decided, and why. The civil servant reads it through, adjusts it where needed, and publishes it. Then it is on the public page, next to the programme.",
+      },
+    ),
+    step(
+      "public-summary",
+      "publish",
+      { view: "document", page: "published" },
+      { target: "published-topic-summary", estMinutes: 3 },
+      {
+        title: "Terug bij de inwoner",
+        action: "Laat op de publieke pagina de samenvatting zien, en bij de eigen reactie het besluit en de toelichting. Teken daarna bezwaar aan tegen het besluit.",
+        why: "De inwoner ziet wat er met de reactie is gebeurd, en waarom. Is de inwoner het er niet mee eens, dan vraagt die om een nieuwe beoordeling; die komt bij de provincie terug.",
+        expect: "De samenvatting op de publieke pagina, en een bezwaar dat wacht op beoordeling.",
+        narration:
+          "Terug bij de inwoner. Op de publieke pagina staat nu wat de provincie met de reacties heeft gedaan, per onderwerp. En bij de eigen reactie ziet de inwoner het besluit en de toelichting. Is de inwoner het er niet mee eens, dan tekent die bezwaar aan en vraagt om een nieuwe beoordeling. Dat komt bij de provincie terug.",
+      },
+      {
+        title: "Back with the resident",
+        action: "On the public page, show the summary, and the decision and reasoning under your own response. Then appeal the decision.",
+        why: "The resident sees what happened to the response, and why. A resident who disagrees asks for a new assessment, which goes back to the province.",
+        expect: "The summary on the public page, and an appeal waiting to be assessed.",
+        narration:
+          "Back with the resident. The public page now shows what the province did with the responses, topic by topic. And under their own response, the resident sees the decision and the reasoning. A resident who disagrees can appeal and ask for a new assessment. That goes back to the province.",
+      },
+    ),
+    step(
+      "appeal",
+      "publish",
+      section("consultation"),
+      { target: "appeal-uphold", estMinutes: 3 },
+      {
+        title: "Een nieuwe beoordeling",
+        action: "Lees het bezwaar, schrijf een toelichting en kies 'Handhaaf' of 'Heropen'. Sluit daarna de inspraaktermijn.",
+        why: "Een inspreker kan om een nieuwe beoordeling vragen. De provincie beslist daarover met een toelichting, en ook dat wordt vastgelegd.",
+        expect: "Het bezwaar is beoordeeld en de inspraaktermijn is gesloten.",
+        narration:
+          "Het bezwaar van de inwoner komt hier binnen. De ambtenaar bekijkt het, schrijft een toelichting, en besluit: het besluit blijft staan, of de reactie gaat opnieuw open. Ook dat wordt vastgelegd, met naam en reden. Daarna sluiten we de inspraaktermijn. Alles wat er met de reacties is gebeurd, van de eerste reactie tot het laatste besluit, is terug te vinden.",
+      },
+      {
+        title: "A new assessment",
+        action: "Read the appeal, write a reason and choose 'Uphold' or 'Reopen'. Then close the comment period.",
+        why: "A respondent can ask for a new assessment. The province decides on it with a reason, and that is recorded too.",
+        expect: "The appeal is assessed and the comment period is closed.",
+        narration:
+          "The resident's appeal arrives here. The civil servant looks at it, writes a reason, and decides: the decision stands, or the response opens again. That is recorded too, with name and reason. Then we close the comment period. Everything that happened to the responses, from the first response to the last decision, can be traced.",
       },
     ),
     step(

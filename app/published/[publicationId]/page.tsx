@@ -1,19 +1,24 @@
 import Link from "next/link"
-import ReactMarkdown from "react-markdown"
 import { getPublishedProgrammeForReading } from "@/lib/actions/publish"
 import { getPublishedConsultation } from "@/lib/actions/consultation"
+import { getLoadedDemo } from "@/lib/actions/demo-pack"
 import { getServerTranslator } from "@/lib/i18n/server"
 import { Button } from "@/components/ui/button"
+import { DemoTourMount } from "@/components/demo-tour-mount"
+import { PublishedArticle } from "@/components/published-article"
 import { PublishedCodeForm } from "@/components/published-code-form"
 import { PublishedPrintButton } from "@/components/published-print-button"
 import { PublishedConsultationPanel } from "@/components/published-consultation-panel"
 
 export default async function PublishedProgrammePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ publicationId: string }>
+  searchParams: Promise<{ tourProgramme?: string }>
 }) {
   const { publicationId } = await params
+  const { tourProgramme } = await searchParams
   const { t } = await getServerTranslator()
   const result = await getPublishedProgrammeForReading(publicationId)
 
@@ -67,9 +72,13 @@ export default async function PublishedProgrammePage({
   }
 
   const { publication, bodyMarkdown, authorityName } = result
-  const consultation = await getPublishedConsultation(publication.id)
+  const [consultation, { data: loadedDemo }] = await Promise.all([
+    getPublishedConsultation(publication.id),
+    tourProgramme ? getLoadedDemo(publication.spaceId) : Promise.resolve({ data: null }),
+  ])
 
   return (
+    <DemoTourMount demo={loadedDemo} tourProgramme={tourProgramme}>
     <div className="min-h-screen bg-white">
       <header className="border-b">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-6 py-4">
@@ -94,9 +103,7 @@ export default async function PublishedProgrammePage({
           <p className="font-medium">{t("workspace.published.citation")}</p>
           <p className="text-muted-foreground">{publication.citation}</p>
         </div>
-        <article className="prose prose-neutral max-w-none">
-          <ReactMarkdown>{bodyMarkdown}</ReactMarkdown>
-        </article>
+        <PublishedArticle bodyMarkdown={bodyMarkdown} quotable={Boolean(consultation.data?.canComment)} />
         <p className="text-xs text-muted-foreground">{t("workspace.published.gazetteNote")}</p>
         {consultation.data ? (
           <PublishedConsultationPanel
@@ -113,5 +120,6 @@ export default async function PublishedProgrammePage({
         ) : null}
       </main>
     </div>
+    </DemoTourMount>
   )
 }

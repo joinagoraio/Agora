@@ -6,6 +6,7 @@ import { Loader2, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { DemoTourOpenButton } from "@/components/demo-tour"
 import {
   AlertDialog,
@@ -17,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { endLoadedDemo, resetLoadedDemo, type LoadedDemo } from "@/lib/actions/demo-pack"
+import { endLoadedDemo, resetLoadedDemo, setLoadedDemoTour, type LoadedDemo } from "@/lib/actions/demo-pack"
 import { useI18n } from "@/lib/i18n/use-i18n"
 import { notify } from "@/lib/notify"
 
@@ -74,7 +75,27 @@ export function DemoStrip({ demo }: { demo: LoadedDemo }) {
         <span className="min-w-0 flex-1 truncate">
           {t("demoStrip.summary", undefined, { pack: demo.packName, loaded: loadedAt })}
         </span>
-        <DemoTourOpenButton className="h-7 text-xs" />
+        {demo.tourOn ? <DemoTourOpenButton className="h-7 text-xs" /> : null}
+        {demo.hasTour ? (
+          <label className="flex shrink-0 items-center gap-1.5 px-1">
+            <Switch
+              checked={demo.tourOn}
+              disabled={pending}
+              aria-label={t("demoStrip.tour")}
+              onCheckedChange={(on) =>
+                startTransition(async () => {
+                  const result = await setLoadedDemoTour(demo.spaceId, on)
+                  if (result.error) {
+                    notify(result.error, "error")
+                    return
+                  }
+                  router.refresh()
+                })
+              }
+            />
+            <span>{t("demoStrip.tour")}</span>
+          </label>
+        ) : null}
         <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" disabled={pending} onClick={() => setConfirm("reset")}>
           {t("demoStrip.reset")}
         </Button>

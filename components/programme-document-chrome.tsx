@@ -151,6 +151,8 @@ export function ProgrammeDocumentChrome({
                 aria-label={t("workspace.programme.layoutPages")}
                 aria-pressed={layout.paged}
                 onClick={() => onLayoutChange({ paged: !layout.paged })}
+                data-guidance-target="pages-view"
+                data-guidance-state={layout.paged ? "on" : "off"}
               >
                 <GalleryVertical className={iconClass} />
               </Button>
@@ -310,6 +312,7 @@ export function ProgrammeDocumentChrome({
                 aria-label={t("workspace.programme.modes.read")}
                 aria-pressed={documentMode === "read"}
                 onClick={() => onDocumentModeChange("read")}
+                data-guidance-target="mode-read"
               >
                 <Eye className={iconClass} />
               </Button>
@@ -336,6 +339,7 @@ export function ProgrammeDocumentChrome({
                 aria-label={t("workspace.programme.modes.focus")}
                 aria-pressed={documentMode === "focus"}
                 onClick={() => onDocumentModeChange("focus")}
+                data-guidance-target="mode-focus"
               >
                 <Focus className={iconClass} />
               </Button>

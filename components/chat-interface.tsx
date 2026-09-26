@@ -1835,6 +1835,7 @@ export function ChatInterface({ workspaceId, spaceId, conversationId, initialMes
             placeholder={inputPlaceholder}
             className={cn("min-h-[60px] flex-1 resize-none shadow", isLoading ? "pr-28" : "pr-20")}
             onKeyDown={handleTextareaKeyDown}
+            data-guidance-target="ask-input"
           />
           <DictationButton
             workspaceId={workspaceId}
@@ -1867,6 +1868,7 @@ export function ChatInterface({ workspaceId, spaceId, conversationId, initialMes
               disabled={isLoading || !safeInput.trim()}
               className="h-6 w-6 p-0"
               aria-label={t("workspace.chat.interface.input.send")}
+              data-guidance-target="ask-send"
             >
               {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
             </Button>

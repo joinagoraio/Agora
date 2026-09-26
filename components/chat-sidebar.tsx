@@ -929,8 +929,12 @@ export function ChatSidebar({
             {guidance ? (
               <Tabs value={panelTab} onValueChange={(value) => onPanelTabChange?.(value as ChatPanelTab)}>
                 <TabsList>
-                  <TabsTrigger value="ask">{t("guidance.chat.programmeAssistant")}</TabsTrigger>
-                  <TabsTrigger value="guidance">{guidance.tabLabel ?? t("guidance.coach.landmark")}</TabsTrigger>
+                  <TabsTrigger value="ask" data-guidance-target="panel-tab-ask">
+                    {t("guidance.chat.programmeAssistant")}
+                  </TabsTrigger>
+                  <TabsTrigger value="guidance" data-guidance-target="panel-tab-guidance">
+                    {guidance.tabLabel ?? t("guidance.coach.landmark")}
+                  </TabsTrigger>
                 </TabsList>
               </Tabs>
             ) : (
@@ -1054,7 +1058,7 @@ export function ChatSidebar({
                 <CardContent className="p-8">
                   <h3 className="mb-2 text-lg font-semibold">{t("workspace.chat.empty.title")}</h3>
                   <p className="mb-4 text-sm text-muted-foreground">{t("workspace.chat.empty.description")}</p>
-                  <Button onClick={handleNewChat} className="w-full">
+                  <Button onClick={handleNewChat} className="w-full" data-guidance-target="ask-new-chat">
                     {t("workspace.chat.actions.newChat")}
                   </Button>
                 </CardContent>

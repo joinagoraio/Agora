@@ -117,6 +117,7 @@ import {
   listProgrammeComments,
   setProgrammeCommentResolved,
   setProgrammeCommentThemeAddressed,
+  replyToColleagueTheme,
 } from "@/lib/actions/comments"
 import { nestColleagueComments, type ColleagueCommentThemeRecord } from "@/lib/programme/colleague-comments"
 import { getProgrammeConsultationQueue, type ConsultationQueue } from "@/lib/actions/consultation"
@@ -180,6 +181,7 @@ import { getDocumentFileExtension } from "@/lib/utils/document-files"
 import { ArrowLeft, Loader2, MoreVertical } from "lucide-react"
 import { useBackgroundJob } from "@/components/programme-jobs-provider"
 import { ProgrammeWriteChaptersBar } from "@/components/programme-write-chapters-bar"
+import { DemoColleaguesBar } from "@/components/demo-colleagues-bar"
 import { startFillChapters, startMeasureGeneration, startRoleCheck } from "@/lib/actions/programme-jobs"
 import {
   ProgrammeToolExtra,
@@ -325,6 +327,8 @@ type Props = {
   initialDocumentOwnerId?: string | null
   /** Shown above everything, for example the demo strip. */
   topBanner?: ReactNode
+  /** A loaded demo, for platform admins: offers shortcuts such as colleagues reading along. */
+  demo?: boolean
 }
 
 export function ProgrammeWorkbench({
@@ -347,6 +351,7 @@ export function ProgrammeWorkbench({
   initialDocumentOwnerId = null,
   metadata,
   topBanner = null,
+  demo = false,
 }: Props) {
   const workspaceSummary = workspaceSummaryProp ?? ""
   const workspaceDescription = workspaceDescriptionProp ?? ""
@@ -675,6 +680,7 @@ export function ProgrammeWorkbench({
   const [commentBody, setCommentBody] = useState("")
   const [comments, setComments] = useState<any[]>([])
   const [commentThemes, setCommentThemes] = useState<ColleagueCommentThemeRecord[]>([])
+  const [themeReplies, setThemeReplies] = useState<Record<string, string>>({})
   const [chapters, setChapters] = useState<
     Array<{
       documentId: string
@@ -1064,6 +1070,7 @@ export function ProgrammeWorkbench({
                     size="icon-sm"
                     aria-label={t("space.workspaces.dropdownMenuSr")}
                     aria-haspopup="menu"
+                    data-guidance-target="programme-menu"
                   >
                     <MoreVertical className="h-4 w-4" />
                   </Button>
@@ -1208,16 +1215,28 @@ export function ProgrammeWorkbench({
               contentRefreshKey={chapterContentKey}
               topSlot={
                 !isKnowledgeView ? (
-                  <ProgrammeWriteChaptersBar
-                    workspaceId={workspaceId}
-                    spaceId={spaceId}
-                    templateId={bindings.templateId ?? null}
-                    chapters={chapters}
-                    chaptersLoaded={snapshotLoaded}
-                    canAdminister={canAdminister}
-                    onMessage={notify}
-                    onChaptersWritten={chaptersWritten}
-                  />
+                  <>
+                    <ProgrammeWriteChaptersBar
+                      workspaceId={workspaceId}
+                      spaceId={spaceId}
+                      templateId={bindings.templateId ?? null}
+                      chapters={chapters}
+                      chaptersLoaded={snapshotLoaded}
+                      canAdminister={canAdminister}
+                      onMessage={notify}
+                      onChaptersWritten={chaptersWritten}
+                    />
+                    {demo && chapters.some((chapter) => chapter.drafted) ? (
+                      <DemoColleaguesBar
+                        workspaceId={workspaceId}
+                        refreshKey={commentRefreshKey}
+                        onSeeded={() => {
+                          patchDocumentLayout({ showComments: true })
+                          setCommentRefreshKey((key) => key + 1)
+                        }}
+                      />
+                    ) : null}
+                  </>
                 ) : null
               }
               bindings={bindings}
@@ -2743,6 +2762,8 @@ export function ProgrammeWorkbench({
                           aria-current={selected ? "true" : undefined}
                           className={`w-full border-l-2 px-4 py-3 text-left ${selected ? "border-l-foreground bg-background" : "border-l-transparent hover:bg-muted/30"}`}
                           onClick={() => setSelectedRunId(run.id)}
+                          data-guidance-target="provenance-run"
+                          data-guidance-state={run.kind}
                         >
                           <span className="block font-medium">
                             {t(`workspace.programme.provenanceKind.${run.kind}`, run.kind)}
@@ -2925,13 +2946,49 @@ export function ProgrammeWorkbench({
             ) : (
               <ul className="space-y-2">
                 {commentThemes.map((theme) => (
-                  <li key={theme.id} className="space-y-1 rounded-md border p-2">
+                  <li key={theme.id} className={cn("space-y-1 rounded-md border p-2", theme.addressed && "opacity-70")}>
                     <p className="text-sm font-medium">{theme.label}</p>
                     <p className="text-xs text-muted-foreground">
                       {t("workspace.programme.colleagueThemeComments", undefined, { count: String(theme.commentCount) })}
                     </p>
                     {theme.summary ? <p className="text-xs">{theme.summary}</p> : null}
-                    {theme.suggestedReply ? (
+                    {!theme.addressed ? (
+                      <div className="space-y-1.5 pt-1">
+                        <Textarea
+                          rows={3}
+                          className="text-xs"
+                          value={themeReplies[theme.id] ?? theme.suggestedReply ?? ""}
+                          placeholder={t("workspace.programme.colleagueThemeReplyPlaceholder")}
+                          onChange={(event) => setThemeReplies((current) => ({ ...current, [theme.id]: event.target.value }))}
+                          aria-label={t("workspace.programme.colleagueThemeSuggestedReply")}
+                        />
+                        <Button
+                          size="sm"
+                          disabled={pending || !(themeReplies[theme.id] ?? theme.suggestedReply ?? "").trim()}
+                          data-guidance-target="theme-reply-all"
+                          data-guidance-state="open"
+                          onClick={() =>
+                            startTransition(async () => {
+                              const result = await replyToColleagueTheme(
+                                workspaceId,
+                                theme.id,
+                                themeReplies[theme.id] ?? theme.suggestedReply ?? "",
+                              )
+                              notifyResult(
+                                result.error,
+                                t("workspace.programme.colleagueThemeReplied", undefined, {
+                                  count: String(result.data?.replied ?? theme.commentCount),
+                                }),
+                              )
+                              setCommentRefreshKey((key) => key + 1)
+                              refresh()
+                            })
+                          }
+                        >
+                          {t("workspace.programme.colleagueThemeReplyAll", undefined, { count: String(theme.commentCount) })}
+                        </Button>
+                      </div>
+                    ) : theme.suggestedReply ? (
                       <p className="text-xs text-muted-foreground">
                         {t("workspace.programme.colleagueThemeSuggestedReply")}: {theme.suggestedReply}
                       </p>
@@ -3366,6 +3423,7 @@ export function ProgrammeWorkbench({
             canAdminister={canAdminister}
             queue={consultationQueue}
             onChanged={refresh}
+            demo={demo}
           />
           </ProgrammeToolPage>
         </TabsContent>
@@ -3431,6 +3489,7 @@ export function ProgrammeWorkbench({
               <Button
                 disabled={pending}
                 variant="outline"
+                data-guidance-target="export-pdf"
                 onClick={() =>
                   startTransition(async () => {
                     const result = await runMarkdownOrDocxExport({
@@ -3523,7 +3582,7 @@ export function ProgrammeWorkbench({
           {!observability?.hasSuccessfulExport && (
             <p className="text-sm text-muted-foreground">{t("workspace.programme.emptyNext.export")}</p>
           )}
-          {demoTour && chapters.some((chapter) => chapter.workflowStatus !== "approved") ? (
+          {demo && chapters.some((chapter) => chapter.workflowStatus !== "approved") ? (
             <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
               <p className="min-w-0 flex-1">{t("workspace.programme.demoApproveHint")}</p>
               <Button

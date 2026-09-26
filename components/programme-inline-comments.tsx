@@ -167,7 +167,13 @@ export function ProgrammeInlineComments({
             >
               {thread.map((comment) => (
                 <div key={comment.id} className="border-b px-1 py-2 last:border-b-0">
-                  <button type="button" className="w-full text-left" onClick={() => onSelect(comment.blockId)}>
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => onSelect(comment.blockId)}
+                    data-guidance-target="comment-open"
+                    data-guidance-state={comment.resolved ? "resolved" : "open"}
+                  >
                     {comment.themeLabel ? (
                       <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-amber-800">
                         {comment.themeLabel}
@@ -234,6 +240,7 @@ export function ProgrammeInlineComments({
                             variant="ghost"
                             size="sm"
                             className="h-6 px-1 text-[11px]"
+                            data-guidance-target="comment-reply"
                             onClick={() => {
                               setConfirmDeleteId(null)
                               setReplyTo(replyTo === comment.id ? null : comment.id)
@@ -269,6 +276,7 @@ export function ProgrammeInlineComments({
                             value={replyDraft}
                             onChange={(event) => setReplyDraft(event.target.value)}
                             placeholder={replyPlaceholder}
+                            data-guidance-target="comment-reply-input"
                             onKeyDown={(event) => {
                               if (event.key === "Enter" && replyDraft.trim() && !pending) {
                                 event.preventDefault()
@@ -276,7 +284,13 @@ export function ProgrammeInlineComments({
                               }
                             }}
                           />
-                          <Button type="button" size="sm" disabled={pending || !replyDraft.trim()} onClick={() => submitReply(comment.id)}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={pending || !replyDraft.trim()}
+                            onClick={() => submitReply(comment.id)}
+                            data-guidance-target="comment-reply-send"
+                          >
                             {replyLabel}
                           </Button>
                         </div>
@@ -313,7 +327,14 @@ export function ProgrammeInlineComments({
       <div className="pointer-events-none absolute inset-y-0 right-2 z-20 w-72 max-w-[calc(100%-1rem)]" data-programme-comments="panel">
         <div className="pointer-events-auto sticky top-16">
           {collapsed ? (
-            <Button type="button" size="sm" variant="outline" className="ml-auto flex bg-white shadow" onClick={() => setCollapsed(false)}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="ml-auto flex bg-white shadow"
+              onClick={() => setCollapsed(false)}
+              data-guidance-target="comments-panel-open"
+            >
               {panelLabel} ({grouped.size})
             </Button>
           ) : (

@@ -132,6 +132,7 @@ export default async function ProgrammeWorkbenchPage({
         })}
         canAccessSettings={canAccessSettings}
         topBanner={loadedDemo ? <DemoStrip demo={loadedDemo} /> : null}
+        demo={Boolean(loadedDemo)}
         currentUserId={user.id}
         accessRole={accessRole}
         initialDocumentOwnerId={

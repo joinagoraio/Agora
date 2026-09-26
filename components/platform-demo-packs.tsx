@@ -23,6 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
@@ -44,6 +45,7 @@ import {
   removeLoadedDemos,
   saveDemoPack,
   setLoadedDemoHidden,
+  setLoadedDemoTour,
   getDemoTourOptions,
   setDemoTourOption,
   setDemoTourDefaultVoice,
@@ -88,6 +90,7 @@ export function PlatformDemoPacks() {
   const [loadedDemos, setLoadedDemos] = useState<LoadedDemo[]>([])
   const [confirmDemo, setConfirmDemo] = useState<LoadedDemo | "all" | null>(null)
   const [typedWord, setTypedWord] = useState("")
+  const [loadWithTour, setLoadWithTour] = useState(true)
   const refreshLoaded = (packId: string) => {
     void listLoadedDemos(packId).then((result) => setLoadedDemos(result.data || []))
   }
@@ -188,7 +191,7 @@ export function PlatformDemoPacks() {
         notify(saved.error || t("admin.platform.demoPackSaveError"), "error")
         return
       }
-      const result = await loadDemoPack(saved.data.id)
+      const result = await loadDemoPack(saved.data.id, { tour: loadWithTour })
       if (result.error || !result.data) {
         notify(result.error || t("admin.platform.demoPackLoadError"), "error")
         return
@@ -252,6 +255,10 @@ export function PlatformDemoPacks() {
               >
                 {t("admin.platform.demoPackLoad")}
               </Button>
+              <label className="flex items-center gap-2 text-sm">
+                <Switch checked={loadWithTour} onCheckedChange={setLoadWithTour} />
+                <span>{t("admin.platform.demoPackLoadWithTour")}</span>
+              </label>
               {!draft.defaultModelId ? (
                 <p className="text-xs text-muted-foreground">{t("admin.platform.demoPackModelRequired")}</p>
               ) : null}
@@ -578,6 +585,25 @@ export function PlatformDemoPacks() {
                       >
                         {demo.hidden ? t("admin.platform.loadedDemoShow", "Show on dashboard") : t("admin.platform.loadedDemoHide", "Hide from dashboard")}
                       </Button>
+                      {demo.hasTour ? (
+                        <label className="flex items-center gap-1.5 text-xs">
+                          <Switch
+                            checked={demo.tourOn}
+                            disabled={pending}
+                            onCheckedChange={(on) =>
+                              startTransition(async () => {
+                                const result = await setLoadedDemoTour(demo.spaceId, on)
+                                if (result.error) {
+                                  notify(result.error, "error")
+                                  return
+                                }
+                                refreshLoaded(draft.id)
+                              })
+                            }
+                          />
+                          <span>{t("demoStrip.tour")}</span>
+                        </label>
+                      ) : null}
                       <Button
                         type="button"
                         size="sm"
