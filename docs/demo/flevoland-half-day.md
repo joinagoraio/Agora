@@ -79,7 +79,7 @@ On Platform admin → Demo packs → Flevoland demo:
 
 ## How long Autopilot takes
 
-On its own, without questions, Autopilot presents the whole tour in about 36 minutes: 35 minutes measured on live on 26 September for the 49 steps without the optional AI set-up part (which adds about 1½ minutes), plus about a minute for the Bound sources step and the PDF added since. The half-day timetable above leaves room for the talk around each step; pause Autopilot whenever you want to explain more or take questions. Without questions from the room, the last step skips the summary, because there is nothing to summarise.
+On its own, without questions, Autopilot presents the whole tour in about 42 minutes: measured on live on 26 September, 18:06 to 18:50, for the 50 steps without the optional AI set-up part (which adds about 1½ minutes), in Dutch with the recorded narration. That run lost about a minute at step 19 (the register), where the screen fell back to the interests; Autopilot now reloads the right screen by itself when that happens. The half-day timetable above leaves room for the talk around each step; pause Autopilot whenever you want to explain more or take questions. Without questions from the room, the last step skips the summary, because there is nothing to summarise.
 
 ## Waiting times
 
@@ -107,14 +107,13 @@ Agora records the tokens of every AI call and shows the running cost of the demo
 
 | Item | Cost |
 | --- | --- |
-| One full run, measured on live (26 September, 13:27) | US$ 3.33 |
-| of which: eight chapters and one redraft | US$ 2.10 |
-| of which: three work-ups | US$ 0.41 |
+| One full run, measured on live (26 September, 18:06) | US$ 3.19 |
+| of which: eight chapters and one redraft | US$ 2.01 |
+| of which: three work-ups | US$ 0.39 |
 | of which: measure proposals | US$ 0.35 |
-| of which: analysis | US$ 0.25 |
-| of which: comparison | US$ 0.13 |
-| of which: colleagues' notes, residents' responses and grouping them | US$ 0.07 |
-| of which: reading the Ask answer aloud | US$ 0.02 |
+| of which: analysis | US$ 0.26 |
+| of which: comparison | US$ 0.12 |
+| of which: colleagues' notes, residents' responses and grouping them | US$ 0.06 |
 | Recording all narration (2 voices, 2 languages, once) | about US$ 0.90 |
 | A spoken answer to a question from the room (Questions button) | estimated US$ 0.05 to 0.15; recorded per answer |
 | Reading an Ask answer aloud | about US$ 0.01 per minute of speech |

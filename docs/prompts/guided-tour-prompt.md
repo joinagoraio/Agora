@@ -229,7 +229,7 @@ From top to bottom:
 - **Going to a step** builds its link:
   - same page (`onTourStepPage`): replace the URL with the step's query, without scrolling;
   - another page: do a **full page load** (`window.location.assign`) and return `true` ("another page takes over"). A full load means a refresh still in flight on the previous page (for example right after submitting a form) cannot carry over into the next page.
-- **Address check after arriving:** a refresh still in flight from the previous step can put the old address back. After the settle wait, if `atTourStepPlace` is false, navigate again, up to three times, 1.5 s apart.
+- **Address check after arriving:** a refresh still in flight from the previous step can put the old address back. After the settle wait, if `atTourStepPlace` is false, navigate again, up to three times, 1.5 s apart. If the address still shows the previous screen, save `{ index, autopilot: "running" }` and load the step's address with a full page load, **once per step** (remember the step in `sessionStorage`), so the new page resumes on the right screen. On a slow production server the soft retries were not enough: right after a long AI job, the screen kept falling back to the previous section.
 - **On arrival:**
   - if the step has `click`, wait up to 8 s for the target and press it;
   - if it has `target`, wait up to 8 s (600 ms after a click) and mark the element with `data-tour-highlight`, scrolling it into view (`block: "nearest"`, smooth);

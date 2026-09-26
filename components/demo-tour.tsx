@@ -498,6 +498,14 @@ export function DemoTourProvider({
             navigateTo(current)
             await sleep(1500)
           }
+          // Still the previous screen: load this step's address fresh, once, and carry on there.
+          const reloadKey = `agora.demoTour.reloaded.${workspaceId}`
+          if (!current.place.page && !atTourStepPlace(current, window.location.search) && window.sessionStorage.getItem(reloadKey) !== String(position)) {
+            window.sessionStorage.setItem(reloadKey, String(position))
+            writeSaved(workspaceId, { index: position, open: true, voiceOn, voice, autopilot: "running" })
+            window.location.assign(tourStepHref(current, { workspaceId, spaceId }))
+            return
+          }
           const narrated = playAudio(urlFor(current))
           const done = stepDone(current, await refreshFacts())
           ensure()
@@ -523,7 +531,7 @@ export function DemoTourProvider({
         )
       }
     },
-    [language, navigateTo, playAudio, refreshFacts, refreshJobs, stopAudio, t, tour.steps, urlFor, voice, voiceOn, workspaceId],
+    [language, navigateTo, playAudio, refreshFacts, refreshJobs, spaceId, stopAudio, t, tour.steps, urlFor, voice, voiceOn, workspaceId],
   )
 
   useEffect(() => {
