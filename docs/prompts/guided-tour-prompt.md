@@ -228,7 +228,7 @@ From top to bottom:
 
 - **Going to a step** builds its link:
   - same page (`onTourStepPage`): replace the URL with the step's query, without scrolling;
-  - another page: push the link and return `true` ("another page takes over").
+  - another page: do a **full page load** (`window.location.assign`) and return `true` ("another page takes over"). A full load means a refresh still in flight on the previous page (for example right after submitting a form) cannot carry over into the next page.
 - **Address check after arriving:** a refresh still in flight from the previous step can put the old address back. After the settle wait, if `atTourStepPlace` is false, navigate again, up to three times, 1.5 s apart.
 - **On arrival:**
   - if the step has `click`, wait up to 8 s for the target and press it;
@@ -456,7 +456,8 @@ Regenerate it whenever the tour changes.
 **Dry runs**, first locally, then on production:
 - **Browser automation:** a hidden automation tab throttles timers (they fire about once a minute). Turn on focus emulation and set the page lifecycle to active before timing anything. Send resize and measure commands one after the other, never in parallel.
 - **Microphone:** substitute a recorded narration file for the microphone (`getUserMedia` returning `audioElement.captureStream()`) to test dictation, the push-to-talk questions and the summary end to end. A real room microphone test stays with the presenter.
-- **Full run:** a complete Autopilot run from step 1, logging each step's start time. Afterwards check the database: every expected result exists, the costs are recorded, the backup demo is hidden.
+- **Full run:** a complete Autopilot run from step 1, logging each step's start time and every console error in full. Afterwards check the database: every expected result exists, the costs are recorded, the backup demo is hidden.
+- **After every framework or UI-library upgrade, do a full run again.** Unit tests and short replays do not catch everything: in the reference product, a framework minor upgrade that bundled a newer React build made UI-library components that set state from ref callbacks loop ("Maximum update depth exceeded") partway through the tour, in three full runs out of three, while a replay of the same steps passed. The fix was to stay on the previous framework version until the UI library supports the new React build.
 
 ---
 

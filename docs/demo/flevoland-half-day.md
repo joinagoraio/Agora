@@ -79,7 +79,7 @@ On Platform admin → Demo packs → Flevoland demo:
 
 ## How long Autopilot takes
 
-On its own, without questions, Autopilot presents the whole tour in about 35 minutes (live, 26 September, 13:27 to 14:02, the 49 steps without the optional AI set-up part, which adds about 1½ minutes). The half-day timetable above leaves room for the talk around each step; pause Autopilot whenever you want to explain more or take questions. Without questions from the room, the last step skips the summary, because there is nothing to summarise.
+On its own, without questions, Autopilot presents the whole tour in about 36 minutes: 35 minutes measured on live on 26 September for the 49 steps without the optional AI set-up part (which adds about 1½ minutes), plus about a minute for the Bound sources step and the PDF added since. The half-day timetable above leaves room for the talk around each step; pause Autopilot whenever you want to explain more or take questions. Without questions from the room, the last step skips the summary, because there is nothing to summarise.
 
 ## Waiting times
 

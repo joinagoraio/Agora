@@ -292,7 +292,8 @@ export function DemoTourProvider({
       const href = tourStepHref(target, { workspaceId, spaceId })
       const query = href.split("?")[1] ?? ""
       if (!onTourStepPage(target, pathname, { workspaceId, spaceId })) {
-        router.push(href, { scroll: false })
+        // A full load, so a refresh still in flight on the previous page cannot carry over into the next one.
+        window.location.assign(href)
         return true
       }
       if (!target.place.page && window.location.search.replace(/^\?/, "") !== query) {
